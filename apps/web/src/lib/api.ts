@@ -6,8 +6,20 @@ import type {
   AssumptionsUpdateResult,
   AssumptionsVersion,
   CompareResult,
+  DpeVerifyRequest,
   DuplicateCandidate,
   DuplicateProbe,
+  LayerFeatureCollection,
+  ListingContext,
+  MarketContext,
+  MarketContextReport,
+  MarketContextRequest,
+  SearchCriteriaInputRaw,
+  SearchCriteriaPreview,
+  SearchCriteriaPreviewRequestInput,
+  SearchCriteriaSummary,
+  SearchCriteriaUpdate,
+  TransitMode,
   EvaluateRequest,
   EvaluateResult,
   EvaluatedListing,
@@ -185,6 +197,69 @@ export const api = {
       apiFetch<CompareResult>('/listings/compare', {
         method: 'POST',
         json: { listingIds },
+      }),
+    /** Contexte open data : tram, plafond d'encadrement, DPE vérifié, comparables DVF. */
+    context: (id: string) =>
+      apiFetch<ListingContext>(`/listings/${id}/context`),
+    market: (id: string) => apiFetch<MarketContext>(`/listings/${id}/market`),
+    /** Relance le géocodage (sans cache) puis les enrichissements. */
+    regeocode: (id: string) =>
+      apiFetch<EvaluatedListing>(`/listings/${id}/geocode`, { method: 'POST' }),
+    searchDpe: (id: string) =>
+      apiFetch<ListingContext>(`/listings/${id}/dpe/search`, {
+        method: 'POST',
+      }),
+    verifyDpe: (id: string, request: DpeVerifyRequest) =>
+      apiFetch<EvaluatedListing>(`/listings/${id}/dpe/verify`, {
+        method: 'POST',
+        json: request,
+      }),
+  },
+
+  /** Critères de recherche enregistrés et partagés (lot 4). */
+  searchCriteria: {
+    list: (includeArchived = false) =>
+      apiFetch<SearchCriteriaSummary[]>(
+        `/search-criteria${includeArchived ? '?includeArchived=true' : ''}`
+      ),
+    get: (id: string) =>
+      apiFetch<SearchCriteriaSummary>(`/search-criteria/${id}`),
+    create: (input: SearchCriteriaInputRaw) =>
+      apiFetch<SearchCriteriaSummary>('/search-criteria', {
+        method: 'POST',
+        json: input,
+      }),
+    update: (id: string, patch: SearchCriteriaUpdate) =>
+      apiFetch<SearchCriteriaSummary>(`/search-criteria/${id}`, {
+        method: 'PATCH',
+        json: patch,
+      }),
+    remove: (id: string) =>
+      apiFetch<void>(`/search-criteria/${id}`, { method: 'DELETE' }),
+    /** Périmètre résolu (isochrone calculée) et annonces retenues, sans enregistrer. */
+    preview: (request: SearchCriteriaPreviewRequestInput) =>
+      apiFetch<SearchCriteriaPreview>('/search-criteria/preview', {
+        method: 'POST',
+        json: request,
+      }),
+  },
+
+  /** Couches de carte et contexte de marché (lot 4). */
+  opendata: {
+    transitStops: (mode?: TransitMode) =>
+      apiFetch<LayerFeatureCollection>(
+        `/opendata/layers/transit-stops${mode ? `?mode=${mode}` : ''}`
+      ),
+    rentControlZones: () =>
+      apiFetch<LayerFeatureCollection>('/opendata/layers/rent-control-zones'),
+    dvf: (bbox: readonly [number, number, number, number]) =>
+      apiFetch<LayerFeatureCollection>(
+        `/opendata/layers/dvf?bbox=${bbox.map(v => v.toFixed(5)).join(',')}`
+      ),
+    marketContext: (request: MarketContextRequest) =>
+      apiFetch<MarketContextReport>('/market-context', {
+        method: 'POST',
+        json: request,
       }),
   },
 

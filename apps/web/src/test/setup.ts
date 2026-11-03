@@ -27,9 +27,11 @@ vi.mock('@/lib/supabase', () => ({
 export const mapLibreMock = {
   maps: [] as MockMap[],
   markers: [] as MockMarker[],
+  popups: [] as MockPopup[],
   reset(): void {
     this.maps = []
     this.markers = []
+    this.popups = []
   },
 }
 
@@ -42,14 +44,46 @@ export class MockMap {
   constructor(public readonly options: Record<string, unknown>) {
     mapLibreMock.maps.push(this)
   }
-  on(type: string, listener: (event: unknown) => void): this {
-    const list = this.listeners.get(type) ?? []
+  center: [number, number] = [-0.59, 44.82]
+  on(
+    type: string,
+    layerOrListener: string | ((event: unknown) => void),
+    maybeListener?: (event: unknown) => void
+  ): this {
+    const key =
+      typeof layerOrListener === 'string' ? `${type}:${layerOrListener}` : type
+    const listener =
+      typeof layerOrListener === 'string' ? maybeListener : layerOrListener
+    if (!listener) return this
+    const list = this.listeners.get(key) ?? []
     list.push(listener)
-    this.listeners.set(type, list)
+    this.listeners.set(key, list)
     return this
+  }
+  /** Ce que `queryRenderedFeatures` rend sous le clic (filtré par couche). */
+  rendered: Array<{ layer: { id: string }; properties: unknown }> = []
+  queryRenderedFeatures(
+    _point: unknown,
+    options?: { layers?: string[] }
+  ): Array<{ layer: { id: string }; properties: unknown }> {
+    return this.rendered.filter(
+      f => !options?.layers || options.layers.includes(f.layer.id)
+    )
+  }
+  getBounds(): { toArray: () => [[number, number], [number, number]] } {
+    return {
+      toArray: () => [
+        [-0.7, 44.75],
+        [-0.5, 44.9],
+      ],
+    }
   }
   emit(type: string, event?: unknown): void {
     for (const listener of this.listeners.get(type) ?? []) listener(event)
+  }
+  jumpTo(options: { center: [number, number] }): this {
+    this.center = options.center
+    return this
   }
   addControl(control: unknown): this {
     this.controls.push(control)
@@ -77,6 +111,8 @@ export class MockMap {
 
 export class MockPopup {
   html = ''
+  lngLat: unknown = null
+  map: MockMap | null = null
   listeners = new Map<string, Array<() => void>>()
   element = document.createElement('div')
   constructor(public readonly options: Record<string, unknown>) {}
@@ -93,6 +129,15 @@ export class MockPopup {
   }
   open(): void {
     for (const listener of this.listeners.get('open') ?? []) listener()
+  }
+  setLngLat(lngLat: unknown): this {
+    this.lngLat = lngLat
+    return this
+  }
+  addTo(map: MockMap): this {
+    this.map = map
+    mapLibreMock.popups.push(this)
+    return this
   }
   getElement(): HTMLElement {
     return this.element
@@ -123,6 +168,91 @@ export class MockMarker {
     this.removed = true
   }
 }
+
+/**
+ * terra-draw ne dessine rien dans les tests : un enregistreur à la place.
+ * `terraDrawMock.instances[0].finish(feature)` simule la fin d'un dessin.
+ */
+export const terraDrawMock = {
+  instances: [] as MockTerraDraw[],
+  reset(): void {
+    this.instances = []
+  },
+}
+
+export class MockTerraDraw {
+  mode = 'static'
+  started = false
+  stopped = false
+  cleared = 0
+  features = new Map<string, unknown>()
+  listeners = new Map<string, Array<(...args: unknown[]) => void>>()
+  constructor(public readonly options: { modes: unknown[] }) {
+    terraDrawMock.instances.push(this)
+  }
+  start(): void {
+    this.started = true
+  }
+  stop(): void {
+    this.stopped = true
+  }
+  setMode(mode: string): void {
+    this.mode = mode
+  }
+  clear(): void {
+    this.cleared++
+    this.features.clear()
+  }
+  on(event: string, listener: (...args: unknown[]) => void): void {
+    const list = this.listeners.get(event) ?? []
+    list.push(listener)
+    this.listeners.set(event, list)
+  }
+  getSnapshotFeature(id: string): unknown {
+    return this.features.get(id)
+  }
+  getSnapshot(): Array<{ id: string }> {
+    return [...this.features.entries()].map(([id, feature]) => ({
+      ...(feature as object),
+      id,
+    }))
+  }
+  private nextId = 0
+  getFeatureId(): string {
+    this.nextId += 1
+    return `feature-${this.nextId}`
+  }
+  addFeatures(features: Array<{ id: string }>): unknown[] {
+    for (const feature of features) this.features.set(feature.id, feature)
+    return features.map(f => ({ id: f.id, valid: true }))
+  }
+  removeFeatures(ids: string[]): void {
+    for (const id of ids) this.features.delete(id)
+  }
+  /** Simule la fin d'un tracé (ou d'une retouche, `action: 'edit'`). */
+  finish(feature: unknown, id = 'drawn-1', action = 'draw'): void {
+    this.features.set(id, feature)
+    for (const listener of this.listeners.get('finish') ?? [])
+      listener(id, { mode: this.mode, action })
+  }
+}
+
+vi.mock('terra-draw', () => ({
+  TerraDraw: MockTerraDraw,
+  TerraDrawPolygonMode: class {
+    mode = 'polygon'
+    constructor(public readonly options: unknown = {}) {}
+  },
+  TerraDrawCircleMode: class {
+    mode = 'circle'
+  },
+}))
+
+vi.mock('terra-draw-maplibre-gl-adapter', () => ({
+  TerraDrawMapLibreGLAdapter: class {
+    constructor(public readonly options: unknown) {}
+  },
+}))
 
 vi.mock('maplibre-gl', () => ({
   Map: MockMap,

@@ -4,6 +4,8 @@ import type {
   Assumptions,
   ListingEvaluation,
   ListingFinancials,
+  FieldProvenanceMap,
+  ListingOpenDataContext,
   NegotiationBrief,
 } from '@apart/contracts'
 import {
@@ -32,7 +34,11 @@ export interface LivePreview {
  */
 export function previewFromForm(
   form: ListingForm,
-  base: Assumptions | null | undefined
+  base: Assumptions | null | undefined,
+  openDataContext: ListingOpenDataContext | null = null,
+  /** Provenance enregistrée : un plafond posé d'office expire avec son arrêté, comme côté serveur. */
+  fieldSources: FieldProvenanceMap | null = null,
+  at: Date = new Date()
 ): LivePreview {
   if (!base) {
     return {
@@ -53,7 +59,12 @@ export function previewFromForm(
   }
   const listing = parsed.data
   const assumptions = mergeAssumptions(base, listing.assumptionsOverride)
-  const financials = financialsFromListing(listing)
+  // Le prix médian DVF enregistré nourrit le critère « marché », comme côté serveur.
+  const financials = financialsFromListing(
+    { ...listing, openDataContext, fieldSources },
+    undefined,
+    at
+  )
   const metrics = compute(financials, assumptions)
   const rental = rentalChecks(
     {
@@ -95,7 +106,16 @@ export function previewFromForm(
 
 export function useLivePreview(
   form: Ref<ListingForm>,
-  assumptions: Ref<Assumptions | null | undefined>
+  assumptions: Ref<Assumptions | null | undefined>,
+  openDataContext?: Ref<ListingOpenDataContext | null>,
+  fieldSources?: Ref<FieldProvenanceMap | null>
 ) {
-  return computed(() => previewFromForm(form.value, assumptions.value))
+  return computed(() =>
+    previewFromForm(
+      form.value,
+      assumptions.value,
+      openDataContext?.value ?? null,
+      fieldSources?.value ?? null
+    )
+  )
 }

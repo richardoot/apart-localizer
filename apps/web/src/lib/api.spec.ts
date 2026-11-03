@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { supabase } from '@/lib/supabase'
-import { ApiError, apiFetch } from './api'
+import { ApiError, api, apiFetch } from './api'
 
 const fetchMock = vi.fn()
 
@@ -61,5 +61,36 @@ describe('apiFetch', () => {
       json: () => Promise.reject(new Error()),
     })
     await expect(apiFetch('/x')).rejects.toThrow('Erreur 502')
+  })
+})
+
+describe('api (lot 4)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockReset()
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    })
+  })
+
+  it('critères, couches et contexte : chemins et méthodes', async () => {
+    await api.searchCriteria.list(true)
+    await api.searchCriteria.preview({ perimeter: null })
+    await api.opendata.dvf([-0.7, 44.75, -0.5, 44.9])
+    await api.opendata.transitStops('tram')
+    await api.listings.verifyDpe('id-1', { number: 'X' })
+    const calls = fetchMock.mock.calls.map(
+      ([url, init]) =>
+        `${(init as RequestInit).method ?? 'GET'} ${String(url).replace(/^https?:\/\/[^/]+/, '')}`
+    )
+    expect(calls).toEqual([
+      'GET /search-criteria?includeArchived=true',
+      'POST /search-criteria/preview',
+      'GET /opendata/layers/dvf?bbox=-0.70000,44.75000,-0.50000,44.90000',
+      'GET /opendata/layers/transit-stops?mode=tram',
+      'POST /listings/id-1/dpe/verify',
+    ])
   })
 })

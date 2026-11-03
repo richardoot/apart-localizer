@@ -56,7 +56,8 @@ est testée.
 
 ## Lot 4 : critères géographiques et données ouvertes
 
-- Besoins G3 à G7, D1 à D7, L2, L3, N4.
+- Besoins G3 à G7, D1 à D5 et D7, L2, L3, N4 ; Géorisques (D6) passe au lot 5 avec la
+  checklist réglementaire (ADR 0011).
 - Critères de recherche enregistrés et partagés ; périmètre dessiné (terra-draw) ; isochrones
   Géoplateforme ; alertes à l'entrée d'une annonce dans un critère, y compris à la création par
   le MCP ; `list_search_criteria`, `create_search_criteria`, `update_search_criteria`.
@@ -69,9 +70,10 @@ DVF du quartier s'affichent avec leur date.
 
 ## Lot 5 : phase 1 et phase 2 avancées
 
-- Besoins E3, E4, E6, E7, L4, L5.
+- Besoins E3, E4, E6, E7, L4, L5, D6.
 - Coût d'occupation contre loyer actuel, scénarios « et si » enregistrables, fiscalité estimée,
-  TRI et revente, loyer de marché par comparables saisis, checklist réglementaire datée.
+  TRI et revente, loyer de marché par comparables saisis, checklist réglementaire datée
+  (risques Géorisques à l'adresse compris).
 
 ## Lot 6 : confort
 

@@ -4,6 +4,7 @@ import { ListingsModule } from '../listings/listings.module'
 import { OffersModule } from '../offers/offers.module'
 import { OpinionsModule } from '../opinions/opinions.module'
 import { TasksModule } from '../tasks/tasks.module'
+import { SearchCriteriaModule } from '../search-criteria/search-criteria.module'
 import { McpAuthGuard } from './mcp-auth.guard'
 import { McpController } from './mcp.controller'
 import { OAuthDiscoveryService } from './oauth-discovery.service'
@@ -20,6 +21,7 @@ import { WellKnownController } from './well-known.controller'
     OpinionsModule,
     TasksModule,
     OffersModule,
+    SearchCriteriaModule,
   ],
   controllers: [McpController, WellKnownController],
   providers: [McpAuthGuard, OAuthDiscoveryService],

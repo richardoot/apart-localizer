@@ -12,6 +12,11 @@ import {
   ListingUpdateSchema,
 } from './listing.js'
 import { SensitivityRequestSchema } from './metrics.js'
+import { MarketContextRequestSchema } from './opendata.js'
+import {
+  SearchCriteriaInputSchema,
+  SearchCriteriaUpdateSchema,
+} from './search-criteria.js'
 import {
   CompareRequestSchema,
   EvaluateRequestSchema,
@@ -264,4 +269,42 @@ export const McpSetAssumptionsInputSchema = z.object({
 })
 export type McpSetAssumptionsInput = z.infer<
   typeof McpSetAssumptionsInputSchema
+>
+
+/** `list_search_criteria` : critères de l'espace avec leurs compteurs. */
+export const McpListSearchCriteriaInputSchema = z.object({
+  includeArchived: z
+    .boolean()
+    .default(false)
+    .describe('Inclure les critères archivés (inactifs)'),
+})
+export type McpListSearchCriteriaInput = z.infer<
+  typeof McpListSearchCriteriaInputSchema
+>
+
+/**
+ * `create_search_criteria` : nom, filtres, périmètre (point et rayon,
+ * polygone GeoJSON, ou isochrone calculée par la Géoplateforme).
+ */
+export const McpCreateSearchCriteriaInputSchema = SearchCriteriaInputSchema
+export type McpCreateSearchCriteriaInput = z.infer<
+  typeof McpCreateSearchCriteriaInputSchema
+>
+
+/** `update_search_criteria` : champs modifiés, garde-fou `expectedUpdatedAt`. */
+export const McpUpdateSearchCriteriaInputSchema = z.object({
+  criteriaId: z
+    .string()
+    .uuid()
+    .describe('Identifiant du critère (voir list_search_criteria)'),
+  ...SearchCriteriaUpdateSchema.shape,
+})
+export type McpUpdateSearchCriteriaInput = z.infer<
+  typeof McpUpdateSearchCriteriaInputSchema
+>
+
+/** `get_market_context` : DVF, encadrement et desserte d'une annonce, d'une adresse ou d'un point. */
+export const McpGetMarketContextInputSchema = MarketContextRequestSchema
+export type McpGetMarketContextInput = z.infer<
+  typeof McpGetMarketContextInputSchema
 >

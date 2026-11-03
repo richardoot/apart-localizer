@@ -18,6 +18,7 @@ import 'reflect-metadata'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
+import { cliArgs } from './lib/cli.js'
 import { config as loadEnv } from 'dotenv'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
@@ -37,6 +38,7 @@ import type { GeocodeResult } from './lib/geocode.js'
 const repoRoot = path.resolve(import.meta.dirname, '..')
 
 const { values: args } = parseArgs({
+  args: cliArgs(),
   options: {
     'no-geocode': { type: 'boolean', default: false },
     'dry-run': { type: 'boolean', default: false },

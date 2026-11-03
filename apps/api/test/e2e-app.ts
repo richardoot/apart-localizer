@@ -1,7 +1,7 @@
 /**
  * Boots the real application for e2e specs, on a database of its own.
  *
- * Four things are substituted, and only four:
+ * Five things are substituted, and only five:
  *  - PrismaService, pointed at a throwaway PostGIS database provisioned from
  *    prisma/migrations (see e2e-database.ts);
  *  - SupabaseService, the one call that leaves the machine to validate a
@@ -10,7 +10,10 @@
  *    `parse` each spec scripts (`ctx.ai.parse`), or by null to exercise the
  *    "IA non configurée" answer (`{ ai: false }`);
  *  - the geocoder's fetch (GeocodingService.fetchImpl), which answers "no
- *    result" unless a spec says otherwise (`ctx.geocoding.fetchImpl`).
+ *    result" unless a spec says otherwise (`ctx.geocoding.fetchImpl`);
+ *  - the other open data clients' fetch: the ADEME DPE search answers "no
+ *    DPE" (`ctx.dpe.fetchImpl`) and the Géoplateforme isochrone fails
+ *    (`ctx.isochrone.fetchImpl`), unless a spec scripts them.
  *
  * Everything else runs for real: SupabaseGuard (token extraction, member
  * resolution), the Zod validation pipe, the exception filter, the services,
@@ -31,6 +34,8 @@ import { SupabaseService } from '../src/auth/supabase.service'
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter'
 import { requestLogger } from '../src/common/request-log'
 import { GeocodingService } from '../src/opendata/geocoding.service'
+import { DpeService } from '../src/opendata/dpe.service'
+import { IsochroneService } from '../src/opendata/isochrone.service'
 import { createE2eDatabase } from './e2e-database'
 import type { E2eDatabase } from './e2e-database'
 
@@ -87,6 +92,10 @@ export interface E2eContext {
   ai: FakeAnthropic
   /** The geocoder; set `fetchImpl` to script the Géoplateforme's answers. */
   geocoding: GeocodingService
+  /** The ADEME DPE search; set `fetchImpl` to script its answers. */
+  dpe: DpeService
+  /** The Géoplateforme isochrones; set `fetchImpl` to script its answers. */
+  isochrone: IsochroneService
   /** Authorization header for a known identity. */
   auth: (identity: E2eIdentity) => { Authorization: string }
   /** Closes the app and drops the database. */
@@ -97,6 +106,22 @@ export interface E2eOptions {
   /** False builds the app without an AI client, as when ANTHROPIC_API_KEY is unset. */
   ai?: boolean
 }
+
+/** The ADEME answer with no DPE: the default for every spec. */
+export const NO_DPE_RESULT: typeof NO_GEOCODE_RESULT = () =>
+  Promise.resolve({
+    ok: true,
+    status: 200,
+    json: () => Promise.resolve({ total: 0, results: [] }),
+  })
+
+/** The isochrone service down: the default, so that no spec reaches the network. */
+export const ISOCHRONE_DOWN: typeof NO_GEOCODE_RESULT = () =>
+  Promise.resolve({
+    ok: false,
+    status: 503,
+    json: () => Promise.resolve({}),
+  })
 
 /** A geocoder answer with no result: the default for every spec. */
 export const NO_GEOCODE_RESULT = (): Promise<{
@@ -161,6 +186,10 @@ export async function createE2eApp(
   // Nothing leaves the machine: the geocoder answers "no result" by default.
   const geocoding = app.get(GeocodingService)
   geocoding.fetchImpl = NO_GEOCODE_RESULT
+  const dpe = app.get(DpeService)
+  dpe.fetchImpl = NO_DPE_RESULT
+  const isochrone = app.get(IsochroneService)
+  isochrone.fetchImpl = ISOCHRONE_DOWN
 
   return {
     app,
@@ -169,6 +198,8 @@ export async function createE2eApp(
     db: database,
     ai,
     geocoding,
+    dpe,
+    isochrone,
     auth: identity => ({ Authorization: `Bearer ${identity.token}` }),
     close: async () => {
       await app.close()

@@ -16,6 +16,7 @@ import { ListingsModule } from './listings/listings.module'
 import { OpinionsModule } from './opinions/opinions.module'
 import { OffersModule } from './offers/offers.module'
 import { TasksModule } from './tasks/tasks.module'
+import { SearchCriteriaModule } from './search-criteria/search-criteria.module'
 import { McpModule } from './mcp/mcp.module'
 
 @Module({
@@ -44,6 +45,7 @@ import { McpModule } from './mcp/mcp.module'
     OpinionsModule,
     OffersModule,
     TasksModule,
+    SearchCriteriaModule,
     McpModule,
   ],
   providers: [

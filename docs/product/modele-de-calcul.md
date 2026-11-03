@@ -115,13 +115,21 @@ Repris de l'artefact, chacun rend `ok`, `warn`, `bad` ou `unknown` :
 Verdict : `Incompatible` dès un `bad` ; `Sous conditions` dès un `warn` ou à partir de trois
 `unknown` ; sinon `Compatible`.
 
-Ajouts prévus :
+Ajouts du lot 4 (données ouvertes, voir [open-data.md](../open-data.md) et ADR 0011) :
 
-- validité du DPE : un DPE réalisé avant le 1er juillet 2021 n'est plus valable depuis le
-  1er janvier 2025 ; alerte si la date est absente ou antérieure ;
-- audit énergétique obligatoire à la vente (F et G depuis 2023, E depuis 2025) : tâche « demander
-  l'audit » ;
-- plafond meublé distinct du plafond vide ; complément de loyer éventuel signalé.
+- **plafond automatique** : le loyer de référence majoré de l'arrêté en vigueur (zone, pièces,
+  époque, meublé ou vide, `lookupRentReference`) devient `refM2` de la phase 2 avec la
+  provenance `open_data` tant que le membre n'en saisit pas un autre ; il nourrit le contrôle 2
+  et `plafond = refM2 × S`. Il ne compte plus après la fin d'application de son arrêté
+  (`referenceRentInForce`) ; une adresse sans numéro, une limite de zone ou une époque ambiguë
+  le laissent « à vérifier » sans l'appliquer ;
+- **validité du DPE** (`dpeValidity`, hors `rentalChecks` pour ne pas changer le nombre
+  d'inconnues, donc les verdicts) : un DPE d'avant le 1er juillet 2021 n'est plus valable depuis
+  le 1er janvier 2025 (le 1er janvier 2023 s'il date d'avant 2018), dix ans sinon ; audit
+  énergétique signalé pour F et G (depuis le 1er avril 2023) et E (depuis le 1er janvier 2025)
+  hors copropriété.
+
+Reste prévu : complément de loyer éventuel signalé.
 
 ## 4. Phase 1 : coût d'occupation (lot E3)
 
@@ -156,10 +164,17 @@ le prix correspondant à un coût total `x` (avec honoraires acquéreur : `(x �
 | Rendement net ≥ `s_n` | `netExpl / s_n` | `P_n = c⁻¹(netExpl / s_n)` |
 | Effort ≥ −`E` | `A + (netExpl / 12 + E) / k` | `P_e = c⁻¹(A + (netExpl / 12 + E) / k)` |
 | Repère 220 × loyer | `220 × L` | `P_220 = c⁻¹(220 × L)` |
-| Marché (lot N4) | | `P_m = S × prixM2Median(DVF, quartier) × ajustements` |
+| Marché (lot 4, N4) | | `P_m = S × prixM2Median(DVF)`, à partir de cinq ventes comparables |
 
 Le critère effort n'a de sens que si `cout > A` (sinon la mensualité est nulle et l'effort vaut
 `netExpl / 12`, indépendant du prix).
+
+Critère « marché » (`maxPriceForMarket`, `marketStats`) : ventes DVF d'appartements (ni VEFA ni
+adjudication, une mutation d'un seul appartement sans autre local) des trois dernières années,
+surface à ±25 %, dans 500 m élargis à 1 000 puis 2 000 m faute de cinq ventes ; `prixM2Median` est
+la médiane (quantiles par interpolation linéaire), sans ajustement. Elle est lue dans
+l'instantané de l'annonce, donc la même dans la liste, la fiche et le MCP ; le prix de marché est
+une estimation (provenance `estimated`). Le critère est inactif par défaut.
 
 ```
 prixCible   = min des prix maximaux des critères actifs (défaut : brut et effort, comme le verdict)

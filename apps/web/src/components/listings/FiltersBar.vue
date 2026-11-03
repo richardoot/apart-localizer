@@ -7,7 +7,12 @@
     ListingStatusSchema,
     VerdictSchema,
   } from '@apart/contracts'
-  import type { DpeClass, ListingSort, Verdict } from '@apart/contracts'
+  import type {
+    DpeClass,
+    ListingSort,
+    SearchCriteriaSummary,
+    Verdict,
+  } from '@apart/contracts'
   import {
     LISTING_STATUS_LABELS,
     SORT_LABELS,
@@ -16,10 +21,15 @@
   import { formatDistance, parseNumberInput } from '@/lib/format'
   import { useFiltersStore } from '@/stores/filters'
 
-  const props = defineProps<{
-    /** Les communes présentes dans l'espace, pour le sélecteur. */
-    communes: readonly string[]
-  }>()
+  const props = withDefaults(
+    defineProps<{
+      /** Les communes présentes dans l'espace, pour le sélecteur. */
+      communes: readonly string[]
+      /** Les critères de recherche de l'espace, pour le sélecteur. */
+      criteria?: readonly SearchCriteriaSummary[]
+    }>(),
+    { criteria: () => [] }
+  )
 
   const store = useFiltersStore()
   const statuses = ListingStatusSchema.options
@@ -59,6 +69,11 @@
   function onCommune(event: Event): void {
     const value = (event.target as HTMLSelectElement).value
     store.patch({ commune: value ? [value] : undefined })
+  }
+
+  function onCriteria(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value
+    store.patch({ criteriaId: value || undefined })
   }
 
   function onSearch(event: Event): void {
@@ -121,6 +136,22 @@
         <option value="">Toutes</option>
         <option v-for="commune in communeOptions" :key="commune">
           {{ commune }}
+        </option>
+      </select>
+    </div>
+    <div class="grid gap-1">
+      <label for="f-criteria" class="text-xs font-medium text-muted"
+        >Critère enregistré</label
+      >
+      <select
+        id="f-criteria"
+        class="rounded-lg border border-line bg-bg px-3 py-1.5 text-sm"
+        :value="store.filters.criteriaId ?? ''"
+        @change="onCriteria"
+      >
+        <option value="">Aucun</option>
+        <option v-for="c in props.criteria" :key="c.id" :value="c.id">
+          {{ c.name }} ({{ c.listingCount }})
         </option>
       </select>
     </div>

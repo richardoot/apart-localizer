@@ -41,6 +41,7 @@ export const DOC_EXAMPLE: ListingFinancials = {
   annualCharges: null,
   nonRecoverableChargesMonthly: null,
   dpeClass: 'D',
+  marketPricePerM2: null,
 }
 
 /** Une entrée financière complète à partir d'une surcharge partielle. */

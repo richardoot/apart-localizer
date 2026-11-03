@@ -49,6 +49,7 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     dpeConsumption: null,
     gesClass: null,
     dpeDate: new Date('2024-05-01T00:00:00.000Z'),
+    dpeNumber: null,
     heatingType: null,
     heatingCollective: null,
     outdoor: null,
@@ -69,6 +70,7 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     discardReason: null,
     discardedAt: null,
     assumptionsOverride: null,
+    openDataContext: null,
     createdById: null,
     createdAt: now,
     updatedAt: now,
@@ -94,6 +96,7 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     tasks: [],
     priceEvents: [],
     offers: [],
+    criteriaMatches: [],
     ...over,
   }
 }
@@ -113,6 +116,32 @@ describe('toListingDto', () => {
     expect(dto.rentalPlan?.targetRent).toBe(750)
     expect(dto.renovation).toBeNull()
     expect(dto.fieldSources).toEqual({ price: { source: 'listing' } })
+    expect(dto.openDataContext).toBeNull()
+  })
+
+  it('reads the open data snapshot, ignoring an unreadable one', () => {
+    const snapshot = {
+      market: {
+        medianPricePerM2: 4200,
+        count: 9,
+        radiusMeters: 500,
+        computedAt: '2026-11-03T10:00:00.000Z',
+      },
+    }
+    const dto = toListingDto(row({ openDataContext: snapshot }))
+    expect(dto.openDataContext?.market?.medianPricePerM2).toBe(4200)
+    expect(dto.openDataContext?.dpe).toBeNull()
+    expect(
+      toListingDto(row({ openDataContext: { market: 'broken' } }))
+        .openDataContext
+    ).toBeNull()
+    // Le prix médian enregistré rend le critère « marché » calculable.
+    const evaluation = evaluateListing(dto, DEFAULT_ASSUMPTIONS)
+    const market = evaluation.targetPrice.criteria.find(
+      c => c.criterion === 'market'
+    )
+    expect(market?.maxPrice).toBe(4200 * 45)
+    expect(market?.active).toBe(false)
   })
 
   it('prefers the stored GeoJSON and handles a listing without a point', () => {

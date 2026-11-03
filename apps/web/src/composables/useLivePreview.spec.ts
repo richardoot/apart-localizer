@@ -66,6 +66,94 @@ describe('aperçu en direct', () => {
     expect(preview.value.assumptions?.interestRate).toBeCloseTo(0.032, 10)
   })
 
+  it('le critère « marché » lit la médiane DVF enregistrée sur l’annonce (lot 4)', () => {
+    const form = emptyForm()
+    form.price = '200000'
+    form.surface = '45'
+    form.rentalPlan.targetRent = '750'
+    const without = previewFromForm(form, DEFAULT_ASSUMPTIONS)
+    const market = (p: ReturnType<typeof previewFromForm>) =>
+      p.evaluation?.targetPrice.criteria.find(c => c.criterion === 'market')
+    expect(market(without)?.maxPrice).toBeNull()
+    const context = {
+      market: {
+        medianPricePerM2: 4000,
+        count: 6,
+        radiusMeters: 500,
+        computedAt: '2026-11-03T10:00:00.000Z',
+      },
+      dpe: null,
+      rentControl: null,
+      transit: null,
+    }
+    const withMarket = previewFromForm(form, DEFAULT_ASSUMPTIONS, context)
+    expect(market(withMarket)?.maxPrice).toBe(180_000)
+    expect(market(withMarket)?.discount).toBeCloseTo(0.1, 10)
+    // Moins de cinq ventes : pas d'ancrage marché.
+    const few = previewFromForm(form, DEFAULT_ASSUMPTIONS, {
+      ...context,
+      market: { ...context.market, count: 4 },
+    })
+    expect(market(few)?.maxPrice).toBeNull()
+    const reactive = useLivePreview(
+      ref(form),
+      ref(DEFAULT_ASSUMPTIONS),
+      ref(context)
+    )
+    expect(market(reactive.value)?.maxPrice).toBe(180_000)
+  })
+
+  it('un plafond posé d’office d’après un arrêté expiré ne plafonne plus, comme côté serveur', () => {
+    const form = emptyForm()
+    form.price = '200000'
+    form.surface = '40'
+    form.commune = 'Bordeaux'
+    form.rentalPlan.targetRent = '900'
+    form.rentalPlan.referenceRentPerM2 = '15'
+    const context = {
+      market: null,
+      dpe: null,
+      transit: null,
+      rentControl: {
+        status: 'ok' as const,
+        zone: 1,
+        referenceRentPerM2: 15,
+        decreeDate: '2030-06-01',
+        validUntil: '2030-06-30',
+        reasons: [],
+        computedAt: '2030-06-01T10:00:00.000Z',
+      },
+    }
+    const sources = {
+      'rentalPlan.referenceRentPerM2': {
+        source: 'open_data' as const,
+        confidence: 1,
+        recordedAt: '2030-06-01T10:00:00.000Z',
+      },
+    }
+    const during = previewFromForm(
+      form,
+      DEFAULT_ASSUMPTIONS,
+      context,
+      sources,
+      new Date('2030-06-15')
+    )
+    expect(during.evaluation?.metrics.rentCap).toBe(600)
+    const after = previewFromForm(
+      form,
+      DEFAULT_ASSUMPTIONS,
+      context,
+      sources,
+      new Date('2030-07-15')
+    )
+    expect(after.evaluation?.metrics.rentCap).toBeNull()
+    // Sans provenance (valeur retapée), la saisie compte.
+    expect(
+      previewFromForm(form, DEFAULT_ASSUMPTIONS, context, null).evaluation
+        ?.metrics.rentCap
+    ).toBe(600)
+  })
+
   it('calcule même un formulaire incomplet et se tait sans hypothèses', () => {
     const form = emptyForm()
     const partial = previewFromForm(form, DEFAULT_ASSUMPTIONS)

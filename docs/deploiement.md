@@ -63,6 +63,27 @@ pnpm import:artifact -- --database-url '<connexion directe>' --richard-email <e-
 Les e-mails doivent être ceux des comptes Google : le rattachement se fait à la première connexion
 (ADR 0004).
 
+### Données ouvertes (lot 4)
+
+Les tables de référence (zonage et arrêté de l'encadrement, arrêts TBM, ventes DVF) ne sont pas
+dans les migrations : elles se chargent depuis les fichiers téléchargés dans `data/opendata/`
+(sources, URL, licences et dates dans [open-data.md](open-data.md)), depuis un poste, avec la
+connexion directe. Commencer par `--dry-run` pour lire les comptes sans rien écrire :
+
+```bash
+pnpm import:rent-control -- --database-url '<connexion directe>'
+pnpm import:transit-stops -- --database-url '<connexion directe>'
+pnpm import:dvf -- --year 2024 --database-url '<connexion directe>'
+pnpm geocode:missing -- --dry-run --database-url '<connexion directe>'
+```
+
+Les imports sont idempotents (relancer ne crée pas de doublon) et se rafraîchissent au rythme
+décrit dans [open-data.md](open-data.md) (arrêté de l'encadrement chaque année, DVF à chaque
+nouvelle année publiée). Sans ces imports, l'API répond quand même : la desserte, le plafond et
+les comparables passent « à vérifier » ou « indisponible ». Le DPE (ADEME), le géocodage et les
+isochrones (Géoplateforme) sont appelés à la demande, sans clé, avec un cache dans
+`reference_data`.
+
 ## 3. Projet Vercel : API
 
 Nouveau projet depuis le dépôt GitHub, **Root Directory** `apps/api`, framework « Other ». Le
@@ -85,6 +106,8 @@ et le dossier de sortie (`dist`). Variables d'environnement (Production, et Prev
 | `AI_MODEL`, `AI_MODEL_BULK`                                      | facultatif, défauts `claude-opus-5-5` et `claude-haiku-5-5` ([ia.md](ia.md))                                           |
 | `AI_EFFORT`, `AI_MAX_TOKENS`, `AI_MAX_IMAGES`, `AI_MAX_IMAGE_MB` | facultatif ; Vercel plafonne le corps d'une requête à 4,5 Mo, le web réduit les captures avant envoi                   |
 | `GEOCODING_URL`                                                  | facultatif, défaut Géoplateforme IGN                                                                                   |
+| `ISOCHRONE_URL`                                                  | facultatif, défaut Géoplateforme IGN (`https://data.geopf.fr/navigation/isochrone`)                                    |
+| `ADEME_DPE_URL`                                                  | facultatif, défaut API data-fair de l'ADEME (jeu `dpe03existant`)                                                      |
 
 Après le premier déploiement : `GET https://<api>.vercel.app/health` doit répondre `200` avec
 `checks.postgis.status: "ok"`, et `GET /.well-known/oauth-protected-resource` doit annoncer
@@ -141,6 +164,9 @@ URL des fils d'Ariane sont anonymisées (`apps/api/src/common/sentry.ts`, `apps/
       possible.
 - [ ] Migrations appliquées (`prisma:deploy` avec la connexion directe), import de l'artefact
       fait avec les bons e-mails.
+- [ ] Imports open data faits sur la base cloud (encadrement, arrêts TBM, DVF), puis
+      `GET /opendata/status` vérifié (secteurs, arrêté en vigueur, arrêts par mode, ventes par
+      année).
 - [ ] Projet Vercel API déployé, `/health` et `/.well-known/oauth-protected-resource` vérifiés.
 - [ ] Projet Vercel web déployé, connexion Google et carte vérifiées.
 - [ ] Connecteur déclaré dans claude.ai, `list_listings` puis `create_listing` testés.

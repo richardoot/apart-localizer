@@ -49,6 +49,9 @@ const arbFinancials: fc.Arbitrary<ListingFinancials> = fc
     annualCharges: fc.option(money(10_000), { nil: null }),
     nonRecoverableChargesMonthly: fc.option(money(300), { nil: null }),
     dpeClass: fc.constantFrom('A', 'B', 'C', 'D', 'E', 'F', 'G', null),
+    marketPricePerM2: fc.option(fc.integer({ min: 1500, max: 9000 }), {
+      nil: null,
+    }),
   })
   .map(({ feesRatio, ...f }) => ({
     ...f,

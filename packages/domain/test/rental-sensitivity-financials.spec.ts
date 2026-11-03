@@ -194,6 +194,7 @@ describe("entrée financière dérivée d'une annonce", () => {
       annualCharges: null,
       nonRecoverableChargesMonthly: null,
       dpeClass: null,
+      marketPricePerM2: null,
     })
     const full = financialsFromListing({
       price: 199_000,
@@ -215,6 +216,20 @@ describe("entrée financière dérivée d'une annonce", () => {
     expect(full.renovationTotal).toBe(2500)
     expect(full.targetRent).toBe(850)
     expect(full.referenceRentPerM2).toBe(14.5)
+    expect(full.marketPricePerM2).toBeNull()
+    // Le prix médian DVF enregistré nourrit le critère « marché », pas sous cinq ventes.
+    expect(
+      financialsFromListing({
+        price: 1,
+        openDataContext: { market: { medianPricePerM2: 4200, count: 12 } },
+      }).marketPricePerM2
+    ).toBe(4200)
+    expect(
+      financialsFromListing({
+        price: 1,
+        openDataContext: { market: { medianPricePerM2: 4200, count: 4 } },
+      }).marketPricePerM2
+    ).toBeNull()
     expect(
       financialsFromListing({
         price: 1,

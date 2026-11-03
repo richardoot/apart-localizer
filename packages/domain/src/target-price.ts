@@ -114,6 +114,19 @@ export function maxPriceForRule220(
   return positiveOrNull(priceForTotalCost(220 * rent, input, a))
 }
 
+/**
+ * Prix maximal du critère « marché » (lot 4, besoin N4) : médiane au m² des
+ * ventes DVF comparables × surface. Une estimation (provenance `estimated`),
+ * null sans médiane ou sans surface.
+ */
+export function maxPriceForMarket(input: ListingFinancials): number | null {
+  if (input.marketPricePerM2 === null || !(input.marketPricePerM2 > 0)) {
+    return null
+  }
+  if (!(input.surface > 0)) return null
+  return input.marketPricePerM2 * input.surface
+}
+
 /** Classement de la décote selon les seuils des hypothèses. */
 export function classifyDiscount(
   discount: number,
@@ -146,8 +159,7 @@ export function targetPrice(
     net_yield: maxPriceForNetYield(input, a),
     effort: maxPriceForEffort(input, a),
     rent_x220: maxPriceForRule220(input, a),
-    // Ancrage marché (DVF) : lot 4, pas encore calculable.
-    market: null,
+    market: maxPriceForMarket(input),
   }
 
   const discountFor = (maxPrice: number | null): number | null =>

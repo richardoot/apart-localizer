@@ -21,6 +21,7 @@
   } from '@/lib/format'
   import { DISCOUNT_CLASS_CLASSES, DISCOUNT_CLASS_LABELS } from '@/lib/labels'
   import DpeBadge from './DpeBadge.vue'
+  import CriteriaBadges from './CriteriaBadges.vue'
   import NewBadge from './NewBadge.vue'
   import RentalPill from './RentalPill.vue'
   import StatusBadge from './StatusBadge.vue'
@@ -100,6 +101,7 @@
           h('div', { class: 'flex items-center gap-2' }, [
             h('span', { class: 'font-medium' }, ctx.row.original.listing.title),
             h(NewBadge, { isNew: ctx.row.original.isNewForMe }),
+            h(CriteriaBadges, { matches: ctx.row.original.criteriaMatches }),
           ]),
           h('div', { class: 'flex flex-wrap items-center gap-1.5' }, [
             h(StatusBadge, { status: ctx.row.original.listing.status }),

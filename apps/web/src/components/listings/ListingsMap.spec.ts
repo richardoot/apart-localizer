@@ -81,7 +81,10 @@ describe('ListingsMap (MapLibre mocké)', () => {
     expect(source).toBeDefined()
     const data = source?.data as { features: unknown[] }
     expect(data.features).toHaveLength(1)
-    expect(map?.layers).toHaveLength(2)
+    const radiusLayers = (map?.layers ?? []).filter(
+      layer => (layer as { source: string }).source === 'near-radius'
+    )
+    expect(radiusLayers).toHaveLength(2)
     await wrapper.setProps({ near: undefined })
     expect((source?.data as { features: unknown[] }).features).toHaveLength(0)
 
@@ -93,6 +96,123 @@ describe('ListingsMap (MapLibre mocké)', () => {
       .querySelector<HTMLButtonElement>('[data-open]')
       ?.click()
     expect(wrapper.emitted('open')).toEqual([[placed.listing.id]])
+    wrapper.unmount()
+  })
+
+  it('couches de contexte : données posées si la couche est active, emprise rendue', async () => {
+    const stops = {
+      type: 'FeatureCollection' as const,
+      features: [
+        {
+          type: 'Feature' as const,
+          geometry: {
+            type: 'Point' as const,
+            coordinates: [-0.58, 44.84] as [number, number],
+          },
+          properties: { name: 'Arrêt fictif', lines: 'A', mode: 'tram' },
+        },
+      ],
+    }
+    const wrapper = mount(ListingsMap, {
+      props: {
+        items: [placed],
+        near: undefined,
+        colorBy: 'verdict',
+        layers: {
+          criteria: null,
+          tram: stops,
+          bus: null,
+          dvf: null,
+          rentZones: null,
+        },
+        toggles: {
+          criteria: true,
+          tram: false,
+          bus: false,
+          dvf: false,
+          rentZones: false,
+        },
+      },
+      attachTo: document.body,
+    })
+    await nextTick()
+    const map = mapLibreMock.maps[0]
+    map?.emit('load')
+    expect(wrapper.emitted('bounds')?.[0]).toEqual([[-0.7, 44.75, -0.5, 44.9]])
+    const tram = map?.sources.get('tram-stops')
+    expect((tram?.data as { features: unknown[] }).features).toHaveLength(0)
+    await wrapper.get('input[data-layer="tram"]').setValue(true)
+    expect(wrapper.emitted('update:toggles')?.[0]?.[0]).toMatchObject({
+      tram: true,
+    })
+    await wrapper.setProps({
+      toggles: {
+        criteria: true,
+        tram: true,
+        bus: false,
+        dvf: false,
+        rentZones: false,
+      },
+    })
+    expect((tram?.data as { features: unknown[] }).features).toHaveLength(1)
+    for (const id of [
+      'rent-zones',
+      'criteria-perimeters',
+      'dvf-sales',
+      'bus-stops',
+    ]) {
+      expect(map?.sources.get(id)).toBeDefined()
+    }
+    map?.emit('moveend')
+    expect(wrapper.emitted('bounds')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('un clic sur une vente DVF ouvre sa fiche sans déplacer le point ; légende des zones', async () => {
+    const wrapper = mount(ListingsMap, {
+      props: {
+        items: [placed],
+        near: undefined,
+        colorBy: 'verdict',
+        toggles: {
+          criteria: true,
+          tram: false,
+          bus: false,
+          dvf: true,
+          rentZones: true,
+        },
+      },
+      attachTo: document.body,
+    })
+    await nextTick()
+    const map = mapLibreMock.maps[0]
+    map?.emit('load')
+    expect(wrapper.get('[data-testid="rent-zone-legend"]').text()).toContain(
+      'Zones'
+    )
+    if (map) {
+      map.rendered = [
+        {
+          layer: { id: 'dvf-sales-points' },
+          properties: {
+            date: '2024-06-12',
+            price: 190000,
+            surface: 44,
+            pricePerM2: 4318,
+            rooms: 2,
+            address: '3 rue Fictive',
+          },
+        },
+      ]
+    }
+    map?.emit('click', { lngLat: { lng: -0.58, lat: 44.84 }, point: [1, 1] })
+    expect(wrapper.emitted('update:near')).toBeUndefined()
+    const popup = mapLibreMock.popups.at(-1)
+    expect(popup?.html).toContain('Vente DVF du 12 juin 2024')
+    expect(popup?.html).toContain('3 rue Fictive')
+    if (map) map.rendered = []
+    map?.emit('click', { lngLat: { lng: -0.58, lat: 44.84 }, point: [1, 1] })
+    expect(wrapper.emitted('update:near')).toHaveLength(1)
     wrapper.unmount()
   })
 })

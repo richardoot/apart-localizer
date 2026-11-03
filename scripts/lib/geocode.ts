@@ -27,6 +27,8 @@ export interface GeocoderOptions {
   cacheFile: string
   /** Faux = cache seul, aucun appel réseau. */
   online: boolean
+  /** Faux = le cache sur disque est lu mais jamais réécrit (simulation). */
+  persist?: boolean
   fetch?: FetchLike
   /** Score minimal pour retenir un résultat (0 à 1). */
   minScore?: number
@@ -59,7 +61,7 @@ export class Geocoder {
       minScore: this.minScore,
     })
     this.cache[key] = result
-    this.save()
+    if (this.options.persist !== false) this.save()
     return result
   }
 

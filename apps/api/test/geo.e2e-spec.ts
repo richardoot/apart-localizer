@@ -153,6 +153,13 @@ describe('GeoService (PostGIS)', () => {
       where: { id: criteria.id },
     })
     expect(saved.perimeterGeoJson).toEqual(TALENCE_BOX)
+    // Le critère d'un autre espace ne s'applique jamais à celui-ci.
+    const other = await ctx.prisma.workspace.create({
+      data: { name: 'Autre espace' },
+    })
+    expect(
+      await geo.listingsWithinCriteriaPerimeter(other.id, criteria.id)
+    ).toEqual([])
     await geo.setCriteriaPerimeter(criteria.id, null)
     expect(
       await geo.listingsWithinCriteriaPerimeter(workspaceId, criteria.id)

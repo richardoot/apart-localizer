@@ -14,6 +14,7 @@ import {
 import type {
   ActivityChannel,
   Assumptions,
+  CriteriaFilters,
   EvaluateRequest,
   EvaluateResult,
   EvaluatedListing,
@@ -32,18 +33,29 @@ import type {
   RenovationInput,
   RentalPlanInput,
 } from '@apart/contracts'
-import { mergeAssumptions } from '@apart/domain'
+import { criteriaFilterMatch, mergeAssumptions } from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
 import { GeoService } from '../geo/geo.service'
+import type { CriteriaGeoDraft, CriteriaGeoMatch } from '../geo/geo.service'
 import { GeocodingService } from '../opendata/geocoding.service'
 import { Prisma } from '../generated/prisma'
 import type { Member } from '../generated/prisma'
+import {
+  CriteriaMatchService,
+  criteriaCandidateOf,
+  criteriaFiltersOf,
+} from './criteria-match.service'
 import { DuplicatesService } from './duplicates.service'
+import {
+  ListingEnrichmentService,
+  REFERENCE_RENT_KEY,
+} from './enrichment.service'
 import { evaluateListing } from './evaluate'
 import {
   listingInclude,
+  toCriteriaMatchDtos,
   toListingDto,
   toOfferDto,
   toOpinionDto,
@@ -73,6 +85,38 @@ export interface CreateOptions extends WriteOptions {
   ignoreDuplicates?: boolean
 }
 
+/** Un critère appliqué à la liste : ses filtres, et sa partie géographique si elle contraint. */
+interface CriteriaScope {
+  filters: CriteriaFilters
+  /** Annonces qui passent le périmètre et la distance au tram ; null = pas de contrainte géographique. */
+  geo: CriteriaGeoMatch[] | null
+}
+
+/** Un critère à évaluer : enregistré, ou brouillon (aperçu avant enregistrement). */
+export type CriteriaSource =
+  | { criteriaId: string }
+  | { draft: CriteriaGeoDraft & { filters: CriteriaFilters } }
+
+/** Restreint `where.id` à des identifiants, en gardant une restriction déjà posée. */
+function restrictIds(where: Prisma.ListingWhereInput, ids: string[]): void {
+  const previous = where.id
+  const allowed =
+    previous && typeof previous === 'object' && 'in' in previous && previous.in
+      ? ids.filter(id => (previous.in as string[]).includes(id))
+      : ids
+  where.id = { in: allowed }
+}
+
+/** Les champs dont un changement relance le plafond, le marché et l'arrêt le plus proche. */
+const ENRICHMENT_KEYS = [
+  'surface',
+  'rooms',
+  'constructionYear',
+  'constructionPeriod',
+  'rentalPlan',
+  'floor',
+] as const
+
 /**
  * Les annonces : lecture filtrée, calculée et paginée ; création avec
  * checklist par défaut ; mise à jour partielle avec garde-fous optimistes ;
@@ -88,7 +132,9 @@ export class ListingsService {
     private readonly assumptions: AssumptionsService,
     private readonly geo: GeoService,
     private readonly geocoding: GeocodingService,
-    private readonly duplicates: DuplicatesService
+    private readonly duplicates: DuplicatesService,
+    private readonly criteriaMatches: CriteriaMatchService,
+    private readonly enrichment: ListingEnrichmentService
   ) {}
 
   /**
@@ -147,8 +193,17 @@ export class ListingsService {
       for (const row of nearby) distances.set(row.id, row.distance_meters)
       where.id = { in: nearby.map(r => r.id) }
     }
+    let scope: CriteriaScope | null = null
     if (filters.criteriaId) {
-      await this.applyCriteria(member.workspaceId, filters.criteriaId, where)
+      scope = await this.criteriaScope(member.workspaceId, filters.criteriaId)
+      if (filters.status === undefined && scope.filters.statuses.length) {
+        where.status = { in: scope.filters.statuses }
+      }
+      if (scope.geo)
+        restrictIds(
+          where,
+          scope.geo.map(g => g.id)
+        )
     }
 
     const rows = await this.prisma.listing.findMany({
@@ -160,6 +215,14 @@ export class ListingsService {
     let items = rows.map(row =>
       this.evaluateRow(row, member, base, distances.get(row.id))
     )
+    if (scope) {
+      const criteriaFilters = scope.filters
+      items = items.filter(
+        item =>
+          criteriaFilterMatch(criteriaCandidateOf(item), criteriaFilters)
+            .matches
+      )
+    }
     if (filters.verdict?.length) {
       items = items.filter(item =>
         filters.verdict?.includes(item.evaluation.metrics.verdict)
@@ -288,7 +351,9 @@ export class ListingsService {
     if (location.point) {
       await this.geo.setListingPoint(id, location.point, location.precision)
     }
-    const item = await this.get(member, id)
+    // Données ouvertes (arrêt, plafond, marché, DPE vérifié), puis alertes.
+    await this.enrichment.enrich(member, id, { dpe: true, channel })
+    const item = await this.afterWrite(member, id, channel)
     return {
       ...item,
       duplicates,
@@ -319,7 +384,29 @@ export class ListingsService {
       },
       provenance
     )
+    // Un loyer de référence saisi à la main l'emporte sur le plafond automatique.
+    if (patch.rentalPlan !== undefined) {
+      const next = patch.rentalPlan?.referenceRentPerM2 ?? null
+      const previous = before.rentalPlan?.referenceRentPerM2 ?? null
+      if (next !== previous) {
+        if (next === null) {
+          const { [REFERENCE_RENT_KEY]: _dropped, ...rest } = fieldSources
+          fieldSources = rest
+        } else {
+          fieldSources = {
+            ...fieldSources,
+            [REFERENCE_RENT_KEY]: {
+              source: provenance,
+              recordedAt: new Date().toISOString(),
+            },
+          }
+        }
+      }
+    }
     let location = patch.location
+    const locationChanged =
+      location !== undefined &&
+      ('point' in location || addressChanged(before.location, location))
     if (location && addressChanged(before.location, location)) {
       const merged: ListingLocationInput = { ...before.location, ...location }
       if (needsGeocoding({ ...merged, point: location.point ?? null })) {
@@ -398,7 +485,13 @@ export class ListingsService {
         location.precision ?? null
       )
     }
-    return this.get(member, id)
+    if (locationChanged || ENRICHMENT_KEYS.some(key => key in patch)) {
+      await this.enrichment.enrich(member, id, {
+        dpe: locationChanged,
+        channel,
+      })
+    }
+    return this.afterWrite(member, id, channel)
   }
 
   async setStatus(
@@ -438,7 +531,7 @@ export class ListingsService {
         tx
       )
     })
-    return this.get(member, id)
+    return this.afterWrite(member, id, channel)
   }
 
   /** Marque l'annonce comme vue par le membre (le drapeau « nouveau » s'éteint pour lui seul). */
@@ -501,7 +594,7 @@ export class ListingsService {
         tx
       )
     })
-    return this.get(member, id)
+    return this.afterWrite(member, id, channel)
   }
 
   /**
@@ -590,72 +683,175 @@ export class ListingsService {
       tasks: row.tasks.map(toTaskDto),
       priceEvents: row.priceEvents.map(toPriceEventDto),
       offers: row.offers.map(toOfferDto),
+      criteriaMatches: toCriteriaMatchDtos(row),
     })
   }
 
-  /** Applique un critère enregistré : filtres simples en SQL, périmètre par le module geo. */
-  private async applyCriteria(
+  /** Les filtres d'un critère enregistré et sa partie géographique (PostGIS). */
+  private async criteriaScope(
     workspaceId: string,
-    criteriaId: string,
-    where: Prisma.ListingWhereInput
-  ): Promise<void> {
+    criteriaId: string
+  ): Promise<CriteriaScope> {
     const criteria = await this.prisma.searchCriteria.findFirst({
       where: { id: criteriaId, workspaceId },
     })
-    if (!criteria)
+    if (!criteria) {
       throw new NotFoundException('Critère de recherche introuvable')
-    const filters = (criteria.filters ?? {}) as {
-      communes?: string[]
-      priceMin?: number | null
-      priceMax?: number | null
-      surfaceMin?: number | null
-      roomsMin?: number | null
     }
-    if (filters.communes?.length) {
-      where.commune = { in: filters.communes, mode: 'insensitive' }
-    }
-    if (filters.priceMin != null || filters.priceMax != null) {
-      where.price = {
-        ...(filters.priceMin != null ? { gte: filters.priceMin } : {}),
-        ...(filters.priceMax != null ? { lte: filters.priceMax } : {}),
-      }
-    }
-    if (filters.surfaceMin != null) where.surface = { gte: filters.surfaceMin }
-    if (filters.roomsMin != null) where.rooms = { gte: filters.roomsMin }
+    const filters = criteriaFiltersOf(criteria.filters)
+    const geo =
+      criteria.perimeterType !== null || filters.maxTramDistanceMeters !== null
+        ? await this.geo.listingsInCriteria(workspaceId, criteriaId)
+        : null
+    return { filters, geo }
+  }
 
-    let ids: string[] | null = null
+  /**
+   * Toutes les annonces de l'espace qui satisfont un critère (enregistré ou
+   * brouillon), évaluées, avec le drapeau « localisation imprécise » : la
+   * même règle que `list` avec `criteriaId`, pour les compteurs, l'aperçu et
+   * la table des entrées.
+   */
+  async listingsForCriteria(
+    member: Member,
+    source: CriteriaSource
+  ): Promise<{ items: EvaluatedListing[]; approximate: Set<string> }> {
+    let filters: CriteriaFilters
+    let geo: CriteriaGeoMatch[] | null
+    if ('criteriaId' in source) {
+      const scope = await this.criteriaScope(
+        member.workspaceId,
+        source.criteriaId
+      )
+      filters = scope.filters
+      geo = scope.geo
+    } else {
+      filters = source.draft.filters
+      geo =
+        source.draft.perimeterType !== null ||
+        filters.maxTramDistanceMeters !== null
+          ? await this.geo.listingsInCriteriaDraft(
+              member.workspaceId,
+              source.draft
+            )
+          : null
+    }
+    const where: Prisma.ListingWhereInput = {
+      workspaceId: member.workspaceId,
+      status: {
+        in: filters.statuses.length
+          ? filters.statuses
+          : [...ACTIVE_LISTING_STATUSES],
+      },
+    }
+    if (geo)
+      restrictIds(
+        where,
+        geo.map(g => g.id)
+      )
+    const rows = await this.prisma.listing.findMany({
+      where,
+      include: listingInclude,
+      orderBy: { createdAt: 'desc' },
+    })
+    const base = await this.assumptions.currentValues(member.workspaceId)
+    const items = rows
+      .map(row => this.evaluateRow(row, member, base))
+      .filter(
+        item => criteriaFilterMatch(criteriaCandidateOf(item), filters).matches
+      )
+    const approximate = new Set(
+      (geo ?? []).filter(g => g.approximate).map(g => g.id)
+    )
+    return { items, approximate }
+  }
+
+  /**
+   * L'annonce vue après une écriture, avec les critères dans lesquels elle
+   * entre ou dont elle sort (table des entrées resynchronisée, alertes
+   * journalisées). Public pour les écritures faites hors de ce service (DPE
+   * retenu ou appliqué par l'enrichissement).
+   */
+  async afterWrite(
+    member: Member,
+    id: string,
+    channel: ActivityChannel
+  ): Promise<EvaluatedListing> {
+    const item = await this.get(member, id)
+    const criteriaChanges = await this.criteriaMatches.refreshForListing(
+      member,
+      item,
+      channel
+    )
+    return {
+      ...item,
+      criteriaMatches: criteriaChanges.current,
+      criteriaChanges,
+    }
+  }
+
+  /**
+   * Relance le géocodage d'une annonce (sans le cache : le géocodeur était
+   * peut-être en panne, ou l'adresse n'avait donné que la commune), puis les
+   * enrichissements. Refus si l'annonce n'a ni adresse ni commune.
+   */
+  async regeocode(
+    member: Member,
+    id: string,
+    channel: ActivityChannel = 'web'
+  ): Promise<EvaluatedListing> {
+    const row = await this.findRow(member, id)
+    const before = toListingDto(row)
     if (
-      criteria.perimeterType === 'point_radius' &&
-      criteria.centerLatitude !== null &&
-      criteria.centerLongitude !== null &&
-      criteria.radiusMeters !== null
+      !before.location.addressRaw?.trim() &&
+      !before.location.commune?.trim()
     ) {
-      const rows = await this.geo.listingsWithinRadius(workspaceId, {
-        latitude: criteria.centerLatitude,
-        longitude: criteria.centerLongitude,
-        radiusMeters: criteria.radiusMeters,
-      })
-      ids = rows.map(r => r.id)
-    } else if (
-      criteria.perimeterType === 'polygon' ||
-      criteria.perimeterType === 'isochrone'
-    ) {
-      ids = await this.geo.listingsWithinCriteriaPerimeter(
-        workspaceId,
-        criteriaId
+      throw new BadRequestException(
+        "L'annonce n'a ni adresse ni commune à géocoder"
       )
     }
-    if (ids !== null) {
-      const previous = where.id
-      const allowed =
-        previous &&
-        typeof previous === 'object' &&
-        'in' in previous &&
-        previous.in
-          ? ids.filter(id => (previous.in as string[]).includes(id))
-          : ids
-      where.id = { in: allowed }
+    const located = await this.geocoding.locate(before.location, {
+      fresh: true,
+    })
+    if (located) {
+      const applied = applyLocated(before.location, located)
+      const fieldSources = withOpenDataProvenance(
+        before.fieldSources,
+        applied.keys
+      )
+      await this.prisma.$transaction(async tx => {
+        await tx.listing.update({
+          where: { id },
+          data: {
+            ...locationData(applied.location),
+            fieldSources: fieldSources as Prisma.InputJsonValue,
+          },
+        })
+        await this.activity.record(
+          {
+            workspaceId: member.workspaceId,
+            listingId: id,
+            actorMemberId: member.id,
+            channel,
+            action: 'listing.geocoded',
+            before: {
+              point: before.location.point,
+              precision: before.location.precision,
+            },
+            after: {
+              point: located.point,
+              precision: located.precision,
+              addressNormalized: located.addressNormalized,
+              banId: located.banId,
+            },
+          },
+          tx
+        )
+      })
+      await this.geo.setListingPoint(id, located.point, located.precision)
     }
+    await this.enrichment.enrich(member, id, { dpe: true, channel })
+    return this.afterWrite(member, id, channel)
   }
 }
 

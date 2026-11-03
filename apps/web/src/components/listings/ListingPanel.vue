@@ -16,13 +16,16 @@
   import { useLivePreview } from '@/composables/useLivePreview'
   import { useAssumptions, useWorkspace } from '@/composables/useWorkspace'
   import { ApiError } from '@/lib/api'
-  import { formatDate, formatDistance } from '@/lib/format'
+  import { criteriaChangesMessage } from '@/lib/criteria'
+  import { formatDate, formatDistance, parseNumberInput } from '@/lib/format'
   import {
     emptyForm,
     formFromListing,
     formToPatch,
     validateForm,
   } from '@/lib/listing-form'
+  import ContextSection from './ContextSection.vue'
+  import CriteriaBadges from './CriteriaBadges.vue'
   import DpeBadge from './DpeBadge.vue'
   import HistorySection from './HistorySection.vue'
   import ListingForm from './ListingForm.vue'
@@ -36,7 +39,11 @@
   import TargetPriceSection from './TargetPriceSection.vue'
   import TasksSection from './TasksSection.vue'
 
-  const props = defineProps<{ id: string }>()
+  const props = defineProps<{
+    id: string
+    /** Message à afficher à l'ouverture (critères dans lesquels l'annonce créée entre). */
+    notice?: string | null
+  }>()
   const emit = defineEmits<{ close: [] }>()
 
   const id = computed(() => props.id)
@@ -48,7 +55,7 @@
   const form = ref(emptyForm())
   const errors = ref<Record<string, string>>({})
   const editing = ref(false)
-  const message = ref<string | null>(null)
+  const message = ref<string | null>(props.notice ?? null)
   const failure = ref<string | null>(null)
   const seenFor = ref<string | null>(null)
 
@@ -67,7 +74,19 @@
     { immediate: true }
   )
 
-  const preview = useLivePreview(form, assumptions)
+  const preview = useLivePreview(
+    form,
+    assumptions,
+    computed(() => item.value?.listing.openDataContext ?? null),
+    // La provenance enregistrée ne vaut que tant que le plafond n'est pas retapé.
+    computed(() => {
+      const stored = item.value?.listing.rentalPlan?.referenceRentPerM2 ?? null
+      const typed = parseNumberInput(form.value.rentalPlan.referenceRentPerM2)
+      return typed === stored
+        ? (item.value?.listing.fieldSources ?? null)
+        : null
+    })
+  )
   const shownEvaluation = computed(() =>
     editing.value ? preview.value.evaluation : (item.value?.evaluation ?? null)
   )
@@ -129,7 +148,7 @@
     if (!input) return
     failure.value = null
     try {
-      await mutations.update.mutateAsync({
+      const saved = await mutations.update.mutateAsync({
         id: item.value.listing.id,
         patch: {
           ...formToPatch(form.value),
@@ -137,7 +156,12 @@
         },
       })
       editing.value = false
-      message.value = 'Annonce enregistrée.'
+      message.value = [
+        'Annonce enregistrée.',
+        criteriaChangesMessage(saved.criteriaChanges),
+      ]
+        .filter(Boolean)
+        .join(' ')
     } catch (err) {
       report(err)
     }
@@ -226,6 +250,7 @@
           <StatusBadge :status="item.listing.status" />
           <NewBadge :is-new="item.isNewForMe" />
           <DpeBadge :dpe="item.listing.dpeClass" />
+          <CriteriaBadges :matches="item.criteriaMatches" />
           <span class="text-xs text-muted">
             {{
               [item.listing.location.commune, item.listing.location.district]
@@ -288,6 +313,10 @@
       <RentalChecksList
         v-if="shownEvaluation"
         :rental="shownEvaluation.rental"
+      />
+      <ContextSection
+        :listing-id="item.listing.id"
+        :updated-at="item.listing.updatedAt"
       />
 
       <p

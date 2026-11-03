@@ -1,0 +1,6 @@
+territoire,territoire_nom,millesime,date_debut,date_fin,zonage,zone,zone_nom,quartier_code,quartier_nom,type_logement,nombre_pieces,nombre_pieces_libelle,epoque_construction,annee_construction_min,annee_construction_max,meuble,loyer_reference,loyer_reference_majore,loyer_reference_minore,arrete_date,arrete_numero,source_url
+bordeaux,Bordeaux,2030,2030-07-15,2031-07-14,bordeaux,1,Zone 1,,,tous,1,1 pièce,avant 1946,,1945,false,10,12,7,2030-07-01,,https://example.invalid/arrete-fictif.xlsx
+bordeaux,Bordeaux,2030,2030-07-15,2031-07-14,bordeaux,1,Zone 1,,,tous,1,1 pièce,avant 1946,,1945,true,11,13.2,7.7,2030-07-01,,https://example.invalid/arrete-fictif.xlsx
+bordeaux,Bordeaux,2030,2030-07-15,2031-07-14,bordeaux,2,Zone 2,,,tous,4,4 pièces et plus,après 1990,1991,,false,9,10.8,6.3,2030-07-01,,https://example.invalid/arrete-fictif.xlsx
+bordeaux,Bordeaux,2030,2030-07-15,2031-07-14,bordeaux,2,Zone 2,,,tous,4,4 pièces et plus,après 1990,1991,,true,10,12,7,2030-07-01,,https://example.invalid/arrete-fictif.xlsx
+lyon,Lyon,2030,2030-11-01,2031-10-31,lyon,1,Zone 1,,,tous,1,1 pièce,avant 1946,,1945,false,99,99,99,2030-07-01,,https://example.invalid/lyon.xlsx

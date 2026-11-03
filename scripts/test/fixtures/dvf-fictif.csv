@@ -1,0 +1,13 @@
+id_mutation,date_mutation,numero_disposition,nature_mutation,valeur_fonciere,adresse_numero,adresse_suffixe,adresse_nom_voie,adresse_code_voie,code_postal,code_commune,nom_commune,code_departement,ancien_code_commune,ancien_nom_commune,id_parcelle,ancien_id_parcelle,numero_volume,lot1_numero,lot1_surface_carrez,lot2_numero,lot2_surface_carrez,lot3_numero,lot3_surface_carrez,lot4_numero,lot4_surface_carrez,lot5_numero,lot5_surface_carrez,nombre_lots,code_type_local,type_local,surface_reelle_bati,nombre_pieces_principales,code_nature_culture,nature_culture,code_nature_culture_speciale,nature_culture_speciale,surface_terrain,longitude,latitude
+T-1,2030-01-10,000001,Vente,180000,12,B,RUE FICTIVE,0001,33000,33063,Bordeaux,33,,,X1,,,1,44.5,,,,,,,,,1,2,Appartement,45,2,,,,,,-0.5800,44.8400
+T-1,2030-01-10,000001,Vente,180000,12,B,RUE FICTIVE,0001,33000,33063,Bordeaux,33,,,X1,,,2,,,,,,,,,,1,3,Dépendance,,0,,,,,,-0.5800,44.8400
+T-2,2030-02-01,000001,Vente,300000,1,,"RUE ""DES GUILLEMETS"", ET VIRGULE",0002,33400,33522,Talence,33,,,X2,,,1,,,,,,,,,,2,2,Appartement,40,2,,,,,,-0.5900,44.8000
+T-2,2030-02-01,000001,Vente,300000,1,,"RUE ""DES GUILLEMETS"", ET VIRGULE",0002,33400,33522,Talence,33,,,X2,,,2,,,,,,,,,,2,2,Appartement,35,1,,,,,,-0.5900,44.8000
+T-3,2030-03-01,000001,Echange,100000,2,,RUE FICTIVE,0001,33000,33063,Bordeaux,33,,,X3,,,1,,,,,,,,,,1,2,Appartement,30,1,,,,,,-0.5800,44.8400
+T-4,2030-04-01,000001,Vente,90000,3,,AVENUE INVENTEE,0003,33600,33318,Pessac,33,,,X4,,,1,,,,,,,,,,1,2,Appartement,30,1,,,,,,,
+T-5,2030-05-01,000001,Vente,1000,4,,AVENUE INVENTEE,0003,33600,33318,Pessac,33,,,X5,,,1,,,,,,,,,,1,2,Appartement,30,1,,,,,,-0.6400,44.8000
+T-6,2030-06-01,000001,Vente,250000,5,,ROUTE IMAGINAIRE,0004,33680,33240,Lacanau,33,,,X6,,,1,,,,,,,,,,1,2,Appartement,50,2,,,,,,-1.1000,45.0000
+T-7,2030-07-01,000001,Vente en l'état futur d'achèvement,260000,6,,QUAI NEUF,0005,33100,33063,Bordeaux,33,,,X7,,,1,,,,,,,,,,1,2,Appartement,52,3,,,,,,-0.5500,44.8400
+T-8,2030-08-01,000001,Vente,350000,7,,ALLEE MAISON,0006,33700,33281,Mérignac,33,,,X8,,,,,,,,,,,,,0,1,Maison,90,4,,,,,,-0.6500,44.8400
+T-9,2030-09-01,000001,Vente,400000,8,,RUE MIXTE,0007,33000,33063,Bordeaux,33,,,X9,,,1,,,,,,,,,,1,2,Appartement,30,1,,,,,,-0.5810,44.8410
+T-9,2030-09-01,000001,Vente,400000,8,,RUE MIXTE,0007,33000,33063,Bordeaux,33,,,X9,,,2,,,,,,,,,,0,4,Local industriel. commercial ou assimilé,120,0,,,,,,-0.5810,44.8410

@@ -1,0 +1,101 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.58, 44.84] },
+      "properties": {
+        "gid": 1,
+        "libelle": "Terminus Ouest",
+        "vehicule": "TRAM",
+        "actif": 1,
+        "type": "CLASSIQUE",
+        "insee": "33063"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.57, 44.84012] },
+      "properties": {
+        "gid": 2,
+        "libelle": "Milieu",
+        "vehicule": "TRAM",
+        "actif": 1,
+        "type": "CLASSIQUE",
+        "insee": "33063"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.56, 44.84] },
+      "properties": {
+        "gid": 3,
+        "libelle": "Terminus Est",
+        "vehicule": "TRAM",
+        "actif": 1,
+        "type": "CLASSIQUE",
+        "insee": "33063"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.57, 44.845] },
+      "properties": {
+        "gid": 4,
+        "libelle": "Loin du tracé",
+        "vehicule": "TRAM",
+        "actif": 1,
+        "type": "CLASSIQUE",
+        "insee": "33063"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.57, 44.8401] },
+      "properties": {
+        "gid": 5,
+        "libelle": "Bus du milieu",
+        "vehicule": "BUS",
+        "actif": 1,
+        "type": "CLASSIQUE",
+        "insee": "33063"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.57, 44.8401] },
+      "properties": {
+        "gid": 6,
+        "libelle": "Ancien arrêt",
+        "vehicule": "BUS",
+        "actif": 0,
+        "type": "CLASSIQUE",
+        "insee": "33063"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.4, 44.9] },
+      "properties": {
+        "gid": 7,
+        "libelle": "Hors métropole",
+        "vehicule": "BUS",
+        "actif": 1,
+        "type": "CLASSIQUE",
+        "insee": "HORS_BM"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.57, 44.8401] },
+      "properties": {
+        "gid": 8,
+        "libelle": "Fictif",
+        "vehicule": "BUS",
+        "actif": 1,
+        "type": "FICTIF",
+        "insee": "33063"
+      }
+    }
+  ]
+}

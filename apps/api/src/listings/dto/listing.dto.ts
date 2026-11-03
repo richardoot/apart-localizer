@@ -2,6 +2,11 @@ import { createZodDto } from 'nestjs-zod'
 import {
   CompareRequestSchema,
   CompareResultSchema,
+  DpeVerifyRequestSchema,
+  ListingContextSchema,
+  MarketContextReportSchema,
+  MarketContextRequestSchema,
+  MarketContextSchema,
   DuplicateCandidateSchema,
   DuplicateProbeSchema,
   EvaluatedListingSchema,
@@ -60,3 +65,14 @@ export class SensitivityGridDto extends createZodDto(SensitivityGridSchema) {}
 export class NegotiationBriefDto extends createZodDto(NegotiationBriefSchema) {}
 export class CompareRequestDto extends createZodDto(CompareRequestSchema) {}
 export class CompareResultDto extends createZodDto(CompareResultSchema) {}
+
+/** Lot 4 : contexte open data, marché, DPE vérifié. */
+export class ListingContextDto extends createZodDto(ListingContextSchema) {}
+export class MarketContextDto extends createZodDto(MarketContextSchema) {}
+export class MarketContextRequestDto extends createZodDto(
+  MarketContextRequestSchema
+) {}
+export class MarketContextReportDto extends createZodDto(
+  MarketContextReportSchema
+) {}
+export class DpeVerifyRequestDto extends createZodDto(DpeVerifyRequestSchema) {}

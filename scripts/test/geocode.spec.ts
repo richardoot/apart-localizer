@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -71,6 +71,22 @@ describe('Geocoder', () => {
     expect(JSON.parse(readFileSync(cacheFile, 'utf8'))).toHaveProperty(
       'address:1 rue du forum, talence'
     )
+  })
+
+  it('en simulation, le cache sur disque n’est pas réécrit', async () => {
+    const fetchMock = vi.fn(async (_url: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => feature(),
+    }))
+    const geocoder = new Geocoder({
+      cacheFile,
+      online: true,
+      persist: false,
+      fetch: fetchMock,
+    })
+    expect(await geocoder.geocode('1 rue du Forum, Talence')).not.toBeNull()
+    expect(existsSync(cacheFile)).toBe(false)
   })
 
   it('en mode cache seul, ne touche jamais le réseau', async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import CriteriaBadges from './CriteriaBadges.vue'
 import DpeBadge from './DpeBadge.vue'
 import NewBadge from './NewBadge.vue'
 import ProvenanceBadge from './ProvenanceBadge.vue'
@@ -91,5 +92,32 @@ describe('ProvenanceBadge', () => {
     expect(mount(ProvenanceBadge, { props: { provenance: null } }).text()).toBe(
       ''
     )
+  })
+
+  it('badges des critères : nom, « ≈ » sous réserve, rien sans critère', () => {
+    const wrapper = mount(CriteriaBadges, {
+      props: {
+        matches: [
+          {
+            criteriaId: 'a',
+            name: 'Talence',
+            matchedAt: '2026-11-03T10:00:00.000Z',
+            approximate: false,
+          },
+          {
+            criteriaId: 'b',
+            name: 'Tram',
+            matchedAt: '2026-11-03T10:00:00.000Z',
+            approximate: true,
+          },
+        ],
+      },
+    })
+    const badges = wrapper.findAll('[data-testid="criteria-badge"]')
+    expect(badges.map(b => b.text())).toEqual(['◎ Talence', '◎ Tram ≈'])
+    expect(badges[1]?.attributes('title')).toContain('sous réserve')
+    expect(
+      mount(CriteriaBadges, { props: { matches: [] } }).html()
+    ).not.toContain('criteria-badge')
   })
 })

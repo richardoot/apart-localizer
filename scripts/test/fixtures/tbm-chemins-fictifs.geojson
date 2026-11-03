@@ -1,0 +1,75 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-0.58, 44.84],
+          [-0.56, 44.84]
+        ]
+      },
+      "properties": {
+        "vehicule": "TRAM",
+        "rs_sv_ligne_a": "59",
+        "rg_sv_arret_p_nd": "1",
+        "rg_sv_arret_p_na": 3,
+        "principal": "True"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "MultiLineString",
+        "coordinates": [
+          [
+            [-0.58, 44.8402],
+            [-0.56, 44.8402]
+          ]
+        ]
+      },
+      "properties": {
+        "vehicule": "BUS",
+        "rs_sv_ligne_a": "1",
+        "rg_sv_arret_p_nd": "9",
+        "rg_sv_arret_p_na": 10,
+        "principal": "True"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-0.58, 44.84],
+          [-0.56, 44.84]
+        ]
+      },
+      "properties": {
+        "vehicule": "TRAM",
+        "rs_sv_ligne_a": "60",
+        "rg_sv_arret_p_nd": "1",
+        "rg_sv_arret_p_na": 3,
+        "principal": "True"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-0.57, 44.84012],
+          [-0.57, 44.845]
+        ]
+      },
+      "properties": {
+        "vehicule": "TRAM",
+        "rs_sv_ligne_a": "61",
+        "principal": "False",
+        "rg_sv_arret_p_nd": "2",
+        "rg_sv_arret_p_na": 4
+      }
+    }
+  ]
+}

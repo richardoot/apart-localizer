@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { useFiltersStore } from '@/stores/filters'
+import { fakeCriteria } from '@/test/criteria-fixtures'
 import FiltersBar from './FiltersBar.vue'
 
 describe('FiltersBar', () => {
@@ -67,5 +68,27 @@ describe('FiltersBar', () => {
     expect(wrapper.text()).toContain('Effacer les filtres (1)')
     await wrapper.get('button.underline').trigger('click')
     expect(store.activeCount).toBe(0)
+  })
+
+  it('le critère enregistré se choisit dans les filtres et compte comme un filtre', async () => {
+    const store = useFiltersStore()
+    const wrapper = mount(FiltersBar, {
+      props: { communes: [], criteria: [fakeCriteria()] },
+    })
+    const select = wrapper.get('#f-criteria')
+    expect(select.findAll('option').map(o => o.text())).toEqual([
+      'Aucun',
+      'Talence fictif (3)',
+    ])
+    await select.setValue('cccccccc-cccc-4ccc-8ccc-cccccccccccc')
+    expect(store.filters.criteriaId).toBe(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+    )
+    expect(store.activeCount).toBe(1)
+    expect(store.routeQuery).toMatchObject({
+      criteriaId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    })
+    await select.setValue('')
+    expect(store.filters.criteriaId).toBeUndefined()
   })
 })

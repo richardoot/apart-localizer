@@ -211,7 +211,8 @@ describe('MCP (e2e)', () => {
         (t: { name: string }) => t.name === 'get_listing'
       )
       expect(get.annotations.readOnlyHint).toBe(true)
-      expect(names).toHaveLength(17)
+      // Dix-sept outils jusqu'au lot 3, quatre au lot 4 (critères, marché).
+      expect(names).toHaveLength(21)
       const extract = list.body.result.tools.find(
         (t: { name: string }) => t.name === 'extract_listing'
       )
@@ -521,10 +522,13 @@ describe('MCP (e2e)', () => {
       )
       const logs = await ctx.prisma.activityLog.findMany({
         where: { listingId: item.listing.id },
+        orderBy: { createdAt: 'asc' },
       })
-      expect(logs).toHaveLength(1)
-      expect(logs[0]?.channel).toBe('mcp')
-      expect(logs[0]?.action).toBe('listing.created')
+      expect(logs.map(l => l.action)).toEqual([
+        'listing.created',
+        'listing.enriched',
+      ])
+      expect(logs.every(l => l.channel === 'mcp')).toBe(true)
       const prices = await ctx.prisma.priceEvent.findMany({
         where: { listingId: item.listing.id },
       })

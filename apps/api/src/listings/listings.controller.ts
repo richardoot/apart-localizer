@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Get,
   HttpCode,
@@ -21,6 +22,7 @@ import { SupabaseGuard } from '../auth/guards/supabase.guard'
 import { CurrentMember } from '../auth/decorators/current-member.decorator'
 import type { Member } from '../generated/prisma'
 import { DuplicatesService } from './duplicates.service'
+import { ListingEnrichmentService } from './enrichment.service'
 import { ExtractionService } from './extraction.service'
 import { ListingsService } from './listings.service'
 import { TargetPriceService } from './target-price.service'
@@ -28,6 +30,9 @@ import {
   CompareRequestDto,
   CompareResultDto,
   CreateListingDto,
+  DpeVerifyRequestDto,
+  ListingContextDto,
+  MarketContextDto,
   DuplicateCandidateDto,
   DuplicateProbeDto,
   EvaluateRequestDto,
@@ -57,7 +62,8 @@ export class ListingsController {
     private readonly listings: ListingsService,
     private readonly extraction: ExtractionService,
     private readonly duplicates: DuplicatesService,
-    private readonly targetPrice: TargetPriceService
+    private readonly targetPrice: TargetPriceService,
+    private readonly enrichment: ListingEnrichmentService
   ) {}
 
   @Get()
@@ -264,5 +270,89 @@ export class ListingsController {
     @Body() body: PriceEventInputDto
   ): Promise<EvaluatedListingDto> {
     return this.listings.recordPriceChange(member, id, body)
+  }
+
+  @Get(':id/context')
+  @ApiOperation({
+    summary:
+      'Contexte open data : arrêt de tram le plus proche, plafond d’encadrement (Bordeaux), DPE vérifié et sa validité, comparables DVF ; calculé à la lecture',
+  })
+  @ZodResponse({ status: 200, type: ListingContextDto })
+  context(
+    @CurrentMember() member: Member,
+    @Param('id', ParseUUIDPipe) id: string
+  ): Promise<ListingContextDto> {
+    return this.enrichment.context(member, id)
+  }
+
+  @Get(':id/market')
+  @ApiOperation({
+    summary:
+      'Comparables DVF : ventes d’appartements dans un rayon (500 m, élargi à 1 000 puis 2 000 m), surface ±25 %, trois ans ; médiane au m², dispersion, liste datée',
+  })
+  @ZodResponse({ status: 200, type: MarketContextDto })
+  market(
+    @CurrentMember() member: Member,
+    @Param('id', ParseUUIDPipe) id: string
+  ): Promise<MarketContextDto> {
+    return this.enrichment.marketOf(member, id)
+  }
+
+  @Post(':id/geocode')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Relance le géocodage (sans cache) puis les enrichissements : point, adresse normalisée, BAN, plafond, marché, DPE ; critères recalculés',
+  })
+  @ZodResponse({ status: 200, type: EvaluatedListingDto })
+  regeocode(
+    @CurrentMember() member: Member,
+    @Param('id', ParseUUIDPipe) id: string
+  ): Promise<EvaluatedListingDto> {
+    return this.listings.regeocode(member, id)
+  }
+
+  @Post(':id/dpe/search')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Cherche le DPE à l’observatoire ADEME (adresse BAN, sinon commune et surface) ; appliqué d’office s’il est seul et clair, sinon proposé',
+  })
+  @ZodResponse({ status: 200, type: ListingContextDto })
+  async searchDpe(
+    @CurrentMember() member: Member,
+    @Param('id', ParseUUIDPipe) id: string
+  ): Promise<ListingContextDto> {
+    await this.enrichment.searchDpe(member, id, 'web')
+    // Un DPE appliqué d'office change la classe, que lit le filtre « DPE au plus ».
+    await this.listings.afterWrite(member, id, 'web')
+    return this.enrichment.context(member, id)
+  }
+
+  @Post(':id/dpe/verify')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Retient un DPE de la dernière recherche ADEME : classe, GES, consommation, date et numéro en provenance open data',
+  })
+  @ZodResponse({ status: 200, type: EvaluatedListingDto })
+  async verifyDpe(
+    @CurrentMember() member: Member,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: DpeVerifyRequestDto
+  ): Promise<EvaluatedListingDto> {
+    const current = await this.listings.get(member, id)
+    if (
+      body.expectedUpdatedAt !== undefined &&
+      Date.parse(body.expectedUpdatedAt) !==
+        Date.parse(current.listing.updatedAt)
+    ) {
+      throw new ConflictException(
+        `L'annonce a changé depuis votre lecture (modifiée le ${current.listing.updatedAt}) : relisez-la`
+      )
+    }
+    await this.enrichment.verifyDpe(member, id, body.number, 'web')
+    // La classe retenue peut faire entrer l'annonce dans un critère ou l'en sortir.
+    return this.listings.afterWrite(member, id, 'web')
   }
 }

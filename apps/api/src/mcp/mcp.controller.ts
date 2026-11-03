@@ -15,6 +15,8 @@ import { DuplicatesService } from '../listings/duplicates.service'
 import { ExtractionService } from '../listings/extraction.service'
 import { ListingsService } from '../listings/listings.service'
 import { TargetPriceService } from '../listings/target-price.service'
+import { ListingEnrichmentService } from '../listings/enrichment.service'
+import { SearchCriteriaService } from '../search-criteria/search-criteria.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
 import { OffersService } from '../offers/offers.service'
 import { OpinionsService } from '../opinions/opinions.service'
@@ -46,7 +48,9 @@ export class McpController {
     private readonly tasks: TasksService,
     private readonly workspace: WorkspaceService,
     private readonly offers: OffersService,
-    private readonly targetPrice: TargetPriceService
+    private readonly targetPrice: TargetPriceService,
+    private readonly criteria: SearchCriteriaService,
+    private readonly enrichment: ListingEnrichmentService
   ) {}
 
   @Post()
@@ -83,6 +87,8 @@ export class McpController {
       workspace: this.workspace,
       offers: this.offers,
       targetPrice: this.targetPrice,
+      criteria: this.criteria,
+      enrichment: this.enrichment,
     })
     registerPrompts(server)
     registerResources(server)

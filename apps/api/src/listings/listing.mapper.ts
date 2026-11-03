@@ -1,4 +1,5 @@
 import {
+  ListingOpenDataContextSchema,
   ListingSchema,
   OfferSchema,
   OpinionSchema,
@@ -7,6 +8,7 @@ import {
   TaskSchema,
 } from '@apart/contracts'
 import type {
+  CriteriaMatch,
   FieldProvenanceMap,
   Listing as ListingDto,
   Offer as OfferDto,
@@ -33,6 +35,11 @@ export const listingInclude = {
   tasks: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] },
   priceEvents: { orderBy: { occurredAt: 'desc' } },
   offers: { orderBy: { madeAt: 'desc' } },
+  criteriaMatches: {
+    where: { criteria: { active: true } },
+    include: { criteria: { select: { name: true } } },
+    orderBy: { matchedAt: 'desc' },
+  },
 } satisfies Prisma.ListingInclude
 
 export type ListingRow = Prisma.ListingGetPayload<{
@@ -147,6 +154,7 @@ export function toListingDto(row: ListingRow): ListingDto {
     dpeConsumption: row.dpeConsumption,
     gesClass: row.gesClass,
     dpeDate: isoDate(row.dpeDate),
+    dpeNumber: row.dpeNumber,
     heatingType: row.heatingType,
     heatingCollective: row.heatingCollective,
     outdoor: row.outdoor,
@@ -215,6 +223,24 @@ export function toListingDto(row: ListingRow): ListingDto {
       memberId: view.memberId,
       seenAt: view.seenAt.toISOString(),
     })),
+    openDataContext: openDataContextOf(row.openDataContext),
   }
   return ListingSchema.parse(dto)
+}
+
+/** L'instantané open data enregistré ; un JSON d'une version antérieure illisible vaut null. */
+function openDataContextOf(value: unknown): ListingDto['openDataContext'] {
+  if (value === null || value === undefined) return null
+  const parsed = ListingOpenDataContextSchema.safeParse(value)
+  return parsed.success ? parsed.data : null
+}
+
+/** Les critères dans lesquels l'annonce est entrée (alertes). */
+export function toCriteriaMatchDtos(row: ListingRow): CriteriaMatch[] {
+  return row.criteriaMatches.map(match => ({
+    criteriaId: match.criteriaId,
+    name: match.criteria.name,
+    matchedAt: match.matchedAt.toISOString(),
+    approximate: match.approximate,
+  }))
 }

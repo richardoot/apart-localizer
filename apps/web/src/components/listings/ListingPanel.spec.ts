@@ -22,6 +22,7 @@ const apiMock = vi.hoisted(() => ({
     recordPriceChange: vi.fn(),
     targetPrice: vi.fn(),
     sensitivity: vi.fn(),
+    context: vi.fn(),
   },
   opinions: { upsertMine: vi.fn() },
   tasks: { create: vi.fn(), update: vi.fn(), remove: vi.fn() },
@@ -33,6 +34,7 @@ vi.mock('@/lib/api', async () => {
   return { ...actual, api: apiMock }
 })
 
+import { fakeContext } from '@/test/criteria-fixtures'
 import ListingPanel from './ListingPanel.vue'
 
 const item = fakeEvaluated({}, { isNewForMe: true })
@@ -53,6 +55,7 @@ function mountPanel() {
 describe('ListingPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    apiMock.listings.context.mockResolvedValue(fakeContext())
     apiMock.workspace.mockResolvedValue({
       workspace: {
         id: MEMBERS[0]?.workspaceId,
@@ -117,6 +120,10 @@ describe('ListingPanel', () => {
     expect(document.body.textContent).toContain(
       'Historique des prix et des offres'
     )
+    // Lot 4 : le bloc « Contexte » (tram, DPE, encadrement, DVF).
+    expect(apiMock.listings.context).toHaveBeenCalledWith(item.listing.id)
+    expect(document.body.textContent).toContain('Contexte (données ouvertes)')
+    expect(document.body.textContent).toContain('Arrêt fictif')
     wrapper.unmount()
   })
 
@@ -172,6 +179,38 @@ describe('ListingPanel', () => {
       reason: null,
       expectedStatus: 'to_study',
     })
+    wrapper.unmount()
+  })
+
+  it('montre les critères de l’annonce et le message de création', async () => {
+    apiMock.listings.get.mockResolvedValue({
+      ...item,
+      isNewForMe: false,
+      criteriaMatches: [
+        {
+          criteriaId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          name: 'Talence fictif',
+          matchedAt: '2026-11-03T10:00:00.000Z',
+          approximate: false,
+        },
+      ],
+    })
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const wrapper = mount(ListingPanel, {
+      props: {
+        id: item.listing.id,
+        notice: 'Annonce créée. Entre dans le critère « Talence fictif ».',
+      },
+      attachTo: document.body,
+      global: { plugins: [[VueQueryPlugin, { queryClient: client }]] },
+    })
+    await flushPromises()
+    expect(document.body.textContent).toContain('◎ Talence fictif')
+    expect(document.body.textContent).toContain(
+      'Entre dans le critère « Talence fictif »'
+    )
     wrapper.unmount()
   })
 })

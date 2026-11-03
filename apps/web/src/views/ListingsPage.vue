@@ -1,7 +1,8 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
-  import type { PointRadius } from '@apart/contracts'
+  import type { CriteriaMatchChanges, PointRadius } from '@apart/contracts'
+  import { criteriaChangesMessage } from '@/lib/criteria'
   import FiltersBar from '@/components/listings/FiltersBar.vue'
   import ListingCards from '@/components/listings/ListingCards.vue'
   import ListingCreatePanel from '@/components/listings/ListingCreatePanel.vue'
@@ -10,6 +11,13 @@
   import ListingsTable from '@/components/listings/ListingsTable.vue'
   import ViewSwitch from '@/components/listings/ViewSwitch.vue'
   import { useListingList } from '@/composables/useListings'
+  import {
+    DEFAULT_LAYER_TOGGLES,
+    useMapLayers,
+  } from '@/composables/useMapLayers'
+  import type { MapLayerToggles } from '@/composables/useMapLayers'
+  import { useSearchCriteriaList } from '@/composables/useSearchCriteria'
+  import { criteriaFeatures } from '@/lib/perimeter'
   import { useFiltersStore } from '@/stores/filters'
 
   const route = useRoute()
@@ -53,13 +61,33 @@
   })
   const colorBy = ref<'verdict' | 'status'>('verdict')
 
+  // Critères de recherche : sélecteur des filtres et périmètres sur la carte.
+  const { data: criteriaData } = useSearchCriteriaList(false)
+  const criteria = computed(() => criteriaData.value ?? [])
+  const toggles = ref<MapLayerToggles>({ ...DEFAULT_LAYER_TOGGLES })
+  const bbox = ref<[number, number, number, number] | null>(null)
+  const layerData = useMapLayers(toggles, bbox)
+  const mapLayers = computed(() => ({
+    ...layerData.value,
+    criteria: criteriaFeatures(criteria.value, store.filters.criteriaId),
+  }))
+
   const openedId = computed(() =>
     typeof route.params.id === 'string' ? route.params.id : null
   )
   const creating = computed(() => route.name === 'listing-new')
 
+  /** Le message de création (« entre dans le critère… »), montré à l'ouverture de la fiche. */
+  const notice = ref<string | null>(null)
+
   function open(id: string): void {
     void router.push({ name: 'listing', params: { id }, query: route.query })
+  }
+  function onCreated(id: string, changes?: CriteriaMatchChanges | null): void {
+    notice.value = ['Annonce créée.', criteriaChangesMessage(changes)]
+      .filter(Boolean)
+      .join(' ')
+    open(id)
   }
   function closePanel(): void {
     void router.push({ name: 'listings', query: route.query })
@@ -109,7 +137,7 @@
       </div>
     </header>
 
-    <FiltersBar :communes="communes" />
+    <FiltersBar :communes="communes" :criteria="criteria" />
 
     <p
       v-if="error"
@@ -135,11 +163,14 @@
       />
       <ListingsMap
         v-else
+        v-model:toggles="toggles"
         :items="items"
         :near="store.filters.near"
         :color-by="colorBy"
+        :layers="mapLayers"
         @open="open"
         @update:near="onNear"
+        @bounds="value => (bbox = value)"
       />
     </template>
 
@@ -162,11 +193,22 @@
       >
     </p>
 
-    <ListingPanel v-if="openedId" :id="openedId" @close="closePanel" />
+    <ListingPanel
+      v-if="openedId"
+      :id="openedId"
+      :key="openedId"
+      :notice="notice"
+      @close="
+        () => {
+          notice = null
+          closePanel()
+        }
+      "
+    />
     <ListingCreatePanel
       v-if="creating"
       @close="closePanel"
-      @created="open"
+      @created="onCreated"
       @open="open"
     />
   </section>

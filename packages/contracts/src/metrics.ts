@@ -78,6 +78,14 @@ export const ListingFinancialsSchema = z.object({
       'Part non récupérable en euros par mois ; null = estimée à 25 % des charges annuelles / 12'
     ),
   dpeClass: DpeClassSchema.nullable().default(null),
+  marketPricePerM2: z
+    .number()
+    .min(0)
+    .nullable()
+    .default(null)
+    .describe(
+      'Prix médian au m² des ventes DVF comparables, en euros ; null = critère « marché » non calculable'
+    ),
 })
 export type ListingFinancials = z.infer<typeof ListingFinancialsSchema>
 export type ListingFinancialsInput = z.input<typeof ListingFinancialsSchema>

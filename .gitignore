@@ -163,3 +163,7 @@ supabase/.branches/
 
 # Supabase CLI : fichiers locaux
 supabase/.env
+
+# Fichiers open data téléchargés (DVF, TBM, encadrement, zones) : volumineux et
+# reproductibles par les scripts d'import ; jamais commités.
+data/opendata/

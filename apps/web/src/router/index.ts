@@ -36,6 +36,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Comparer', requiresAuth: true },
   },
   {
+    path: '/criteres',
+    name: 'criteria',
+    component: () => import('@/views/CriteriaPage.vue'),
+    meta: { title: 'Critères', requiresAuth: true },
+  },
+  {
     path: '/hypotheses',
     name: 'assumptions',
     component: () => import('@/views/AssumptionsPage.vue'),

@@ -1,0 +1,99 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
+import { fakeCriteria } from '@/test/criteria-fixtures'
+
+const apiMock = vi.hoisted(() => ({
+  searchCriteria: {
+    list: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+    preview: vi.fn(),
+    create: vi.fn(),
+  },
+}))
+
+vi.mock('@/lib/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+  return { ...actual, api: apiMock }
+})
+
+import CriteriaPage from './CriteriaPage.vue'
+
+function mountPage() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return mount(CriteriaPage, {
+    attachTo: document.body,
+    global: {
+      plugins: [[VueQueryPlugin, { queryClient: client }]],
+      stubs: { RouterLink: { template: '<a><slot /></a>' } },
+    },
+  })
+}
+
+describe('CriteriaPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiMock.searchCriteria.list.mockResolvedValue([
+      fakeCriteria(),
+      fakeCriteria({
+        id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        name: 'Archivé',
+        active: false,
+        perimeter: null,
+        perimeterType: null,
+        listingCount: 0,
+        newCount: 0,
+        approximateCount: 0,
+      }),
+    ])
+    apiMock.searchCriteria.update.mockResolvedValue(fakeCriteria())
+    apiMock.searchCriteria.remove.mockResolvedValue(undefined)
+  })
+
+  it('liste les critères avec leurs compteurs ; archive et supprime', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(apiMock.searchCriteria.list).toHaveBeenCalledWith(false)
+    const first = wrapper.get(
+      '[data-criteria="cccccccc-cccc-4ccc-8ccc-cccccccccccc"]'
+    )
+    expect(first.text()).toContain('Talence fictif')
+    expect(first.get('[data-testid="count"]').text()).toBe('3')
+    expect(first.text()).toContain('1 nouvelle(s)')
+    expect(first.text()).toContain('dont 1 sous réserve')
+    expect(first.text()).toContain('Polygone dessiné')
+    expect(first.text()).toContain('≤ 200')
+    expect(first.text()).toContain('Voir les annonces')
+    await first.get('[data-action="archive"]').trigger('click')
+    expect(apiMock.searchCriteria.update).toHaveBeenCalledWith(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      { active: false, expectedUpdatedAt: '2026-11-03T10:00:00.000Z' }
+    )
+    const confirm = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true)
+    vi.stubGlobal('confirm', confirm)
+    window.confirm = confirm
+    await first.get('[data-action="delete"]').trigger('click')
+    expect(apiMock.searchCriteria.remove).not.toHaveBeenCalled()
+    await first.get('[data-action="delete"]').trigger('click')
+    expect(apiMock.searchCriteria.remove).toHaveBeenCalledWith(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+    )
+    const archived = wrapper.get(
+      '[data-criteria="dddddddd-dddd-4ddd-8ddd-dddddddddddd"]'
+    )
+    expect(archived.text()).toContain('Réactiver')
+    wrapper.unmount()
+  })
+
+  it('montre les archivés à la demande', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.get('input[type="checkbox"]').setValue(true)
+    await flushPromises()
+    expect(apiMock.searchCriteria.list).toHaveBeenLastCalledWith(true)
+    wrapper.unmount()
+  })
+})

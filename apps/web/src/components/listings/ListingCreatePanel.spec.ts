@@ -178,7 +178,9 @@ describe('ListingCreatePanel', () => {
     expect(sent.fieldSources.point?.source).toBe('open_data')
     expect(sent.location.precision).toBe('street')
     expect(sent.location.inseeCode).toBe('33522')
-    expect(wrapper.emitted('created')).toEqual([[fakeEvaluated().listing.id]])
+    expect(wrapper.emitted('created')?.[0]?.[0]).toBe(
+      fakeEvaluated().listing.id
+    )
     wrapper.unmount()
   })
 

@@ -17,6 +17,10 @@ import {
   TargetPriceSchema,
 } from './metrics.js'
 import { NegotiationBriefSchema } from './negotiation.js'
+import {
+  CriteriaMatchChangesSchema,
+  CriteriaMatchSchema,
+} from './search-criteria.js'
 import { withoutDefaults } from './zod-utils.js'
 
 /**
@@ -46,6 +50,17 @@ export const EvaluatedListingSchema = z.object({
     .array(OfferSchema)
     .default([])
     .describe('Offres faites, de la plus récente à la plus ancienne'),
+  criteriaMatches: z
+    .array(CriteriaMatchSchema)
+    .default([])
+    .describe(
+      "Critères de recherche actifs dans lesquels l'annonce est entrée (alertes)"
+    ),
+  criteriaChanges: CriteriaMatchChangesSchema.nullable()
+    .default(null)
+    .describe(
+      "Après une création ou une mise à jour : critères dans lesquels l'annonce entre ou dont elle sort ; null à la lecture"
+    ),
 })
 export type EvaluatedListing = z.infer<typeof EvaluatedListingSchema>
 

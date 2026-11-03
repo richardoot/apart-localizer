@@ -87,6 +87,7 @@ export const useFiltersStore = defineStore('filters', () => {
     if (f.roomsMin !== undefined) count += 1
     if (f.newForMe) count += 1
     if (f.near) count += 1
+    if (f.criteriaId) count += 1
     if (f.search) count += 1
     return count
   })

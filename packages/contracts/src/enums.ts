@@ -267,3 +267,54 @@ export const DISCOUNT_CLASS_LABELS: Record<DiscountClass, string> = {
   tight: 'Tendu',
   out_of_reach: 'Hors de portée',
 }
+
+export const TransitModeSchema = z
+  .enum(['tram', 'bus', 'boat'])
+  .describe('Mode de transport d’un arrêt TBM : tram, bus, bateau (BAT³)')
+export type TransitMode = z.infer<typeof TransitModeSchema>
+
+export const TRANSIT_MODE_LABELS: Record<TransitMode, string> = {
+  tram: 'Tram',
+  bus: 'Bus',
+  boat: 'Bateau',
+}
+
+export const IsochroneModeSchema = z
+  .enum(['walking', 'cycling', 'driving'])
+  .describe(
+    'Mode de déplacement d’une isochrone : à pied, à vélo (approché : distance sur le réseau piéton à 15 km/h), en voiture'
+  )
+export type IsochroneMode = z.infer<typeof IsochroneModeSchema>
+
+export const ISOCHRONE_MODE_LABELS: Record<IsochroneMode, string> = {
+  walking: 'À pied',
+  cycling: 'À vélo',
+  driving: 'En voiture',
+}
+
+export const PERIMETER_TYPE_LABELS: Record<PerimeterType, string> = {
+  point_radius: 'Point et rayon',
+  polygon: 'Polygone dessiné',
+  isochrone: 'Isochrone',
+}
+
+export const OpenDataStatusSchema = z
+  .enum(['ok', 'to_verify', 'not_applicable', 'unavailable'])
+  .describe(
+    'État d’un enrichissement par données ouvertes : calculé, à vérifier (donnée ambiguë ou périmée), sans objet, source indisponible'
+  )
+export type OpenDataStatus = z.infer<typeof OpenDataStatusSchema>
+
+export const OPEN_DATA_STATUS_LABELS: Record<OpenDataStatus, string> = {
+  ok: 'Calculé',
+  to_verify: 'À vérifier',
+  not_applicable: 'Sans objet',
+  unavailable: 'Indisponible',
+}
+
+export const DpeSearchStatusSchema = z
+  .enum(['verified', 'single', 'multiple', 'none', 'unavailable'])
+  .describe(
+    'Résultat d’une recherche de DPE à l’ADEME : vérifié (appliqué), un candidat, plusieurs candidats à départager, aucun, service indisponible'
+  )
+export type DpeSearchStatus = z.infer<typeof DpeSearchStatusSchema>

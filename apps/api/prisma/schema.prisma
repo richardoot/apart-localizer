@@ -175,6 +175,14 @@ enum PerimeterType {
   @@schema("app")
 }
 
+enum TransitMode {
+  tram
+  bus
+  boat
+
+  @@schema("app")
+}
+
 // ---------------------------------------------------------------------------
 // Espace de travail et membres
 // ---------------------------------------------------------------------------
@@ -299,6 +307,7 @@ model Listing {
   dpeConsumption     Float?     @map("dpe_consumption")
   gesClass           DpeClass?  @map("ges_class")
   dpeDate            DateTime?  @map("dpe_date") @db.Date
+  dpeNumber          String?    @map("dpe_number")
   heatingType        String?    @map("heating_type")
   heatingCollective  Boolean?   @map("heating_collective")
   outdoor            String?
@@ -328,21 +337,25 @@ model Listing {
   // Surcharge partielle des hypothèses (JSON validé par AssumptionsOverrideSchema)
   assumptionsOverride Json? @map("assumptions_override")
 
+  // Dernier enrichissement open data (JSON validé par ListingOpenDataContextSchema)
+  openDataContext Json? @map("open_data_context")
+
   createdById String?  @map("created_by_id")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy    Member?       @relation("ListingCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  renovation   Renovation?
-  rentalPlan   RentalPlan?
-  opinions     Opinion[]
-  tasks        Task[]
-  priceEvents  PriceEvent[]
-  offers       Offer[]
-  visits       Visit[]
-  activityLogs ActivityLog[]
-  views        ListingView[]
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy       Member?         @relation("ListingCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  renovation      Renovation?
+  rentalPlan      RentalPlan?
+  opinions        Opinion[]
+  tasks           Task[]
+  priceEvents     PriceEvent[]
+  offers          Offer[]
+  visits          Visit[]
+  activityLogs    ActivityLog[]
+  views           ListingView[]
+  criteriaMatches CriteriaMatch[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, commune])
@@ -562,11 +575,31 @@ model SearchCriteria {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy Member?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy Member?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  matches   CriteriaMatch[]
 
   @@index([workspaceId])
   @@map("search_criteria")
+  @@schema("app")
+}
+
+/// Une annonce entrée dans un critère de recherche (alerte, badge). Mise à
+/// jour à chaque écriture d'annonce et de critère ; les compteurs et la liste
+/// filtrée, eux, sont recalculés à la lecture.
+model CriteriaMatch {
+  criteriaId  String   @map("criteria_id")
+  listingId   String   @map("listing_id")
+  matchedAt   DateTime @default(now()) @map("matched_at") @db.Timestamptz(6)
+  /// Localisation imprécise (quartier ou commune) : incluse sous réserve.
+  approximate Boolean  @default(false)
+
+  criteria SearchCriteria @relation(fields: [criteriaId], references: [id], onDelete: Cascade)
+  listing  Listing        @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@id([criteriaId, listingId])
+  @@index([listingId])
+  @@map("criteria_matches")
   @@schema("app")
 }
 
@@ -574,39 +607,74 @@ model SearchCriteria {
 // Données ouvertes importées
 // ---------------------------------------------------------------------------
 
-/// Arrêts de tram et de bus (import TBM).
+/// Arrêts de tram et de bus (import TBM). `line` liste les lignes qui
+/// desservent l'arrêt, séparées par des virgules (« A, C »).
 model TransitStop {
   id         String                                 @id @default(uuid())
   network    String
+  mode       TransitMode                            @default(bus)
   line       String?
   name       String
   externalId String?                                @map("external_id")
   latitude   Float
   longitude  Float
   geom       Unsupported("geography(Point, 4326)")?
+  importedAt DateTime                               @default(now()) @map("imported_at") @db.Timestamptz(6)
 
+  @@unique([network, externalId])
   @@index([network, line])
+  @@index([mode])
   @@map("transit_stops")
   @@schema("app")
 }
 
-/// Ventes DVF (import Gironde).
+/// Ventes DVF (import Gironde, filtré sur Bordeaux Métropole) : une ligne par
+/// mutation ne portant qu'un appartement. `externalId` est l'identifiant de
+/// mutation (id_mutation) ; l'import est un upsert idempotent sur cette clé.
 model DvfSale {
-  id           String                                 @id @default(uuid())
-  mutationDate DateTime                               @map("mutation_date") @db.Date
-  price        Decimal                                @db.Decimal(12, 2)
-  surface      Decimal?                               @db.Decimal(8, 2)
-  propertyType String                                 @map("property_type")
-  rooms        Int?
-  address      String?
-  inseeCode    String?                                @map("insee_code")
-  latitude     Float?
-  longitude    Float?
-  geom         Unsupported("geography(Point, 4326)")?
-  pricePerM2   Decimal?                               @map("price_per_m2") @db.Decimal(10, 2)
+  id             String                                 @id @default(uuid())
+  externalId     String?                                @unique @map("external_id")
+  mutationDate   DateTime                               @map("mutation_date") @db.Date
+  mutationNature String?                                @map("mutation_nature")
+  price          Decimal                                @db.Decimal(12, 2)
+  surface        Decimal?                               @db.Decimal(8, 2)
+  propertyType   String                                 @map("property_type")
+  rooms          Int?
+  address        String?
+  postalCode     String?                                @map("postal_code")
+  commune        String?
+  inseeCode      String?                                @map("insee_code")
+  latitude       Float?
+  longitude      Float?
+  geom           Unsupported("geography(Point, 4326)")?
+  pricePerM2     Decimal?                               @map("price_per_m2") @db.Decimal(10, 2)
+  source         String?
+  importedAt     DateTime                               @default(now()) @map("imported_at") @db.Timestamptz(6)
 
   @@index([inseeCode, mutationDate])
+  @@index([mutationDate])
   @@map("dvf_sales")
+  @@schema("app")
+}
+
+/// Secteurs de l'encadrement des loyers (zonage de l'observatoire local des
+/// loyers de Bordeaux, un polygone par IRIS) ; la zone se lit dans le module
+/// geo. Les loyers de référence par arrêté sont dans ReferenceData (sorte
+/// `rent_reference`).
+model RentControlZone {
+  id         String                                        @id @default(uuid())
+  territory  String
+  zone       Int
+  label      String
+  irisCode   String                                        @map("iris_code")
+  inseeCode  String                                        @map("insee_code")
+  geom       Unsupported("geography(MultiPolygon, 4326)")?
+  source     String?
+  importedAt DateTime                                      @default(now()) @map("imported_at") @db.Timestamptz(6)
+
+  @@unique([territory, irisCode])
+  @@index([territory, zone])
+  @@map("rent_control_zones")
   @@schema("app")
 }
 

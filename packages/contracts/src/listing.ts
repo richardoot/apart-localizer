@@ -11,6 +11,7 @@ import { RenovationInputSchema, RenovationSchema } from './renovation.js'
 import { RentalPlanInputSchema, RentalPlanSchema } from './rental-plan.js'
 import { FieldProvenanceMapSchema } from './sourced.js'
 import { AssumptionsOverrideSchema } from './assumptions.js'
+import { ListingOpenDataContextSchema } from './opendata.js'
 import { withoutDefaults } from './zod-utils.js'
 
 const euros = (what: string) =>
@@ -126,6 +127,10 @@ export const ListingPropertyInputSchema = z.object({
   gesClass: DpeClassSchema.nullable()
     .default(null)
     .describe('Classe GES, de A à G'),
+  dpeNumber: nullableText(
+    20,
+    'Numéro du DPE à l’observatoire ADEME (13 caractères), quand il est connu ou vérifié'
+  ),
   dpeDate: z
     .string()
     .date()
@@ -301,6 +306,11 @@ export const ListingSchema = ListingInputSchema.omit({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   views: z.array(ListingViewSchema).default([]),
+  openDataContext: ListingOpenDataContextSchema.nullable()
+    .default(null)
+    .describe(
+      'Dernier enrichissement par données ouvertes : prix médian DVF, recherche DPE, plafond d’encadrement, tram le plus proche'
+    ),
 })
 export type Listing = z.infer<typeof ListingSchema>
 

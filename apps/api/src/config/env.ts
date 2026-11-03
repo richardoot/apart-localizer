@@ -58,6 +58,8 @@ export const EnvSchema = z.object({
   AI_MAX_IMAGE_MB: z.coerce.number().positive().optional(),
   // Données ouvertes : géocodeur IGN Géoplateforme (défaut dans opendata/geoplateforme.ts).
   GEOCODING_URL: z.string().url().optional(),
+  ISOCHRONE_URL: z.string().url().optional(),
+  ADEME_DPE_URL: z.string().url().optional(),
 })
 export type Env = z.infer<typeof EnvSchema>
 

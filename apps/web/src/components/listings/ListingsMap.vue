@@ -3,7 +3,21 @@
   import * as maplibregl from 'maplibre-gl'
   import type { GeoJSONSource, Map as MapLibreMap, Marker } from 'maplibre-gl'
   import type { EvaluatedListing, PointRadius } from '@apart/contracts'
+  import type {
+    MapLayerData,
+    MapLayerToggles,
+  } from '@/composables/useMapLayers'
+  import { DEFAULT_LAYER_TOGGLES } from '@/composables/useMapLayers'
   import { circlePolygon } from '@/lib/geo-circle'
+  import {
+    CRITERIA_LAYERS,
+    POPUP_LAYER_IDS,
+    RENT_ZONE_COLORS,
+    RENT_ZONE_LAYERS,
+    layerFeaturePopupHtml,
+    pointLayer,
+    upsertGeoJsonLayer,
+  } from '@/lib/map-layers'
   import { formatDistance, formatEuros, formatPercent } from '@/lib/format'
   import {
     LISTING_STATUS_LABELS,
@@ -18,15 +32,84 @@
     mapStyleUrl,
   } from '@/lib/map-style'
 
-  const props = defineProps<{
-    items: EvaluatedListing[]
-    near: PointRadius | undefined
-    colorBy: 'verdict' | 'status'
-  }>()
+  const props = withDefaults(
+    defineProps<{
+      items: EvaluatedListing[]
+      near: PointRadius | undefined
+      colorBy: 'verdict' | 'status'
+      layers?: MapLayerData | null
+      toggles?: MapLayerToggles
+    }>(),
+    { layers: null, toggles: () => ({ ...DEFAULT_LAYER_TOGGLES }) }
+  )
   const emit = defineEmits<{
     open: [id: string]
     'update:near': [near: PointRadius | undefined]
+    'update:toggles': [toggles: MapLayerToggles]
+    bounds: [bbox: [number, number, number, number]]
   }>()
+
+  const LAYER_LABELS: { key: keyof MapLayerToggles; label: string }[] = [
+    { key: 'criteria', label: 'Périmètres des critères' },
+    { key: 'tram', label: 'Arrêts de tram' },
+    { key: 'bus', label: 'Arrêts de bus' },
+    { key: 'dvf', label: 'Ventes DVF (3 ans)' },
+    { key: 'rentZones', label: 'Zones d’encadrement' },
+  ]
+
+  function toggle(key: keyof MapLayerToggles, event: Event): void {
+    emit('update:toggles', {
+      ...props.toggles,
+      [key]: (event.target as HTMLInputElement).checked,
+    })
+  }
+
+  /** Les couches de contexte, sous les marqueurs ; une couche éteinte reçoit des données vides. */
+  function renderLayers(): void {
+    if (!map || !ready.value) return
+    const on = props.toggles
+    const data = props.layers
+    upsertGeoJsonLayer(
+      map,
+      'rent-zones',
+      on.rentZones ? data?.rentZones : null,
+      RENT_ZONE_LAYERS
+    )
+    upsertGeoJsonLayer(
+      map,
+      'criteria-perimeters',
+      on.criteria ? data?.criteria : null,
+      CRITERIA_LAYERS
+    )
+    upsertGeoJsonLayer(
+      map,
+      'dvf-sales',
+      on.dvf ? data?.dvf : null,
+      pointLayer('dvf-sales-points', '#7c3aed', 3)
+    )
+    upsertGeoJsonLayer(
+      map,
+      'bus-stops',
+      on.bus ? data?.bus : null,
+      pointLayer('bus-stops-points', '#6b7280', 2.5)
+    )
+    upsertGeoJsonLayer(
+      map,
+      'tram-stops',
+      on.tram ? data?.tram : null,
+      pointLayer('tram-stops-points', '#dc2626', 4)
+    )
+  }
+
+  function emitBounds(): void {
+    const bounds = map?.getBounds()
+    if (!bounds) return
+    const [[west, south], [east, north]] = bounds.toArray() as [
+      [number, number],
+      [number, number],
+    ]
+    emit('bounds', [west, south, east, north])
+  }
 
   const container = ref<HTMLDivElement | null>(null)
   let map: MapLibreMap | null = null
@@ -178,9 +261,27 @@
     created.addControl(new maplibregl.NavigationControl(), 'top-right')
     created.on('load', () => {
       ready.value = true
+      renderLayers()
       renderRadius()
+      emitBounds()
     })
-    created.on('click', event => setCenter(event.lngLat.lng, event.lngLat.lat))
+    created.on('moveend', emitBounds)
+    created.on('click', event => {
+      // Un arrêt ou une vente sous le clic : sa fiche, sans déplacer le point.
+      const hit = ready.value
+        ? created.queryRenderedFeatures(event.point, {
+            layers: [...POPUP_LAYER_IDS],
+          })[0]
+        : undefined
+      if (hit) {
+        new maplibregl.Popup({ offset: 8, closeButton: false })
+          .setLngLat(event.lngLat)
+          .setHTML(layerFeaturePopupHtml(hit))
+          .addTo(created)
+        return
+      }
+      setCenter(event.lngLat.lng, event.lngLat.lat)
+    })
     renderMarkers()
   })
 
@@ -191,6 +292,7 @@
   })
 
   watch(() => [props.items, props.colorBy], renderMarkers, { deep: false })
+  watch(() => [props.layers, props.toggles], renderLayers, { deep: true })
   watch(
     () => props.near,
     near => {
@@ -244,6 +346,44 @@
       <span class="ml-auto text-xs text-muted">
         {{ items.filter(i => i.listing.location.point).length }} annonce(s)
         placée(s)
+      </span>
+    </div>
+    <div
+      class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
+      role="group"
+      aria-label="Couches de la carte"
+    >
+      <span class="text-muted">Couches :</span>
+      <label
+        v-for="layer in LAYER_LABELS"
+        :key="layer.key"
+        class="flex items-center gap-1"
+      >
+        <input
+          type="checkbox"
+          class="accent-accent"
+          :checked="toggles[layer.key]"
+          :data-layer="layer.key"
+          @change="toggle(layer.key, $event)"
+        />
+        {{ layer.label }}
+      </label>
+      <span
+        v-if="toggles.rentZones"
+        class="flex items-center gap-2 text-muted"
+        data-testid="rent-zone-legend"
+      >
+        Zones :
+        <span
+          v-for="(color, zone) in RENT_ZONE_COLORS"
+          :key="zone"
+          class="flex items-center gap-1"
+        >
+          <span
+            class="inline-block h-2.5 w-2.5 rounded-sm"
+            :style="{ background: color }"
+          />{{ zone }}
+        </span>
       </span>
     </div>
     <div

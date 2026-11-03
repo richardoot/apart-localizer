@@ -206,9 +206,14 @@ describe('Listings (e2e)', () => {
       expect(Number(prices[0]?.newPrice)).toBe(200_000)
       const logs = await ctx.prisma.activityLog.findMany({
         where: { listingId: res.body.listing.id },
+        orderBy: { createdAt: 'asc' },
       })
-      expect(logs.map(l => l.action)).toEqual(['listing.created'])
-      expect(logs[0]?.channel).toBe('web')
+      // La création, puis l'enrichissement par les données ouvertes (lot 4).
+      expect(logs.map(l => l.action)).toEqual([
+        'listing.created',
+        'listing.enriched',
+      ])
+      expect(logs.every(l => l.channel === 'web')).toBe(true)
     })
 
     it('enregistre le point géographique par le module geo', async () => {

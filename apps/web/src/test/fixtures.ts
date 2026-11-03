@@ -75,6 +75,7 @@ export function fakeListing(over: Partial<Listing> = {}): Listing {
     dpeConsumption: null,
     gesClass: null,
     dpeDate: null,
+    dpeNumber: null,
     heatingType: null,
     heatingCollective: null,
     outdoor: null,
@@ -133,6 +134,7 @@ export function fakeListing(over: Partial<Listing> = {}): Listing {
     createdAt: now,
     updatedAt: now,
     views: [],
+    openDataContext: null,
     ...over,
   }
 }
@@ -210,6 +212,8 @@ export function fakeEvaluated(
       },
     ],
     offers: [],
+    criteriaMatches: [],
+    criteriaChanges: null,
     ...over,
   }
 }

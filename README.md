@@ -12,6 +12,7 @@ Documentation :
 - [Feuille de route](docs/product/roadmap.md)
 - [Connecteur MCP](docs/mcp.md)
 - [Extraction par IA](docs/ia.md)
+- [Données ouvertes](docs/open-data.md)
 - [Déploiement](docs/deploiement.md)
 - [Décisions d'architecture](docs/decisions/README.md)
 - [Règles de travail](CLAUDE.md)
@@ -21,20 +22,24 @@ Documentation :
 ```
 apps/
   api/          NestJS 11, Prisma 7 + PostGIS, nestjs-zod, OpenAPI (/api/docs hors production),
-                MCP (/mcp, découverte OAuth), extraction IA (@anthropic-ai/sdk), géocodage IGN,
+                MCP (/mcp, découverte OAuth), extraction IA (@anthropic-ai/sdk), géocodage et
+                isochrones IGN, DPE ADEME, encadrement, arrêts TBM, DVF, critères de recherche,
                 doublons, throttler, Sentry en option
-  web/          Vue 3.5 + Vite, Tailwind 4, TanStack Query et Table, MapLibre GL, reka-ui,
-                Supabase Auth, PWA, Sentry en option
+  web/          Vue 3.5 + Vite, Tailwind 4, TanStack Query et Table, MapLibre GL + terra-draw,
+                reka-ui, Supabase Auth, PWA, Sentry en option
 packages/
   contracts/    schémas Zod partagés (annonces, hypothèses et barème notaire, offres, GeoJSON,
                 filtres, sorties calculées, prix cible, négociation, comparaison, glossaire)
   domain/       calculs purs (coût, rendement, verdict, louabilité, frais de notaire par taux ou
-                barème, prix cible, sensibilité, brief de négociation, rangs)
-scripts/        import de l'artefact Claude (annonces, réglages, géocodage)
+                barème, prix cible et critère « marché », sensibilité, brief de négociation,
+                rangs, plafond d'encadrement, statistiques DVF, validité du DPE, filtres des critères)
+scripts/        import de l'artefact Claude ; imports open data (encadrement, arrêts TBM, DVF) ;
+                géocodage des annonces manquantes
 supabase/       configuration du Supabase CLI
 docker/         Postgres + PostGIS pour les tests e2e (repli au Supabase CLI)
 docs/           produit et décisions
 data/private/   exports et caches personnels, jamais commités
+data/opendata/  fichiers open data téléchargés (DVF, TBM, encadrement), jamais commités
 ```
 
 ## Prérequis
@@ -88,9 +93,11 @@ pnpm --filter @apart/api prisma:deploy     # applique prisma/migrations (PostGIS
 pnpm --filter @apart/api prisma:migrate    # crée une migration après un changement de schéma (dev)
 ```
 
-Migrations : `20261103000000_init` (schéma complet, PostGIS, index GiST) puis
-`20261103120000_lot3_offers` (canal, date de réponse, auteur et dates des offres). Une base
-locale créée avant le lot 3 doit rejouer `prisma:deploy`.
+Migrations : `20261103000000_init` (schéma complet, PostGIS, index GiST),
+`20261103120000_lot3_offers` (canal, date de réponse, auteur et dates des offres), puis
+`20261103180000_lot4_criteria_opendata` (entrées des annonces dans les critères, zonage de
+l'encadrement, clés d'import des arrêts et des ventes DVF, numéro de DPE et instantané open data
+des annonces). Une base créée avant un lot doit rejouer `prisma:deploy`.
 
 ## Démarrage
 
@@ -106,12 +113,23 @@ et garde-fous dans [docs/mcp.md](docs/mcp.md).
 ### Écrans du web
 
 - **Synthèse** (`/`) : compteurs (nouvelles, suivies, dans la cible, meilleur brut, prix moyen au
-  m², à visiter), répartition par statut, tâches ouvertes et en retard, nouvelles annonces,
-  meilleures annonces.
-- **Annonces** (`/annonces`) : filtres partagés (statut, commune, verdict, DPE, prix, recherche,
-  « nouvelles pour moi », point et rayon) synchronisés avec l'URL, trois vues : tableau
-  comparatif (TanStack Table, tri par colonne), cartes (mobile), carte MapLibre (marqueurs colorés
-  par verdict ou statut, popup vers la fiche, clic = point du filtre, curseur de rayon).
+  m², à visiter), répartition par statut, tâches ouvertes et en retard, critères de recherche
+  actifs avec leurs annonces et leurs nouveautés pour moi, nouvelles annonces, meilleures
+  annonces.
+- **Annonces** (`/annonces`) : filtres partagés (statut, commune, critère enregistré, verdict,
+  DPE, prix, recherche, « nouvelles pour moi », point et rayon) synchronisés avec l'URL, trois
+  vues : tableau comparatif (TanStack Table, tri par colonne), cartes (mobile), carte MapLibre
+  (marqueurs colorés par verdict ou statut, popup vers la fiche, clic = point du filtre, curseur
+  de rayon, couches activables : périmètres des critères, arrêts de tram et de bus, ventes DVF
+  des trois dernières années, zones d'encadrement avec leur légende ; un clic sur un arrêt ou une
+  vente en montre le détail). Les annonces entrées dans un critère portent son badge ◎.
+- **Critères** (`/criteres`) : critères de recherche partagés avec leurs compteurs (annonces,
+  nouveautés pour moi, sous réserve), création et modification (filtres, périmètre dessiné en
+  polygone ou en cercle avec terra-draw, polygone retouchable sommet par sommet, point et rayon
+  par clic, isochrone par adresse ou clic,
+  à pied, à vélo ou en voiture, aperçu du nombre d'annonces), archivage, suppression,
+  « Voir les annonces ». Une annonce créée qui entre dans un critère l'annonce à l'ouverture de
+  sa fiche.
 - **Nouvelle annonce** (`/annonces/nouvelle`) : onglet « Coller une annonce » (texte de la page,
   lien, captures d'écran, bouton Analyser avec coût affiché) qui pré-remplit la fiche avec une
   pastille de provenance et de confiance par champ, les champs indispensables à compléter et le
@@ -126,7 +144,10 @@ et garde-fous dans [docs/mcp.md](docs/mcp.md).
   au choix (prix, loyer, taux, apport, durée) coloré par verdict avec la cellule courante
   repérée, contrôles de louabilité, formulaire complet (bien, charges, travaux avec postes,
   phase 2, hypothèses surchargées), changement de statut avec garde-fou, avis des deux membres,
-  tâches (dont « IA · champ manquant »), **frise des prix et des offres** (nouveau prix
+  tâches (dont « IA · champ manquant »), bloc **« Contexte »** (arrêt de tram le plus proche,
+  DPE vérifié auprès de l'ADEME avec les candidats à retenir et la validité, plafond
+  d'encadrement et son état, ventes DVF comparables datées avec la médiane au m², carte
+  miniature, relance du géocodage), **frise des prix et des offres** (nouveau prix
   constaté, nouvelle offre avec canal et date, réponse du vendeur et contre-proposition, statut
   proposé après une réponse, jamais appliqué d'office), pastilles de provenance par champ.
   L'ouverture marque l'annonce « vue » pour le membre ; le badge « nouvelle » s'éteint pour lui
@@ -158,8 +179,9 @@ pnpm build
 
 Les e2e (REST, géo, collaboration, prix cible et négociation, extraction IA, MCP par appels JSON-RPC réels) demandent
 `TEST_DATABASE_URL` (voie 2 ci-dessus, ou le Postgres du Supabase CLI sur 54322). Le client
-Anthropic et le géocodeur IGN sont remplacés par des factices dans le harnais ; les tests du web
-mockent MapLibre et Supabase : aucun réseau, aucune clé. La CI GitHub Actions (`.github/workflows/ci.yml`) rejoue lint,
+Anthropic, le géocodeur et les isochrones IGN et la recherche DPE de l'ADEME sont remplacés par
+des factices dans le harnais ; les tests du web
+mockent MapLibre, terra-draw et Supabase : aucun réseau, aucune clé. La CI GitHub Actions (`.github/workflows/ci.yml`) rejoue lint,
 format, type-check, unitaires, e2e sur un service PostGIS, puis le build.
 
 ## Import des données de l'artefact
@@ -180,6 +202,22 @@ client que l'API, `apps/api/src/opendata/geoplateforme.ts`) avec un cache dans
 `data/private/geocode-cache.json` ; une annonce sans adresse exacte reçoit le
 centroïde de sa commune (précision `commune`) et une tâche « demander l'adresse exacte ».
 Relancer l'import est sans effet sur les annonces déjà présentes.
+
+## Données ouvertes
+
+Les fichiers se téléchargent dans `data/opendata/` (sources, licences et URL dans
+[docs/open-data.md](docs/open-data.md)), puis :
+
+```bash
+pnpm import:rent-control                 # zonage et arrêté de l'encadrement (Bordeaux), contrôle croisé
+pnpm import:transit-stops                # arrêts TBM et leurs lignes
+pnpm import:dvf -- --year 2024           # ventes d'appartements de Bordeaux Métropole
+pnpm geocode:missing -- --dry-run        # annonces à géocoder (sans point, ou au centroïde)
+```
+
+Chaque script accepte `--help`, `--dry-run` et `--database-url`. Le DPE (ADEME), le géocodage
+et les isochrones (Géoplateforme) sont appelés à la demande par l'API, avec un cache en base ;
+`ISOCHRONE_URL` et `ADEME_DPE_URL` changent leur adresse.
 
 ## Déploiement
 

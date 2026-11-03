@@ -262,7 +262,7 @@ dès le départ.
 | D4 | Arrêts de tram et bus TBM (données Bordeaux Métropole) | Distance au tram le plus proche | L |
 | D5 | DVF (demandes de valeurs foncières, DGFiP) importé pour la Gironde dans la base du projet | Prix au m² des ventes comparables, ancrage du prix cible | L |
 | D6 | Géorisques | Risques à l'adresse (inondation, argiles, radon) dans la checklist | L |
-| D7 | Isochrones IGN Géoplateforme | Périmètre « n minutes à pied ou en transport depuis un point », figé en polygone à l'enregistrement | L |
+| D7 | Isochrones IGN Géoplateforme | Périmètre « n minutes à pied, à vélo ou en voiture depuis un point », figé en polygone à l'enregistrement ; le vélo est approché par une distance sur le réseau piéton et « en transport » reste à venir, la Géoplateforme n'ayant ni profil vélo ni transports en commun (ADR 0010) | L |
 
 Les sources ouvertes changent d'adresse et de format : chaque connecteur est isolé derrière une
 interface, avec un cache en base et un marquage de la date de récupération.
@@ -275,7 +275,7 @@ interface, avec un cache en base et un marquage de la date de récupération.
 | G2 | Filtre par point et rayon : adresse saisie ou clic sur la carte, rayon en mètres | M |
 | G3 | Critères de recherche enregistrés et partagés dans l'espace : nom, communes, prix, surface, pièces, DPE, verdict, périmètre | S |
 | G4 | Périmètre dessiné sur la carte (polygone), modifiable | S |
-| G5 | Périmètre par isochrone : « n minutes à pied ou en transport depuis un point », calculé par un service externe et figé en polygone | L |
+| G5 | Périmètre par isochrone : « n minutes à pied, à vélo ou en voiture depuis un point », calculé par un service externe et figé en polygone ; « en transport » attend un service qui le propose (ADR 0010) | L |
 | G6 | Alerte : une nouvelle annonce qui entre dans un critère est marquée et comptée dans la synthèse ; une annonce ajoutée par le MCP est confrontée aux critères à la création | S |
 | G7 | Couches de contexte sur la carte : arrêts de tram et bus, ventes DVF récentes, zone d'encadrement | L |
 
@@ -335,16 +335,29 @@ d'effet) ; surcharge partielle par annonce.
 **ActivityLog** : annonce, acteur (membre ou MCP), action, avant, après, date.
 
 **SearchCriteria** : espace, nom, créé par, actif, filtres (communes, prix, surface, pièces, DPE,
-verdict), périmètre : type (`point_radius`, `polygon`, `isochrone`), géométrie PostGIS, GeoJSON
-d'origine, paramètres de l'isochrone (point, mode, durée, date de calcul).
+verdict, statuts, distance maximale au tram), périmètre : type (`point_radius`, `polygon`,
+`isochrone`), géométrie PostGIS, GeoJSON d'origine, paramètres de l'isochrone (point, mode, durée,
+date de calcul, approximation éventuelle).
 
-**TransitStop** : réseau, ligne, nom, point géographique (import TBM).
+**CriteriaMatch** : critère, annonce, date d'entrée, localisation imprécise (« sous réserve ») ;
+la matière des alertes et du badge (ADR 0010).
 
-**DvfSale** : date de mutation, prix, surface, type de bien, adresse, point géographique, prix au
-m² (import Gironde).
+**TransitStop** : réseau, identifiant d'import, mode (tram, bus, bateau), lignes, nom, point
+géographique (import TBM).
 
-**ReferenceData** : loyers de référence par année et zone, calendrier DPE, barème des frais de
-notaire, cache des appels open data.
+**DvfSale** : identifiant de mutation, nature, date de mutation, prix, surface, type de bien,
+pièces, adresse, commune, code postal, point géographique, prix au m², source (import Bordeaux
+Métropole depuis le fichier de la Gironde).
+
+**RentControlZone** : territoire, zone de l'encadrement, secteur IRIS, code INSEE, multipolygone
+PostGIS (zonage de Bordeaux, ADR 0011).
+
+Le **Listing** porte aussi le numéro de son DPE et un instantané des données ouvertes (arrêt de
+tram, médiane DVF, état du plafond, dernière recherche DPE) qui alimente le critère « marché ».
+
+**ReferenceData** : loyers de référence par arrêté (date d'application, zone, pièces, époque,
+meublé), calendrier DPE, barème des frais de notaire, cache des appels open data (géocodage, DPE,
+isochrones).
 
 ---
 

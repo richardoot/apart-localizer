@@ -21,7 +21,11 @@
     "test:e2e": "pnpm build:packages && pnpm -r test:e2e",
     "db:test:up": "podman compose -f docker/test-db.yml up -d || docker compose -f docker/test-db.yml up -d",
     "db:test:down": "podman compose -f docker/test-db.yml down || docker compose -f docker/test-db.yml down",
-    "import:artifact": "pnpm --filter @apart/scripts import:artifact"
+    "import:artifact": "pnpm --filter @apart/scripts import:artifact",
+    "import:rent-control": "pnpm --filter @apart/scripts import:rent-control",
+    "import:transit-stops": "pnpm --filter @apart/scripts import:transit-stops",
+    "import:dvf": "pnpm --filter @apart/scripts import:dvf",
+    "geocode:missing": "pnpm --filter @apart/scripts geocode:missing"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

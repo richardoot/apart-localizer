@@ -9,6 +9,7 @@
     formatSurface,
   } from '@/lib/format'
   import DpeBadge from './DpeBadge.vue'
+  import CriteriaBadges from './CriteriaBadges.vue'
   import NewBadge from './NewBadge.vue'
   import RentalPill from './RentalPill.vue'
   import StatusBadge from './StatusBadge.vue'
@@ -39,6 +40,7 @@
             {{ item.listing.title }}
             <NewBadge :is-new="item.isNewForMe" />
           </h3>
+          <CriteriaBadges :matches="item.criteriaMatches" />
           <p class="text-xs text-muted">
             {{
               [item.listing.location.commune, item.listing.location.district]

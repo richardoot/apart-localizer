@@ -49,6 +49,16 @@ describe('router guard', () => {
     expect(router.currentRoute.value.query.redirect).toBe('/annonces?view=map')
   })
 
+  it('protects the search criteria page and titles it', async () => {
+    await router.push('/criteres')
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.query.redirect).toBe('/criteres')
+    authState.isAuthenticated = true
+    await router.push('/criteres')
+    expect(router.currentRoute.value.name).toBe('criteria')
+    expect(document.title).toBe('Critères — apart-localizer')
+  })
+
   it('redirects an unknown path to the home page (then to login when signed out)', async () => {
     await router.push('/nope/nothing')
     expect(router.currentRoute.value.name).toBe('login')

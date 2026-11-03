@@ -152,7 +152,11 @@ Chaque source est un connecteur isolé dans le module `opendata` avec cache en b
 - arrêts TBM : import des données Bordeaux Métropole dans `TransitStop` ;
 - DVF : import des fichiers ouverts DGFiP pour la Gironde dans `DvfSale` (PostGIS), plutôt
   qu'une API tierce ;
-- Géorisques plus tard.
+- Géorisques plus tard (lot 5, checklist réglementaire ; ADR 0011).
+
+Mise en œuvre au lot 4 : [docs/open-data.md](../open-data.md) (sources, licences, dates, imports
+et règles) et ADR 0010, 0011 (isochrone à vélo approchée, zonage de l'encadrement dans une table
+PostGIS dédiée, instantané d'enrichissement sur l'annonce).
 
 ## 3. Arborescence proposée
 

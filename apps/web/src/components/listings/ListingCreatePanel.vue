@@ -1,6 +1,10 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue'
-  import type { ExtractionResult, ListingInput } from '@apart/contracts'
+  import type {
+    CriteriaMatchChanges,
+    ExtractionResult,
+    ListingInput,
+  } from '@apart/contracts'
   import { missingListingFields } from '@apart/contracts'
   import SidePanel from '@/components/ui/SidePanel.vue'
   import { describeUsage } from '@/composables/useExtraction'
@@ -26,7 +30,7 @@
 
   const emit = defineEmits<{
     close: []
-    created: [id: string]
+    created: [id: string, criteriaChanges?: CriteriaMatchChanges | null]
     /** Le membre a reconnu un doublon : ouvrir l'annonce existante. */
     open: [id: string]
   }>()
@@ -122,7 +126,7 @@
           }
         : input
       const created = await create.mutateAsync(body)
-      emit('created', created.listing.id)
+      emit('created', created.listing.id, created.criteriaChanges)
     } catch (err) {
       failure.value =
         err instanceof ApiError ? err.message : "L'enregistrement a échoué."

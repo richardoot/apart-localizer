@@ -30,9 +30,15 @@ export type EvaluableListing = ListingLike & {
  */
 export function evaluateListing(
   listing: EvaluableListing,
-  assumptions: Assumptions
+  assumptions: Assumptions,
+  /** La date de l'évaluation : un plafond posé d'office expire avec son arrêté. */
+  at: Date = new Date()
 ): ListingEvaluation {
-  const financials: ListingFinancials = financialsFromListing(listing)
+  const financials: ListingFinancials = financialsFromListing(
+    listing,
+    undefined,
+    at
+  )
   const metrics = compute(financials, assumptions)
   const rental = rentalChecks(
     {

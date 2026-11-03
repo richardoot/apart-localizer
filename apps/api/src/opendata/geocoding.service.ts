@@ -43,12 +43,15 @@ export class GeocodingService {
   /** Un appel, mis en cache ; les erreurs HTTP remontent sans être mises en cache. */
   async geocode(
     query: string,
-    kind: GeocodeKind = 'address'
+    kind: GeocodeKind = 'address',
+    options: { fresh?: boolean } = {}
   ): Promise<GeocodeResult | null> {
     const key = geocodeCacheKey(query, kind)
-    const cached = await this.prisma.referenceData.findUnique({
-      where: { kind_key: { kind: GEOCODE_CACHE_KIND, key } },
-    })
+    const cached = options.fresh
+      ? null
+      : await this.prisma.referenceData.findUnique({
+          where: { kind_key: { kind: GEOCODE_CACHE_KIND, key } },
+        })
     if (cached) {
       const payload = cached.payload as { result: GeocodeResult | null }
       return payload.result ?? null
@@ -77,14 +80,17 @@ export class GeocodingService {
    * la commune. Ne lance jamais : un géocodeur muet ou en panne rend `null`
    * et l'annonce s'enregistre sans point.
    */
-  async locate(location: {
-    addressRaw?: string | null | undefined
-    commune?: string | null | undefined
-  }): Promise<LocatedAddress | null> {
+  async locate(
+    location: {
+      addressRaw?: string | null | undefined
+      commune?: string | null | undefined
+    },
+    options: { fresh?: boolean } = {}
+  ): Promise<LocatedAddress | null> {
     try {
       const query = addressQuery(location.addressRaw, location.commune)
       if (query) {
-        const result = await this.geocode(query, 'address')
+        const result = await this.geocode(query, 'address', options)
         if (result && result.precision !== 'commune') {
           return {
             point: result.point,
@@ -99,7 +105,7 @@ export class GeocodingService {
       }
       const commune = location.commune?.trim()
       if (!commune) return null
-      const result = await this.geocode(commune, 'municipality')
+      const result = await this.geocode(commune, 'municipality', options)
       if (!result) return null
       return {
         point: result.point,

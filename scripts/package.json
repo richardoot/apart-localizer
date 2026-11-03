@@ -12,6 +12,10 @@
   },
   "scripts": {
     "import:artifact": "tsx import-artifact.ts",
+    "import:rent-control": "tsx import-rent-control.ts",
+    "import:transit-stops": "tsx import-transit-stops.ts",
+    "import:dvf": "tsx import-dvf.ts",
+    "geocode:missing": "tsx geocode-missing.ts",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",

@@ -1,4 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { ServiceUnavailableException } from '@nestjs/common'
 import { z } from 'zod'
 import {
   AssumptionsSchema,
@@ -13,6 +14,14 @@ import {
   McpCompareListingsInputSchema,
   McpCompleteTaskInputSchema,
   McpCreateListingInputSchema,
+  McpCreateSearchCriteriaInputSchema,
+  McpGetMarketContextInputSchema,
+  McpListSearchCriteriaInputSchema,
+  McpUpdateSearchCriteriaInputSchema,
+  ISOCHRONE_MODE_LABELS,
+  OPEN_DATA_STATUS_LABELS,
+  PERIMETER_TYPE_LABELS,
+  RENT_EPOCH_LABELS,
   McpEvaluateListingInputSchema,
   McpExtractListingInputSchema,
   McpFindDuplicatesInputSchema,
@@ -35,6 +44,13 @@ import {
 import type {
   AssumptionsImpact,
   CompareResult,
+  CriteriaMatchChanges,
+  ListingContext,
+  MarketContext,
+  MarketContextReport,
+  RentControlLookup,
+  SearchCriteriaSummary,
+  TransitContext,
   DuplicateCandidate,
   EvaluatedListing,
   ListingEvaluation,
@@ -49,6 +65,8 @@ import type { DuplicatesService } from '../listings/duplicates.service'
 import type { ExtractionService } from '../listings/extraction.service'
 import type { ListingsService } from '../listings/listings.service'
 import type { TargetPriceService } from '../listings/target-price.service'
+import type { ListingEnrichmentService } from '../listings/enrichment.service'
+import type { SearchCriteriaService } from '../search-criteria/search-criteria.service'
 import type { AssumptionsService } from '../assumptions/assumptions.service'
 import type { OffersService } from '../offers/offers.service'
 import type { OpinionsService } from '../opinions/opinions.service'
@@ -69,6 +87,8 @@ export interface McpToolContext {
   workspace: WorkspaceService
   offers: OffersService
   targetPrice: TargetPriceService
+  criteria: SearchCriteriaService
+  enrichment: ListingEnrichmentService
 }
 
 const CHANNEL = 'mcp' as const
@@ -76,7 +96,7 @@ const CHANNEL = 'mcp' as const
 /**
  * Les noms des outils, dans l'ordre de la feuille de route : lot 1, lot 2
  * (extraction et doublons), lot 3 (prix cible, offres, prix, comparaison,
- * hypothèses).
+ * hypothèses), lot 4 (critères de recherche, contexte de marché).
  */
 export const MCP_TOOL_NAMES = [
   'list_listings',
@@ -96,6 +116,10 @@ export const MCP_TOOL_NAMES = [
   'record_price_change',
   'record_offer',
   'set_assumptions',
+  'list_search_criteria',
+  'get_market_context',
+  'create_search_criteria',
+  'update_search_criteria',
 ] as const
 
 /** Les prompts du connecteur. */
@@ -259,6 +283,133 @@ export function describeImpact(impact: AssumptionsImpact): string {
   ].join('\n')
 }
 
+/** Les critères dans lesquels une annonce entre ou dont elle sort, en une ligne. */
+export function describeCriteriaChanges(
+  changes: CriteriaMatchChanges | null
+): string | null {
+  if (!changes) return null
+  const parts: string[] = []
+  for (const m of changes.entered) {
+    parts.push(
+      `Entre dans le critère « ${m.name} »${m.approximate ? ' (sous réserve : localisation imprécise)' : ''}.`
+    )
+  }
+  for (const m of changes.left) parts.push(`Sort du critère « ${m.name} ».`)
+  return parts.length ? parts.join(' ') : null
+}
+
+/** La desserte en une ligne. */
+export function describeTransit(transit: TransitContext): string {
+  const tram = transit.nearestTram
+  return tram
+    ? `Tram le plus proche : ${tram.name}${tram.lines.length ? ` (ligne ${tram.lines.join(', ')})` : ''} à ${tram.distanceMeters} m`
+    : 'Aucun arrêt de tram à moins de 2 km (ou arrêts TBM non importés)'
+}
+
+/** Le plafond d'encadrement en une ligne. */
+export function describeRentControl(rent: RentControlLookup): string {
+  if (rent.status === 'not_applicable')
+    return 'Encadrement des loyers : sans objet (hors Bordeaux)'
+  if (rent.status === 'unavailable') {
+    return `Encadrement des loyers : ${rent.reasons.join(' ')}`
+  }
+  const value =
+    rent.referenceRentPerM2 !== null
+      ? `loyer de référence majoré ${rent.referenceRentPerM2} €/m²${rent.monthlyCap !== null ? `, plafond ${formatEuros(rent.monthlyCap)}/mois HC` : ''} (zone ${rent.zone?.zone ?? '?'}, ${rent.rooms === 4 ? '4 pièces et plus' : `${rent.rooms ?? '?'} pièce(s)`}, ${rent.epoch ? RENT_EPOCH_LABELS[rent.epoch].toLowerCase() : 'époque ?'}, ${rent.furnished ? 'meublé' : 'vide'}, arrêté du ${rent.decree?.decreeDate ?? '?'})`
+      : 'plafond non déterminé'
+  return `Encadrement des loyers (${OPEN_DATA_STATUS_LABELS[rent.status]}) : ${value}${rent.reasons.length ? ` — ${rent.reasons.join(' ')}` : ''}`
+}
+
+/** Les comparables DVF en une ligne. */
+export function describeMarket(market: MarketContext): string {
+  if (!market.stats) {
+    return `Marché DVF (${OPEN_DATA_STATUS_LABELS[market.status]}) : ${market.reasons.join(' ') || 'aucune vente comparable'}`
+  }
+  const s = market.stats
+  return [
+    `Marché DVF (${OPEN_DATA_STATUS_LABELS[market.status]}) : médiane ${formatEuros(s.medianPricePerM2)}/m² sur ${s.count} vente(s) d'appartements à ${market.radiusMeters} m (${market.period.from} → ${market.period.to}${market.surfaceRange ? `, ${Math.round(market.surfaceRange[0])} à ${Math.round(market.surfaceRange[1])} m²` : ''}), quartiles ${formatEuros(s.p25PricePerM2)} à ${formatEuros(s.p75PricePerM2)}/m²`,
+    market.marketPrice !== null
+      ? `prix de marché estimé ≈ ${formatEuros(market.marketPrice)}`
+      : null,
+    market.gapToMarket !== null
+      ? `prix affiché ${market.gapToMarket >= 0 ? '+' : '−'}${formatPercent(Math.abs(market.gapToMarket))} par rapport à la médiane`
+      : null,
+    market.reasons.length ? market.reasons.join(' ') : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+/** Le bloc « Contexte » d'une fiche en quelques lignes. */
+export function describeContext(context: ListingContext): string {
+  return [
+    `Contexte (données ouvertes) :`,
+    `  - ${describeTransit(context.transit)}`,
+    `  - ${describeRentControl(context.rentControl)}`,
+    `  - DPE ${context.dpe.verified ? 'vérifié auprès de l’ADEME' : 'non vérifié'} : ${context.dpe.validity.messages.join(' ')}${context.dpe.search && !context.dpe.verified && context.dpe.search.candidates.length ? ` (${context.dpe.search.candidates.length} DPE candidat(s) à l'ADEME, à valider dans l'application)` : ''}`,
+    `  - ${describeMarket(context.market)}`,
+  ].join('\n')
+}
+
+/** Le contexte de marché d'une adresse ou d'un point. */
+export function describeMarketReport(report: MarketContextReport): string {
+  const where =
+    report.location.label ??
+    (report.location.point
+      ? report.location.point.coordinates.join(', ')
+      : 'lieu inconnu')
+  return [
+    `Contexte de marché pour ${where}${report.location.commune ? ` (${report.location.commune})` : ''} :`,
+    `  - ${describeMarket(report.market)}`,
+    `  - ${describeRentControl(report.rentControl)}`,
+    `  - ${describeTransit(report.transit)}`,
+  ].join('\n')
+}
+
+/** Un critère en une ligne : périmètre, filtres, compteurs. */
+export function describeCriteria(c: SearchCriteriaSummary): string {
+  const f = c.filters
+  const perimeter = c.perimeter
+    ? c.perimeter.type === 'point_radius'
+      ? `${PERIMETER_TYPE_LABELS.point_radius} ${c.perimeter.radiusMeters} m`
+      : c.perimeter.type === 'isochrone'
+        ? `isochrone ${c.perimeter.params.durationMinutes} min ${ISOCHRONE_MODE_LABELS[c.perimeter.params.mode].toLowerCase()}`
+        : PERIMETER_TYPE_LABELS.polygon
+    : 'sans périmètre'
+  const filters = [
+    f.priceMax !== null ? `≤ ${formatEuros(f.priceMax)}` : null,
+    f.priceMin !== null ? `≥ ${formatEuros(f.priceMin)}` : null,
+    f.surfaceMin !== null ? `≥ ${f.surfaceMin} m²` : null,
+    f.roomsMin !== null ? `${f.roomsMin} pièce(s) ou plus` : null,
+    f.dpeMax !== null ? `DPE ${f.dpeMax} au plus` : null,
+    f.maxTramDistanceMeters !== null
+      ? `tram à ${f.maxTramDistanceMeters} m au plus`
+      : null,
+    f.communes.length ? f.communes.join(', ') : null,
+    f.verdicts.length
+      ? f.verdicts.map(v => VERDICT_LABELS[v]).join(', ')
+      : null,
+    f.statuses.length
+      ? f.statuses.map(st => LISTING_STATUS_LABELS[st]).join(', ')
+      : null,
+  ].filter(Boolean)
+  return `« ${c.name} »${c.active ? '' : ' (archivé)'} : ${perimeter}${filters.length ? `, ${filters.join(', ')}` : ''} — ${c.listingCount} annonce(s), ${c.newCount} nouvelle(s) pour vous${c.approximateCount ? `, ${c.approximateCount} sous réserve` : ''} [id ${c.id}, modifié ${c.updatedAt}]`
+}
+
+/** Un service open data en panne (isochrones) : refus lisible plutôt qu'erreur de transport. */
+async function openDataAnswer(
+  body: () => Promise<ReturnType<typeof dataResult>>
+): Promise<ReturnType<typeof dataResult>> {
+  try {
+    return await body()
+  } catch (error) {
+    if (error instanceof ServiceUnavailableException) {
+      return refusal(`Refusé : ${error.message}`)
+    }
+    throw error
+  }
+}
+
 /** Le schéma JSON d'une annonce à créer, descriptions comprises (ressource `apart://schema/listing`). */
 export function listingJsonSchema(): Record<string, unknown> {
   return z.toJSONSchema(ListingCreateSchema, {
@@ -290,7 +441,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     {
       title: 'Lister les annonces',
       description:
-        "Annonces de l'espace, filtrées (statut, commune, DPE, verdict, prix, surface, pièces, « nouvelles pour moi », recherche texte, point et rayon en mètres), " +
+        "Annonces de l'espace, filtrées (statut, commune, DPE, verdict, prix, surface, pièces, « nouvelles pour moi », recherche texte, point et rayon en mètres, critère enregistré `criteriaId` : son périmètre et ses filtres, exactement comme dans l'application), " +
         'triées et paginées (50 par page par défaut), chacune avec ses indicateurs calculés (coût, mensualité, rendements, effort, verdict, prix cible), ' +
         'son verdict de louabilité, ses avis et ses tâches. Sans filtre de statut : les annonces actives (à étudier, à visiter, visité, offre faite, offre acceptée). ' +
         'Avec `near`, chaque annonce porte sa distance au point.',
@@ -316,19 +467,24 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       title: 'Lire une annonce',
       description:
         'Une annonce complète : tous ses champs et leur provenance, ses indicateurs calculés, le détail des contrôles de louabilité (phase 2), ' +
-        "le prix cible par critère, les avis des membres, les tâches (avec leurs identifiants) et l'historique des prix.",
+        "le prix cible par critère, les avis des membres, les tâches (avec leurs identifiants), l'historique des prix, les critères de recherche dans lesquels elle est entrée, " +
+        "et son contexte de données ouvertes (`context`) : arrêt de tram le plus proche (distance, ligne), plafond d'encadrement (Bordeaux), DPE vérifié auprès de l'ADEME et sa validité, comparables DVF datés.",
       inputSchema: McpGetListingInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ listingId }) =>
       answer(async () => {
         const item = await ctx.listings.get(ctx.member, listingId)
+        const context = await ctx.enrichment.context(ctx.member, listingId)
         const checks = item.evaluation.rental.checks
           .map(c => `  - [${c.level}] ${c.message}`)
           .join('\n')
+        const criteria = item.criteriaMatches.length
+          ? `\nCritères : ${item.criteriaMatches.map(m => `« ${m.name} »${m.approximate ? ' (sous réserve)' : ''}`).join(', ')}`
+          : ''
         return dataResult(
-          `${describeListing(item)}\nContrôles de louabilité :\n${checks}`,
-          item
+          `${describeListing(item)}${criteria}\nContrôles de louabilité :\n${checks}\n${describeContext(context)}`,
+          { ...item, context }
         )
       })
   )
@@ -432,7 +588,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         "Enregistre une annonce normalisée dans l'espace, avec la checklist par défaut et un premier événement de prix. Elle apparaît « nouvelle » pour les autres membres. " +
         "Donnez tout ce que l'annonce dit (prix FAI, surface Carrez, pièces, étage, DPE, charges annuelles, taxe foncière, adresse, commune, quartier, loyer visé dans rentalPlan, point GeoJSON [lng, lat] si connu) ; sans point, l'adresse est géocodée côté serveur. " +
         'Passez la fiche rendue par extract_listing telle quelle (fieldSources : provenance, confiance et extrait par champ ; mettez `user` sur les champs que le membre a corrigés). ' +
-        'La réponse liste les doublons probables (la création n’est pas bloquée ; `ignoreDuplicates: true` quand le membre a vu l’alerte et confirme) et les tâches créées pour les champs indispensables manquants. ' +
+        'La réponse liste les doublons probables (la création n’est pas bloquée ; `ignoreDuplicates: true` quand le membre a vu l’alerte et confirme), les tâches créées pour les champs indispensables manquants, ' +
+        'les critères de recherche dans lesquels l’annonce entre (`criteriaChanges`), et les enrichissements open data faits côté serveur (arrêt de tram, plafond d’encadrement, prix médian DVF, DPE vérifié à l’ADEME). ' +
         '`provenance` : « ai » si Claude a lu la page, « user » si le membre a dicté les valeurs. Portée listings:write.',
       inputSchema: McpCreateListingInputSchema,
       annotations: {
@@ -454,6 +611,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         })
         const lines = [
           `Annonce créée : ${describeListing(item)} [id ${item.listing.id}]`,
+          describeCriteriaChanges(item.criteriaChanges),
           describeDuplicates(item.duplicates),
           item.createdTasks.length
             ? `Tâches créées pour les champs manquants : ${item.createdTasks.map(t => t.label).join(' ; ')}.`
@@ -504,7 +662,12 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           }
         )
         return dataResult(
-          `Annonce modifiée (${Object.keys(patch).join(', ')}) : ${describeListing(item)}`,
+          [
+            `Annonce modifiée (${Object.keys(patch).join(', ')}) : ${describeListing(item)}`,
+            describeCriteriaChanges(item.criteriaChanges),
+          ]
+            .filter(Boolean)
+            .join('\n'),
           item
         )
       })
@@ -536,7 +699,12 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           CHANNEL
         )
         return dataResult(
-          `Statut : ${LISTING_STATUS_LABELS[item.listing.status]}${reason ? ` (${reason})` : ''} — ${describeListing(item)}`,
+          [
+            `Statut : ${LISTING_STATUS_LABELS[item.listing.status]}${reason ? ` (${reason})` : ''} — ${describeListing(item)}`,
+            describeCriteriaChanges(item.criteriaChanges),
+          ]
+            .filter(Boolean)
+            .join('\n'),
           item
         )
       })
@@ -727,7 +895,12 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
             ? ` (${newPrice < previous ? '−' : '+'}${formatEuros(Math.abs(newPrice - previous))}, ${formatPercent(Math.abs(newPrice - previous) / previous)})`
             : ''
         return dataResult(
-          `Prix ${previous !== null ? `${formatEuros(previous)} → ` : ''}${formatEuros(newPrice)}${delta} enregistré · ${describeListing(item)}`,
+          [
+            `Prix ${previous !== null ? `${formatEuros(previous)} → ` : ''}${formatEuros(newPrice)}${delta} enregistré · ${describeListing(item)}`,
+            describeCriteriaChanges(item.criteriaChanges),
+          ]
+            .filter(Boolean)
+            .join('\n'),
           item
         )
       })
@@ -848,6 +1021,106 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           result
         )
       })
+  )
+  server.registerTool(
+    'list_search_criteria',
+    {
+      title: 'Lister les critères de recherche',
+      description:
+        "Critères de recherche enregistrés et partagés dans l'espace : nom, filtres (prix, surface, pièces, DPE, verdict, statuts, distance au tram), périmètre (point et rayon, polygone, isochrone), " +
+        "nombre d'annonces qui le satisfont, nouveautés pour le membre connecté, annonces incluses sous réserve (localisation imprécise). Les identifiants servent à list_listings (`criteriaId`) et à update_search_criteria.",
+      inputSchema: McpListSearchCriteriaInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ includeArchived }) =>
+      answer(async () => {
+        const criteria = await ctx.criteria.list(ctx.member, {
+          includeArchived,
+        })
+        const summary = criteria.length
+          ? `${criteria.length} critère(s) :\n${criteria.map(c => `- ${describeCriteria(c)}`).join('\n')}`
+          : 'Aucun critère de recherche enregistré.'
+        return dataResult(summary, { criteria })
+      })
+  )
+
+  server.registerTool(
+    'get_market_context',
+    {
+      title: 'Contexte de marché',
+      description:
+        "Pour une annonce (`listingId`), une adresse (`address`, géocodée) ou un point GeoJSON : ventes DVF d'appartements comparables (500 m, élargi à 1 000 puis 2 000 m faute de ventes, surface ±25 % si `surface`, trois dernières années) avec prix médian au m², quartiles, dispersion et liste datée ; " +
+        "plafond d'encadrement des loyers (Bordeaux seulement : zone, loyer de référence majoré selon `rooms`, `constructionYear`, `furnished`) ; arrêt de tram et arrêt le plus proches. Données ouvertes importées (DVF, TBM, arrêté préfectoral), rien n'est inventé : un doute rend « à vérifier ».",
+      inputSchema: McpGetMarketContextInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async request =>
+      answer(async () => {
+        const report = await ctx.enrichment.marketReport(ctx.member, request)
+        return dataResult(describeMarketReport(report), report)
+      })
+  )
+
+  server.registerTool(
+    'create_search_criteria',
+    {
+      title: 'Créer un critère de recherche',
+      description:
+        "Enregistre un critère partagé dans l'espace : `name`, `filters` (priceMax, priceMin, surfaceMin, roomsMin, dpeMax, verdicts, statuses, communes, maxTramDistanceMeters) et `perimeter` : " +
+        "{ type: 'point_radius', longitude, latitude, radiusMeters }, { type: 'polygon', polygon: GeoJSON [lng, lat] fermé }, ou { type: 'isochrone', origin (point) ou address, mode : walking, cycling (approché), driving, durationMinutes } calculée par la Géoplateforme et figée en polygone. " +
+        'La réponse donne le nombre d’annonces qui le satisfont ; les annonces créées ensuite y sont confrontées (alerte « entre dans le critère »). Portée listings:write.',
+      inputSchema: McpCreateSearchCriteriaInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    async input =>
+      answer(() =>
+        openDataAnswer(async () => {
+          const denied = writeRefusal(ctx.scopes)
+          if (denied) return denied
+          const created = await ctx.criteria.create(ctx.member, input, CHANNEL)
+          return dataResult(`Critère créé : ${describeCriteria(created)}`, {
+            criteria: created,
+          })
+        })
+      )
+  )
+
+  server.registerTool(
+    'update_search_criteria',
+    {
+      title: 'Modifier un critère de recherche',
+      description:
+        'Modifie un critère : `name`, `filters` (fusionnés avec les filtres enregistrés), `perimeter` (remplacé ; null = aucun), `active: false` pour l’archiver (aucune suppression par le MCP). ' +
+        '`expectedUpdatedAt` (le `updatedAt` lu avec list_search_criteria) est le garde-fou optimiste : refus si le critère a changé depuis. Portée listings:write.',
+      inputSchema: McpUpdateSearchCriteriaInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async ({ criteriaId, ...patch }) =>
+      answer(() =>
+        openDataAnswer(async () => {
+          const denied = writeRefusal(ctx.scopes)
+          if (denied) return denied
+          const updated = await ctx.criteria.update(
+            ctx.member,
+            criteriaId,
+            patch,
+            CHANNEL
+          )
+          return dataResult(`Critère modifié : ${describeCriteria(updated)}`, {
+            criteria: updated,
+          })
+        })
+      )
   )
 }
 
