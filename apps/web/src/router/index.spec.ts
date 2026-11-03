@@ -59,6 +59,19 @@ describe('router guard', () => {
     expect(document.title).toBe('Critères — apart-localizer')
   })
 
+  it('protects the OAuth consent page and keeps authorization_id through the login', async () => {
+    await router.push('/oauth/consent?authorization_id=abc123')
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.query.redirect).toBe(
+      '/oauth/consent?authorization_id=abc123'
+    )
+    authState.isAuthenticated = true
+    await router.push('/oauth/consent?authorization_id=abc123')
+    expect(router.currentRoute.value.name).toBe('oauth-consent')
+    expect(router.currentRoute.value.meta.bare).toBe(true)
+    expect(document.title).toBe('Autorisation — apart-localizer')
+  })
+
   it('redirects an unknown path to the home page (then to login when signed out)', async () => {
     await router.push('/nope/nothing')
     expect(router.currentRoute.value.name).toBe('login')

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { effectiveScopes, hasScope, scopesFromToken } from './mcp-scopes'
+import {
+  effectiveScopes,
+  hasScope,
+  isApplicationScope,
+  scopesFromToken,
+} from './mcp-scopes'
 
 /** Un JWT non signé, juste pour la charge utile. */
 export function fakeJwt(payload: Record<string, unknown>): string {
@@ -9,17 +14,27 @@ export function fakeJwt(payload: Record<string, unknown>): string {
 }
 
 describe('scopesFromToken', () => {
-  it('lit la revendication scope, en chaîne ou en tableau', () => {
+  it("lit les portées de l'application, en chaîne ou en tableau", () => {
     expect(
       scopesFromToken(fakeJwt({ sub: 'u', scope: 'listings:read openid' }))
-    ).toEqual(['listings:read', 'openid'])
+    ).toEqual(['listings:read'])
     expect(
       scopesFromToken(fakeJwt({ sub: 'u', scopes: ['listings:write'] }))
     ).toEqual(['listings:write'])
-    expect(scopesFromToken(fakeJwt({ sub: 'u', scp: 'a,b' }))).toEqual([
-      'a',
-      'b',
-    ])
+    expect(
+      scopesFromToken(fakeJwt({ sub: 'u', scp: 'listings:read,email' }))
+    ).toEqual(['listings:read'])
+  })
+
+  it("garde une portée de l'application inconnue : elle ne donne aucun droit", () => {
+    expect(
+      scopesFromToken(fakeJwt({ sub: 'u', scope: 'listings:admin' }))
+    ).toEqual(['listings:admin'])
+    expect(
+      effectiveScopes(
+        scopesFromToken(fakeJwt({ sub: 'u', scope: 'listings:admin' }))
+      )
+    ).toEqual([])
   })
 
   it('rend null pour un jeton sans portée ou qui n’est pas un JWT', () => {
@@ -27,6 +42,34 @@ describe('scopesFromToken', () => {
     expect(scopesFromToken('e2e-token-richard')).toBeNull()
     expect(scopesFromToken('a.b.c')).toBeNull()
     expect(scopesFromToken('')).toBeNull()
+  })
+
+  it('rend null pour un jeton OAuth de GoTrue, qui ne porte que des portées OpenID', () => {
+    // Charge utile réelle d'un jeton émis par le serveur OAuth 2.1 de
+    // Supabase (CLI 3.0, GoTrue 2.197) : `email` par défaut, ou ce que le
+    // client a demandé parmi les portées OpenID.
+    for (const scope of ['email', 'openid email profile', 'offline_access']) {
+      const token = fakeJwt({
+        sub: 'u',
+        role: 'authenticated',
+        client_id: 'c',
+        scope,
+      })
+      expect(scopesFromToken(token)).toBeNull()
+      expect(effectiveScopes(scopesFromToken(token))).toEqual([
+        'listings:read',
+        'listings:write',
+      ])
+    }
+  })
+})
+
+describe('isApplicationScope', () => {
+  it('reconnaît le préfixe listings:', () => {
+    expect(isApplicationScope('listings:read')).toBe(true)
+    expect(isApplicationScope('listings:anything')).toBe(true)
+    expect(isApplicationScope('email')).toBe(false)
+    expect(isApplicationScope('openid')).toBe(false)
   })
 })
 

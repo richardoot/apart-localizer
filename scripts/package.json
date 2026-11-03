@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Scripts d'exploitation : import de l'artefact, imports open data",
+  "description": "Scripts d'exploitation : pile locale, jeu de démonstration, vérification, import de l'artefact, imports open data",
   "engines": {
     "node": "24.x"
   },
@@ -16,10 +16,15 @@
     "import:transit-stops": "tsx import-transit-stops.ts",
     "import:dvf": "tsx import-dvf.ts",
     "geocode:missing": "tsx geocode-missing.ts",
+    "stack": "tsx stack.ts",
+    "seed:demo": "tsx seed-demo.ts",
+    "link:identities": "tsx link-local-identities.ts",
+    "verify": "tsx verify.ts",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run",
-    "test:unit": "vitest run"
+    "test": "vitest run && vitest run --config vitest.config.e2e.ts",
+    "test:unit": "vitest run",
+    "test:e2e": "vitest run --config vitest.config.e2e.ts"
   },
   "dependencies": {
     "@apart/contracts": "workspace:*",

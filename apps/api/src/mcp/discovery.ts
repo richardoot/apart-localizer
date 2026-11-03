@@ -1,9 +1,20 @@
-import { MCP_SCOPES } from '@apart/contracts'
-
 /**
  * Découverte OAuth du connecteur MCP (RFC 9728, RFC 8414), en fonctions
  * pures : le contrôleur `.well-known` ne fait que les appeler.
  */
+
+/**
+ * Les portées annoncées dans `scopes_supported` : celles que le serveur
+ * d'autorisation (GoTrue) accepte de délivrer. Un client MCP demande
+ * exactement cette liste (SDK MCP : `scopes_supported` de la ressource) ;
+ * GoTrue refuse toute portée hors OpenID (« unsupported scope ») et
+ * `listings:read` y ferait échouer l'autorisation avant le consentement.
+ * `email` est la portée par défaut de GoTrue : elle n'exige ni jeton
+ * d'identité ni clé asymétrique. Les portées de l'application
+ * (`listings:read`, `listings:write`) restent lues dans le jeton si un jour
+ * le serveur les inscrit (ADR 0005, précisé par l'ADR 0017).
+ */
+export const AUTHORIZATION_SCOPES = ['email'] as const
 
 export interface RequestLike {
   protocol: string
@@ -59,7 +70,7 @@ export function protectedResourceMetadata(
   return {
     resource: resourceUrl(req, env),
     authorization_servers: [authorizationServerUrl(env)],
-    scopes_supported: [...MCP_SCOPES],
+    scopes_supported: [...AUTHORIZATION_SCOPES],
     bearer_methods_supported: ['header'],
     resource_name: 'apart-localizer MCP',
     resource_documentation: `${publicOrigin(req, env)}/.well-known/oauth-protected-resource`,

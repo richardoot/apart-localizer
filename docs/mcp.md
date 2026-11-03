@@ -17,22 +17,35 @@ module n'a aucune logique métier propre.
 | Chemin                                          | Rôle                                                                                                                                                                                |
 | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /mcp`                                     | L'endpoint MCP. Sans jeton : 401 avec `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"` (RFC 9728), pour que le client trouve le serveur OAuth. |
-| `GET /.well-known/oauth-protected-resource`     | Métadonnées de ressource protégée : `resource` (l'URL de `/mcp`), `authorization_servers` (GoTrue, `SUPABASE_EXTERNAL_URL/auth/v1`), `scopes_supported`.                            |
+| `GET /.well-known/oauth-protected-resource`     | Métadonnées de ressource protégée : `resource` (l'URL de `/mcp`), `authorization_servers` (GoTrue, `SUPABASE_EXTERNAL_URL/auth/v1`), `scopes_supported` (`email`, voir Portées).    |
 | `GET /.well-known/oauth-protected-resource/mcp` | La même, à l'emplacement propre à la ressource.                                                                                                                                     |
 | `GET /.well-known/oauth-authorization-server`   | Les métadonnées du serveur d'autorisation (RFC 8414) relayées depuis GoTrue et mises en cache cinq minutes, pour un client qui ne lit que l'origine de l'API.                       |
 
 Le jeton est validé par Supabase (`auth.getUser`), puis le membre de l'espace est résolu comme
 pour le REST (rattachement par e-mail à la première connexion, ADR 0004).
 
+Le client s'enregistre auprès de GoTrue (enregistrement dynamique), puis GoTrue envoie la
+personne sur la page de consentement du web, `/oauth/consent?authorization_id=…`
+(`site_url` + chemin d'autorisation) : connexion si besoin, client, compte, hôte de retour,
+portées en phrases, « Autoriser » ou « Refuser ». Le client échange ensuite le code (PKCE) contre
+un jeton d'accès.
+
 ### Portées
 
-Deux portées, `listings:read` et `listings:write` (`MCP_SCOPES` dans `contracts`). Le garde lit
-la revendication `scope` du jeton (ADR 0005) :
+Deux portées d'application, `listings:read` et `listings:write` (`MCP_SCOPES` dans `contracts`).
+Le garde lit la revendication `scope` du jeton et n'y retient que les portées `listings:…`
+(ADR 0005, précisé par l'ADR 0017) :
 
-- un jeton qui déclare ses portées n'a que celles-là : sans `listings:write`, chaque outil
-  d'écriture répond un refus lisible (« le jeton ne porte pas la portée listings:write ») et
-  n'écrit rien ;
-- un jeton qui n'en déclare aucune (session de première main) vaut toutes les portées.
+- un jeton qui déclare des portées de l'application n'a que celles-là : sans `listings:write`,
+  chaque outil d'écriture répond un refus lisible (« le jeton ne porte pas la portée
+  listings:write ») et n'écrit rien ;
+- un jeton qui n'en déclare aucune vaut toutes les portées : une session de première main, et
+  tout jeton du serveur OAuth de GoTrue, qui n'inscrit que des portées OpenID (`email` par
+  défaut).
+
+GoTrue refuse toute portée hors OpenID (« unsupported scope ») : la découverte annonce donc
+`scopes_supported: ["email"]`, ce qu'un client MCP demande tel quel. Annoncer `listings:read`
+ferait échouer l'autorisation avant le consentement.
 
 Il n'y a **aucun outil de suppression** : supprimer une tâche saisie à la main reste dans
 l'application web ; une annonce ne se supprime pas, elle s'écarte.
@@ -228,8 +241,9 @@ dans un critère. `whats_new` avec `since` relit une période précise.
 
 ## Limites connues
 
-- Les portées ne restreignent l'écriture que si le serveur d'autorisation inscrit la
-  revendication `scope` dans le jeton (ADR 0005).
+- Les portées ne restreignent l'écriture que si le serveur d'autorisation inscrit `listings:…`
+  dans la revendication `scope` du jeton, ce que GoTrue ne fait pas aujourd'hui (ADR 0017) : un
+  client autorisé lit et écrit, sans suppression possible.
 - `extract_listing` coûte quelques centimes par appel (modèle côté serveur, [ia.md](ia.md)) et
   n'est pas limité par portée : un jeton en lecture peut l'appeler.
 - Le critère « marché (DVF) » du prix cible lit la médiane enregistrée lors du dernier
@@ -256,3 +270,10 @@ dans un critère. `whats_new` avec `since` relit une période précise.
 - `whats_new` lit pour le membre du jeton : ce qu'il a fait lui-même dans l'application n'y
   figure pas, ce que Claude a fait pour lui au MCP si (ADR 0014). Il ne marque rien comme vu ; le
   point de départ avance avec les visites de l'application web.
+
+## Tester en local
+
+La pile locale active le serveur OAuth 2.1 de GoTrue :
+`claude mcp add --transport http apart-local http://localhost:3000/mcp` dans Claude Code, ou
+`npx @modelcontextprotocol/inspector@2.13.0`. claude.ai ne joint pas `localhost`. Détails, jeton
+de session et comptes de démo : [developpement-local.md](developpement-local.md#tester-le-mcp-en-local).

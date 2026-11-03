@@ -1,6 +1,7 @@
 # 0005. Portées MCP lues dans le jeton ; un jeton sans portée vaut toutes les portées
 
-Statut : acceptée, 3 novembre 2026.
+Statut : acceptée, 3 novembre 2026 ; précisée par l'ADR 0017 (seules les portées `listings:…` du
+jeton comptent, la découverte annonce `email`).
 
 ## Contexte
 

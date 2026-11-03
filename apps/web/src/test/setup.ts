@@ -14,7 +14,24 @@ vi.mock('@/lib/supabase', () => ({
       getSession: vi.fn(() => Promise.resolve({ data: { session: null } })),
       onAuthStateChange: vi.fn(),
       signInWithOAuth: vi.fn(() => Promise.resolve({ error: null })),
+      signInWithPassword: vi.fn(() =>
+        Promise.resolve({
+          data: { session: { access_token: 't' }, user: { id: 'u1' } },
+          error: null,
+        })
+      ),
+      signUp: vi.fn(() =>
+        Promise.resolve({
+          data: { session: { access_token: 't' }, user: { id: 'u1' } },
+          error: null,
+        })
+      ),
       signOut: vi.fn(() => Promise.resolve({ error: null })),
+      oauth: {
+        getAuthorizationDetails: vi.fn(),
+        approveAuthorization: vi.fn(),
+        denyAuthorization: vi.fn(),
+      },
     },
   },
 }))

@@ -1,7 +1,10 @@
 # Configuration Supabase CLI (`supabase start`), générée par `supabase init` (CLI 3.0.0)
-# puis ajustée : identifiant du projet, origine du web (5173), Google activé via les
-# variables SUPABASE_AUTH_GOOGLE_CLIENT_ID / SUPABASE_AUTH_GOOGLE_SECRET (fichier
-# supabase/.env, ignoré par git), stockage, fonctions edge et analytics désactivés.
+# puis ajustée : identifiant du projet, origine du web (5173), connexion par e-mail
+# confirmée d'office (pile locale), Google activé seulement si supabase/.env (ignoré
+# par git, écrit par `pnpm stack:up`) donne SUPABASE_AUTH_GOOGLE_CLIENT_ID et
+# SUPABASE_AUTH_GOOGLE_SECRET, serveur OAuth 2.1 pour le MCP (lot 7), stockage ;
+# fonctions edge et analytics désactivés. Démarrer par `pnpm stack:up`
+# (docs/developpement-local.md) ; `supabase start` seul exige supabase/.env.
 # Base : postgresql://postgres:postgres@127.0.0.1:54322/postgres (PostGIS inclus).
 # For detailed configuration reference documentation, visit:
 # https://supabase.com/docs/guides/local-development/cli/config
@@ -169,7 +172,9 @@ site_url = "http://localhost:5173"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["http://localhost:5173", "http://localhost:5173/"]
+# `/**` : retour sur n'importe quelle page après Google, dont le consentement
+# OAuth (`/oauth/consent?authorization_id=…`).
+additional_redirect_urls = ["http://localhost:5173", "http://localhost:5173/", "http://localhost:5173/**"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -331,8 +336,11 @@ max_frequency = "5s"
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack_oidc`, `spotify`, `workos`, `zoom`.
+# Activé seulement si supabase/.env donne les identifiants : `pnpm stack:up`
+# y écrit SUPABASE_AUTH_GOOGLE_ENABLED=true quand l'identifiant et le secret
+# sont renseignés, false sinon (la connexion par e-mail suffit en local).
 [auth.external.google]
-enabled = true
+enabled = "env(SUPABASE_AUTH_GOOGLE_ENABLED)"
 client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
 secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
@@ -374,14 +382,16 @@ enabled = false
 # Obtain from https://clerk.com/setup/supabase
 # domain = "example.clerk.accounts.dev"
 
-# OAuth server configuration
+# Serveur OAuth 2.1 de GoTrue (lot 7) : c'est lui qui authentifie les clients
+# MCP (Claude Code, l'inspecteur MCP, claude.ai via un tunnel). Les clients
+# s'enregistrent eux-mêmes (RFC 7591) ; la page de consentement est celle du
+# web, `site_url` + `authorization_url_path` = http://localhost:5173/oauth/consent.
+# Découverte : http://127.0.0.1:54321/auth/v1/.well-known/oauth-authorization-server,
+# relayée par l'API sur http://localhost:3000/.well-known/oauth-authorization-server.
 [auth.oauth_server]
-# Enable OAuth server functionality
-enabled = false
-# Path for OAuth consent flow UI
+enabled = true
 authorization_url_path = "/oauth/consent"
-# Allow dynamic client registration
-allow_dynamic_registration = false
+allow_dynamic_registration = true
 
 [edge_runtime]
 enabled = false

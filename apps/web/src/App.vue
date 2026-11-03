@@ -1,8 +1,10 @@
 <script setup lang="ts">
+  import { useRoute } from 'vue-router'
   import AppHeader from '@/components/AppHeader.vue'
   import { useAuthStore } from '@/stores/auth'
 
   const auth = useAuthStore()
+  const route = useRoute()
 </script>
 
 <template>
@@ -13,7 +15,7 @@
     >
       Aller au contenu
     </a>
-    <AppHeader v-if="auth.isAuthenticated" />
+    <AppHeader v-if="auth.isAuthenticated && !route.meta.bare" />
     <main id="main" tabindex="-1" class="focus:outline-none">
       <RouterView />
     </main>

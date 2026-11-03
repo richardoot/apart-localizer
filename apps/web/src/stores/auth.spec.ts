@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { supabase } from '@/lib/supabase'
-import { useAuthStore } from './auth'
+import { passwordErrorMessage, useAuthStore } from './auth'
 
 const mocked = supabase.auth as unknown as {
   getSession: ReturnType<typeof vi.fn>
   onAuthStateChange: ReturnType<typeof vi.fn>
   signInWithOAuth: ReturnType<typeof vi.fn>
+  signInWithPassword: ReturnType<typeof vi.fn>
+  signUp: ReturnType<typeof vi.fn>
   signOut: ReturnType<typeof vi.fn>
 }
 
@@ -50,6 +52,67 @@ describe('auth store', () => {
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/` },
     })
+    await auth.signInWithGoogle('//evil.invalid/x')
+    expect(mocked.signInWithOAuth).toHaveBeenLastCalledWith({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/` },
+    })
+  })
+
+  it('signs in with e-mail and password and keeps the session', async () => {
+    const auth = useAuthStore()
+    await auth.signInWithPassword('demo@apart.local', 'secret-local')
+    expect(mocked.signInWithPassword).toHaveBeenCalledWith({
+      email: 'demo@apart.local',
+      password: 'secret-local',
+    })
+    expect(auth.isAuthenticated).toBe(true)
+    expect(auth.session?.access_token).toBe('t')
+  })
+
+  it('translates a refused password sign-in', async () => {
+    mocked.signInWithPassword.mockResolvedValueOnce({
+      data: { session: null, user: null },
+      error: new Error('Invalid login credentials'),
+    })
+    const auth = useAuthStore()
+    await expect(auth.signInWithPassword('a@b.invalid', 'x')).rejects.toThrow()
+    expect(auth.error).toBe('E-mail ou mot de passe incorrect.')
+    expect(auth.isAuthenticated).toBe(false)
+  })
+
+  it('creates a local account; a server asking for confirmation says so', async () => {
+    const auth = useAuthStore()
+    await auth.signUpWithPassword('me@apart.local', 'secret-local')
+    expect(mocked.signUp).toHaveBeenCalledWith({
+      email: 'me@apart.local',
+      password: 'secret-local',
+    })
+    expect(auth.isAuthenticated).toBe(true)
+
+    setActivePinia(createPinia())
+    mocked.signUp.mockResolvedValueOnce({
+      data: { session: null, user: { id: 'u2' } },
+      error: null,
+    })
+    const other = useAuthStore()
+    await expect(
+      other.signUpWithPassword('me@apart.local', 'secret-local')
+    ).rejects.toThrow(/confirmation/)
+    expect(other.isAuthenticated).toBe(false)
+  })
+
+  it('names the common GoTrue refusals in French', () => {
+    expect(passwordErrorMessage('User already registered')).toMatch(
+      /existe déjà/
+    )
+    expect(
+      passwordErrorMessage('Password should be at least 6 characters.')
+    ).toMatch(/trop court/)
+    expect(passwordErrorMessage('Email logins are disabled')).toMatch(
+      /désactivée/
+    )
+    expect(passwordErrorMessage('Autre chose')).toBe('Autre chose')
   })
 
   it('keeps the error message when Supabase refuses', async () => {

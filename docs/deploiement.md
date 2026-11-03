@@ -25,20 +25,26 @@ le dépôt.
    l'URL du web (`https://<web>.vercel.app`) et ajouter aux `Redirect URLs` cette URL et
    `https://<web>.vercel.app/**`, plus `http://localhost:5173/**` pour le développement.
 7. **Serveur OAuth 2.1 (MCP)** : dans « Authentication → OAuth Server » (ou l'écran équivalent
-   du tableau de bord), activer le serveur OAuth. Deux points à vérifier dans l'interface, car ils
-   conditionnent la déclaration du connecteur :
+   du tableau de bord), activer le serveur OAuth, puis :
+   - **chemin d'autorisation** `/oauth/consent` : GoTrue envoie la personne sur `Site URL` +
+     ce chemin, la page de consentement du web (`https://<web>.vercel.app/oauth/consent`) ; sans
+     ce réglage, l'autorisation du connecteur n'aboutit pas ;
    - l'**enregistrement dynamique des clients** (claude.ai s'enregistre ainsi) ou, à défaut, la
      création manuelle d'un client avec l'URL de rappel que claude.ai indique au moment d'ajouter
      le connecteur ;
-   - la possibilité de déclarer des **portées personnalisées** `listings:read` et
-     `listings:write`. Si le tableau de bord ne le permet pas, les jetons ne portent pas de
-     revendication `scope` et le garde accorde lecture et écriture (ADR 0005) ; le connecteur
-     fonctionne, sans la restriction lecture seule.
+   - **portées** : GoTrue ne délivre que des portées OpenID ; la découverte de l'API annonce
+     `email` et un jeton OAuth vaut lecture et écriture, sans suppression (ADR 0017). Les jetons
+     sont signés par une clé asymétrique si le projet en a une (recommandé, obligatoire pour la
+     portée `openid`).
 8. Vérifier que `https://<ref>.supabase.co/auth/v1/.well-known/oauth-authorization-server`
    répond : c'est ce que l'API relaie sur `/.well-known/oauth-authorization-server`. En local,
-   le serveur OAuth du Supabase CLI est désactivé (`[auth.oauth_server] enabled = false` dans
-   `supabase/config.toml`) et ce relais répond 503 ; passer `enabled = true` puis redémarrer la
-   pile pour tester le flux complet hors cloud.
+   `supabase/config.toml` active le serveur OAuth avec les mêmes réglages
+   ([développement local](developpement-local.md#tester-le-mcp-en-local)).
+
+   **Connexion par e-mail** : désactiver le fournisseur « Email » (« Authentication →
+   Providers ») pour que Google reste le seul moyen de se connecter, comme dans l'interface (le
+   formulaire e-mail n'existe qu'en local, `VITE_AUTH_PASSWORD`, ADR 0016). Ne jamais poser
+   `VITE_AUTH_PASSWORD` sur le projet Vercel du web.
 
 ### Stockage des photos de visite (lot 6)
 
@@ -172,10 +178,10 @@ carte s'affichent (la carte charge les tuiles OpenFreeMap sans clé).
 1. Dans claude.ai, « Paramètres → Connecteurs → Ajouter un connecteur personnalisé » : URL
    `https://<api>.vercel.app/mcp`. claude.ai lit `/.well-known/oauth-protected-resource`, trouve
    le serveur d'autorisation Supabase, s'y enregistre (enregistrement dynamique) ou utilise le
-   client déclaré à la main, puis ouvre la page de consentement Supabase : se connecter avec le
-   compte Google de l'espace.
-2. Portées à accorder : `listings:read` et `listings:write` (si le serveur les propose ; sinon le
-   jeton vaut les deux, ADR 0005).
+   client déclaré à la main, puis ouvre la page de consentement du web (`/oauth/consent`) : se
+   connecter avec le compte Google de l'espace, puis « Autoriser ».
+2. Portées : la page de consentement montre celles que claude.ai demande (`email`) ; le jeton
+   vaut lecture et écriture, sans suppression (ADR 0017).
 3. Tester dans une conversation : « Liste mes annonces à visiter » (`list_listings`), puis depuis
    une page d'annonce avec Claude in Chrome : le prompt « Analyser cette annonce »
    (`extract_listing`, confirmation, `create_listing`). L'annonce doit apparaître « nouvelle »
@@ -278,8 +284,8 @@ partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « C
 ## 11. Liste de contrôle
 
 - [ ] Projet Supabase créé, PostGIS actif, Google configuré, URL de redirection du web ajoutées.
-- [ ] Serveur OAuth 2.1 activé ; enregistrement dynamique ou client manuel ; portées déclarées si
-      possible.
+- [ ] Serveur OAuth 2.1 activé ; chemin d'autorisation `/oauth/consent` et `Site URL` = le web ;
+      enregistrement dynamique ou client manuel ; fournisseur « Email » désactivé.
 - [ ] Migrations appliquées (`prisma:deploy` avec la connexion directe), import de l'artefact
       fait avec les bons e-mails.
 - [ ] Imports open data faits sur la base cloud (encadrement, arrêts TBM, DVF), puis

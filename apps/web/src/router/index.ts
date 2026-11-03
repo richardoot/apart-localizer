@@ -94,6 +94,15 @@ const routes: RouteRecordRaw[] = [
     }),
   },
   {
+    // Le consentement du serveur OAuth 2.1 de Supabase (connecteur MCP) :
+    // GoTrue redirige ici avec `authorization_id`. Connexion exigée ; après
+    // la connexion, la page revient ici avec la même requête.
+    path: '/oauth/consent',
+    name: 'oauth-consent',
+    component: () => import('@/views/OAuthConsentPage.vue'),
+    meta: { title: 'Autorisation', requiresAuth: true, bare: true },
+  },
+  {
     path: '/login',
     name: 'login',
     component: () => import('@/views/LoginPage.vue'),
@@ -149,5 +158,7 @@ declare module 'vue-router' {
     requiresAuth?: boolean
     guestOnly?: boolean
     title?: string
+    /** Page sans l'en-tête de l'application (consentement OAuth : une décision, pas de navigation). */
+    bare?: boolean
   }
 }

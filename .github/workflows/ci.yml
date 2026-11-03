@@ -72,8 +72,9 @@ jobs:
       - name: Unit tests
         run: pnpm -r test:unit
 
+      # API (REST, MCP, géo) and scripts (demo seed) against PostGIS.
       - name: E2E tests (PostGIS)
-        run: pnpm --filter @apart/api test:e2e
+        run: pnpm -r test:e2e
 
       - name: Build
         run: pnpm build

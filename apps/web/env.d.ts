@@ -12,6 +12,8 @@ interface ImportMetaEnv {
   readonly VITE_API_URL: string
   /** URL d'un style MapLibre sans clé ; défaut : OpenFreeMap Liberty. */
   readonly VITE_MAP_STYLE_URL?: string
+  /** `1` = connexion par e-mail et mot de passe, en local seulement (ADR 0016). */
+  readonly VITE_AUTH_PASSWORD?: string
   readonly VITE_SENTRY_DSN?: string
   readonly VITE_SENTRY_TRACES_SAMPLE_RATE?: string
   readonly VITE_VERCEL_ENV?: string

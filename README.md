@@ -8,7 +8,7 @@ checklist réglementaire datée avec les risques Géorisques ; et le confort du 
 visites avec photos privées, journal d'activité, « ce qui a changé depuis ma dernière visite »,
 notifications (cloche, web push, e-mail en option), partage d'une annonce depuis le téléphone,
 alertes e-mail transférées en brouillons à valider, export CSV et JSON. Les lots 0 à 6 de la
-feuille de route sont livrés.
+feuille de route sont livrés, et le lot 7 rend l'environnement local démarrable en une commande.
 
 Documentation :
 
@@ -21,6 +21,7 @@ Documentation :
 - [Données ouvertes](docs/open-data.md)
 - [Export des données](docs/export.md)
 - [Confidentialité et données personnelles](docs/confidentialite.md)
+- [Développement local](docs/developpement-local.md)
 - [Déploiement](docs/deploiement.md)
 - [Décisions d'architecture](docs/decisions/README.md)
 - [Règles de travail](CLAUDE.md)
@@ -48,63 +49,58 @@ packages/
                 rangs, plafond d'encadrement, statistiques DVF, validité du DPE, filtres des
                 critères, coût d'occupation, tableau d'amortissement, fiscalité locative,
                 plus-value, TRI et VAN, projection, scénarios, loyer de marché, checklist)
-scripts/        import de l'artefact Claude ; imports open data (encadrement, arrêts TBM, DVF) ;
-                géocodage des annonces manquantes
-supabase/       configuration du Supabase CLI
-docker/         Postgres + PostGIS pour les tests e2e (repli au Supabase CLI)
+scripts/        pile locale (stack:up, down, status, reset), jeu de démonstration, raccordement
+                des identités, verify ; import de l'artefact Claude ; imports open data
+                (encadrement, arrêts TBM, DVF) ; géocodage des annonces manquantes
+supabase/       configuration du Supabase CLI (Auth e-mail et Google, serveur OAuth 2.1, Storage)
+docker/         Postgres + PostGIS pour les tests e2e (port 54329)
 docs/           produit et décisions
 data/private/   exports et caches personnels, jamais commités
 data/opendata/  fichiers open data téléchargés (DVF, TBM, encadrement), jamais commités
 ```
 
-## Prérequis
+## Développement local
 
-- Node 24 et pnpm 12.5.1 (`volta` lit `package.json` ; sinon `corepack enable`).
-- Pour la base locale : le [Supabase CLI](https://supabase.com/docs/guides/local-development)
-  (`brew install supabase/tap/supabase`) avec Docker ou podman, ou à défaut podman/docker seul
-  pour `docker/test-db.yml`.
-
-## Installation
+Depuis un clone frais, trois commandes :
 
 ```bash
 pnpm install
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env
+pnpm stack:up --dataset demo   # Supabase CLI, .env, migrations, base de test, espace « Démo » fictif
+pnpm dev                       # api sur http://localhost:3000, web sur http://localhost:5173
 ```
 
-### Base de données : deux voies
-
-**Voie 1, Supabase CLI** (Auth Google, Studio, PostGIS inclus) :
+Puis http://localhost:5173, « Connexion locale » : `demo@apart.local` / `demo-apart-local`
+(ou `demo2@apart.local` pour l'autre membre). Prérequis : Node 24, pnpm 12.5.1 (`corepack
+enable` ou volta), le [Supabase CLI](https://supabase.com/docs/guides/local-development) 3.0 ou
+plus, podman (ou Docker). Tout est détaillé dans
+[docs/developpement-local.md](docs/developpement-local.md) : ce que fait chaque commande, les
+jeux de données, les comptes de démo, le test du MCP (Claude Code, inspecteur), du partage et du
+push, le dépannage et la remise à zéro.
 
 ```bash
-supabase start            # affiche l'URL de l'API (54321), la base (54322), les clés anon et service_role
+pnpm stack:up                  # démarre ou met à jour la pile sans toucher aux données (idempotent)
+pnpm stack:up --dataset artifact --richard-email r@exemple.fr --chloe-email c@exemple.fr
+pnpm stack:up --opendata       # imports open data dont les fichiers sont dans data/opendata/
+pnpm stack:up --dev            # puis pnpm dev au premier plan
+pnpm stack:status              # état, adresses, annonces et membres par espace
+pnpm stack:down                # arrêt, données conservées
+pnpm stack:reset --yes         # DESTRUCTIF : vide le schéma app local, rejoue migrations et jeu
+pnpm verify                    # rejoue les étapes de la CI ; --quick sans e2e ni build (hook pre-push)
 ```
 
-Avec podman plutôt que Docker Desktop, pointez la CLI vers le socket de la machine podman :
-`export DOCKER_HOST=unix://$(podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}')`.
-`supabase stop` arrête la pile.
-
-Reportez `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` dans `apps/api/.env` et `VITE_SUPABASE_URL`,
-`VITE_SUPABASE_ANON_KEY` dans `apps/web/.env`. `DATABASE_URL` vaut
-`postgresql://postgres:postgres@127.0.0.1:54322/postgres`. Pour la connexion Google, renseignez
-`SUPABASE_AUTH_GOOGLE_CLIENT_ID` et `SUPABASE_AUTH_GOOGLE_SECRET` dans `supabase/.env` (ignoré
-par git) avant `supabase start`.
-
-**Voie 2, conteneur PostGIS seul** (tests e2e, développement sans authentification réelle) :
-
-```bash
-pnpm db:test:up           # podman compose (ou docker compose) sur docker/test-db.yml, port 54329
-```
-
-`DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/apart` pour le développement,
-`TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/postgres` pour les e2e (le
-harnais crée une base par fichier de test et la supprime). Sur Mac Apple Silicon l'image
-`imresamu/postgis` est utilisée car l'image officielle n'existe qu'en amd64 (ADR 0003).
+`stack:up` lance la CLI Supabase (avec le bon `DOCKER_HOST` pour podman), écrit ou complète
+`apps/api/.env`, `apps/web/.env` et `supabase/.env` par fusion (vos clés `ANTHROPIC_API_KEY`,
+`SENTRY_*`, Google… sont conservées, l'original est sauvegardé en `.env.backup`), génère des clés
+VAPID locales, applique les migrations Prisma, crée le bucket des photos, démarre la base de test
+(`docker/test-db.yml`, port 54329), charge le jeu choisi, rattache les identités, puis affiche les
+adresses : web, API, Swagger, MCP, Studio (54323), Mailpit (54324). La connexion par mot de passe
+n'existe qu'en local (`VITE_AUTH_PASSWORD=1`) ; en production, Google reste le seul moyen
+(ADR 0016).
 
 ### Migrations
 
 ```bash
-pnpm --filter @apart/api prisma:deploy     # applique prisma/migrations (PostGIS activé par la première)
+pnpm --filter @apart/api prisma:deploy     # applique prisma/migrations (stack:up le fait)
 pnpm --filter @apart/api prisma:migrate    # crée une migration après un changement de schéma (dev)
 ```
 
@@ -115,25 +111,34 @@ l'encadrement, clés d'import des arrêts et des ventes DVF, numéro de DPE et i
 des annonces), puis `20261103210000_lot5_scenarios_rent_comparables` (scénarios « et si »
 enregistrés, annonces de location comparables), puis `20261103230000_lot6_visits_notifications`
 (visites et photos, notifications et abonnements push, brouillons reçus par e-mail, horodatage
-de visite et préférences des membres). Une base créée avant un lot doit rejouer `prisma:deploy`.
+de visite et préférences des membres).
 
-Supabase Storage est actif dans `supabase/config.toml`, qui déclare le bucket privé
-`visit-photos` : après une mise à jour du dépôt, `supabase stop && supabase start` (les données de
-la base restent), puis `supabase seed buckets` pour créer le bucket.
+### Sans le Supabase CLI
+
+Le conteneur PostGIS seul (`pnpm db:test:up`, port 54329) suffit aux tests e2e :
+`TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/postgres` (le harnais crée une
+base par fichier de test et la supprime). Sur Mac Apple Silicon l'image `imresamu/postgis` est
+utilisée car l'image officielle n'existe qu'en amd64 (ADR 0003).
 
 ## Démarrage
 
-```bash
-pnpm dev                  # api sur http://localhost:3000, web sur http://localhost:5173, paquets en watch
-```
+`pnpm dev` (après `pnpm stack:up`) : api sur http://localhost:3000, web sur
+http://localhost:5173, paquets en watch.
 
 OpenAPI : http://localhost:3000/api/docs. Santé : http://localhost:3000/health. MCP :
 `POST http://localhost:3000/mcp` (jeton Supabase en `Authorization: Bearer`), découverte sur
 `/.well-known/oauth-protected-resource` et `/.well-known/oauth-authorization-server` ; outils
-et garde-fous dans [docs/mcp.md](docs/mcp.md).
+et garde-fous dans [docs/mcp.md](docs/mcp.md). Le consentement OAuth d'un client MCP passe par la
+page `/oauth/consent` du web ; en local, `claude mcp add --transport http apart-local
+http://localhost:3000/mcp` ([développement local](docs/developpement-local.md#tester-le-mcp-en-local)).
 
 ### Écrans du web
 
+- **Connexion** (`/login`) : Google ; en local seulement (`VITE_AUTH_PASSWORD=1`, écrit par
+  `stack:up`), e-mail et mot de passe, avec « Créer un compte local ».
+- **Autorisation** (`/oauth/consent`) : la page de consentement du serveur OAuth 2.1 de Supabase
+  pour un client MCP (claude.ai, Claude Code) : client, compte, hôte de retour, portées en
+  phrases, ce que l'accès permet, « Autoriser » ou « Refuser ».
 - **Synthèse** (`/`) : bandeau **« Depuis votre dernière visite »** (nouvelles annonces,
   changements de prix et de statut, avis et tâches de l'autre membre, entrées dans un critère,
   détail et liens, « Tout marquer comme vu »), annonces **reçues par e-mail à valider** (valider
@@ -224,10 +229,11 @@ d'OpenFreeMap (`https://tiles.openfreemap.org/styles/liberty`).
 ## Qualité et tests
 
 ```bash
+pnpm verify               # tout ce que fait la CI, dans le même ordre (--quick : sans e2e ni build)
 pnpm lint
 pnpm format:check
 pnpm type-check
-pnpm test                 # unitaires (contracts, domain, api, web, scripts) puis e2e de l'API
+pnpm test                 # unitaires (contracts, domain, api, web, scripts) puis e2e (API, seed de démo)
 pnpm --filter @apart/domain test:cov
 pnpm build
 ```
@@ -235,12 +241,13 @@ pnpm build
 Les e2e (REST, géo, collaboration, prix cible et négociation, extraction IA, phase 1,
 scénarios, projection, comparables et conformité, visites et photos, journal, nouveautés,
 notifications, alertes e-mail signées, export, MCP par appels JSON-RPC réels) demandent
-`TEST_DATABASE_URL` (voie 2 ci-dessus, ou le Postgres du Supabase CLI sur 54322). Le client
+`TEST_DATABASE_URL` (la base de test de `stack:up`, ou `pnpm db:test:up`). Le client
 Anthropic, le géocodeur et les isochrones IGN, la recherche DPE de l'ADEME, le rapport
 Géorisques, Supabase Storage, l'envoi web push et l'envoi d'e-mails sont remplacés par des
 factices dans le harnais ; les tests du web
 mockent MapLibre, terra-draw et Supabase : aucun réseau, aucune clé. La CI GitHub Actions (`.github/workflows/ci.yml`) rejoue lint,
-format, type-check, unitaires, e2e sur un service PostGIS, puis le build.
+format, type-check, unitaires, e2e sur un service PostGIS (API et seed de démo), puis le build ;
+`pnpm verify` lit ce fichier et rejoue les mêmes étapes en local.
 
 ## Import des données de l'artefact
 
@@ -248,6 +255,7 @@ Placez l'export dans `data/private/artifact-export/` (`annonces/*.json`,
 `reglages/financement.json`), puis :
 
 ```bash
+pnpm stack:up --dataset artifact --richard-email richard@exemple.fr --chloe-email chloe@exemple.fr
 pnpm import:artifact -- --richard-email richard@exemple.fr --chloe-email chloe@exemple.fr
 pnpm import:artifact -- --no-geocode      # hors ligne : cache de géocodage seul
 pnpm import:artifact -- --dry-run         # affiche la correspondance sans écrire
@@ -259,7 +267,9 @@ phase 2, avis, tâches et « vu par ». Les adresses sont géocodées par la Gé
 client que l'API, `apps/api/src/opendata/geoplateforme.ts`) avec un cache dans
 `data/private/geocode-cache.json` ; une annonce sans adresse exacte reçoit le
 centroïde de sa commune (précision `commune`) et une tâche « demander l'adresse exacte ».
-Relancer l'import est sans effet sur les annonces déjà présentes.
+Relancer l'import est sans effet sur les annonces déjà présentes. En local, sans Google : se
+connecter avec « Créer un compte local » et le **même e-mail** que le membre importé
+([développement local](docs/developpement-local.md#vos-vraies-annonces-en-local)).
 
 ## Données ouvertes
 

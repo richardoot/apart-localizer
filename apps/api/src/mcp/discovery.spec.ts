@@ -59,14 +59,15 @@ describe('découverte OAuth', () => {
     ).toBe('https://s.invalid/auth/v1/.well-known/oauth-authorization-server')
   })
 
-  it('publie les métadonnées de ressource avec les deux portées', () => {
+  it('publie les métadonnées de ressource avec les portées que GoTrue délivre', () => {
     const metadata = protectedResourceMetadata(req(), {
       SUPABASE_URL: 'https://xyz.supabase.co',
     })
     expect(metadata).toMatchObject({
       resource: 'https://api.example.invalid/mcp',
       authorization_servers: ['https://xyz.supabase.co/auth/v1'],
-      scopes_supported: ['listings:read', 'listings:write'],
+      // Pas `listings:*` : GoTrue refuserait l'autorisation (ADR 0017).
+      scopes_supported: ['email'],
       bearer_methods_supported: ['header'],
     })
   })

@@ -30,6 +30,11 @@ const reader = e2eIdentity('richard-reader', { scope: 'openid listings:read' })
 const writer = e2eIdentity('richard-writer', {
   scope: 'listings:read listings:write',
 })
+/**
+ * Le même membre derrière un jeton tel que le serveur OAuth de GoTrue le
+ * délivre vraiment : une portée OpenID (`email`), aucune de l'application.
+ */
+const gotrueClient = e2eIdentity('richard-gotrue', { scope: 'email' })
 
 const EXAMPLE = {
   title: 'T2 exemple § 8',
@@ -97,7 +102,9 @@ describe('MCP (e2e)', () => {
     reader.email = richard.email
     writer.supabaseId = richard.supabaseId
     writer.email = richard.email
-    ctx = await createE2eApp([richard, chloe, reader, writer])
+    gotrueClient.supabaseId = richard.supabaseId
+    gotrueClient.email = richard.email
+    ctx = await createE2eApp([richard, chloe, reader, writer, gotrueClient])
     // La découverte relaie GoTrue : ici, une réponse fabriquée, jamais le réseau.
     const discovery = ctx.app.get(OAuthDiscoveryService)
     discovery.fetchImpl = url =>
@@ -141,7 +148,7 @@ describe('MCP (e2e)', () => {
   })
 
   describe('découverte et authentification', () => {
-    it('publie les métadonnées de ressource protégée avec les portées', async () => {
+    it('publie les métadonnées de ressource protégée avec les portées que GoTrue délivre', async () => {
       const res = await request(ctx.server)
         .get('/.well-known/oauth-protected-resource')
         .expect(200)
@@ -149,10 +156,9 @@ describe('MCP (e2e)', () => {
       expect(res.body.authorization_servers).toEqual([
         'http://127.0.0.1:54321/auth/v1',
       ])
-      expect(res.body.scopes_supported).toEqual([
-        'listings:read',
-        'listings:write',
-      ])
+      // GoTrue refuse `listings:*` (« unsupported scope ») : un client qui
+      // demanderait ces portées échouerait avant le consentement (ADR 0017).
+      expect(res.body.scopes_supported).toEqual(['email'])
       await request(ctx.server)
         .get('/.well-known/oauth-protected-resource/mcp')
         .expect(200)
@@ -776,6 +782,27 @@ describe('MCP (e2e)', () => {
       const tasks = await ctx.prisma.task.findMany({ where: { listingId: id } })
       expect(tasks.map(t => t.label)).toContain('Permis')
       expect(tasks.map(t => t.label)).not.toContain('Interdit')
+    })
+
+    it('un jeton OAuth de GoTrue (portée « email » seule) lit et écrit', async () => {
+      const created = await request(ctx.server)
+        .post('/listings')
+        .set(ctx.auth(richard))
+        .send(EXAMPLE)
+        .expect(201)
+      const id = created.body.listing.id as string
+
+      const read = await callTool(gotrueClient, 'get_listing', {
+        listingId: id,
+      })
+      expect(read.isError).toBeUndefined()
+      const written = await callTool(gotrueClient, 'add_task', {
+        listingId: id,
+        label: 'Écrite par un client OAuth',
+      })
+      expect(written.isError).toBeUndefined()
+      const tasks = await ctx.prisma.task.findMany({ where: { listingId: id } })
+      expect(tasks.map(t => t.label)).toContain('Écrite par un client OAuth')
     })
 
     it("n'expose aucun outil de suppression", async () => {
