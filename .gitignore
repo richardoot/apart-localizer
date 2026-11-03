@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Données personnelles (export de l'artefact, imports locaux) : jamais dans le dépôt public
+data/private/
