@@ -214,7 +214,7 @@ describe('MCP (e2e)', () => {
       expect(get.annotations.readOnlyHint).toBe(true)
       // Dix-sept outils jusqu'au lot 3, quatre au lot 4 (critères, marché),
       // quatre au lot 5 (scénario, projection, conformité, comparable).
-      expect(names).toHaveLength(25)
+      expect(names).toHaveLength(28)
       const extract = list.body.result.tools.find(
         (t: { name: string }) => t.name === 'extract_listing'
       )

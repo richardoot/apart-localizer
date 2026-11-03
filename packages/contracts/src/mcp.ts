@@ -14,6 +14,8 @@ import {
 import { SensitivityRequestSchema } from './metrics.js'
 import { MarketContextRequestSchema } from './opendata.js'
 import { RentComparableInputSchema } from './rent-market.js'
+import { VisitInputSchema } from './visits.js'
+import { WhatsNewQuerySchema } from './whats-new.js'
 import { ProjectionRequestSchema, ScenarioOverridesSchema } from './study.js'
 import {
   SearchCriteriaInputSchema,
@@ -377,3 +379,33 @@ export const McpAddRentComparableInputSchema = z.object({
 export type McpAddRentComparableInput = z.infer<
   typeof McpAddRentComparableInputSchema
 >
+
+// ---------------------------------------------------------------------------
+// Lot 6 : visites, « ce qui a changé »
+// ---------------------------------------------------------------------------
+
+/**
+ * `add_visit` : une visite faite ou planifiée, sans photo (les photos se
+ * téléversent depuis l'application). Les participants sont désignés par leur
+ * identifiant court (« richard », « chloe »).
+ */
+export const McpAddVisitInputSchema = z.object({
+  listingId,
+  ...VisitInputSchema.omit({ participantIds: true }).shape,
+  participantHandles: z
+    .array(z.string().min(1).max(40))
+    .max(10)
+    .default([])
+    .describe(
+      'Participants par identifiant court (« richard », « chloe ») ; vide = aucun précisé'
+    ),
+})
+export type McpAddVisitInput = z.infer<typeof McpAddVisitInputSchema>
+
+/** `list_visits` : les visites d'une annonce (sans les photos). */
+export const McpListVisitsInputSchema = z.object({ listingId })
+export type McpListVisitsInput = z.infer<typeof McpListVisitsInputSchema>
+
+/** `whats_new` : ce qui a changé pour le membre depuis sa dernière visite. */
+export const McpWhatsNewInputSchema = WhatsNewQuerySchema
+export type McpWhatsNewInput = z.infer<typeof McpWhatsNewInputSchema>

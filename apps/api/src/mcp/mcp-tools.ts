@@ -37,6 +37,11 @@ import {
   McpGetProjectionInputSchema,
   McpGetComplianceInputSchema,
   McpAddRentComparableInputSchema,
+  McpAddVisitInputSchema,
+  McpListVisitsInputSchema,
+  McpWhatsNewInputSchema,
+  VISIT_STATUS_LABELS,
+  WHATS_NEW_KIND_LABELS,
   COMPLIANCE_CATEGORY_LABELS,
   TAX_REGIME_LABELS,
   OFFER_RESPONSE_LABELS,
@@ -69,6 +74,8 @@ import type {
   RentMarketReport,
   ScenarioComparison,
   ScenarioDelta,
+  Visit,
+  WhatsNewReport,
 } from '@apart/contracts'
 import { formatEuros, formatPercent, mergeAssumptions } from '@apart/domain'
 import type { Member } from '../generated/prisma'
@@ -87,6 +94,8 @@ import type { StudyService } from '../study/study.service'
 import type { ScenariosService } from '../study/scenarios.service'
 import type { RentComparablesService } from '../study/rent-comparables.service'
 import type { ComplianceService } from '../study/compliance.service'
+import type { VisitsService } from '../visits/visits.service'
+import type { WhatsNewService } from '../whats-new/whats-new.service'
 import { answer, dataResult, refusal, writeRefusal } from './tool-results'
 
 /** Ce dont les outils ont besoin : le membre, ses portées, les services métier. */
@@ -108,6 +117,8 @@ export interface McpToolContext {
   scenarios: ScenariosService
   comparables: RentComparablesService
   compliance: ComplianceService
+  visits: VisitsService
+  whatsNew: WhatsNewService
 }
 
 const CHANNEL = 'mcp' as const
@@ -116,7 +127,8 @@ const CHANNEL = 'mcp' as const
  * Les noms des outils, dans l'ordre de la feuille de route : lot 1, lot 2
  * (extraction et doublons), lot 3 (prix cible, offres, prix, comparaison,
  * hypothèses), lot 4 (critères de recherche, contexte de marché), lot 5
- * (scénarios, projection, conformité, comparables de loyer).
+ * (scénarios, projection, conformité, comparables de loyer), lot 6
+ * (visites, « ce qui a changé »).
  */
 export const MCP_TOOL_NAMES = [
   'list_listings',
@@ -144,6 +156,9 @@ export const MCP_TOOL_NAMES = [
   'get_projection',
   'get_compliance',
   'add_rent_comparable',
+  'add_visit',
+  'list_visits',
+  'whats_new',
 ] as const
 
 /** Les prompts du connecteur. */
@@ -527,6 +542,51 @@ export function describeRentMarket(market: RentMarketReport): string {
     `Loyer de marché (${market.comparables.length} comparable(s), ${market.comparables.filter(c => c.included).length} retenu(s)) : ${s ? `médiane ${s.medianRentPerM2.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €/m², quartiles ${s.p25RentPerM2.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} à ${s.p75RentPerM2.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €/m²` : 'aucun comparable retenu'}${market.estimatedRent !== null ? `, loyer estimé ≈ ${formatEuros(market.estimatedRent)}/mois` : ''}.`,
     ...market.messages,
   ].join(' ')
+}
+
+/** Une ligne par visite : date, état, note, participants, compte rendu. */
+export function describeVisits(
+  visits: Visit[],
+  names: ReadonlyMap<string, string>
+): string {
+  if (visits.length === 0) return 'Aucune visite enregistrée.'
+  return visits
+    .map(v => {
+      const who = v.participantIds.map(id => names.get(id) ?? 'un membre')
+      return [
+        `- ${VISIT_STATUS_LABELS[v.status]} le ${new Date(v.visitedAt).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'long', timeStyle: 'short' })}`,
+        v.rating > 0 ? `${v.rating}/5` : null,
+        who.length ? `avec ${who.join(', ')}` : null,
+        v.photoCount ? `${v.photoCount} photo(s) dans l'application` : null,
+        v.report ? `compte rendu : ${v.report.slice(0, 300)}` : null,
+        v.pros ? `+ ${v.pros.slice(0, 200)}` : null,
+        v.cons ? `− ${v.cons.slice(0, 200)}` : null,
+        `[id ${v.id}]`,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    })
+    .join('\n')
+}
+
+/** Le rapport « ce qui a changé » : comptes par sorte, puis une ligne par nouveauté. */
+export function describeWhatsNew(report: WhatsNewReport): string {
+  if (report.total === 0) {
+    return `Rien de nouveau depuis le ${new Date(report.since).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'long', timeStyle: 'short' })}.`
+  }
+  const counts = Object.entries(report.counts)
+    .filter(([, n]) => n > 0)
+    .map(
+      ([kind, n]) =>
+        `${WHATS_NEW_KIND_LABELS[kind as keyof typeof WHATS_NEW_KIND_LABELS]} : ${n}`
+    )
+    .join(', ')
+  return [
+    `Depuis le ${new Date(report.since).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'long', timeStyle: 'short' })} : ${report.total} nouveauté(s) (${counts}).`,
+    ...report.items.map(
+      i => `- ${i.listingTitle} — ${i.summary} [id ${i.listingId}]`
+    ),
+  ].join('\n')
 }
 
 /** Le schéma JSON d'une annonce à créer, descriptions comprises (ressource `apart://schema/listing`). */
@@ -1359,6 +1419,99 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           `Comparable ajouté : ${formatEuros(result.comparable.rent)}/mois pour ${result.comparable.surface} m²${result.comparable.furnished ? ', meublé' : ''} [id ${result.comparable.id}].\n${describeRentMarket(result.market)}`,
           result
         )
+      })
+  )
+
+  server.registerTool(
+    'add_visit',
+    {
+      title: 'Ajouter une visite',
+      description:
+        'Enregistre une visite d\'une annonce, faite (`status: "done"`, compte rendu `report`, points positifs `pros` et négatifs `cons`, note `rating` sur 5) ou planifiée (`status: "planned"`, `createPrepTask: true` ajoute la tâche « Préparer la visite »). `visitedAt` en ISO 8601, participants par identifiant court (`participantHandles`). ' +
+        "Sans photo : les photos se téléversent depuis l'application. La réponse propose un statut (« visité » après une visite faite, « à visiter » pour une visite planifiée) sans l'appliquer : demandez au membre, puis set_listing_status. Aucune suppression par le MCP. Portée listings:write.",
+      inputSchema: McpAddVisitInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ listingId, participantHandles, ...input }) =>
+      answer(async () => {
+        const denied = writeRefusal(ctx.scopes)
+        if (denied) return denied
+        const members = await ctx.workspace.members(ctx.member.workspaceId)
+        const participantIds: string[] = []
+        for (const handle of participantHandles) {
+          const found = members.find(
+            m => m.handle.toLowerCase() === handle.toLowerCase()
+          )
+          if (!found) {
+            return refusal(
+              `Refusé : aucun membre « ${handle} » dans l'espace (membres : ${members.map(m => m.handle).join(', ')}).`
+            )
+          }
+          participantIds.push(found.id)
+        }
+        const result = await ctx.visits.create(
+          ctx.member,
+          listingId,
+          { ...input, participantIds },
+          CHANNEL
+        )
+        const names = new Map(members.map(m => [m.id, m.displayName]))
+        return dataResult(
+          [
+            `Visite enregistrée :\n${describeVisits([result.visit], names)}`,
+            result.createdTask
+              ? `Tâche ajoutée : ${result.createdTask.label} [id ${result.createdTask.id}]`
+              : null,
+            result.suggestedStatus
+              ? `Statut proposé : « ${LISTING_STATUS_LABELS[result.suggestedStatus]} » (actuel : « ${LISTING_STATUS_LABELS[result.currentStatus]} ») ; demandez au membre avant set_listing_status.`
+              : null,
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          result
+        )
+      })
+  )
+
+  server.registerTool(
+    'list_visits',
+    {
+      title: 'Lister les visites',
+      description:
+        "Les visites d'une annonce, de la plus récente à la plus ancienne : date, état (faite, planifiée), participants, compte rendu, points positifs et négatifs, note, nombre de photos (les photos elles-mêmes restent privées dans l'application).",
+      inputSchema: McpListVisitsInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ listingId }) =>
+      answer(async () => {
+        const [visits, members] = await Promise.all([
+          ctx.visits.list(ctx.member, listingId, { photos: false }),
+          ctx.workspace.members(ctx.member.workspaceId),
+        ])
+        const names = new Map(members.map(m => [m.id, m.displayName]))
+        return dataResult(describeVisits(visits, names), { visits })
+      })
+  )
+
+  server.registerTool(
+    'whats_new',
+    {
+      title: 'Ce qui a changé',
+      description:
+        "Ce qui a changé pour le membre connecté depuis sa dernière visite de l'application (ou depuis `since`, ISO 8601) et, annonce par annonce, depuis sa dernière ouverture de la fiche : nouvelles annonces, changements de prix et de statut, avis et tâches de l'autre membre, annonces entrées dans un critère. " +
+        "Ce que le membre a fait lui-même dans l'application n'y figure pas ; ce que Claude a fait pour lui au MCP, si. Même calcul que le bandeau de la synthèse. Lecture seule : rien n'est marqué vu.",
+      inputSchema: McpWhatsNewInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async query =>
+      answer(async () => {
+        const report = await ctx.whatsNew.report(ctx.member, query)
+        return dataResult(describeWhatsNew(report), report)
       })
   )
 }

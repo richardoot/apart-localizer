@@ -9,6 +9,7 @@
   import ListingPanel from '@/components/listings/ListingPanel.vue'
   import ListingsMap from '@/components/listings/ListingsMap.vue'
   import ListingsTable from '@/components/listings/ListingsTable.vue'
+  import ExportMenu from '@/components/listings/ExportMenu.vue'
   import ViewSwitch from '@/components/listings/ViewSwitch.vue'
   import { useListingList } from '@/composables/useListings'
   import {
@@ -128,6 +129,7 @@
             <option value="status">par statut</option>
           </select>
         </label>
+        <ExportMenu :filters="filters" />
         <RouterLink
           :to="{ name: 'listing-new', query: route.query }"
           class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg"

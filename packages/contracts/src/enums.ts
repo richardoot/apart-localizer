@@ -111,9 +111,9 @@ export const TriStateSchema = z
 export type TriState = z.infer<typeof TriStateSchema>
 
 export const TaskOriginSchema = z
-  .enum(['default', 'manual', 'missing_field'])
+  .enum(['default', 'manual', 'missing_field', 'visit'])
   .describe(
-    "Origine d'une tâche : checklist par défaut, saisie manuelle, ou champ manquant transformé en tâche"
+    "Origine d'une tâche : checklist par défaut, saisie manuelle, champ manquant transformé en tâche, ou préparation d'une visite planifiée"
   )
 export type TaskOrigin = z.infer<typeof TaskOriginSchema>
 

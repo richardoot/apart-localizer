@@ -134,6 +134,7 @@ enum TaskOrigin {
   default
   manual
   missing_field
+  visit
 
   @@schema("app")
 }
@@ -163,6 +164,62 @@ enum ActivityChannel {
   mcp
   import
   system
+
+  @@schema("app")
+}
+
+enum VisitStatus {
+  planned
+  done
+
+  @@schema("app")
+}
+
+enum VisitPhotoStatus {
+  pending
+  ready
+
+  @@schema("app")
+}
+
+enum NotificationType {
+  listing_created
+  status_changed
+  task_assigned
+  criteria_matched
+  offer_response
+  drafts_received
+
+  @@schema("app")
+}
+
+/// État d'envoi d'une notification sur un canal (push, e-mail).
+enum DeliveryStatus {
+  pending
+  sent
+  failed
+  skipped
+
+  @@schema("app")
+}
+
+enum DraftStatus {
+  pending
+  accepted
+  dismissed
+
+  @@schema("app")
+}
+
+enum DraftOrigin {
+  email
+
+  @@schema("app")
+}
+
+enum DraftExtractor {
+  ai
+  parser
 
   @@schema("app")
 }
@@ -199,6 +256,9 @@ model Workspace {
   searchCriteria SearchCriteria[]
   activityLogs   ActivityLog[]
   scenarios      Scenario[]
+  notifications  Notification[]
+  listingDrafts  ListingDraft[]
+  visitPhotos    VisitPhoto[]
 
   @@map("workspaces")
   @@schema("app")
@@ -218,16 +278,32 @@ model Member {
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  opinions        Opinion[]
-  assignedTasks   Task[]           @relation("TaskAssignee")
-  listingViews    ListingView[]
-  createdListings Listing[]        @relation("ListingCreator")
-  offers          Offer[]          @relation("OfferAuthor")
-  searchCriteria  SearchCriteria[]
-  activityLogs    ActivityLog[]
-  scenarios       Scenario[]       @relation("ScenarioAuthor")
-  rentComparables RentComparable[] @relation("RentComparableAuthor")
+  /// Dernière activité dans l'application (visite en cours ou passée).
+  lastVisitAt             DateTime? @map("last_visit_at") @db.Timestamptz(6)
+  /// Point de départ de « ce qui a changé » : fin de la visite précédente
+  /// ou « tout marquer comme vu ».
+  whatsNewSince           DateTime? @map("whats_new_since") @db.Timestamptz(6)
+  /// Origine de ce point de départ (`previous_visit`, `marked_seen`).
+  whatsNewSource          String?   @map("whats_new_source")
+  /// Préférences de notification par type et par canal (JSON validé par
+  /// NotificationPreferencesSchema ; vide = défauts).
+  notificationPreferences Json      @default("{}") @map("notification_preferences")
+
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  opinions          Opinion[]
+  assignedTasks     Task[]             @relation("TaskAssignee")
+  listingViews      ListingView[]
+  createdListings   Listing[]          @relation("ListingCreator")
+  offers            Offer[]            @relation("OfferAuthor")
+  searchCriteria    SearchCriteria[]
+  activityLogs      ActivityLog[]
+  scenarios         Scenario[]         @relation("ScenarioAuthor")
+  rentComparables   RentComparable[]   @relation("RentComparableAuthor")
+  visits            Visit[]            @relation("VisitAuthor")
+  visitPhotos       VisitPhoto[]       @relation("VisitPhotoAuthor")
+  notifications     Notification[]
+  pushSubscriptions PushSubscription[]
+  decidedDrafts     ListingDraft[]     @relation("DraftDecider")
 
   @@unique([workspaceId, handle])
   @@index([workspaceId])
@@ -347,8 +423,8 @@ model Listing {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy       Member?         @relation("ListingCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy       Member?          @relation("ListingCreator", fields: [createdById], references: [id], onDelete: SetNull)
   renovation      Renovation?
   rentalPlan      RentalPlan?
   opinions        Opinion[]
@@ -361,6 +437,8 @@ model Listing {
   criteriaMatches CriteriaMatch[]
   scenarios       Scenario[]
   rentComparables RentComparable[]
+  notifications   Notification[]
+  drafts          ListingDraft[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, commune])
@@ -525,6 +603,7 @@ model Task {
 
   listing  Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
   assignee Member? @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  visit    Visit?  @relation("VisitPrepTask")
 
   @@index([listingId])
   @@map("tasks")
@@ -570,19 +649,62 @@ model Offer {
   @@schema("app")
 }
 
+/// Visite d'une annonce (besoin S4) : faite ou planifiée, participants
+/// (identifiants des membres), compte rendu, points positifs et négatifs,
+/// note. Les photos sont des lignes `VisitPhoto` (objets privés dans
+/// Supabase Storage).
 model Visit {
-  id           String   @id @default(uuid())
-  listingId    String   @map("listing_id")
-  visitedAt    DateTime @map("visited_at") @db.Timestamptz(6)
-  participants String[] @default([])
-  report       String?
-  photos       Json     @default("[]")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id             String      @id @default(uuid())
+  listingId      String      @map("listing_id")
+  visitedAt      DateTime    @map("visited_at") @db.Timestamptz(6)
+  status         VisitStatus @default(done)
+  participantIds String[]    @default([]) @map("participants")
+  report         String?
+  pros           String?
+  cons           String?
+  rating         Int         @default(0)
+  prepTaskId     String?     @unique @map("prep_task_id")
+  createdById    String?     @map("created_by_id")
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listing   Listing      @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdBy Member?      @relation("VisitAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  prepTask  Task?        @relation("VisitPrepTask", fields: [prepTaskId], references: [id], onDelete: SetNull)
+  photos    VisitPhoto[]
 
-  @@index([listingId])
+  @@index([listingId, visitedAt])
   @@map("visits")
+  @@schema("app")
+}
+
+/// Une photo de visite : l'objet et sa vignette dans le bucket privé, sous
+/// `<espace>/<annonce>/<visite>/`. Lue par URL signée à durée courte ;
+/// supprimée par son auteur seulement.
+model VisitPhoto {
+  id                   String           @id @default(uuid())
+  visitId              String           @map("visit_id")
+  workspaceId          String           @map("workspace_id")
+  status               VisitPhotoStatus @default(pending)
+  storagePath          String           @unique @map("storage_path")
+  thumbnailPath        String           @unique @map("thumbnail_path")
+  contentType          String           @map("content_type")
+  sizeBytes            Int              @map("size_bytes")
+  thumbnailContentType String           @map("thumbnail_content_type")
+  thumbnailSizeBytes   Int              @map("thumbnail_size_bytes")
+  width                Int?
+  height               Int?
+  caption              String?
+  uploadedById         String?          @map("uploaded_by_id")
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  readyAt              DateTime?        @map("ready_at") @db.Timestamptz(6)
+
+  visit      Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  uploadedBy Member?   @relation("VisitPhotoAuthor", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([visitId])
+  @@map("visit_photos")
   @@schema("app")
 }
 
@@ -598,13 +720,101 @@ model ActivityLog {
   after         Json?
   createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  listing   Listing?  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  actor     Member?   @relation(fields: [actorMemberId], references: [id], onDelete: SetNull)
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  listing       Listing?       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  actor         Member?        @relation(fields: [actorMemberId], references: [id], onDelete: SetNull)
+  notifications Notification[]
 
   @@index([workspaceId, createdAt(sort: Desc)])
   @@index([listingId, createdAt(sort: Desc)])
   @@map("activity_logs")
+  @@schema("app")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications (lot 6)
+// ---------------------------------------------------------------------------
+
+/// Une notification pour un membre, née d'une écriture journalisée. Le
+/// texte est figé à la création (il part tel quel en push et par e-mail).
+model Notification {
+  id          String           @id @default(uuid())
+  workspaceId String           @map("workspace_id")
+  recipientId String           @map("recipient_id")
+  type        NotificationType
+  title       String
+  body        String
+  url         String?
+  listingId   String?          @map("listing_id")
+  activityId  String?          @map("activity_id")
+  actorName   String?          @map("actor_name")
+  /// Visible dans la cloche (préférence « dans l'application »).
+  inApp       Boolean          @default(true) @map("in_app")
+  pushStatus  DeliveryStatus   @default(skipped) @map("push_status")
+  emailStatus DeliveryStatus   @default(skipped) @map("email_status")
+  readAt      DateTime?        @map("read_at") @db.Timestamptz(6)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  recipient Member       @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  listing   Listing?     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  activity  ActivityLog? @relation(fields: [activityId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, createdAt(sort: Desc)])
+  @@index([pushStatus, createdAt])
+  @@index([emailStatus, createdAt])
+  @@map("notifications")
+  @@schema("app")
+}
+
+/// Un abonnement Web Push d'un appareil (PWA). Supprimé quand le service
+/// push répond qu'il a expiré (404 ou 410).
+model PushSubscription {
+  id            String    @id @default(uuid())
+  memberId      String    @map("member_id")
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  userAgent     String?   @map("user_agent")
+  failureCount  Int       @default(0) @map("failure_count")
+  lastSuccessAt DateTime? @map("last_success_at") @db.Timestamptz(6)
+  lastFailureAt DateTime? @map("last_failure_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@map("push_subscriptions")
+  @@schema("app")
+}
+
+/// Une annonce reçue (alerte e-mail transférée) à valider : la fiche
+/// pré-remplie (JSON validé par ListingInputSchema), les doublons probables
+/// à la réception, puis la décision d'un membre.
+model ListingDraft {
+  id           String         @id @default(uuid())
+  workspaceId  String         @map("workspace_id")
+  origin       DraftOrigin    @default(email)
+  status       DraftStatus    @default(pending)
+  extractedBy  DraftExtractor @map("extracted_by")
+  input        Json           @map("listing_input")
+  duplicates   Json           @default("[]")
+  warnings     Json           @default("[]")
+  url          String?
+  emailSubject String?        @map("email_subject")
+  emailFrom    String?        @map("email_from")
+  receivedAt   DateTime       @default(now()) @map("received_at") @db.Timestamptz(6)
+  decidedAt    DateTime?      @map("decided_at") @db.Timestamptz(6)
+  decidedById  String?        @map("decided_by_id")
+  listingId    String?        @map("listing_id")
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  decidedBy Member?   @relation("DraftDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  listing   Listing?  @relation(fields: [listingId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, createdAt])
+  @@map("listing_drafts")
   @@schema("app")
 }
 

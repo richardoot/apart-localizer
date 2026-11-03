@@ -13,7 +13,16 @@ const apiMock = vi.hoisted(() => ({
   workspace: vi.fn(),
   assumptions: { current: vi.fn() },
   listings: { extract: vi.fn(), create: vi.fn() },
+  drafts: { get: vi.fn(), decide: vi.fn(), list: vi.fn() },
 }))
+
+/** La route courante : vide, sauf pour les tests de partage et de brouillon. */
+const routeState = vi.hoisted(() => ({ query: {} as Record<string, string> }))
+vi.mock('vue-router', async () => {
+  const actual =
+    await vi.importActual<typeof import('vue-router')>('vue-router')
+  return { ...actual, useRoute: () => routeState }
+})
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
@@ -58,6 +67,7 @@ describe('ListingCreatePanel', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    routeState.query = {}
     apiMock.assumptions.current.mockResolvedValue({
       id: 'v1',
       workspaceId: MEMBERS[0]?.workspaceId,
@@ -228,6 +238,97 @@ describe('ListingCreatePanel', () => {
     expect(
       body().querySelector('[data-testid="extraction-pane"]')
     ).not.toBeNull()
+    wrapper.unmount()
+  })
+
+  it('partage depuis le mobile : le texte et le lien partagés sont analysés à l’ouverture', async () => {
+    routeState.query = {
+      partage: '1',
+      url: 'https://www.leboncoin.fr/ad/ventes_immobilieres/2890123456',
+      texte: 'Appartement 2 pièces 45 m² Talence',
+    }
+    apiMock.listings.extract.mockResolvedValue(fakeExtractionResult())
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(apiMock.listings.extract).toHaveBeenCalledWith({
+      text: 'Appartement 2 pièces 45 m² Talence',
+      url: 'https://www.leboncoin.fr/ad/ventes_immobilieres/2890123456',
+      images: [],
+    })
+    expect(
+      body().querySelector('[data-testid="extraction-summary"]')
+    ).not.toBeNull()
+    wrapper.unmount()
+  })
+
+  it('partage sans IA : saisie manuelle pré-remplie avec le lien et le texte', async () => {
+    routeState.query = {
+      partage: '1',
+      url: 'https://www.seloger.com/annonces/achat/appartement/talence-33/218765432.htm',
+      texte: 'T3 lumineux',
+      titre: 'T3 Talence',
+    }
+    const { ApiError } = await import('@/lib/api')
+    apiMock.listings.extract.mockRejectedValue(
+      new ApiError(503, "L'extraction par IA n'est pas configurée.")
+    )
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(query<HTMLInputElement>('#f-url').value).toBe(
+      'https://www.seloger.com/annonces/achat/appartement/talence-33/218765432.htm'
+    )
+    expect(query<HTMLInputElement>('#f-title').value).toBe('T3 Talence')
+    expect(query<HTMLSelectElement>('#f-source').value).toBe('seloger')
+    expect(
+      body().querySelector('[data-testid="create-notice"]')?.textContent
+    ).toContain("L'analyse par IA n'est pas configurée")
+    wrapper.unmount()
+  })
+
+  it('brouillon reçu par e-mail : fiche pré-remplie, doublons, puis validé à l’enregistrement', async () => {
+    const extracted = fakeExtractionResult()
+    routeState.query = { brouillon: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' }
+    apiMock.drafts.get.mockResolvedValue({
+      id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      workspaceId: MEMBERS[0]?.workspaceId,
+      origin: 'email',
+      status: 'pending',
+      extractedBy: 'parser',
+      listing: extracted.listing,
+      duplicates: [fakeDuplicate()],
+      warnings: ['Lu par l’analyseur simple'],
+      url: extracted.listing.url,
+      emailSubject: 'Alerte SeLoger',
+      emailFrom: null,
+      receivedAt: '2026-11-03T10:00:00.000Z',
+      decidedAt: null,
+      decidedById: null,
+      listingId: null,
+      createdAt: '2026-11-03T10:00:00.000Z',
+    })
+    apiMock.drafts.decide.mockResolvedValue({})
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(apiMock.drafts.get).toHaveBeenCalledWith(
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+    )
+    expect(body().textContent).toContain(
+      'Fiche pré-remplie par l’analyseur simple.'
+    )
+    expect(body().textContent).toContain(
+      'Reçue par e-mail (« Alerte SeLoger »)'
+    )
+    expect(
+      body().querySelector('[data-testid="duplicates-banner"]')
+    ).not.toBeNull()
+    query<HTMLButtonElement>('[data-testid="save"]').click()
+    await flushPromises()
+    expect(apiMock.listings.create).toHaveBeenCalledTimes(1)
+    expect(apiMock.drafts.decide).toHaveBeenCalledWith(
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      { status: 'accepted', listingId: fakeEvaluated().listing.id }
+    )
+    expect(wrapper.emitted('created')).toHaveLength(1)
     wrapper.unmount()
   })
 })

@@ -13,6 +13,11 @@ import type { Member } from '../generated/prisma'
 import { DuplicatesService } from './duplicates.service'
 import { applyLocated, withOpenDataProvenance } from './location'
 
+/** Qui demande l'extraction : un membre, ou le système (alerte e-mail, `id` null). */
+export type ExtractionActor = Pick<Member, 'workspaceId'> & {
+  id: string | null
+}
+
 /**
  * L'extraction de bout en bout, sans écriture d'annonce : le modèle lit,
  * le mappeur traduit vers le contrat, le géocodeur place l'adresse, le
@@ -30,7 +35,7 @@ export class ExtractionService {
   ) {}
 
   async extract(
-    member: Member,
+    member: ExtractionActor,
     request: ExtractionRequest,
     channel: ActivityChannel = 'web'
   ): Promise<ExtractionResult> {

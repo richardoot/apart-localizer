@@ -27,6 +27,9 @@ const apiMock = vi.hoisted(() => ({
   opinions: { upsertMine: vi.fn() },
   tasks: { create: vi.fn(), update: vi.fn(), remove: vi.fn() },
   offers: { create: vi.fn(), update: vi.fn() },
+  whatsNew: { listingChanges: vi.fn() },
+  visits: { list: vi.fn() },
+  activity: { forListing: vi.fn() },
 }))
 
 vi.mock('@/lib/api', async () => {
@@ -88,6 +91,20 @@ describe('ListingPanel', () => {
       suggestedStatus: 'offer_made',
     })
     apiMock.listings.markSeen.mockResolvedValue({ ...item, isNewForMe: false })
+    apiMock.whatsNew.listingChanges.mockResolvedValue({
+      listingId: item.listing.id,
+      since: null,
+      changedFields: [],
+      entries: [],
+    })
+    apiMock.visits.list.mockResolvedValue([])
+    apiMock.activity.forListing.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      limit: 30,
+      pageCount: 0,
+    })
     apiMock.listings.setStatus.mockResolvedValue({
       ...item,
       listing: { ...item.listing, status: 'to_visit' },
@@ -200,9 +217,12 @@ describe('ListingPanel', () => {
   })
 
   it('sans phase 2 : invite à la créer avant de retenir un loyer de marché', async () => {
-    apiMock.listings.get.mockResolvedValueOnce(
-      fakeEvaluated({ rentalPlan: null }, { isNewForMe: false })
+    const withoutPlan = fakeEvaluated(
+      { rentalPlan: null },
+      { isNewForMe: false }
     )
+    apiMock.listings.get.mockResolvedValueOnce(withoutPlan)
+    apiMock.listings.markSeen.mockResolvedValueOnce(withoutPlan)
     const wrapper = mountPanel()
     await flushPromises()
     wrapper
@@ -215,7 +235,7 @@ describe('ListingPanel', () => {
   })
 
   it('montre les critères de l’annonce et le message de création', async () => {
-    apiMock.listings.get.mockResolvedValue({
+    const matched = {
       ...item,
       isNewForMe: false,
       criteriaMatches: [
@@ -226,7 +246,9 @@ describe('ListingPanel', () => {
           approximate: false,
         },
       ],
-    })
+    }
+    apiMock.listings.get.mockResolvedValue(matched)
+    apiMock.listings.markSeen.mockResolvedValue(matched)
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     })
@@ -243,6 +265,83 @@ describe('ListingPanel', () => {
     expect(document.body.textContent).toContain(
       'Entre dans le critère « Talence fictif »'
     )
+    wrapper.unmount()
+  })
+
+  it('lit ce qui a changé avant de marquer la fiche vue, et met les champs en évidence', async () => {
+    const seen = fakeEvaluated({}, { isNewForMe: false })
+    apiMock.listings.get.mockResolvedValue(seen)
+    apiMock.listings.markSeen.mockResolvedValue(seen)
+    let resolveChanges: (value: unknown) => void = () => undefined
+    apiMock.whatsNew.listingChanges.mockReturnValue(
+      new Promise(resolve => {
+        resolveChanges = resolve
+      })
+    )
+    const wrapper = mountPanel()
+    await flushPromises()
+    // Tant que les changements ne sont pas lus, la fiche n'est pas marquée vue.
+    expect(apiMock.listings.markSeen).not.toHaveBeenCalled()
+    resolveChanges({
+      listingId: seen.listing.id,
+      since: '2026-11-02T10:00:00.000Z',
+      changedFields: ['price', 'rentalPlan', 'rentalPlan.targetRent'],
+      entries: [
+        {
+          id: '99999999-9999-4999-8999-999999999999',
+          createdAt: '2026-11-03T09:00:00.000Z',
+          action: 'listing.price_changed',
+          kind: 'price',
+          channel: 'web',
+          channelLabel: 'Web',
+          actor: { id: MEMBERS[1]?.id, handle: 'chloe', displayName: 'Chloé' },
+          listing: { id: seen.listing.id, title: 'T2 fictif' },
+          summary: 'a enregistré un nouveau prix',
+          changes: [
+            {
+              field: 'price',
+              label: 'Prix',
+              before: '210 000 €',
+              after: '200 000 €',
+            },
+          ],
+        },
+      ],
+    })
+    await flushPromises()
+    expect(apiMock.listings.markSeen).toHaveBeenCalledTimes(1)
+    const box = document.body.querySelector('[data-testid="listing-changes"]')
+    expect(box?.textContent).toContain('Chloé')
+    expect(box?.textContent).toContain('a enregistré un nouveau prix')
+    expect(box?.textContent).toContain('210 000 €')
+    expect(
+      document.body.querySelector('[data-testid="changed-count"]')?.textContent
+    ).toContain('3 champ(s) modifié(s)')
+    const changed = [...document.body.querySelectorAll('[data-changed="true"]')]
+    expect(
+      changed.map(el => el.querySelector('label')?.getAttribute('for'))
+    ).toEqual(['f-price', 'f-rent'])
+    wrapper.unmount()
+  })
+
+  it('ouvre les onglets Visites et Journal', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    ;(
+      document.body.querySelector('[data-testid="tab-visits"]') as HTMLElement
+    ).click()
+    await flushPromises()
+    expect(apiMock.visits.list).toHaveBeenCalledWith(item.listing.id)
+    expect(document.body.textContent).toContain("Aucune visite pour l'instant.")
+    ;(
+      document.body.querySelector('[data-testid="tab-journal"]') as HTMLElement
+    ).click()
+    await flushPromises()
+    expect(apiMock.activity.forListing).toHaveBeenCalledWith(item.listing.id, {
+      page: 1,
+      limit: 30,
+    })
+    expect(document.body.textContent).toContain('Rien dans le journal.')
     wrapper.unmount()
   })
 })

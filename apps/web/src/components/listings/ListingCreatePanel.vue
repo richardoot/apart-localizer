@@ -1,17 +1,20 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
+  import { computed, onMounted, ref } from 'vue'
+  import { useRoute } from 'vue-router'
   import type {
     CriteriaMatchChanges,
     ExtractionResult,
+    ListingDraft,
     ListingInput,
   } from '@apart/contracts'
-  import { missingListingFields } from '@apart/contracts'
+  import { listingSourceFromUrl, missingListingFields } from '@apart/contracts'
   import SidePanel from '@/components/ui/SidePanel.vue'
   import { describeUsage } from '@/composables/useExtraction'
   import { useListingMutations } from '@/composables/useListings'
   import { useLivePreview } from '@/composables/useLivePreview'
   import { useAssumptions } from '@/composables/useWorkspace'
-  import { ApiError } from '@/lib/api'
+  import { ApiError, api } from '@/lib/api'
+  import { useDrafts } from '@/composables/useDrafts'
   import {
     emptyForm,
     formFromInput,
@@ -37,6 +40,28 @@
 
   type Tab = 'paste' | 'manual'
   const tab = ref<Tab>('paste')
+
+  // Sans routeur (tests du panneau seul), ni partage ni brouillon.
+  const query = useRoute()?.query ?? {}
+  const one = (value: unknown): string | null =>
+    typeof value === 'string' && value.trim() ? value : null
+  /** Partage depuis le mobile (`/partager` → `?partage=1&url=&texte=&titre=`). */
+  const shared =
+    query.partage === '1'
+      ? {
+          url: one(query.url),
+          text: one(query.texte),
+          title: one(query.titre),
+        }
+      : null
+  const sharedText = shared
+    ? ([shared.text, shared.title].find(Boolean) ?? null)
+    : null
+  /** Brouillon reçu par e-mail à valider (`?brouillon=<id>`). */
+  const draftId = one(query.brouillon)
+  const draft = ref<ListingDraft | null>(null)
+  const notice = ref<string | null>(null)
+  const { decide } = useDrafts()
 
   const form = ref(emptyForm())
   const errors = ref<Record<string, string>>({})
@@ -101,6 +126,66 @@
     tab.value = 'manual'
   }
 
+  /** Sans IA : la saisie manuelle, pré-remplie avec ce que le partage a transmis. */
+  function onUnavailable(): void {
+    if (!shared) return
+    const filled = emptyForm()
+    filled.title = shared.title ?? 'Annonce partagée'
+    filled.url = shared.url ?? ''
+    filled.source = listingSourceFromUrl(shared.url)
+    filled.description = shared.text ?? ''
+    form.value = filled
+    tab.value = 'manual'
+    notice.value =
+      "L'analyse par IA n'est pas configurée : le lien et le texte partagés sont repris, complétez la fiche."
+  }
+
+  /** Un brouillon reçu par e-mail ouvre comme une fiche extraite, doublons compris. */
+  async function loadDraft(id: string): Promise<void> {
+    try {
+      const loaded = await api.drafts.get(id)
+      draft.value = loaded
+      onExtracted({
+        listing: loaded.listing,
+        missingFields: missingListingFields(loaded.listing),
+        duplicates: loaded.duplicates,
+        warnings: loaded.warnings,
+        geocoded: false,
+        usage: {
+          model:
+            loaded.extractedBy === 'ai'
+              ? 'IA (alerte e-mail)'
+              : 'analyseur simple',
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          estimatedCostUsd: null,
+          durationMs: 0,
+        },
+        persisted: false,
+      })
+      notice.value = `Reçue par e-mail${loaded.emailSubject ? ` (« ${loaded.emailSubject} »)` : ''} : vérifiez la fiche avant d'enregistrer.`
+    } catch (err) {
+      failure.value =
+        err instanceof ApiError ? err.message : 'Brouillon introuvable.'
+      tab.value = 'manual'
+    }
+  }
+
+  onMounted(() => {
+    if (draftId) void loadDraft(draftId)
+  })
+
+  async function dismissDraft(): Promise<void> {
+    if (!draft.value) return
+    await decide.mutateAsync({
+      id: draft.value.id,
+      decision: { status: 'dismissed' },
+    })
+    emit('close')
+  }
+
   function startOver(): void {
     extraction.value = null
     extractedForm.value = null
@@ -126,6 +211,12 @@
           }
         : input
       const created = await create.mutateAsync(body)
+      if (draft.value) {
+        await decide.mutateAsync({
+          id: draft.value.id,
+          decision: { status: 'accepted', listingId: created.listing.id },
+        })
+      }
       emit('created', created.listing.id, created.criteriaChanges)
     } catch (err) {
       failure.value =
@@ -168,7 +259,31 @@
         </button>
       </div>
 
-      <ExtractionPane v-if="tab === 'paste'" @extracted="onExtracted" />
+      <p
+        v-if="notice"
+        class="rounded-lg bg-accent-soft px-3 py-2 text-sm"
+        data-testid="create-notice"
+      >
+        {{ notice }}
+        <button
+          v-if="draft"
+          type="button"
+          class="ml-2 text-xs underline"
+          data-testid="dismiss-draft"
+          @click="dismissDraft"
+        >
+          Écarter ce brouillon
+        </button>
+      </p>
+
+      <ExtractionPane
+        v-if="tab === 'paste'"
+        :initial-text="sharedText"
+        :initial-url="shared?.url ?? null"
+        :auto-analyze="Boolean(shared && (sharedText || shared.url))"
+        @extracted="onExtracted"
+        @unavailable="onUnavailable"
+      />
 
       <template v-else>
         <div
@@ -178,7 +293,11 @@
         >
           <div class="flex flex-wrap items-center justify-between gap-2">
             <p>
-              <strong>Fiche pré-remplie par l'IA.</strong>
+              <strong>{{
+                draft?.extractedBy === 'parser'
+                  ? 'Fiche pré-remplie par l’analyseur simple.'
+                  : "Fiche pré-remplie par l'IA."
+              }}</strong>
               Vérifiez chaque champ : les pastilles disent d'où vient la valeur
               et avec quelle confiance ; survolez-les pour lire l'extrait. Un
               champ que vous modifiez passe en « vous ».

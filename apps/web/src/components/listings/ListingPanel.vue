@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue'
+  import { useQuery } from '@tanstack/vue-query'
   import type {
     ListingStatus,
     OfferInputRaw,
@@ -15,7 +16,7 @@
   } from '@/composables/useListings'
   import { useLivePreview } from '@/composables/useLivePreview'
   import { useAssumptions, useWorkspace } from '@/composables/useWorkspace'
-  import { ApiError } from '@/lib/api'
+  import { ApiError, api } from '@/lib/api'
   import { criteriaChangesMessage } from '@/lib/criteria'
   import { formatDate, formatDistance, parseNumberInput } from '@/lib/format'
   import {
@@ -39,6 +40,9 @@
   import TargetPriceSection from './TargetPriceSection.vue'
   import TasksSection from './TasksSection.vue'
   import StudySection from '@/components/study/StudySection.vue'
+  import JournalSection from '@/components/activity/JournalSection.vue'
+  import ListingChanges from '@/components/activity/ListingChanges.vue'
+  import VisitsSection from '@/components/visits/VisitsSection.vue'
 
   const props = defineProps<{
     id: string
@@ -60,14 +64,32 @@
   const failure = ref<string | null>(null)
   const seenFor = ref<string | null>(null)
 
+  type Tab = 'listing' | 'visits' | 'journal'
+  const tab = ref<Tab>('listing')
+
+  // « Ce qui a changé » depuis la dernière ouverture : lu avant de marquer la
+  // fiche vue, gardé le temps de l'ouverture (puis oublié). Clé hors de
+  // `['listings']` : une invalidation des annonces ne doit pas le relire
+  // une fois la fiche marquée vue.
+  const changesQuery = useQuery({
+    queryKey: computed(() => ['listing-changes', props.id] as const),
+    queryFn: () => api.whatsNew.listingChanges(props.id),
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 0,
+    retry: false,
+  })
+  const changes = computed(() => changesQuery.data.value ?? null)
+  const changedFields = computed(() => changes.value?.changedFields ?? [])
+
   // La fiche ouverte : le formulaire se cale sur l'annonce, et l'annonce
-  // devient « vue » pour le membre (une fois par ouverture).
+  // devient « vue » pour le membre, une fois par ouverture, après la lecture
+  // de ce qui a changé.
   watch(
-    item,
-    value => {
+    [item, () => changesQuery.status.value],
+    ([value, status]) => {
       if (!value) return
       if (!editing.value) form.value = formFromListing(value.listing)
-      if (value.isNewForMe && seenFor.value !== value.listing.id) {
+      if (status !== 'pending' && seenFor.value !== value.listing.id) {
         seenFor.value = value.listing.id
         mutations.markSeen.mutate(value.listing.id)
       }
@@ -320,149 +342,208 @@
         </p>
       </header>
 
-      <MetricsPreview :evaluation="shownEvaluation" />
-      <TargetPriceSection
-        :price="shownEvaluation?.metrics.price ?? item.listing.price"
-        :target-price="shownTargetPrice"
-        :negotiation="shownNegotiation"
-        :rank="editing ? null : (targetReport?.rank ?? null)"
-        :notary-fees="shownNotaryFees"
-        :live="editing"
-      />
-      <SensitivityTable
-        v-model:row-axis="rowAxis"
-        v-model:col-axis="colAxis"
-        :grid="sensitivity.data.value ?? null"
-        :loading="sensitivity.isFetching.value"
-      />
-      <RentalChecksList
-        v-if="shownEvaluation"
-        :rental="shownEvaluation.rental"
-      />
-      <StudySection
-        :item="item"
-        :assumptions="assumptions"
-        :busy="busy"
-        @retain-market-rent="retainMarketRent"
-      />
-      <ContextSection
-        :listing-id="item.listing.id"
-        :updated-at="item.listing.updatedAt"
-      />
+      <div
+        class="flex gap-1 rounded-lg bg-surface-2 p-1 text-sm"
+        role="tablist"
+        aria-label="Sections de la fiche"
+      >
+        <button
+          v-for="choice in [
+            { id: 'listing', label: 'Fiche' },
+            { id: 'visits', label: 'Visites' },
+            { id: 'journal', label: 'Journal' },
+          ] as const"
+          :key="choice.id"
+          type="button"
+          role="tab"
+          :aria-selected="tab === choice.id"
+          class="flex-1 rounded-md px-3 py-1.5"
+          :class="
+            tab === choice.id ? 'bg-surface font-medium shadow' : 'text-muted'
+          "
+          :data-testid="`tab-${choice.id}`"
+          @click="tab = choice.id"
+        >
+          {{ choice.label }}
+        </button>
+      </div>
 
       <p
-        v-if="failure"
+        v-if="failure && tab !== 'listing'"
         role="alert"
         class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
       >
         {{ failure }}
       </p>
-      <p v-else-if="message" class="text-sm text-good" aria-live="polite">
-        {{ message }}
-      </p>
-
-      <details class="rounded-xl border border-line" :open="editing">
-        <summary
-          class="cursor-pointer px-4 py-3 font-display text-base font-semibold"
-          @click="editing = true"
-        >
-          Fiche et saisie
-        </summary>
-        <div class="grid gap-4 px-4 pb-4">
-          <ListingForm
-            v-model="form"
-            :errors="errors"
-            :field-sources="item.listing.fieldSources"
-            hide-status
-          />
-          <div class="flex flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              class="rounded-lg border border-line px-3 py-1.5 text-sm"
-              @click="cancel"
-            >
-              Annuler
-            </button>
-            <button
-              type="button"
-              class="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-accent-fg disabled:opacity-60"
-              :disabled="busy"
-              @click="save"
-            >
-              {{
-                mutations.update.isPending.value
-                  ? 'Enregistrement…'
-                  : 'Enregistrer'
-              }}
-            </button>
-          </div>
-        </div>
-      </details>
-
-      <OpinionsSection
-        :opinions="item.opinions"
+      <VisitsSection
+        v-if="tab === 'visits'"
+        :listing-id="item.listing.id"
         :members="members"
         :me-id="me?.id ?? null"
-        :saving="mutations.upsertOpinion.isPending.value"
-        @save="
-          input =>
-            run(
-              mutations.upsertOpinion.mutateAsync({
-                id: item!.listing.id,
-                input,
-              })
-            )
-        "
-      />
-
-      <TasksSection
-        :tasks="item.tasks"
-        :members="members"
-        @add="
-          label =>
-            run(mutations.addTask.mutateAsync({ id: item!.listing.id, label }))
-        "
-        @toggle="
-          (taskId, done) =>
-            run(
-              mutations.updateTask.mutateAsync({
-                id: item!.listing.id,
-                taskId,
-                update: { done },
-              })
-            )
-        "
-        @remove="
-          taskId =>
-            run(
-              mutations.removeTask.mutateAsync({ id: item!.listing.id, taskId })
-            )
-        "
-      />
-
-      <HistorySection
-        :events="item.priceEvents"
-        :offers="item.offers"
-        :current-price="item.listing.price"
-        :suggested-status="suggestedStatus"
-        :busy="busy"
-        @record="
-          newPrice =>
-            run(
-              mutations.recordPriceChange.mutateAsync({
-                id: item!.listing.id,
-                input: {
-                  newPrice,
-                  expectedPrice: item!.listing.price,
-                  source: 'listing',
-                },
-              })
-            )
-        "
-        @add-offer="addOffer"
-        @update-offer="updateOffer"
         @set-status="status => changeStatus({ status, reason: null })"
       />
+      <JournalSection
+        v-else-if="tab === 'journal'"
+        :listing-id="item.listing.id"
+      />
+      <template v-else>
+        <ListingChanges v-if="changes" :changes="changes" />
+        <MetricsPreview :evaluation="shownEvaluation" />
+        <TargetPriceSection
+          :price="shownEvaluation?.metrics.price ?? item.listing.price"
+          :target-price="shownTargetPrice"
+          :negotiation="shownNegotiation"
+          :rank="editing ? null : (targetReport?.rank ?? null)"
+          :notary-fees="shownNotaryFees"
+          :live="editing"
+        />
+        <SensitivityTable
+          v-model:row-axis="rowAxis"
+          v-model:col-axis="colAxis"
+          :grid="sensitivity.data.value ?? null"
+          :loading="sensitivity.isFetching.value"
+        />
+        <RentalChecksList
+          v-if="shownEvaluation"
+          :rental="shownEvaluation.rental"
+        />
+        <StudySection
+          :item="item"
+          :assumptions="assumptions"
+          :busy="busy"
+          @retain-market-rent="retainMarketRent"
+        />
+        <ContextSection
+          :listing-id="item.listing.id"
+          :updated-at="item.listing.updatedAt"
+        />
+
+        <p
+          v-if="failure"
+          role="alert"
+          class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
+        >
+          {{ failure }}
+        </p>
+        <p v-else-if="message" class="text-sm text-good" aria-live="polite">
+          {{ message }}
+        </p>
+
+        <details class="rounded-xl border border-line" :open="editing">
+          <summary
+            class="cursor-pointer px-4 py-3 font-display text-base font-semibold"
+            @click="editing = true"
+          >
+            Fiche et saisie
+            <span
+              v-if="changedFields.length"
+              class="ml-2 rounded-full bg-accent px-2 py-0.5 text-xs font-normal text-accent-fg"
+              data-testid="changed-count"
+              >{{ changedFields.length }} champ(s) modifié(s)</span
+            >
+          </summary>
+          <div class="grid gap-4 px-4 pb-4">
+            <ListingForm
+              v-model="form"
+              :errors="errors"
+              :field-sources="item.listing.fieldSources"
+              :changed="changedFields"
+              hide-status
+            />
+            <div class="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                class="rounded-lg border border-line px-3 py-1.5 text-sm"
+                @click="cancel"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                class="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-accent-fg disabled:opacity-60"
+                :disabled="busy"
+                @click="save"
+              >
+                {{
+                  mutations.update.isPending.value
+                    ? 'Enregistrement…'
+                    : 'Enregistrer'
+                }}
+              </button>
+            </div>
+          </div>
+        </details>
+
+        <OpinionsSection
+          :opinions="item.opinions"
+          :members="members"
+          :me-id="me?.id ?? null"
+          :saving="mutations.upsertOpinion.isPending.value"
+          @save="
+            input =>
+              run(
+                mutations.upsertOpinion.mutateAsync({
+                  id: item!.listing.id,
+                  input,
+                })
+              )
+          "
+        />
+
+        <TasksSection
+          :tasks="item.tasks"
+          :members="members"
+          @add="
+            label =>
+              run(
+                mutations.addTask.mutateAsync({ id: item!.listing.id, label })
+              )
+          "
+          @toggle="
+            (taskId, done) =>
+              run(
+                mutations.updateTask.mutateAsync({
+                  id: item!.listing.id,
+                  taskId,
+                  update: { done },
+                })
+              )
+          "
+          @remove="
+            taskId =>
+              run(
+                mutations.removeTask.mutateAsync({
+                  id: item!.listing.id,
+                  taskId,
+                })
+              )
+          "
+        />
+
+        <HistorySection
+          :events="item.priceEvents"
+          :offers="item.offers"
+          :current-price="item.listing.price"
+          :suggested-status="suggestedStatus"
+          :busy="busy"
+          @record="
+            newPrice =>
+              run(
+                mutations.recordPriceChange.mutateAsync({
+                  id: item!.listing.id,
+                  input: {
+                    newPrice,
+                    expectedPrice: item!.listing.price,
+                    source: 'listing',
+                  },
+                })
+              )
+          "
+          @add-offer="addOffer"
+          @update-offer="updateOffer"
+          @set-status="status => changeStatus({ status, reason: null })"
+        />
+      </template>
     </div>
   </SidePanel>
 </template>

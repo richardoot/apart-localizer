@@ -1,6 +1,9 @@
 <script setup lang="ts">
+  import { onBeforeUnmount, onMounted } from 'vue'
+  import { sendVisitHeartbeat } from '@/composables/useWhatsNew'
   import { useAuthStore } from '@/stores/auth'
   import { useThemeStore } from '@/stores/theme'
+  import NotificationBell from './notifications/NotificationBell.vue'
   import ThemeToggle from './ThemeToggle.vue'
 
   const auth = useAuthStore()
@@ -11,7 +14,20 @@
     { to: '/annonces', label: 'Annonces' },
     { to: '/criteres', label: 'Critères' },
     { to: '/hypotheses', label: 'Hypothèses' },
+    { to: '/activite', label: 'Activité' },
   ]
+
+  // « Ce qui a changé » : une visite au chargement, puis au retour sur l'onglet.
+  function onVisible(): void {
+    if (document.visibilityState === 'visible') void sendVisitHeartbeat()
+  }
+  onMounted(() => {
+    void sendVisitHeartbeat()
+    document.addEventListener('visibilitychange', onVisible)
+  })
+  onBeforeUnmount(() =>
+    document.removeEventListener('visibilitychange', onVisible)
+  )
 
   async function signOut(): Promise<void> {
     await auth.signOut()
@@ -26,7 +42,7 @@
       <RouterLink to="/" class="font-display text-lg font-bold text-accent">
         apart-localizer
       </RouterLink>
-      <nav class="flex gap-1" aria-label="Navigation principale">
+      <nav class="flex flex-wrap gap-1" aria-label="Navigation principale">
         <RouterLink
           v-for="link in links"
           :key="link.to"
@@ -39,6 +55,7 @@
       </nav>
     </div>
     <div class="flex items-center gap-2">
+      <NotificationBell />
       <ThemeToggle :is-dark="theme.isDark" @toggle="theme.toggle()" />
       <button
         type="button"

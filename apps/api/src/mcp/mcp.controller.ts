@@ -26,6 +26,8 @@ import { StudyService } from '../study/study.service'
 import { ScenariosService } from '../study/scenarios.service'
 import { RentComparablesService } from '../study/rent-comparables.service'
 import { ComplianceService } from '../study/compliance.service'
+import { VisitsService } from '../visits/visits.service'
+import { WhatsNewService } from '../whats-new/whats-new.service'
 import { McpAuthGuard } from './mcp-auth.guard'
 import type { McpAuthenticatedRequest } from './mcp-auth.guard'
 import { registerPrompts, registerResources, registerTools } from './mcp-tools'
@@ -58,7 +60,9 @@ export class McpController {
     private readonly study: StudyService,
     private readonly scenarios: ScenariosService,
     private readonly comparables: RentComparablesService,
-    private readonly compliance: ComplianceService
+    private readonly compliance: ComplianceService,
+    private readonly visits: VisitsService,
+    private readonly whatsNew: WhatsNewService
   ) {}
 
   @Post()
@@ -101,6 +105,8 @@ export class McpController {
       scenarios: this.scenarios,
       comparables: this.comparables,
       compliance: this.compliance,
+      visits: this.visits,
+      whatsNew: this.whatsNew,
     })
     registerPrompts(server)
     registerResources(server)

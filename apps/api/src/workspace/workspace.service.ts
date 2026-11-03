@@ -5,6 +5,16 @@ import { Prisma } from '../generated/prisma'
 import type { Member, Workspace } from '../generated/prisma'
 
 /**
+ * L'ordre des membres : par arrivée, le propriétaire d'abord quand deux
+ * membres sont créés ensemble (même horodatage), puis par identifiant court.
+ */
+export const MEMBER_ORDER = [
+  { createdAt: 'asc' as const },
+  { role: 'asc' as const },
+  { handle: 'asc' as const },
+]
+
+/**
  * L'espace de travail (foyer) et ses membres.
  *
  * Un membre peut exister avant sa première connexion : l'import crée Richard
@@ -82,7 +92,7 @@ export class WorkspaceService {
   async me(member: Member): Promise<WorkspaceMe> {
     const workspace = await this.prisma.workspace.findUniqueOrThrow({
       where: { id: member.workspaceId },
-      include: { members: { orderBy: { createdAt: 'asc' } } },
+      include: { members: { orderBy: MEMBER_ORDER } },
     })
     return {
       workspace: toWorkspaceDto(workspace, workspace.members),
@@ -93,7 +103,7 @@ export class WorkspaceService {
   async members(workspaceId: string): Promise<Member[]> {
     return this.prisma.member.findMany({
       where: { workspaceId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: MEMBER_ORDER,
     })
   }
 }

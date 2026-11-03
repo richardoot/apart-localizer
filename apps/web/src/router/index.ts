@@ -1,6 +1,31 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import type { RouteRecordRaw } from 'vue-router'
+import type { LocationQuery, RouteRecordRaw } from 'vue-router'
+import { parseSharedListing } from '@apart/contracts'
 import { useAuthStore } from '@/stores/auth'
+
+const first = (value: LocationQuery[string] | undefined): string | null =>
+  (Array.isArray(value) ? value[0] : value) ?? null
+
+/**
+ * La cible de partage de la PWA (`share_target`, GET) : ce que la feuille de
+ * partage du téléphone transmet (titre, texte, lien) ouvre « Nouvelle
+ * annonce » pré-remplie. Rien n'est téléchargé depuis le portail.
+ */
+export function sharedListingQuery(
+  query: LocationQuery
+): Record<string, string> {
+  const shared = parseSharedListing({
+    title: first(query.title),
+    text: first(query.text),
+    url: first(query.url),
+  })
+  return {
+    partage: '1',
+    ...(shared.url ? { url: shared.url } : {}),
+    ...(shared.text ? { texte: shared.text.slice(0, 20_000) } : {}),
+    ...(shared.title ? { titre: shared.title.slice(0, 300) } : {}),
+  }
+}
 
 const routes: RouteRecordRaw[] = [
   {
@@ -46,6 +71,27 @@ const routes: RouteRecordRaw[] = [
     name: 'assumptions',
     component: () => import('@/views/AssumptionsPage.vue'),
     meta: { title: 'Hypothèses', requiresAuth: true },
+  },
+  {
+    path: '/activite',
+    name: 'activity',
+    component: () => import('@/views/ActivityPage.vue'),
+    meta: { title: 'Activité', requiresAuth: true },
+  },
+  {
+    path: '/notifications',
+    name: 'notifications',
+    component: () => import('@/views/NotificationsPage.vue'),
+    meta: { title: 'Notifications', requiresAuth: true },
+  },
+  {
+    path: '/partager',
+    name: 'share',
+    meta: { title: 'Partager une annonce', requiresAuth: true },
+    redirect: to => ({
+      name: 'listing-new',
+      query: sharedListingQuery(to.query),
+    }),
   },
   {
     path: '/login',

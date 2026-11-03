@@ -3,7 +3,16 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
+État au 3 novembre 2026 : **les lots 0 à 6 sont livrés** côté code, tests et documentation
+(branche `build/lots-0-6`). Restent les actions d'exploitation (Supabase cloud, Vercel, clés et
+connecteur : [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard »
+dans chaque lot, et les critères « Fini quand » qui demandent le déploiement ou un usage réel
+(lot 1 : déploiement et mobile de Chloé ; lot 2 : dix essais d'extraction ; lot 6 : push et
+partage sur les vrais téléphones), à constater après la mise en ligne.
+
 ## Lot 0 : socle
+
+Statut : livré.
 
 - Monorepo pnpm, `tsconfig.base.json`, ESLint, Prettier, husky, CI GitHub Actions.
 - `packages/domain` : portage de `compute`, des contrôles de louabilité et du verdict de
@@ -23,6 +32,8 @@ sont en base locale avec leur point géographique.
 
 ## Lot 1 : MVP, parité avec l'artefact, carte et MCP
 
+Statut : livré.
+
 - Besoins C1, C2, S1 à S3, E1, E2, L1, K1 à K3, G1, G2.
 - `apps/web` : connexion, synthèse, tableau comparatif et cartes, carte MapLibre des annonces
   avec filtre par point et rayon, filtres, panneau de fiche avec aperçu en direct, hypothèses,
@@ -37,6 +48,8 @@ apparaît sur la carte et sur le mobile de Chloé comme « nouvelle ».
 
 ## Lot 2 : normalisation assistée par IA
 
+Statut : livré.
+
 - Besoins C3 (prompt MCP « analyser cette annonce »), C4, C5, C6, C7.
 - Extraction serveur depuis texte collé et captures ; fiche pré-remplie à valider ; provenance et
   confiance affichées ; champs manquants en tâches ; doublons détectés à la création ; géocodage
@@ -47,6 +60,8 @@ de trois corrections manuelles en moyenne sur dix essais.
 
 ## Lot 3 : prix cible et négociation
 
+Statut : livré.
+
 - Besoins N1 à N3, S5, C8, E5.
 - Prix cible par critère, décote, classement ; tableau de sensibilité ; historique des prix et des
   offres ; frais de notaire par barème ; `get_target_price` et `record_offer` dans le MCP.
@@ -55,6 +70,8 @@ Fini quand : la fiche répond « à partir de quel prix » et la propriété `rd
 est testée.
 
 ## Lot 4 : critères géographiques et données ouvertes
+
+Statut : livré.
 
 - Besoins G3 à G7, D1 à D5 et D7, L2, L3, N4 ; Géorisques (D6) passe au lot 5 avec la
   checklist réglementaire (ADR 0011).
@@ -69,6 +86,8 @@ une adresse remplit coordonnées, DPE vérifié, plafond et arrêt le plus proch
 DVF du quartier s'affichent avec leur date.
 
 ## Lot 5 : phase 1 et phase 2 avancées
+
+Statut : livré.
 
 - Besoins E3, E4, E6, E7, L4, L5, D6.
 - Coût d'occupation contre loyer actuel, scénarios « et si » enregistrables, fiscalité estimée,
@@ -85,6 +104,25 @@ l'adresse compris.
 
 ## Lot 6 : confort
 
+Statut : livré.
+
 - Besoins S4, S6, S7, K4, C9.
 - Visites avec photos, journal d'activité, notifications, « ce qui a changé », partage mobile,
   export CSV et JSON.
+- Livré : visites faites ou planifiées (participants, compte rendu, points positifs et négatifs,
+  note, tâche « Préparer la visite », statut « visité » proposé), photos dans un bucket Supabase
+  Storage privé (un dossier par espace, envoi direct par URL signée, vignettes réduites sur
+  l'appareil, lecture par URL signées courtes, suppression par l'auteur) ; journal lisible par
+  annonce et par espace avec filtres ; « ce qui a changé » par membre (bandeau, champs modifiés
+  dans la fiche, « tout marquer comme vu ») ; notifications dans l'application, en web push
+  (`web-push`, clés VAPID) et par e-mail en option (interface et envoi HTTP générique, inerte
+  par défaut), préférences par type et par canal ; cible de partage de la PWA ; webhook signé
+  d'alertes e-mail transférées en brouillons à valider ; export CSV et JSON versionné ;
+  `add_visit`, `list_visits` et `whats_new` dans le MCP (28 outils). ADR 0014 et 0015.
+- Plus tard : partage de captures d'écran vers la PWA (POST et service worker), import depuis
+  l'export JSON, un fournisseur d'e-mails choisi par ADR si l'e-mail sert vraiment.
+
+Fini quand : Chloé reçoit sur son téléphone la notification d'une annonce ajoutée par Claude,
+l'ouvre, voit ce qui a changé, ajoute la visite et ses photos ; une annonce partagée depuis
+l'application Leboncoin arrive pré-remplie ; l'export s'ouvre dans un tableur. (Vérifié en tests
+automatisés ; à confirmer sur les vrais téléphones après le déploiement.)

@@ -28,6 +28,8 @@
     fieldSources?: FieldProvenanceMap | null
     /** Chemins du formulaire (`surface`, `rentalPlan.targetRent`) à mettre en évidence. */
     missing?: readonly string[]
+    /** Champs modifiés depuis la dernière ouverture (`price`, `location.commune`, `rentalPlan.targetRent`). */
+    changed?: readonly string[]
   }>()
   const form = defineModel<ListingForm>({ required: true })
 
@@ -83,9 +85,20 @@
   }
 
   /** La pastille et la mise en évidence d'un champ, par son identifiant. */
+  /** Les noms d'un champ dans le journal : le sien, et celui de la localisation. */
+  function changedKeys(path: string): string[] {
+    if (path === 'floorLabel') return ['floor', 'floorLabel']
+    if (path === 'longitude' || path === 'latitude')
+      return ['location.point', 'location']
+    if (['addressRaw', 'commune', 'district'].includes(path))
+      return [`location.${path}`]
+    return [path]
+  }
+
   function meta(id: string): {
     provenance: Provenance | null
     missing: boolean
+    changed: boolean
   } {
     const path = FIELD_PATHS[id] ?? id
     // L'étage est saisi en libellé ; sa provenance est celle de l'étage lu.
@@ -98,6 +111,9 @@
           : null),
       missing: (props.missing ?? []).includes(
         path === 'floorLabel' ? 'floor' : path
+      ),
+      changed: changedKeys(path).some(key =>
+        (props.changed ?? []).includes(key)
       ),
     }
   }

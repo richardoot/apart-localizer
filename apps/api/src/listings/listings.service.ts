@@ -534,14 +534,25 @@ export class ListingsService {
     return this.afterWrite(member, id, channel)
   }
 
-  /** Marque l'annonce comme vue par le membre (le drapeau « nouveau » s'éteint pour lui seul). */
+  /**
+   * Marque l'annonce comme vue par le membre (le drapeau « nouveau »
+   * s'éteint pour lui seul, « ce qui a changé » repart de maintenant pour
+   * cette fiche) ; ses notifications sur l'annonce passent lues.
+   */
   async markSeen(member: Member, id: string): Promise<EvaluatedListing> {
     await this.findRow(member, id)
-    await this.prisma.listingView.upsert({
-      where: { listingId_memberId: { listingId: id, memberId: member.id } },
-      create: { listingId: id, memberId: member.id },
-      update: { seenAt: new Date() },
-    })
+    const now = new Date()
+    await this.prisma.$transaction([
+      this.prisma.listingView.upsert({
+        where: { listingId_memberId: { listingId: id, memberId: member.id } },
+        create: { listingId: id, memberId: member.id, seenAt: now },
+        update: { seenAt: now },
+      }),
+      this.prisma.notification.updateMany({
+        where: { recipientId: member.id, listingId: id, readAt: null },
+        data: { readAt: now },
+      }),
+    ])
     return this.get(member, id)
   }
 

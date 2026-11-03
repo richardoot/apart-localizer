@@ -202,6 +202,20 @@ probables avec lien vers l'annonce existante (« C'est un doublon, ouvrir l'exis
 provenance `user`. La fiche d'une annonce existante montre les mêmes pastilles et marque les
 tâches « IA · champ manquant ».
 
+## Partage mobile et alertes e-mail (lot 6)
+
+- **Partage depuis le téléphone** : la cible de partage de la PWA (`/partager`) remplit
+  « Coller une annonce » avec le titre, le texte et le lien que la feuille de partage transmet,
+  et lance la même extraction (`POST /listings/extract`, qualité `precise`). Sans clé (503), la
+  saisie manuelle reprend le lien, le titre et le texte. Rien n'est téléchargé.
+- **Alertes e-mail transférées** (`POST /inbound/email/:workspaceId`, ADR 0015) : chaque
+  annonce repérée dans l'e-mail (dix au plus) est extraite séparément, avec son extrait et son
+  lien, par le **modèle économique** (`quality: "fast"`, `AI_MODEL_BULK`), au canal `system` ;
+  le coût de chaque appel est journalisé comme une extraction ordinaire (`ai.extraction`). Les
+  fiches deviennent des brouillons à valider. Sans clé, ou si un appel échoue, l'analyseur
+  simple de `contracts/share.ts` prend le lien, le prix, la surface, les pièces et la commune
+  quand le texte les dit (provenance « annonce », confiance 0,6) : aucune valeur n'est devinée.
+
 ## Variables d'environnement (API)
 
 ```

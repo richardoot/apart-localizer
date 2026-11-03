@@ -4,7 +4,11 @@ Suivi d'annonces d'achat d'appartement assisté par IA : normalisation des crit�
 partagé (interface web et MCP), carte et critères géographiques, évaluation de la rentabilité et
 du prix cible, puis l'étude dans le temps : coût d'occupation en phase 1, scénarios « et si »,
 fiscalité estimée, projection jusqu'à la revente avec TRI, loyer de marché par comparables et
-checklist réglementaire datée avec les risques Géorisques.
+checklist réglementaire datée avec les risques Géorisques ; et le confort du quotidien à deux :
+visites avec photos privées, journal d'activité, « ce qui a changé depuis ma dernière visite »,
+notifications (cloche, web push, e-mail en option), partage d'une annonce depuis le téléphone,
+alertes e-mail transférées en brouillons à valider, export CSV et JSON. Les lots 0 à 6 de la
+feuille de route sont livrés.
 
 Documentation :
 
@@ -15,6 +19,8 @@ Documentation :
 - [Connecteur MCP](docs/mcp.md)
 - [Extraction par IA](docs/ia.md)
 - [Données ouvertes](docs/open-data.md)
+- [Export des données](docs/export.md)
+- [Confidentialité et données personnelles](docs/confidentialite.md)
 - [Déploiement](docs/deploiement.md)
 - [Décisions d'architecture](docs/decisions/README.md)
 - [Règles de travail](CLAUDE.md)
@@ -27,9 +33,11 @@ apps/
                 MCP (/mcp, découverte OAuth), extraction IA (@anthropic-ai/sdk), géocodage et
                 isochrones IGN, DPE ADEME, encadrement, arrêts TBM, DVF, Géorisques, critères de
                 recherche, doublons, scénarios, comparables de loyer, projection et conformité
-                (module study), throttler, Sentry en option
+                (module study), visites et photos (Supabase Storage), journal lisible, « ce qui
+                a changé », notifications (web-push), alertes e-mail entrantes, export CSV et
+                JSON, throttler, Sentry en option
   web/          Vue 3.5 + Vite, Tailwind 4, TanStack Query et Table, MapLibre GL + terra-draw,
-                reka-ui, Supabase Auth, PWA, Sentry en option
+                reka-ui, Supabase Auth, PWA (share target, web push), Sentry en option
 packages/
   contracts/    schémas Zod partagés (annonces, hypothèses et barème notaire, paramètres fiscaux
                 datés, offres, GeoJSON, filtres, sorties calculées, prix cible, négociation,
@@ -105,8 +113,13 @@ Migrations : `20261103000000_init` (schéma complet, PostGIS, index GiST),
 `20261103180000_lot4_criteria_opendata` (entrées des annonces dans les critères, zonage de
 l'encadrement, clés d'import des arrêts et des ventes DVF, numéro de DPE et instantané open data
 des annonces), puis `20261103210000_lot5_scenarios_rent_comparables` (scénarios « et si »
-enregistrés, annonces de location comparables). Une base créée avant un lot doit rejouer
-`prisma:deploy`.
+enregistrés, annonces de location comparables), puis `20261103230000_lot6_visits_notifications`
+(visites et photos, notifications et abonnements push, brouillons reçus par e-mail, horodatage
+de visite et préférences des membres). Une base créée avant un lot doit rejouer `prisma:deploy`.
+
+Supabase Storage est actif dans `supabase/config.toml`, qui déclare le bucket privé
+`visit-photos` : après une mise à jour du dépôt, `supabase stop && supabase start` (les données de
+la base restent), puis `supabase seed buckets` pour créer le bucket.
 
 ## Démarrage
 
@@ -121,7 +134,10 @@ et garde-fous dans [docs/mcp.md](docs/mcp.md).
 
 ### Écrans du web
 
-- **Synthèse** (`/`) : compteurs (nouvelles, suivies, dans la cible, meilleur brut, prix moyen au
+- **Synthèse** (`/`) : bandeau **« Depuis votre dernière visite »** (nouvelles annonces,
+  changements de prix et de statut, avis et tâches de l'autre membre, entrées dans un critère,
+  détail et liens, « Tout marquer comme vu »), annonces **reçues par e-mail à valider** (valider
+  ouvre la fiche pré-remplie, écarter), compteurs (nouvelles, suivies, dans la cible, meilleur brut, prix moyen au
   m², à visiter), répartition par statut, tâches ouvertes et en retard, critères de recherche
   actifs avec leurs annonces et leurs nouveautés pour moi, nouvelles annonces, meilleures
   annonces.
@@ -139,6 +155,10 @@ et garde-fous dans [docs/mcp.md](docs/mcp.md).
   à pied, à vélo ou en voiture, aperçu du nombre d'annonces), archivage, suppression,
   « Voir les annonces ». Une annonce créée qui entre dans un critère l'annonce à l'ouverture de
   sa fiche.
+- **Partager** (`/partager`, cible de partage de la PWA) : sur Android, « Partager » depuis
+  l'application Leboncoin, SeLoger ou le navigateur ouvre « Nouvelle annonce » avec le lien et le
+  texte transmis et lance l'extraction ; sans IA, la saisie manuelle reprend le lien. Rien n'est
+  téléchargé depuis le portail.
 - **Nouvelle annonce** (`/annonces/nouvelle`) : onglet « Coller une annonce » (texte de la page,
   lien, captures d'écran, bouton Analyser avec coût affiché) qui pré-remplit la fiche avec une
   pastille de provenance et de confiance par champ, les champs indispensables à compléter et le
@@ -168,11 +188,26 @@ et garde-fous dans [docs/mcp.md](docs/mcp.md).
   tableau annuel, revente ; horizon, régime et TMI de l'aperçu ; « estimation, pas un conseil
   fiscal »), **Loyer de marché** (comparables saisis, médiane et quartiles au m², position du
   loyer visé et du plafond, « Retenir » écrit le loyer de marché de la phase 2) et
-  **Conformité** (checklist datée et sourcée, risques Géorisques à l'adresse).
+  **Conformité** (checklist datée et sourcée, risques Géorisques à l'adresse). Trois onglets en
+  tête de fiche (lot 6) : **Fiche** (tout ce qui précède, avec l'encadré « Depuis votre dernière
+  ouverture » et les champs modifiés par l'autre membre ou par Claude mis en évidence),
+  **Visites** (faites ou planifiées, participants, compte rendu, points positifs et négatifs,
+  note, tâche « Préparer la visite », statut « Visité » proposé sans être forcé, photos réduites
+  sur l'appareil, envoyées dans un stockage privé, vignettes par URL signées, supprimables par
+  leur auteur) et **Journal** (qui, quoi, quand, par quel canal, champs avant et après).
 - **Comparer** (`/comparer?ids=…`) : depuis le tableau, cocher deux à six annonces puis
   « Comparer » : indicateurs, prix cibles, décotes et verdicts côte à côte, la meilleure par
   indicateur marquée ★. Le tableau comparatif porte aussi les colonnes triables « Prix cible »,
   « Décote » et « Classement ».
+- **Activité** (`/activite`) : journal de l'espace, filtres par membre, canal (web, MCP,
+  import, système) et type d'événement, paginé.
+- **Notifications** (`/notifications` et la cloche de l'en-tête) : notifications lues et non
+  lues (nouvelle annonce de l'autre membre ou de Claude, statut, tâche assignée, entrée dans un
+  critère, réponse à une offre, annonces reçues par e-mail), préférences par type et par canal
+  (application, push, e-mail), abonnement web push de l'appareil, adresse du webhook d'alertes
+  e-mail.
+- **Export** : bouton « Exporter » de la liste, CSV (« ; », UTF-8, colonnes en français) ou JSON
+  complet versionné, de la sélection affichée ou de tout l'espace ([docs/export.md](docs/export.md)).
 - **Hypothèses** (`/hypotheses`) : hypothèses de l'espace, versionnées : financement, frais de
   notaire par taux forfaitaire ou par barème (droit départemental, taxe communale, frais
   d'assiette, tranches d'émoluments, CSI, débours ; défauts Gironde datés, voir le modèle de
@@ -198,10 +233,12 @@ pnpm build
 ```
 
 Les e2e (REST, géo, collaboration, prix cible et négociation, extraction IA, phase 1,
-scénarios, projection, comparables et conformité, MCP par appels JSON-RPC réels) demandent
+scénarios, projection, comparables et conformité, visites et photos, journal, nouveautés,
+notifications, alertes e-mail signées, export, MCP par appels JSON-RPC réels) demandent
 `TEST_DATABASE_URL` (voie 2 ci-dessus, ou le Postgres du Supabase CLI sur 54322). Le client
-Anthropic, le géocodeur et les isochrones IGN, la recherche DPE de l'ADEME et le rapport
-Géorisques sont remplacés par des factices dans le harnais ; les tests du web
+Anthropic, le géocodeur et les isochrones IGN, la recherche DPE de l'ADEME, le rapport
+Géorisques, Supabase Storage, l'envoi web push et l'envoi d'e-mails sont remplacés par des
+factices dans le harnais ; les tests du web
 mockent MapLibre, terra-draw et Supabase : aucun réseau, aucune clé. La CI GitHub Actions (`.github/workflows/ci.yml`) rejoue lint,
 format, type-check, unitaires, e2e sur un service PostGIS, puis le build.
 

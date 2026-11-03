@@ -40,6 +40,33 @@ le dépôt.
    `supabase/config.toml`) et ce relais répond 503 ; passer `enabled = true` puis redémarrer la
    pile pour tester le flux complet hors cloud.
 
+### Stockage des photos de visite (lot 6)
+
+9. **Storage** : dans « Storage → New bucket », créer le bucket `visit-photos` (ou le nom donné à
+   `STORAGE_BUCKET_VISIT_PHOTOS`) **privé** (« Public bucket » décoché), taille maximale
+   `10 MB`, types autorisés `image/jpeg, image/png, image/webp`. Équivalent SQL (éditeur SQL du
+   tableau de bord) :
+
+   ```sql
+   insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+   values ('visit-photos', 'visit-photos', false, 10485760,
+           array['image/jpeg', 'image/png', 'image/webp']);
+   ```
+
+10. **Politiques** : n'en ajouter **aucune** sur `storage.objects` pour ce bucket. L'API passe
+    par la clé `service_role` (qui contourne la RLS) et ne donne au navigateur que des URL
+    signées : une URL d'envoi à usage unique (valable deux heures, durée fixée par Supabase) et
+    des URL de lecture de 600 s (`STORAGE_SIGNED_URL_TTL_SECONDS`). Une politique pour `anon` ou
+    `authenticated` ouvrirait les photos hors de l'API. Les objets sont rangés
+    `<espace>/<annonce>/<visite>/<photo>.jpg` (ADR 0014).
+11. Vérifier après le déploiement : ajouter une visite et une photo depuis le web, puis
+    « Storage → visit-photos » montre le dossier de l'espace ; ouvrir l'URL publique de l'objet
+    (`…/storage/v1/object/public/visit-photos/…`) doit échouer.
+
+En local, `supabase/config.toml` active Storage et déclare ce bucket : après la mise à jour,
+`supabase stop && supabase start` (les données de la base sont conservées), puis
+`supabase seed buckets` le crée avec ses réglages (privé, 10 Mio, jpeg/png/webp).
+
 ## 2. Migration Prisma en production
 
 Les migrations s'appliquent avec la connexion directe, jamais le pooler.
@@ -109,6 +136,11 @@ et le dossier de sortie (`dist`). Variables d'environnement (Production, et Prev
 | `ISOCHRONE_URL`                                                  | facultatif, défaut Géoplateforme IGN (`https://data.geopf.fr/navigation/isochrone`)                                    |
 | `ADEME_DPE_URL`                                                  | facultatif, défaut API data-fair de l'ADEME (jeu `dpe03existant`)                                                      |
 | `GEORISQUES_URL`                                                 | facultatif, défaut rapport de risques Géorisques v1 (`https://www.georisques.gouv.fr/api/v1/resultats_rapport_risque`) |
+| `STORAGE_BUCKET_VISIT_PHOTOS`                                    | facultatif, défaut `visit-photos` (bucket privé, § 1)                                                                  |
+| `STORAGE_SIGNED_URL_TTL_SECONDS`                                 | facultatif, défaut 600 (30 à 3 600) : validité des URL de lecture des photos                                           |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`         | web push (§ 7) ; vides = push désactivé, la cloche reste                                                               |
+| `EMAIL_HTTP_URL`, `EMAIL_FROM`, `EMAIL_HTTP_TOKEN`               | facultatif, e-mail de notification (§ 8) ; vides = inerte                                                              |
+| `INBOUND_EMAIL_SECRET`                                           | secret HMAC du webhook d'alertes e-mail (§ 9), 32 caractères au moins ; vide = webhook désactivé (503)                 |
 
 Après le premier déploiement : `GET https://<api>.vercel.app/health` doit répondre `200` avec
 `checks.postgis.status: "ok"`, et `GET /.well-known/oauth-protected-resource` doit annoncer
@@ -158,7 +190,92 @@ du projet Vercel correspondant ; sans DSN, le SDK n'est pas initialisé. Les opt
 ni corps de requête, ni chaîne de requête, ni cookies ; le membre est un identifiant opaque, les
 URL des fils d'Ariane sont anonymisées (`apps/api/src/common/sentry.ts`, `apps/web/src/lib/sentry.ts`).
 
-## 7. Liste de contrôle
+## 7. Web push (lot 6)
+
+1. Générer une paire de clés VAPID, **une fois**, sur un poste :
+
+   ```bash
+   pnpm --filter @apart/api exec web-push generate-vapid-keys
+   ```
+
+   Garder la clé privée hors du dépôt (gestionnaire de mots de passe) ; la perdre oblige les
+   appareils à se réabonner.
+
+2. Sur le projet Vercel API : `VAPID_PUBLIC_KEY` (clé publique), `VAPID_PRIVATE_KEY` (clé
+   privée), `VAPID_SUBJECT` (`mailto:` suivi d'une adresse de contact, ou `https://` et l'URL du
+   web). Redéployer.
+3. Sur chaque téléphone : ouvrir le web déployé (https), l'installer (« Ajouter à l'écran
+   d'accueil » ; obligatoire sur iPhone pour le push), puis « Notifications → Activer sur cet
+   appareil ». Le service worker de la PWA (build seulement, pas `pnpm dev`) reçoit les messages
+   (`public/push-handler.js`).
+4. Vérifier : l'autre membre ajoute une annonce ; une notification arrive sur l'appareil et
+   ouvre la fiche. Un abonnement expiré (404 ou 410) est retiré tout seul.
+
+## 8. E-mail de notification (facultatif)
+
+Sans configuration, la colonne « E-mail » des préférences n'envoie rien (ADR 0015). Pour
+l'activer, renseigner `EMAIL_HTTP_URL` (un point d'envoi HTTP qui accepte un POST JSON
+`{ from, to: [adresse], subject, text, html }`), `EMAIL_FROM` (expéditeur autorisé chez le
+fournisseur) et, s'il en faut un, `EMAIL_HTTP_TOKEN` (envoyé en `Authorization: Bearer`). Ce
+corps convient tel quel à certaines API d'envoi transactionnel ; sinon, un petit relais le
+traduit. Aucun fournisseur n'est imposé ; choisir et ajouter un SDK serait un nouvel ADR.
+
+## 9. Alertes e-mail entrantes (lot 6)
+
+Les alertes des portails (SeLoger, Leboncoin, PAP, Bien'ici…) transférées à une adresse dédiée
+deviennent des annonces « à valider » sur la synthèse. L'API ne reçoit pas d'e-mail elle-même :
+un **service d'e-mails entrants** (au choix : une route d'e-mails entrants d'un fournisseur
+transactionnel, un « Email Worker », un script sur une boîte IMAP…) reçoit le message et appelle
+le webhook. Rien n'est imposé ; l'adaptateur doit :
+
+1. Produire le corps JSON générique, UTF-8 :
+   `{ "from": "…", "to": "…", "subject": "…", "text": "…", "html": "…", "receivedAt": "ISO 8601" }`
+   (`text` ou `html` au moins ; tailles bornées par `InboundEmailSchema`).
+2. Le signer avec `INBOUND_EMAIL_SECRET` (générer par exemple avec `openssl rand -hex 32`, le
+   poser sur Vercel et dans l'adaptateur, jamais dans le dépôt) :
+
+   ```js
+   import { createHmac } from 'node:crypto'
+   const body = JSON.stringify(email)
+   const timestamp = Math.floor(Date.now() / 1000)
+   const signature =
+     'sha256=' +
+     createHmac('sha256', process.env.INBOUND_EMAIL_SECRET)
+       .update(`${timestamp}.${body}`)
+       .digest('hex')
+   await fetch(`https://<api>.vercel.app/inbound/email/${workspaceId}`, {
+     method: 'POST',
+     headers: {
+       'content-type': 'application/json',
+       'x-apart-timestamp': String(timestamp),
+       'x-apart-signature': signature,
+     },
+     body,
+   })
+   ```
+
+   L'horodatage doit être à moins de cinq minutes de l'heure du serveur.
+
+3. Appeler `POST /inbound/email/<identifiant de l'espace>` ; l'identifiant et le chemin exact
+   s'affichent dans « Notifications → Transfert d'alertes e-mail ». Réponse `202` :
+   `{ candidates, created, skipped, draftIds, extractedBy }`.
+
+Ensuite, dans la boîte qui reçoit les alertes, une règle de transfert vers l'adresse du service.
+Avec `ANTHROPIC_API_KEY`, chaque annonce repérée est lue par le modèle économique (quelques
+centimes, dix annonces au plus par e-mail) ; sans, l'analyseur simple prend lien, prix, surface,
+pièces et commune. Aucune page de portail n'est téléchargée : les liens de suivi des alertes sont
+gardés tels quels.
+
+## 10. Partage depuis le téléphone (lot 6)
+
+Une fois le web installé sur l'écran d'accueil d'un téléphone Android, « Partager » depuis
+l'application Leboncoin, SeLoger ou le navigateur propose apart-localizer : « Nouvelle annonce »
+s'ouvre avec le lien et le texte partagés et lance l'extraction (si `ANTHROPIC_API_KEY` est posée ;
+sinon la saisie manuelle reprend le lien). Le manifeste déclare `share_target` en GET vers
+`/partager`. Sur iPhone, Safari ne propose pas les applications web installées dans la feuille de
+partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « Coller une annonce ».
+
+## 11. Liste de contrôle
 
 - [ ] Projet Supabase créé, PostGIS actif, Google configuré, URL de redirection du web ajoutées.
 - [ ] Serveur OAuth 2.1 activé ; enregistrement dynamique ou client manuel ; portées déclarées si
@@ -174,3 +291,15 @@ URL des fils d'Ariane sont anonymisées (`apps/api/src/common/sentry.ts`, `apps/
 - [ ] `ANTHROPIC_API_KEY` posée sur le projet Vercel API, puis « Coller une annonce » testé
       depuis le web (coût affiché) et `extract_listing` depuis claude.ai.
 - [ ] Sentry : DSN posés si souhaité.
+- [ ] Migration du lot 6 appliquée (`20261103230000_lot6_visits_notifications`), `/health` vert.
+- [ ] Bucket `visit-photos` créé privé (10 Mo, jpeg/png/webp), sans politique ; une visite et
+      une photo testées depuis le web, l'URL publique de l'objet refusée.
+- [ ] Clés VAPID générées et posées (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) ;
+      PWA installée sur les deux téléphones, push activé, notification reçue.
+- [ ] Partage depuis l'application Leboncoin ou SeLoger sur Android : « Nouvelle annonce »
+      pré-remplie.
+- [ ] Si souhaité : `INBOUND_EMAIL_SECRET` posé, service d'e-mails entrants branché et une alerte
+      transférée devenue brouillon à valider.
+- [ ] Si souhaité : envoi d'e-mails configuré (`EMAIL_HTTP_URL`, `EMAIL_FROM`).
+- [ ] Export CSV ouvert dans Excel ou LibreOffice (accents et colonnes justes), export JSON
+      gardé comme sauvegarde.

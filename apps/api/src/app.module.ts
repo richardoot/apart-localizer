@@ -18,6 +18,10 @@ import { OffersModule } from './offers/offers.module'
 import { TasksModule } from './tasks/tasks.module'
 import { SearchCriteriaModule } from './search-criteria/search-criteria.module'
 import { StudyModule } from './study/study.module'
+import { VisitsModule } from './visits/visits.module'
+import { WhatsNewModule } from './whats-new/whats-new.module'
+import { InboundModule } from './inbound/inbound.module'
+import { ExportModule } from './export/export.module'
 import { McpModule } from './mcp/mcp.module'
 
 @Module({
@@ -48,6 +52,10 @@ import { McpModule } from './mcp/mcp.module'
     TasksModule,
     SearchCriteriaModule,
     StudyModule,
+    VisitsModule,
+    WhatsNewModule,
+    InboundModule,
+    ExportModule,
     McpModule,
   ],
   providers: [

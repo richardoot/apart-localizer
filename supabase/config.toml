@@ -120,16 +120,18 @@ port = 54324
 # sender_name = "Admin"
 
 [storage]
-enabled = false
+# Lot 6 : photos de visite (bucket privé, lu par URL signées émises par l'API).
+enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
-# Uncomment to configure local storage buckets
-# [storage.buckets.images]
-# public = false
-# file_size_limit = "50MiB"
-# allowed_mime_types = ["image/png", "image/jpeg"]
-# objects_path = "./images"
+# Le bucket des photos de visite, créé par `supabase seed buckets`. Privé :
+# aucune politique d'accès public, l'API (clé service_role) signe les URL
+# d'envoi et de lecture. Mêmes réglages à créer en cloud (docs/deploiement.md).
+[storage.buckets.visit-photos]
+public = false
+file_size_limit = "10MiB"
+allowed_mime_types = ["image/jpeg", "image/png", "image/webp"]
 
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]

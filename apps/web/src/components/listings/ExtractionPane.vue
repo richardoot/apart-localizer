@@ -1,11 +1,24 @@
 <script setup lang="ts">
-  import { ref } from 'vue'
+  import { onMounted, ref } from 'vue'
   import type { ExtractionResult } from '@apart/contracts'
   import { useExtraction } from '@/composables/useExtraction'
 
-  const emit = defineEmits<{ extracted: [result: ExtractionResult] }>()
+  const props = defineProps<{
+    /** Partage depuis le mobile : texte et lien transmis par la feuille de partage. */
+    initialText?: string | null
+    initialUrl?: string | null
+    /** Lance l'analyse dès l'ouverture (partage). */
+    autoAnalyze?: boolean
+  }>()
+  const emit = defineEmits<{
+    extracted: [result: ExtractionResult]
+    /** L'IA n'est pas configurée (503) : passer à la saisie manuelle. */
+    unavailable: []
+  }>()
 
   const extraction = useExtraction()
+  if (props.initialText) extraction.text.value = props.initialText
+  if (props.initialUrl) extraction.url.value = props.initialUrl
   const dragging = ref(false)
   const inputClass =
     'rounded-lg border border-line bg-bg px-3 py-1.5 text-sm w-full'
@@ -33,7 +46,12 @@
   async function analyze(): Promise<void> {
     const result = await extraction.analyze()
     if (result) emit('extracted', result)
+    else if (extraction.unavailable.value) emit('unavailable')
   }
+
+  onMounted(() => {
+    if (props.autoAnalyze && extraction.canAnalyze.value) void analyze()
+  })
 </script>
 
 <template>

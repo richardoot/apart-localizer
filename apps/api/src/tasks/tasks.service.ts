@@ -66,7 +66,12 @@ export class TasksService {
           actorMemberId: member.id,
           channel,
           action: 'task.created',
-          after: { taskId: task.id, label: task.label, origin: task.origin },
+          after: {
+            taskId: task.id,
+            label: task.label,
+            origin: task.origin,
+            assigneeId: task.assigneeId,
+          },
         },
         tx
       )
@@ -109,7 +114,12 @@ export class TasksService {
               : update.done === false
                 ? 'task.reopened'
                 : 'task.updated',
-          before: { taskId: task.id, done: task.done, label: task.label },
+          before: {
+            taskId: task.id,
+            done: task.done,
+            label: task.label,
+            assigneeId: task.assigneeId,
+          },
           after: { taskId: task.id, ...update },
         },
         tx

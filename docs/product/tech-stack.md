@@ -46,8 +46,11 @@ Ce qui change par rapport à bankin-analyzer :
   Il n'y a plus deux descriptions d'une même entrée.
 - **Modules** : `workspace`, `listings`, `assumptions`, `rental`, `renovation`, `opinions`,
   `tasks`, `search-criteria`, `geo`, `opendata`, `ai`, `mcp`, `auth`, `health`, et `study` au
-  lot 5 (phase 1, scénarios, projection, comparables de loyer, conformité). Chaque module
-  expose ses services ; le module `mcp` ne fait qu'orchestrer.
+  lot 5 (phase 1, scénarios, projection, comparables de loyer, conformité) ; au lot 6
+  `visits` (photos dans Supabase Storage), `notifications` (web push par `web-push`, e-mail
+  en option), `whats-new`, `inbound` (alertes e-mail signées) et `export`, et `activity` lit
+  le journal. Chaque module expose ses services ; le module `mcp` ne fait qu'orchestrer.
+  En pratique, travaux et phase 2 vivent dans `listings`.
 - Repris tels quels : le garde MCP, `/.well-known/oauth-protected-resource`, le journal de
   requêtes avec identifiant, les en-têtes de sécurité, le filtre d'exceptions et le mapping des
   erreurs Prisma, `/health`, le `build:vercel`.
@@ -135,8 +138,10 @@ l'agent qui appelle le MCP. La provenance par champ est un type générique `Sou
   jetons de couleur de l'artefact (accent sarcelle, échelle DPE, polices Bricolage Grotesque et
   IBM Plex) en clair et en sombre.
 - Formulaires validés par les schémas Zod de `contracts`, aperçu en direct par `domain`.
-- PWA installable, cache de lecture hors ligne, `share_target` prévu pour le lot de partage
-  mobile.
+- PWA installable, coquille en cache hors ligne ; au lot 6, `share_target` en GET vers
+  `/partager` (lien et texte partagés, extraction lancée) et web push (service worker de
+  `vite-plugin-pwa` avec `public/push-handler.js`, ADR 0015). La lecture hors ligne des
+  données n'est pas faite.
 - Graphiques limités au tableau de sensibilité et, au lot 5, au graphique de la projection : un
   SVG écrit à la main (barres et une ligne) a suffi, sans bibliothèque (ADR 0012).
 

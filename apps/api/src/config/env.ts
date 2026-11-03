@@ -61,6 +61,33 @@ export const EnvSchema = z.object({
   ISOCHRONE_URL: z.string().url().optional(),
   ADEME_DPE_URL: z.string().url().optional(),
   GEORISQUES_URL: z.string().url().optional(),
+  // Lot 6 : photos de visite dans Supabase Storage (bucket privé).
+  STORAGE_BUCKET_VISIT_PHOTOS: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9._-]{1,62}$/)
+    .default('visit-photos')
+    .describe('Bucket privé des photos de visite'),
+  STORAGE_SIGNED_URL_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(30)
+    .max(3600)
+    .default(600)
+    .describe('Durée de validité des URL signées de lecture, en secondes'),
+  // Web push : clés VAPID (npx web-push generate-vapid-keys), jamais commitées.
+  VAPID_PUBLIC_KEY: z.string().min(20).optional(),
+  VAPID_PRIVATE_KEY: z.string().min(20).optional(),
+  VAPID_SUBJECT: z
+    .string()
+    .regex(/^(mailto:|https:\/\/)/)
+    .optional()
+    .describe('Contact VAPID : mailto:adresse ou https://site'),
+  // E-mail sortant (facultatif) : un point d'envoi HTTP JSON, sinon inerte.
+  EMAIL_HTTP_URL: z.string().url().optional(),
+  EMAIL_HTTP_TOKEN: z.string().min(1).optional(),
+  EMAIL_FROM: z.string().min(3).optional(),
+  // E-mails d'alerte entrants : secret HMAC du webhook (32 caractères au moins).
+  INBOUND_EMAIL_SECRET: z.string().min(32).optional(),
 })
 export type Env = z.infer<typeof EnvSchema>
 

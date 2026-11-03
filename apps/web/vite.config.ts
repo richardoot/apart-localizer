@@ -12,7 +12,9 @@ export default defineConfig({
     vue(),
     tailwindcss(),
     // Installable, with the app shell cached for a visit without network.
-    // Share target and offline reads of the data come with later lots.
+    // Lot 6: share target (a listing shared from the phone opens « Nouvelle
+    // annonce ») and Web Push (public/push-handler.js, imported by the
+    // generated service worker).
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
@@ -26,6 +28,13 @@ export default defineConfig({
         display: 'standalone',
         background_color: '#f3f6f6',
         theme_color: '#0e6b63',
+        // GET: only what the share sheet hands over (title, text, link);
+        // the page itself is never downloaded.
+        share_target: {
+          action: '/partager',
+          method: 'GET',
+          params: { title: 'title', text: 'text', url: 'url' },
+        },
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -41,6 +50,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         // API calls are never served from the cache by the shell's worker.
         navigateFallbackDenylist: [/^\/api/],
+        // Push and notification clicks, in plain JS next to the shell.
+        importScripts: ['/push-handler.js'],
       },
       devOptions: { enabled: false },
     }),

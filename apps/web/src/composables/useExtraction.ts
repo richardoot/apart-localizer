@@ -23,6 +23,8 @@ export function useExtraction() {
   const images = ref<PendingImage[]>([])
   const pending = ref(false)
   const error = ref<string | null>(null)
+  /** Vrai quand l'API a répondu 503 : l'IA n'est pas configurée côté serveur. */
+  const unavailable = ref(false)
   const result = ref<ExtractionResult | null>(null)
 
   const canAnalyze = computed(
@@ -59,6 +61,7 @@ export function useExtraction() {
     if (!canAnalyze.value) return null
     pending.value = true
     error.value = null
+    unavailable.value = false
     try {
       const trimmedUrl = url.value.trim()
       result.value = await api.listings.extract({
@@ -68,6 +71,7 @@ export function useExtraction() {
       })
       return result.value
     } catch (err) {
+      unavailable.value = err instanceof ApiError && err.status === 503
       error.value =
         err instanceof ApiError
           ? err.status === 503
@@ -91,6 +95,7 @@ export function useExtraction() {
     images,
     pending,
     error,
+    unavailable,
     result,
     canAnalyze,
     addFiles,

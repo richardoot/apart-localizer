@@ -1,7 +1,7 @@
 /**
  * Boots the real application for e2e specs, on a database of its own.
  *
- * Six things are substituted, and only six:
+ * Nine things are substituted, and only nine:
  *  - PrismaService, pointed at a throwaway PostGIS database provisioned from
  *    prisma/migrations (see e2e-database.ts);
  *  - SupabaseService, the one call that leaves the machine to validate a
@@ -15,7 +15,12 @@
  *    DPE" (`ctx.dpe.fetchImpl`) and the Géoplateforme isochrone fails
  *    (`ctx.isochrone.fetchImpl`), unless a spec scripts them;
  *  - the Géorisques report's fetch, which fails (`ctx.georisques.fetchImpl`)
- *    unless a spec scripts it.
+ *    unless a spec scripts it;
+ *  - Supabase Storage for visit photos (`ctx.storage`, in memory: a spec
+ *    "uploads" with `ctx.storage.put`);
+ *  - the Web Push sender (`ctx.push`, records what would be sent, or answers
+ *    an HTTP status per endpoint);
+ *  - the e-mail sender (`ctx.email`, disabled unless a spec enables it).
  *
  * Everything else runs for real: SupabaseGuard (token extraction, member
  * resolution), the Zod validation pipe, the exception filter, the services,
@@ -39,7 +44,15 @@ import { GeocodingService } from '../src/opendata/geocoding.service'
 import { DpeService } from '../src/opendata/dpe.service'
 import { IsochroneService } from '../src/opendata/isochrone.service'
 import { GeorisquesService } from '../src/opendata/georisques.service'
+import { PHOTO_STORAGE } from '../src/visits/photo-storage'
+import { PUSH_SENDER } from '../src/notifications/push-sender'
+import { EMAIL_SENDER } from '../src/notifications/email-sender'
 import { createE2eDatabase } from './e2e-database'
+import {
+  FakeEmailSender,
+  FakePhotoStorage,
+  FakePushSender,
+} from './fixtures/delivery'
 import type { E2eDatabase } from './e2e-database'
 
 /** A caller: a bearer token, and the Supabase identity it stands for. */
@@ -101,6 +114,12 @@ export interface E2eContext {
   isochrone: IsochroneService
   /** The Géorisques report; set `fetchImpl` to script its answers. */
   georisques: GeorisquesService
+  /** Visit photos' storage, in memory. */
+  storage: FakePhotoStorage
+  /** The Web Push sender. */
+  push: FakePushSender
+  /** The e-mail sender. */
+  email: FakeEmailSender
   /** Authorization header for a known identity. */
   auth: (identity: E2eIdentity) => { Authorization: string }
   /** Closes the app and drops the database. */
@@ -149,6 +168,9 @@ export async function createE2eApp(
   )
   const database = await createE2eDatabase()
   const ai: FakeAnthropic = { messages: { parse: vi.fn() } }
+  const storage = new FakePhotoStorage()
+  const push = new FakePushSender()
+  const email = new FakeEmailSender()
 
   const moduleFixture: TestingModule = await Test.createTestingModule({
     imports: [AppModule],
@@ -157,6 +179,12 @@ export async function createE2eApp(
     .useValue(database.prisma)
     .overrideProvider(ANTHROPIC_CLIENT)
     .useValue(options.ai === false ? null : ai)
+    .overrideProvider(PHOTO_STORAGE)
+    .useValue(storage)
+    .overrideProvider(PUSH_SENDER)
+    .useValue(push)
+    .overrideProvider(EMAIL_SENDER)
+    .useValue(email)
     .overrideProvider(SupabaseService)
     .useValue({
       getUser: (token: string) => {
@@ -178,7 +206,9 @@ export async function createE2eApp(
     })
     .compile()
 
-  const app = moduleFixture.createNestApplication<NestExpressApplication>()
+  const app = moduleFixture.createNestApplication<NestExpressApplication>({
+    rawBody: true,
+  })
 
   // Mirrors main.ts: without these, validation and error shapes differ from
   // production and the specs would assert on something that never runs.
@@ -208,6 +238,9 @@ export async function createE2eApp(
     dpe,
     isochrone,
     georisques,
+    storage,
+    push,
+    email,
     auth: identity => ({ Authorization: `Bearer ${identity.token}` }),
     close: async () => {
       await app.close()

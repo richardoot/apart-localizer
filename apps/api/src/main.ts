@@ -21,6 +21,9 @@ async function bootstrap(): Promise<void> {
     // JSON lines in production so Vercel indexes them, readable ones at a
     // desk. Decided in common/logging.ts.
     logger: createLogger(process.env),
+    // Le corps brut reste lisible pour vérifier la signature du webhook
+    // d'alertes e-mail (inbound/inbound-signature.guard.ts).
+    rawBody: true,
   })
 
   // One line per request, with an id the response also carries. First in

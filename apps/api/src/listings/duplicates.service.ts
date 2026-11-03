@@ -18,6 +18,9 @@ import { num } from './listing.mapper'
  * voisinage à 50 m (PostGIS, par le module geo). Quelques centaines
  * d'annonces au plus : la comparaison se fait en mémoire.
  */
+/** Ce que la recherche de doublons lit de l'appelant : son espace (un membre, ou le système). */
+export type WorkspaceScope = Pick<Member, 'workspaceId'>
+
 @Injectable()
 export class DuplicatesService {
   constructor(
@@ -26,7 +29,7 @@ export class DuplicatesService {
   ) {}
 
   async find(
-    member: Member,
+    member: WorkspaceScope,
     probe: DuplicateProbe
   ): Promise<DuplicateCandidate[]> {
     const effective = probe.listingId
@@ -72,7 +75,7 @@ export class DuplicatesService {
 
   /** Les doublons d'une annonce à créer : la sonde se lit dans l'entrée. */
   findForInput(
-    member: Member,
+    member: WorkspaceScope,
     input: ListingInput
   ): Promise<DuplicateCandidate[]> {
     return this.find(member, probeFromInput(input))
@@ -80,7 +83,7 @@ export class DuplicatesService {
 
   /** Les champs manquants de la sonde se lisent dans l'annonce désignée, exclue des résultats. */
   private async completeFromListing(
-    member: Member,
+    member: WorkspaceScope,
     probe: DuplicateProbe
   ): Promise<DuplicateProbe> {
     const row = await this.prisma.listing.findFirst({

@@ -164,7 +164,7 @@ reste optionnel.
 | S4 | Visites : date, participants, compte rendu, photos | S |
 | S5 | Offres : montant, date, réponse, contre-proposition | S |
 | S6 | Journal d'activité par annonce (qui a changé quoi, quand, par quel canal : web ou MCP) | S |
-| S7 | Notifications (nouvelle annonce, changement de statut, tâche assignée) par e-mail ou web push | L |
+| S7 | Notifications (nouvelle annonce, changement de statut, tâche assignée) par e-mail ou web push ; livrées au lot 6 avec aussi l'entrée dans un critère, la réponse à une offre et les annonces reçues par e-mail, dans l'application et en web push, l'e-mail restant en option (ADR 0015) | L |
 
 ### 3.3 Évaluation financière
 
@@ -232,6 +232,8 @@ Lecture :
 | `evaluate_scenario` | Scénario « et si » sur une annonce (surcharges ou scénario enregistré) comparé à la base ; `saveAs` l'enregistre (portée écriture) |
 | `get_projection` | Fiscalité estimée par régime, projection annuelle jusqu'à la revente, plus-value, TRI, VAN, enrichissement net |
 | `get_compliance` | Checklist réglementaire datée à la date de mise en location, risques Géorisques à l'adresse |
+| `list_visits` | Visites d'une annonce : date, état, participants, compte rendu, points positifs et négatifs, note, nombre de photos (lot 6) |
+| `whats_new` | Ce qui a changé pour le membre depuis sa dernière visite : nouvelles annonces, prix, statuts, avis et tâches de l'autre membre, entrées dans un critère (lot 6) |
 
 Écriture (toutes réversibles, aucune suppression) :
 
@@ -247,6 +249,7 @@ Lecture :
 | `set_assumptions` | Hypothèses globales : champs modifiés seulement, garde-fou sur la version en vigueur, impact rendu (verdicts qui changent) (portée écriture) |
 | `create_search_criteria`, `update_search_criteria` | Critères de recherche : filtres et périmètre en GeoJSON (point et rayon, polygone) ou paramètres d'isochrone |
 | `add_rent_comparable` | Une annonce de location comparable saisie (loyer, surface, meublé, date, source) ; répond avec la médiane à jour |
+| `add_visit` | Une visite faite ou planifiée (date, participants, compte rendu, points positifs et négatifs, note, tâche de préparation), sans photo ; renvoie le statut proposé sans l'appliquer (lot 6) |
 
 Ressources et prompts : le schéma d'annonce en JSON Schema (`apart://schema/listing`), le
 glossaire des indicateurs (`apart://glossaire`), un prompt « analyser cette annonce » qui
@@ -343,9 +346,28 @@ fiscaux datés ; versionnées (date d'effet) ; surcharge partielle par annonce.
 
 **Offer** : annonce, date, montant, canal (e-mail, téléphone, agence, en personne, courrier), réponse (en attente, acceptée, refusée, contre-proposition), contre-proposition, date de la réponse, auteur, notes. Une offre ne se supprime pas ; sa réponse propose un statut à l'annonce sans le changer d'office (ADR 0009).
 
-**Visit** : annonce, date, participants, compte rendu, photos.
+**Visit** : annonce, date, état (faite, planifiée), participants (membres), compte rendu, points
+positifs et négatifs, note sur 5, auteur, tâche « Préparer la visite » éventuelle ; les photos
+sont des lignes **VisitPhoto** (lot 6, ADR 0014).
 
-**ActivityLog** : annonce, acteur (membre ou MCP), action, avant, après, date.
+**VisitPhoto** (lot 6) : visite, espace, chemins de l'objet et de sa vignette dans le bucket
+privé, type, taille, dimensions, légende, auteur, état (envoi en cours, prête). Lue par URL
+signées à durée courte, supprimée par son auteur seulement.
+
+**Notification** (lot 6) : destinataire, type (nouvelle annonce, statut, tâche assignée, entrée
+dans un critère, réponse à une offre, annonces reçues par e-mail), titre, texte, lien, annonce,
+ligne du journal d'origine, lu le, état d'envoi push et e-mail. Les préférences par type et par
+canal sont un JSON sur le membre ; les appareils abonnés au web push sont des lignes
+**PushSubscription**.
+
+**ListingDraft** (lot 6) : espace, origine (alerte e-mail), fiche pré-remplie, doublons à la
+réception, lecture par l'IA ou l'analyseur simple, sujet et expéditeur de l'e-mail, décision
+(validé avec l'annonce créée, écarté).
+
+**ActivityLog** : annonce, acteur (membre ou MCP), action, avant, après, date. Le canal (web,
+MCP, import, système) est une colonne ; la phrase lisible et le détail des champs sont dérivés à
+la lecture (lot 6). Le membre porte aussi sa dernière visite de l'application et le point de
+départ de « ce qui a changé ».
 
 **SearchCriteria** : espace, nom, créé par, actif, filtres (communes, prix, surface, pièces, DPE,
 verdict, statuts, distance maximale au tram), périmètre : type (`point_radius`, `polygon`,
@@ -392,8 +414,10 @@ frais de notaire et les paramètres fiscaux vivent dans les hypothèses (ADR 000
 - **Coût** : offres gratuites ou de base de Supabase et Vercel ; coût IA de l'ordre de quelques
   centimes par annonce extraite.
 - **Langue** : français, formats fr-FR, euros.
-- **Portabilité des données** : export JSON et CSV ; import initial des annonces de l'artefact
-  actuel.
+- **Portabilité des données** : export JSON (complet, versionné) et CSV ; import initial des
+  annonces de l'artefact actuel. Livré au lot 6 ([docs/export.md](../export.md)).
+- **Confidentialité** : photos privées lues par URL signées, export réservé aux membres, aucune
+  donnée personnelle dans les journaux de requêtes ([docs/confidentialite.md](../confidentialite.md)).
 
 ---
 

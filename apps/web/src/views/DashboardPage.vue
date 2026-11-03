@@ -4,6 +4,8 @@
   import { summarizeListings } from '@apart/domain'
   import StatTile from '@/components/ui/StatTile.vue'
   import ListingCards from '@/components/listings/ListingCards.vue'
+  import DraftsInbox from '@/components/drafts/DraftsInbox.vue'
+  import WhatsNewBanner from '@/components/whats-new/WhatsNewBanner.vue'
   import { useListingList } from '@/composables/useListings'
   import { useSearchCriteriaList } from '@/composables/useSearchCriteria'
   import { useWorkspace } from '@/composables/useWorkspace'
@@ -68,6 +70,9 @@
         + Ajouter une annonce
       </RouterLink>
     </header>
+
+    <WhatsNewBanner @open="open" />
+    <DraftsInbox />
 
     <p v-if="isPending" class="text-sm text-muted">Chargement des annonces…</p>
     <p
