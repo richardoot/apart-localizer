@@ -1,0 +1,17 @@
+dist
+build
+coverage
+node_modules
+*.min.js
+*.min.css
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+data/private
+**/src/generated
+**/dev-dist
+supabase/.temp
+supabase/.branches
+apps/api/prisma/migrations/**/*.sql
+# Documentation produit : specification, jamais reformatee par l outil
+docs/product/

@@ -1,0 +1,140 @@
+import { describe, expect, it } from 'vitest'
+import { Prisma } from '../generated/prisma'
+import { toListingDto, num } from './listing.mapper'
+import type { ListingRow } from './listing.mapper'
+import { evaluateListing } from './evaluate'
+import { DEFAULT_ASSUMPTIONS } from '@apart/contracts'
+
+const now = new Date('2026-11-03T10:00:00.000Z')
+
+function row(over: Partial<ListingRow> = {}): ListingRow {
+  return {
+    id: '11111111-1111-4111-8111-111111111111',
+    workspaceId: '22222222-2222-4222-8222-222222222222',
+    source: 'leboncoin',
+    sourceLabel: null,
+    url: 'https://www.leboncoin.fr/ad/1',
+    externalId: null,
+    title: 'T3',
+    publishedAt: null,
+    sourceUpdatedAt: null,
+    description: null,
+    notes: null,
+    sourceText: null,
+    addressRaw: null,
+    addressNormalized: null,
+    banId: null,
+    commune: 'Talence',
+    inseeCode: null,
+    district: null,
+    latitude: 44.8,
+    longitude: -0.59,
+    locationPrecision: 'commune',
+    locationGeoJson: null,
+    price: new Prisma.Decimal('200000'),
+    feesAmount: null,
+    feesPercent: null,
+    feesPayer: null,
+    surface: new Prisma.Decimal('45'),
+    surfaceTotal: null,
+    rooms: 2,
+    bedrooms: null,
+    floor: null,
+    floorsTotal: null,
+    floorLabel: null,
+    elevator: null,
+    constructionYear: null,
+    constructionPeriod: null,
+    dpeClass: 'D',
+    dpeConsumption: null,
+    gesClass: null,
+    dpeDate: new Date('2024-05-01T00:00:00.000Z'),
+    heatingType: null,
+    heatingCollective: null,
+    outdoor: null,
+    parking: null,
+    cellar: null,
+    orientation: null,
+    condition: null,
+    annualCharges: null,
+    nonRecoverableChargesMonthly: null,
+    lotsCount: null,
+    proceedings: null,
+    votedWorks: null,
+    syndic: null,
+    propertyTax: null,
+    furnitureValue: new Prisma.Decimal('5000'),
+    fieldSources: { price: { source: 'listing' } },
+    status: 'to_study',
+    discardReason: null,
+    discardedAt: null,
+    assumptionsOverride: null,
+    createdById: null,
+    createdAt: now,
+    updatedAt: now,
+    renovation: null,
+    rentalPlan: {
+      id: '33333333-3333-4333-8333-333333333333',
+      listingId: '11111111-1111-4111-8111-111111111111',
+      year: null,
+      leaseType: 'unfurnished',
+      rentControl: 'auto',
+      referenceRentPerM2: null,
+      targetRent: new Prisma.Decimal('750'),
+      marketRent: null,
+      comparables: [],
+      demand: 'strong',
+      coOwnershipAllowsRental: 'unknown',
+      decencyCompliant: 'unknown',
+      rentalPermitRequired: 'unknown',
+      notes: null,
+    },
+    views: [],
+    ...over,
+  }
+}
+
+describe('toListingDto', () => {
+  it('converts decimals, dates and rebuilds the point from the mirror columns', () => {
+    const dto = toListingDto(row())
+    expect(dto.price).toBe(200_000)
+    expect(dto.surface).toBe(45)
+    expect(dto.dpeDate).toBe('2024-05-01')
+    expect(dto.createdAt).toBe('2026-11-03T10:00:00.000Z')
+    expect(dto.location.point).toEqual({
+      type: 'Point',
+      coordinates: [-0.59, 44.8],
+    })
+    expect(dto.location.precision).toBe('commune')
+    expect(dto.rentalPlan?.targetRent).toBe(750)
+    expect(dto.renovation).toBeNull()
+    expect(dto.fieldSources).toEqual({ price: { source: 'listing' } })
+  })
+
+  it('prefers the stored GeoJSON and handles a listing without a point', () => {
+    const geo = { type: 'Point', coordinates: [-0.5906, 44.8083] }
+    expect(toListingDto(row({ locationGeoJson: geo })).location.point).toEqual(
+      geo
+    )
+    expect(
+      toListingDto(row({ latitude: null, longitude: null })).location.point
+    ).toBeNull()
+    expect(num(null)).toBeNull()
+  })
+
+  it('evaluates with the shared domain: the § 8 example comes out the same', () => {
+    const evaluation = evaluateListing(toListingDto(row()), DEFAULT_ASSUMPTIONS)
+    expect(evaluation.metrics.totalCost).toBe(220_000)
+    expect(evaluation.metrics.verdict).toBe('off_target')
+    expect(evaluation.rental.verdict).toBe('conditional')
+    expect(evaluation.targetPrice.bindingCriterion).toBe('gross_yield')
+    const bare = evaluateListing(
+      toListingDto(row({ rentalPlan: null })),
+      DEFAULT_ASSUMPTIONS
+    )
+    expect(bare.metrics.rent).toBe(0)
+    expect(bare.rental.checks.find(c => c.key === 'demand')?.level).toBe(
+      'unknown'
+    )
+  })
+})

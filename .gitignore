@@ -150,3 +150,16 @@ vite.config.ts.timestamp-*
 
 # Données personnelles (export de l'artefact, imports locaux) : jamais dans le dépôt public
 data/private/
+
+# Prisma generated client
+apps/api/src/generated/
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
+
+# PWA dev service worker
+**/dev-dist/
+
+# Supabase CLI : fichiers locaux
+supabase/.env

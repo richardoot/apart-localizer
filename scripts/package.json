@@ -1,0 +1,39 @@
+{
+  "name": "@apart/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Scripts d'exploitation : import de l'artefact, imports open data",
+  "engines": {
+    "node": "24.x"
+  },
+  "volta": {
+    "extends": "../package.json"
+  },
+  "scripts": {
+    "import:artifact": "tsx import-artifact.ts",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "@apart/contracts": "workspace:*",
+    "@apart/domain": "workspace:*",
+    "@nestjs/common": "11.2.8",
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "dotenv": "18.0.9",
+    "pg": "8.23.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0"
+  }
+}

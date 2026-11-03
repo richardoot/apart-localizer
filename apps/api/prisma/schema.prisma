@@ -1,0 +1,606 @@
+// Modèle de données d'apart-localizer (étude du besoin § 4).
+//
+// Tout vit dans le schéma Postgres `app`, à l'écart des schémas de Supabase
+// (`auth`, `storage`) et hors de l'exposition PostgREST (`public`). Les
+// colonnes géographiques sont des `geography` PostGIS déclarées Unsupported,
+// doublées de latitude et longitude classiques pour les lectures ordinaires ;
+// le SQL qui les manipule vit dans le module `geo` et nulle part ailleurs.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["app"]
+}
+
+// ---------------------------------------------------------------------------
+// Énumérations (identifiants alignés sur packages/contracts)
+// ---------------------------------------------------------------------------
+
+enum MemberRole {
+  owner
+  member
+
+  @@schema("app")
+}
+
+enum ListingSource {
+  seloger
+  leboncoin
+  pap
+  bienici
+  agence
+  autre
+
+  @@schema("app")
+}
+
+enum ListingStatus {
+  to_study
+  to_visit
+  visited
+  offer_made
+  offer_accepted
+  offer_refused
+  discarded
+  sold_or_withdrawn
+
+  @@schema("app")
+}
+
+enum DpeClass {
+  A
+  B
+  C
+  D
+  E
+  F
+  G
+
+  @@schema("app")
+}
+
+enum FieldSource {
+  listing
+  user
+  ai
+  open_data
+  estimated
+
+  @@schema("app")
+}
+
+enum LocationPrecision {
+  exact
+  street
+  district
+  commune
+
+  @@schema("app")
+}
+
+enum FeesPayer {
+  buyer
+  seller
+
+  @@schema("app")
+}
+
+enum LeaseType {
+  unfurnished
+  furnished
+  shared
+
+  @@schema("app")
+}
+
+enum RentControl {
+  auto
+  yes
+  no
+
+  @@schema("app")
+}
+
+enum RenovationLevel {
+  refresh
+  renovation
+  heavy
+  energy
+
+  @@schema("app")
+}
+
+enum RentalDemand {
+  strong
+  medium
+  weak
+
+  @@schema("app")
+}
+
+enum TriState {
+  yes
+  no
+  unknown
+
+  @@schema("app")
+}
+
+enum TaskOrigin {
+  default
+  manual
+  missing_field
+
+  @@schema("app")
+}
+
+enum OfferResponse {
+  pending
+  accepted
+  refused
+  counter_offer
+
+  @@schema("app")
+}
+
+enum ActivityChannel {
+  web
+  mcp
+  import
+  system
+
+  @@schema("app")
+}
+
+enum PerimeterType {
+  point_radius
+  polygon
+  isochrone
+
+  @@schema("app")
+}
+
+// ---------------------------------------------------------------------------
+// Espace de travail et membres
+// ---------------------------------------------------------------------------
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  members        Member[]
+  listings       Listing[]
+  assumptions    AssumptionsVersion[]
+  searchCriteria SearchCriteria[]
+  activityLogs   ActivityLog[]
+
+  @@map("workspaces")
+  @@schema("app")
+}
+
+/// Un membre peut être créé avant sa première connexion (import des avis de
+/// Richard et Chloé) : `authUserId` est alors null et le rattachement se fait
+/// par e-mail à la première connexion.
+model Member {
+  id          String     @id @default(uuid())
+  workspaceId String     @map("workspace_id")
+  handle      String
+  displayName String     @map("display_name")
+  email       String?
+  authUserId  String?    @unique @map("auth_user_id")
+  role        MemberRole @default(member)
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  opinions        Opinion[]
+  assignedTasks   Task[]           @relation("TaskAssignee")
+  listingViews    ListingView[]
+  createdListings Listing[]        @relation("ListingCreator")
+  searchCriteria  SearchCriteria[]
+  activityLogs    ActivityLog[]
+
+  @@unique([workspaceId, handle])
+  @@index([workspaceId])
+  @@index([email])
+  @@map("members")
+  @@schema("app")
+}
+
+// ---------------------------------------------------------------------------
+// Hypothèses versionnées
+// ---------------------------------------------------------------------------
+
+/// Une ligne par version ; la plus récente par `effectiveFrom` est en vigueur.
+/// `values` est le JSON validé par `AssumptionsSchema` (taux en fractions).
+model AssumptionsVersion {
+  id            String   @id @default(uuid())
+  workspaceId   String   @map("workspace_id")
+  label         String?
+  effectiveFrom DateTime @default(now()) @map("effective_from") @db.Timestamptz(6)
+  values        Json
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, effectiveFrom(sort: Desc)])
+  @@map("assumptions_versions")
+  @@schema("app")
+}
+
+// ---------------------------------------------------------------------------
+// Annonces
+// ---------------------------------------------------------------------------
+
+model Listing {
+  id          String @id @default(uuid())
+  workspaceId String @map("workspace_id")
+
+  // Identité
+  source          ListingSource @default(autre)
+  sourceLabel     String?       @map("source_label")
+  url             String?
+  externalId      String?       @map("external_id")
+  title           String
+  publishedAt     DateTime?     @map("published_at") @db.Timestamptz(6)
+  sourceUpdatedAt DateTime?     @map("source_updated_at") @db.Timestamptz(6)
+  description     String?
+  notes           String?
+  sourceText      String?       @map("source_text")
+
+  // Localisation
+  addressRaw        String?                                @map("address_raw")
+  addressNormalized String?                                @map("address_normalized")
+  banId             String?                                @map("ban_id")
+  commune           String?
+  inseeCode         String?                                @map("insee_code")
+  district          String?
+  latitude          Float?
+  longitude         Float?
+  /// Point WGS 84 ; écrit et lu uniquement par le module geo.
+  geom              Unsupported("geography(Point, 4326)")?
+  locationPrecision LocationPrecision?                     @map("location_precision")
+  locationGeoJson   Json?                                  @map("location_geojson")
+
+  // Bien
+  price              Decimal    @db.Decimal(12, 2)
+  feesAmount         Decimal?   @map("fees_amount") @db.Decimal(12, 2)
+  feesPercent        Float?     @map("fees_percent")
+  feesPayer          FeesPayer? @map("fees_payer")
+  surface            Decimal?   @db.Decimal(8, 2)
+  surfaceTotal       Decimal?   @map("surface_total") @db.Decimal(8, 2)
+  rooms              Int?
+  bedrooms           Int?
+  floor              Int?
+  floorsTotal        Int?       @map("floors_total")
+  floorLabel         String?    @map("floor_label")
+  elevator           Boolean?
+  constructionYear   Int?       @map("construction_year")
+  constructionPeriod String?    @map("construction_period")
+  dpeClass           DpeClass?  @map("dpe_class")
+  dpeConsumption     Float?     @map("dpe_consumption")
+  gesClass           DpeClass?  @map("ges_class")
+  dpeDate            DateTime?  @map("dpe_date") @db.Date
+  heatingType        String?    @map("heating_type")
+  heatingCollective  Boolean?   @map("heating_collective")
+  outdoor            String?
+  parking            String?
+  cellar             Boolean?
+  orientation        String?
+  condition          String?
+
+  // Copropriété et fiscalité locale
+  annualCharges                Decimal? @map("annual_charges") @db.Decimal(12, 2)
+  nonRecoverableChargesMonthly Decimal? @map("non_recoverable_charges_monthly") @db.Decimal(10, 2)
+  lotsCount                    Int?     @map("lots_count")
+  proceedings                  String?
+  votedWorks                   String?  @map("voted_works")
+  syndic                       String?
+  propertyTax                  Decimal? @map("property_tax") @db.Decimal(12, 2)
+  furnitureValue               Decimal? @map("furniture_value") @db.Decimal(12, 2)
+
+  // Provenance par champ : { champ: { source, confidence, evidence } }
+  fieldSources Json @default("{}") @map("field_sources")
+
+  // Suivi
+  status        ListingStatus @default(to_study)
+  discardReason String?       @map("discard_reason")
+  discardedAt   DateTime?     @map("discarded_at") @db.Timestamptz(6)
+
+  // Surcharge partielle des hypothèses (JSON validé par AssumptionsOverrideSchema)
+  assumptionsOverride Json? @map("assumptions_override")
+
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy    Member?       @relation("ListingCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  renovation   Renovation?
+  rentalPlan   RentalPlan?
+  opinions     Opinion[]
+  tasks        Task[]
+  priceEvents  PriceEvent[]
+  offers       Offer[]
+  visits       Visit[]
+  activityLogs ActivityLog[]
+  views        ListingView[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, commune])
+  @@index([workspaceId, url])
+  @@map("listings")
+  @@schema("app")
+}
+
+/// « Vu par » : un membre a ouvert l'annonce.
+model ListingView {
+  listingId String   @map("listing_id")
+  memberId  String   @map("member_id")
+  seenAt    DateTime @default(now()) @map("seen_at") @db.Timestamptz(6)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  member  Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@id([listingId, memberId])
+  @@index([memberId])
+  @@map("listing_views")
+  @@schema("app")
+}
+
+/// Travaux avant emménagement.
+model Renovation {
+  id             String           @id @default(uuid())
+  listingId      String           @unique @map("listing_id")
+  active         Boolean          @default(false)
+  level          RenovationLevel?
+  durationMonths Int?             @map("duration_months")
+  notes          String?
+
+  listing Listing          @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  items   RenovationItem[]
+
+  @@map("renovations")
+  @@schema("app")
+}
+
+model RenovationItem {
+  id           String   @id @default(uuid())
+  renovationId String   @map("renovation_id")
+  label        String
+  amount       Decimal? @db.Decimal(12, 2)
+  position     Int      @default(0)
+
+  renovation Renovation @relation(fields: [renovationId], references: [id], onDelete: Cascade)
+
+  @@index([renovationId])
+  @@map("renovation_items")
+  @@schema("app")
+}
+
+/// Phase 2 : mise en location.
+model RentalPlan {
+  id                      String        @id @default(uuid())
+  listingId               String        @unique @map("listing_id")
+  year                    Int?
+  leaseType               LeaseType     @default(unfurnished) @map("lease_type")
+  rentControl             RentControl   @default(auto) @map("rent_control")
+  referenceRentPerM2      Decimal?      @map("reference_rent_per_m2") @db.Decimal(8, 2)
+  targetRent              Decimal?      @map("target_rent") @db.Decimal(10, 2)
+  marketRent              Decimal?      @map("market_rent") @db.Decimal(10, 2)
+  comparables             Json          @default("[]")
+  demand                  RentalDemand?
+  coOwnershipAllowsRental TriState      @default(unknown) @map("co_ownership_allows_rental")
+  decencyCompliant        TriState      @default(unknown) @map("decency_compliant")
+  rentalPermitRequired    TriState      @default(unknown) @map("rental_permit_required")
+  notes                   String?
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("rental_plans")
+  @@schema("app")
+}
+
+// ---------------------------------------------------------------------------
+// Collaboration
+// ---------------------------------------------------------------------------
+
+model Opinion {
+  id        String   @id @default(uuid())
+  listingId String   @map("listing_id")
+  memberId  String   @map("member_id")
+  rating    Int      @default(0)
+  text      String   @default("")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  member  Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, memberId])
+  @@map("opinions")
+  @@schema("app")
+}
+
+model Task {
+  id         String     @id @default(uuid())
+  listingId  String     @map("listing_id")
+  label      String
+  done       Boolean    @default(false)
+  doneAt     DateTime?  @map("done_at") @db.Timestamptz(6)
+  assigneeId String?    @map("assignee_id")
+  origin     TaskOrigin @default(manual)
+  position   Int        @default(0)
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  listing  Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  assignee Member? @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([listingId])
+  @@map("tasks")
+  @@schema("app")
+}
+
+model PriceEvent {
+  id         String      @id @default(uuid())
+  listingId  String      @map("listing_id")
+  occurredAt DateTime    @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  oldPrice   Decimal?    @map("old_price") @db.Decimal(12, 2)
+  newPrice   Decimal     @map("new_price") @db.Decimal(12, 2)
+  source     FieldSource @default(user)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, occurredAt])
+  @@map("price_events")
+  @@schema("app")
+}
+
+model Offer {
+  id            String        @id @default(uuid())
+  listingId     String        @map("listing_id")
+  madeAt        DateTime      @default(now()) @map("made_at") @db.Timestamptz(6)
+  amount        Decimal       @db.Decimal(12, 2)
+  response      OfferResponse @default(pending)
+  counterAmount Decimal?      @map("counter_amount") @db.Decimal(12, 2)
+  notes         String?
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("offers")
+  @@schema("app")
+}
+
+model Visit {
+  id           String   @id @default(uuid())
+  listingId    String   @map("listing_id")
+  visitedAt    DateTime @map("visited_at") @db.Timestamptz(6)
+  participants String[] @default([])
+  report       String?
+  photos       Json     @default("[]")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("visits")
+  @@schema("app")
+}
+
+/// Qui a changé quoi, quand, par quel canal.
+model ActivityLog {
+  id            String          @id @default(uuid())
+  workspaceId   String          @map("workspace_id")
+  listingId     String?         @map("listing_id")
+  actorMemberId String?         @map("actor_member_id")
+  channel       ActivityChannel @default(web)
+  action        String
+  before        Json?
+  after         Json?
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  listing   Listing?  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  actor     Member?   @relation(fields: [actorMemberId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([listingId, createdAt(sort: Desc)])
+  @@map("activity_logs")
+  @@schema("app")
+}
+
+// ---------------------------------------------------------------------------
+// Critères de recherche géographiques
+// ---------------------------------------------------------------------------
+
+model SearchCriteria {
+  id          String  @id @default(uuid())
+  workspaceId String  @map("workspace_id")
+  createdById String? @map("created_by_id")
+  name        String
+  active      Boolean @default(true)
+  /// JSON validé par CriteriaFiltersSchema
+  filters     Json    @default("{}")
+
+  perimeterType    PerimeterType?                           @map("perimeter_type")
+  /// Point et rayon
+  centerLatitude   Float?                                   @map("center_latitude")
+  centerLongitude  Float?                                   @map("center_longitude")
+  radiusMeters     Int?                                     @map("radius_meters")
+  /// Polygone (dessiné ou isochrone figée) ; écrit et lu par le module geo.
+  perimeter        Unsupported("geography(Polygon, 4326)")?
+  perimeterGeoJson Json?                                    @map("perimeter_geojson")
+  isochroneParams  Json?                                    @map("isochrone_params")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy Member?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@map("search_criteria")
+  @@schema("app")
+}
+
+// ---------------------------------------------------------------------------
+// Données ouvertes importées
+// ---------------------------------------------------------------------------
+
+/// Arrêts de tram et de bus (import TBM).
+model TransitStop {
+  id         String                                 @id @default(uuid())
+  network    String
+  line       String?
+  name       String
+  externalId String?                                @map("external_id")
+  latitude   Float
+  longitude  Float
+  geom       Unsupported("geography(Point, 4326)")?
+
+  @@index([network, line])
+  @@map("transit_stops")
+  @@schema("app")
+}
+
+/// Ventes DVF (import Gironde).
+model DvfSale {
+  id           String                                 @id @default(uuid())
+  mutationDate DateTime                               @map("mutation_date") @db.Date
+  price        Decimal                                @db.Decimal(12, 2)
+  surface      Decimal?                               @db.Decimal(8, 2)
+  propertyType String                                 @map("property_type")
+  rooms        Int?
+  address      String?
+  inseeCode    String?                                @map("insee_code")
+  latitude     Float?
+  longitude    Float?
+  geom         Unsupported("geography(Point, 4326)")?
+  pricePerM2   Decimal?                               @map("price_per_m2") @db.Decimal(10, 2)
+
+  @@index([inseeCode, mutationDate])
+  @@map("dvf_sales")
+  @@schema("app")
+}
+
+/// Données de référence datées (loyers de référence, calendrier DPE, barème
+/// notaire) et cache des appels open data.
+model ReferenceData {
+  id        String    @id @default(uuid())
+  kind      String
+  key       String
+  validFrom DateTime? @map("valid_from") @db.Date
+  payload   Json
+  fetchedAt DateTime  @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  @@unique([kind, key])
+  @@map("reference_data")
+  @@schema("app")
+}

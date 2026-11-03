@@ -1,0 +1,63 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const authState = {
+  loading: false,
+  isAuthenticated: false,
+  $subscribe: vi.fn(),
+}
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => authState }))
+
+import router from './index'
+
+describe('router guard', () => {
+  beforeEach(async () => {
+    authState.isAuthenticated = false
+    authState.loading = false
+    await router.push('/login')
+  })
+
+  it('sends a visitor to the login page, remembering where they were going', async () => {
+    await router.push('/?tab=map')
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.query.redirect).toBe('/?tab=map')
+  })
+
+  it('lets a signed-in user open the home page and sets the title', async () => {
+    authState.isAuthenticated = true
+    await router.push('/')
+    expect(router.currentRoute.value.name).toBe('home')
+    expect(document.title).toBe('Accueil — apart-localizer')
+  })
+
+  it('sends a signed-in user away from the login page', async () => {
+    authState.isAuthenticated = true
+    await router.push('/')
+    await router.push('/login')
+    expect(router.currentRoute.value.name).toBe('home')
+  })
+
+  it('redirects an unknown path to the home page (then to login when signed out)', async () => {
+    await router.push('/nope/nothing')
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.query.redirect).toBe('/')
+  })
+
+  it('waits for the session to be known before deciding', async () => {
+    authState.loading = true
+    let release: (() => void) | undefined
+    authState.$subscribe.mockImplementation((cb: () => void) => {
+      release = () => {
+        authState.loading = false
+        authState.isAuthenticated = true
+        cb()
+      }
+      return vi.fn()
+    })
+    const navigation = router.push('/')
+    // The guard runs on a microtask: wait for it to subscribe before releasing.
+    await vi.waitFor(() => expect(release).toBeDefined())
+    release?.()
+    await navigation
+    expect(router.currentRoute.value.name).toBe('home')
+  })
+})

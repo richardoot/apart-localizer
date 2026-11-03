@@ -1,0 +1,33 @@
+# Postgres + PostGIS pour les tests e2e et comme repli au Supabase CLI.
+#
+# Image multi-architecture (amd64 et arm64) : l'image officielle postgis/postgis
+# n'existe qu'en amd64 et ne tourne pas nativement sur un Mac Apple Silicon.
+#
+#   podman compose -f docker/test-db.yml up -d     (ou docker compose)
+#   TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/postgres
+#
+# Le harnais e2e crée une base par fichier de test sur ce serveur et la
+# supprime à la fin ; la base `apart` sert au développement sans Supabase.
+services:
+  db:
+    image: docker.io/imresamu/postgis:17-3.5
+    container_name: apart-test-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: apart
+    ports:
+      - '54329:5432'
+    command:
+      - postgres
+      - -c
+      - fsync=off
+      - -c
+      - synchronous_commit=off
+      - -c
+      - full_page_writes=off
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 2s
+      timeout: 2s
+      retries: 20

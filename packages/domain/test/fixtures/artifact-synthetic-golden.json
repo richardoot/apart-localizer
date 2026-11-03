@@ -1,0 +1,2896 @@
+{
+  "generatedAt": "2026-11-03T00:34:05.833Z",
+  "source": "Généré par data/private/golden/generate-golden.mjs : fonctions originales de l'artefact sur des cas inventés (aucune donnée privée).",
+  "assumptions": {
+    "downPayment": 40000,
+    "interestRate": 0.0365,
+    "durationYears": 25,
+    "insuranceRate": 0.001,
+    "notaryRate": 0.075,
+    "vacancyMonths": 0.5,
+    "fixedCostsAnnual": 1050,
+    "grossYieldThreshold": 0.055,
+    "netYieldThreshold": null,
+    "maxMonthlyEffort": 150,
+    "grossYieldMargin": 0.007,
+    "effortMargin": 80,
+    "negotiableDiscount": 0.05,
+    "tightDiscount": 0.1,
+    "targetCriteria": ["gross_yield", "effort"],
+    "rentalYear": 2028,
+    "currentRent": null,
+    "maintenanceAnnual": null
+  },
+  "cases": [
+    {
+      "id": "doc-example-s8",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bordeaux-capped-rent",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 50,
+        "targetRent": 900,
+        "rentControlled": true,
+        "referenceRentPerM2": 15,
+        "furnitureValue": 0,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 50,
+          "targetRent": 900,
+          "rent": 750,
+          "rentControlled": true,
+          "rentCap": 750,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 215000,
+          "loanAmount": 175000,
+          "monthlyPayment": 904.8157822051074,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04186046511627907,
+          "netYield": 0.03174418604651163,
+          "effort": -336.06578220510744,
+          "pricePerM2": 4000,
+          "rentPerM2": 15,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 41.860465116279066
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "warn",
+              "message": "Loyer visé (900 €) au-dessus du plafond légal (750 €) : les calculs retiennent le plafond."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (336 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bordeaux-cap-unknown",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": true,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": true,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 5,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "unknown",
+              "message": "Commune à loyers encadrés : saisissez le loyer de référence majoré au m² pour connaître le plafond."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bordeaux-rent-under-cap",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": true,
+        "referenceRentPerM2": 20,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": true,
+          "rentCap": 900,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Loyer visé sous le plafond légal (900 €)."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "forced-control-yes-commune-not-listed",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": true,
+        "referenceRentPerM2": 14,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 630,
+          "rentControlled": true,
+          "rentCap": 630,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 630,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 5565,
+          "grossYield": 0.03436363636363637,
+          "netYield": 0.025295454545454545,
+          "effort": -466.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 14,
+          "maxCostRule220": 138600,
+          "verdict": "off_target",
+          "score": 34.36363636363637
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "warn",
+              "message": "Loyer visé (750 €) au-dessus du plafond légal (630 €) : les calculs retiennent le plafond."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (467 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "forced-control-no-in-bordeaux",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "accented-commune",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": true,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": true,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 5,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "unknown",
+              "message": "Commune à loyers encadrés : saisissez le loyer de référence majoré au m² pour connaître le plafond."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "renovation-items",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 5300,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 5300,
+          "totalCost": 225300,
+          "loanAmount": 185300,
+          "monthlyPayment": 958.0706539577509,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.03994673768308921,
+          "netYield": 0.03029294274300932,
+          "effort": -389.3206539577509,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 39.94673768308921
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (389 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "renovation-inactive-with-legacy-total",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "renovation-active-no-items",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "dpe-e-fails",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "E"
+      },
+      "rental": {
+        "dpeClass": "E",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "warn",
+              "message": "DPE E : louable en 2028, mais interdit à partir de 2034. Travaux à prévoir avant cette date."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "dpe-g-banned-before-year",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "G"
+      },
+      "rental": {
+        "dpeClass": "G",
+        "year": 2026,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2026,
+          "verdict": "incompatible",
+          "rank": 0,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "bad",
+              "message": "DPE G : location interdite depuis 2025, donc dès la mise en location en 2026. Travaux obligatoires avant."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "dpe-f-warn-before-ban",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "F"
+      },
+      "rental": {
+        "dpeClass": "F",
+        "year": 2026,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2026,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "warn",
+              "message": "DPE F : louable en 2026, mais interdit à partir de 2028. Travaux à prévoir avant cette date."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "dpe-unknown",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": null
+      },
+      "rental": {
+        "dpeClass": null,
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 5,
+          "checks": [
+            {
+              "level": "unknown",
+              "message": "DPE inconnu : impossible de savoir jusqu'à quand le bien sera louable."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "charges-with-estimated-copro",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": 1800,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 37.5,
+          "nonRecoverableChargesEstimated": true,
+          "annualCharges": 1800,
+          "netOperating": 6375,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.028977272727272727,
+          "effort": -399.417661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (399 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "charges-with-explicit-copro-and-tf",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": 900,
+        "annualCharges": 1800,
+        "nonRecoverableChargesMonthly": 50,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 900,
+          "propertyTaxEstimated": false,
+          "nonRecoverableChargesMonthly": 50,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": 1800,
+          "netOperating": 6075,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.027613636363636365,
+          "effort": -424.417661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (424 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "copro-given-without-charges",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": 40,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 40,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6345,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.02884090909090909,
+          "effort": -401.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (402 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "zero-surface",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 0,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 0,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": "NaN",
+          "rentPerM2": "NaN",
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "down-payment-above-cost",
+      "financials": {
+        "price": 30000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 0,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 30000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 2250,
+          "renovationTotal": 0,
+          "totalCost": 32250,
+          "loanAmount": 0,
+          "monthlyPayment": 0,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.27906976744186046,
+          "netYield": 0.2116279069767442,
+          "effort": 568.75,
+          "pricePerM2": 666.6666666666666,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "target",
+          "score": 2279.0697674418607
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "ok",
+              "message": "Effort mensuel une fois loué dans votre budget (aucun)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "market-rent-gap-warn",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": 600,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 3,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "warn",
+              "message": "Loyer retenu 25,0 % au-dessus du marché constaté (600 €) : risque de vacance."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "market-rent-ok",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": 740,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 3,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "ok",
+              "message": "Loyer retenu cohérent avec le marché constaté (740 €)."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "demand-weak-bad",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "weak",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "incompatible",
+          "rank": 0,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "bad",
+              "message": "Demande locative faible."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "demand-medium-warn",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "medium",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "warn",
+              "message": "Demande locative moyenne : prévoir une vacance plus longue."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "demand-unknown",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": null,
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 5,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "unknown",
+              "message": "Demande locative à évaluer (transports, campus, CHU, bassin d'emploi)."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "co-ownership-forbids",
+      "financials": {
+        "price": 200000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 750,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "no",
+        "decencyCompliant": "yes",
+        "rentalPermitRequired": "yes"
+      },
+      "expected": {
+        "metrics": {
+          "price": 200000,
+          "surface": 45,
+          "targetRent": 750,
+          "rent": 750,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 15000,
+          "renovationTotal": 0,
+          "totalCost": 220000,
+          "loanAmount": 180000,
+          "monthlyPayment": 930.667661696682,
+          "propertyTax": 750,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6825,
+          "grossYield": 0.04090909090909091,
+          "netYield": 0.03102272727272727,
+          "effort": -361.917661696682,
+          "pricePerM2": 4444.444444444444,
+          "rentPerM2": 16.666666666666668,
+          "maxCostRule220": 165000,
+          "verdict": "off_target",
+          "score": 40.90909090909091
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "incompatible",
+          "rank": 0,
+          "unknownCount": 1,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "bad",
+              "message": "Règlement de copropriété : l'interdit : bloquant."
+            },
+            {
+              "level": "ok",
+              "message": "Critères de décence (surface, hauteur, équipements) : respectés."
+            },
+            {
+              "level": "warn",
+              "message": "Permis de louer exigé : demande d'autorisation à faire avant chaque bail."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (362 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "all-checks-ok-target",
+      "financials": {
+        "price": 120000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 800,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 0,
+        "renovationTotal": 0,
+        "propertyTax": 700,
+        "annualCharges": 1200,
+        "nonRecoverableChargesMonthly": 25,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": 800,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "yes",
+        "decencyCompliant": "yes",
+        "rentalPermitRequired": "no"
+      },
+      "expected": {
+        "metrics": {
+          "price": 120000,
+          "surface": 45,
+          "targetRent": 800,
+          "rent": 800,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 9000,
+          "renovationTotal": 0,
+          "totalCost": 129000,
+          "loanAmount": 89000,
+          "monthlyPayment": 460.1634549500261,
+          "propertyTax": 700,
+          "propertyTaxEstimated": false,
+          "nonRecoverableChargesMonthly": 25,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": 1200,
+          "netOperating": 7150,
+          "grossYield": 0.07441860465116279,
+          "netYield": 0.05542635658914729,
+          "effort": 135.66987838330726,
+          "pricePerM2": 2666.6666666666665,
+          "rentPerM2": 17.77777777777778,
+          "maxCostRule220": 176000,
+          "verdict": "target",
+          "score": 2074.4186046511627
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "compatible",
+          "rank": 2,
+          "unknownCount": 0,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "ok",
+              "message": "Loyer retenu cohérent avec le marché constaté (800 €)."
+            },
+            {
+              "level": "ok",
+              "message": "Règlement de copropriété : autorise la location visée."
+            },
+            {
+              "level": "ok",
+              "message": "Critères de décence (surface, hauteur, équipements) : respectés."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "ok",
+              "message": "Effort mensuel une fois loué dans votre budget (aucun)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "near-miss-gross-yield",
+      "financials": {
+        "price": 150000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 760,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 0,
+        "renovationTotal": 0,
+        "propertyTax": 600,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": 760,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 150000,
+          "surface": 45,
+          "targetRent": 760,
+          "rent": 760,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 11250,
+          "renovationTotal": 0,
+          "totalCost": 161250,
+          "loanAmount": 121250,
+          "monthlyPayment": 626.9080776706816,
+          "propertyTax": 600,
+          "propertyTaxEstimated": false,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 7090,
+          "grossYield": 0.05655813953488372,
+          "netYield": 0.043968992248062014,
+          "effort": -36.07474433734819,
+          "pricePerM2": 3333.3333333333335,
+          "rentPerM2": 16.88888888888889,
+          "maxCostRule220": 167200,
+          "verdict": "target",
+          "score": 2056.5581395348836
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 3,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "ok",
+              "message": "Loyer retenu cohérent avec le marché constaté (760 €)."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "ok",
+              "message": "Effort mensuel une fois loué dans votre budget (36 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "near-miss-effort",
+      "financials": {
+        "price": 165000,
+        "buyerFees": 0,
+        "surface": 45,
+        "targetRent": 760,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 0,
+        "renovationTotal": 0,
+        "propertyTax": 700,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 165000,
+          "surface": 45,
+          "targetRent": 760,
+          "rent": 760,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 12375,
+          "renovationTotal": 0,
+          "totalCost": 177375,
+          "loanAmount": 137375,
+          "monthlyPayment": 710.2803890310093,
+          "propertyTax": 700,
+          "propertyTaxEstimated": false,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 6990,
+          "grossYield": 0.051416490486257925,
+          "netYield": 0.039408033826638475,
+          "effort": -127.78038903100935,
+          "pricePerM2": 3666.6666666666665,
+          "rentPerM2": 16.88888888888889,
+          "maxCostRule220": 167200,
+          "verdict": "to_dig",
+          "score": 1051.416490486258
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "ok",
+              "message": "Effort mensuel une fois loué dans votre budget (128 €)."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "string-numbers-with-comma",
+      "financials": {
+        "price": 199000,
+        "buyerFees": 0,
+        "surface": 62.5,
+        "targetRent": 850,
+        "rentControlled": false,
+        "referenceRentPerM2": null,
+        "furnitureValue": 5000,
+        "renovationTotal": 0,
+        "propertyTax": null,
+        "annualCharges": null,
+        "nonRecoverableChargesMonthly": null,
+        "dpeClass": "D"
+      },
+      "rental": {
+        "dpeClass": "D",
+        "year": 2028,
+        "marketRent": null,
+        "demand": "strong",
+        "coOwnershipAllowsRental": "unknown",
+        "decencyCompliant": "unknown",
+        "rentalPermitRequired": "unknown"
+      },
+      "expected": {
+        "metrics": {
+          "price": 199000,
+          "surface": 62.5,
+          "targetRent": 850,
+          "rent": 850,
+          "rentControlled": false,
+          "rentCap": null,
+          "notaryFees": 14925,
+          "renovationTotal": 0,
+          "totalCost": 218925,
+          "loanAmount": 178925,
+          "monthlyPayment": 925.1095076059935,
+          "propertyTax": 850,
+          "propertyTaxEstimated": true,
+          "nonRecoverableChargesMonthly": 0,
+          "nonRecoverableChargesEstimated": false,
+          "annualCharges": null,
+          "netOperating": 7875,
+          "grossYield": 0.046591298389859544,
+          "netYield": 0.03597122302158273,
+          "effort": -268.8595076059935,
+          "pricePerM2": 3184,
+          "rentPerM2": 13.6,
+          "maxCostRule220": 187000,
+          "verdict": "off_target",
+          "score": 46.591298389859546
+        },
+        "rental": {
+          "year": 2028,
+          "verdict": "conditional",
+          "rank": 1,
+          "unknownCount": 4,
+          "checks": [
+            {
+              "level": "ok",
+              "message": "DPE D : aucune interdiction de location prévue."
+            },
+            {
+              "level": "ok",
+              "message": "Pas d'encadrement des loyers dans cette commune."
+            },
+            {
+              "level": "unknown",
+              "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+            },
+            {
+              "level": "unknown",
+              "message": "Règlement de copropriété : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+            },
+            {
+              "level": "unknown",
+              "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+            },
+            {
+              "level": "ok",
+              "message": "Demande locative forte."
+            },
+            {
+              "level": "warn",
+              "message": "Effort mensuel une fois loué (269 €) au-dessus de votre maximum (150 €)."
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "zeroRate": {
+    "assumptions": {
+      "downPayment": 40000,
+      "interestRate": 0,
+      "durationYears": 25,
+      "insuranceRate": 0.001,
+      "notaryRate": 0.075,
+      "vacancyMonths": 0.5,
+      "fixedCostsAnnual": 1050,
+      "grossYieldThreshold": 0.055,
+      "netYieldThreshold": null,
+      "maxMonthlyEffort": 150,
+      "grossYieldMargin": 0.007,
+      "effortMargin": 80,
+      "negotiableDiscount": 0.05,
+      "tightDiscount": 0.1,
+      "targetCriteria": ["gross_yield", "effort"],
+      "rentalYear": 2028,
+      "currentRent": null,
+      "maintenanceAnnual": null
+    },
+    "cases": [
+      {
+        "id": "zero-rate",
+        "financials": {
+          "price": 200000,
+          "buyerFees": 0,
+          "surface": 45,
+          "targetRent": 750,
+          "rentControlled": false,
+          "referenceRentPerM2": null,
+          "furnitureValue": 5000,
+          "renovationTotal": 0,
+          "propertyTax": null,
+          "annualCharges": null,
+          "nonRecoverableChargesMonthly": null,
+          "dpeClass": "D"
+        },
+        "rental": {
+          "dpeClass": "D",
+          "year": 2028,
+          "marketRent": null,
+          "demand": "strong",
+          "coOwnershipAllowsRental": "unknown",
+          "decencyCompliant": "unknown",
+          "rentalPermitRequired": "unknown"
+        },
+        "expected": {
+          "metrics": {
+            "price": 200000,
+            "surface": 45,
+            "targetRent": 750,
+            "rent": 750,
+            "rentControlled": false,
+            "rentCap": null,
+            "notaryFees": 15000,
+            "renovationTotal": 0,
+            "totalCost": 220000,
+            "loanAmount": 180000,
+            "monthlyPayment": 615,
+            "propertyTax": 750,
+            "propertyTaxEstimated": true,
+            "nonRecoverableChargesMonthly": 0,
+            "nonRecoverableChargesEstimated": false,
+            "annualCharges": null,
+            "netOperating": 6825,
+            "grossYield": 0.04090909090909091,
+            "netYield": 0.03102272727272727,
+            "effort": -46.25,
+            "pricePerM2": 4444.444444444444,
+            "rentPerM2": 16.666666666666668,
+            "maxCostRule220": 165000,
+            "verdict": "off_target",
+            "score": 40.90909090909091
+          },
+          "rental": {
+            "year": 2028,
+            "verdict": "conditional",
+            "rank": 1,
+            "unknownCount": 4,
+            "checks": [
+              {
+                "level": "ok",
+                "message": "DPE D : aucune interdiction de location prévue."
+              },
+              {
+                "level": "ok",
+                "message": "Pas d'encadrement des loyers dans cette commune."
+              },
+              {
+                "level": "unknown",
+                "message": "Loyer de marché non renseigné : comparez avec 5 à 10 annonces de location similaires."
+              },
+              {
+                "level": "unknown",
+                "message": "Règlement de copropriété : à vérifier."
+              },
+              {
+                "level": "unknown",
+                "message": "Critères de décence (surface, hauteur, équipements) : à vérifier."
+              },
+              {
+                "level": "unknown",
+                "message": "Permis de louer : vérifier auprès de la mairie si le secteur y est soumis."
+              },
+              {
+                "level": "ok",
+                "message": "Demande locative forte."
+              },
+              {
+                "level": "ok",
+                "message": "Effort mensuel une fois loué dans votre budget (46 €)."
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

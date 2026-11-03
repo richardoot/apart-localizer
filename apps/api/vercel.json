@@ -1,0 +1,6 @@
+{
+  "regions": ["cdg1"],
+  "buildCommand": "npx pnpm@$(node -p 'require(\"../../package.json\").packageManager.slice(5)') build:vercel",
+  "installCommand": "npx pnpm@$(node -p 'require(\"../../package.json\").packageManager.slice(5)') install",
+  "outputDirectory": "dist"
+}

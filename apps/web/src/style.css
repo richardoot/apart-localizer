@@ -1,0 +1,143 @@
+@import 'tailwindcss';
+
+/*
+ * Jetons de couleur de l'artefact « Comparateur d'annonces locatives »,
+ * repris tels quels. Le thème suit la préférence du système, sauf si
+ * `data-theme` force clair ou sombre (stores/theme.ts, public/theme-init.js).
+ *
+ *   --bg, --surface, --surface-2, --line : fonds et bordures
+ *   --fg, --muted                        : texte
+ *   --accent (sarcelle)                  : action et sélection
+ *   --good / --warn / --bad              : verdicts et contrôles
+ *   --dpe-A … --dpe-G                    : échelle DPE
+ */
+:root {
+  --bg: #f3f6f6;
+  --surface: #ffffff;
+  --surface-2: #e9efef;
+  --line: #d3dddc;
+  --fg: #16211f;
+  --muted: #5b6c69;
+  --accent: #0e6b63;
+  --accent-fg: #ffffff;
+  --accent-soft: #d6ebe8;
+  --good: #1d7a3e;
+  --good-soft: #dff1e4;
+  --warn: #9a5b00;
+  --warn-soft: #fbecd2;
+  --bad: #b4342c;
+  --bad-soft: #f8e0de;
+  --shadow: 0 10px 40px rgba(14, 40, 36, 0.18);
+  --f-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  --f-body:
+    'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
+  --f-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --dpe-A: #00a06d;
+  --dpe-B: #52b153;
+  --dpe-C: #a5cc74;
+  --dpe-D: #f4e70f;
+  --dpe-E: #f0b40f;
+  --dpe-F: #eb8235;
+  --dpe-G: #d7221f;
+  --dpe-ink-light: #16211f;
+  --dpe-ink-dark: #ffffff;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0e1514;
+    --surface: #151f1d;
+    --surface-2: #1c2826;
+    --line: #2a3836;
+    --fg: #e6eeec;
+    --muted: #93a6a2;
+    --accent: #4cc2b4;
+    --accent-fg: #06201d;
+    --accent-soft: #163a36;
+    --good: #5fd08a;
+    --good-soft: #163522;
+    --warn: #f0b64f;
+    --warn-soft: #3a2b10;
+    --bad: #f2847b;
+    --bad-soft: #3d1a17;
+    --shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0e1514;
+  --surface: #151f1d;
+  --surface-2: #1c2826;
+  --line: #2a3836;
+  --fg: #e6eeec;
+  --muted: #93a6a2;
+  --accent: #4cc2b4;
+  --accent-fg: #06201d;
+  --accent-soft: #163a36;
+  --good: #5fd08a;
+  --good-soft: #163522;
+  --warn: #f0b64f;
+  --warn-soft: #3a2b10;
+  --bad: #f2847b;
+  --bad-soft: #3d1a17;
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+/* Les jetons deviennent des utilitaires Tailwind : bg-surface, text-muted, border-line, text-accent... */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-dpe-a: var(--dpe-A);
+  --color-dpe-b: var(--dpe-B);
+  --color-dpe-c: var(--dpe-C);
+  --color-dpe-d: var(--dpe-D);
+  --color-dpe-e: var(--dpe-E);
+  --color-dpe-f: var(--dpe-F);
+  --color-dpe-g: var(--dpe-G);
+  --font-display: var(--f-display);
+  --font-sans: var(--f-body);
+  --font-mono: var(--f-mono);
+  --shadow-panel: var(--shadow);
+}
+
+/* Variante `dark:` pilotée par le même attribut que les jetons. */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) & {
+      @slot;
+    }
+  }
+  :root[data-theme='dark'] & {
+    @slot;
+  }
+}
+
+html {
+  scroll-padding-top: env(safe-area-inset-top, 0px);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--f-body);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

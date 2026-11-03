@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, types, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      # Postgres + PostGIS for the e2e specs: the harness creates one database
+      # per spec file on this server (apps/api/test/e2e-database.ts).
+      postgis:
+        image: imresamu/postgis:17-3.5
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54329/postgres
+      # Only read by the configuration validation: the real Supabase client
+      # is replaced in the e2e harness and the unit specs never build one.
+      SUPABASE_URL: http://127.0.0.1:54321
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54329/postgres
+      VITE_SUPABASE_URL: http://127.0.0.1:54321
+      VITE_SUPABASE_ANON_KEY: ci-placeholder
+      VITE_API_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        # The version comes from `packageManager` in package.json.
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared packages
+        run: pnpm build:packages
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type-check
+        run: pnpm -r type-check
+
+      - name: Unit tests
+        run: pnpm -r test:unit
+
+      - name: E2E tests (PostGIS)
+        run: pnpm --filter @apart/api test:e2e
+
+      - name: Build
+        run: pnpm build
