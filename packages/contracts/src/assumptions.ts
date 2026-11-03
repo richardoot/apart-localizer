@@ -1,9 +1,97 @@
 import { z } from 'zod'
-import { TargetCriterionSchema } from './enums.js'
+import {
+  NotaryModeSchema,
+  TargetCriterionSchema,
+  VerdictSchema,
+} from './enums.js'
 import { withoutDefaults } from './zod-utils.js'
 
 const fraction = (what: string) =>
   z.number().min(0).max(1).describe(`${what}, en fraction (0,05 = 5 %)`)
+
+/** Une tranche du barème des émoluments proportionnels du notaire. */
+export const NotaryScaleBandSchema = z.object({
+  upTo: z
+    .number()
+    .positive()
+    .nullable()
+    .describe(
+      'Borne supérieure de la tranche en euros ; null = dernière tranche, sans limite'
+    ),
+  rate: fraction(
+    "Taux de l'émolument appliqué à la part du prix dans la tranche"
+  ),
+})
+export type NotaryScaleBand = z.infer<typeof NotaryScaleBandSchema>
+
+/**
+ * Barème des frais de notaire pour un logement ancien : droits de mutation,
+ * émoluments proportionnels par tranches, contribution de sécurité
+ * immobilière, débours. Les valeurs par défaut sont celles de la Gironde ;
+ * voir `DEFAULT_NOTARY_SCALE` et le modèle de calcul § 2.
+ */
+export const NotaryScaleSchema = z.object({
+  departmentalRate: fraction(
+    "Droit départemental d'enregistrement sur le prix (4,5 % de droit commun, 5 % quand le département a relevé son taux)"
+  ),
+  communalRate: fraction('Taxe communale additionnelle sur le prix'),
+  collectionFeeRate: fraction(
+    "Frais d'assiette et de recouvrement de l'État, en fraction du droit départemental"
+  ),
+  emolumentBands: z
+    .array(NotaryScaleBandSchema)
+    .min(1)
+    .describe(
+      'Tranches croissantes des émoluments proportionnels (article A444-91 du code de commerce), la dernière sans borne'
+    ),
+  emolumentVatRate: fraction('TVA sur les émoluments'),
+  securityContributionRate: fraction(
+    'Contribution de sécurité immobilière, sur le prix (CGI, art. 879 et 881 K)'
+  ),
+  securityContributionMinimum: z
+    .number()
+    .min(0)
+    .describe('Minimum de la contribution de sécurité immobilière, en euros'),
+  disbursements: z
+    .number()
+    .min(0)
+    .describe(
+      'Débours et émoluments de formalités, forfait estimé en euros (documents d’urbanisme, cadastre, publicité foncière)'
+    ),
+  label: z
+    .string()
+    .max(200)
+    .default('')
+    .describe('Origine et date de relevé des valeurs, pour l’affichage'),
+})
+export type NotaryScale = z.infer<typeof NotaryScaleSchema>
+
+/**
+ * Barème par défaut : Gironde, relevé le 3 novembre 2026. Droit
+ * départemental porté à 5 % à compter du 1er mai 2025 (loi de finances 2025,
+ * art. 116 ; hausse valable jusqu'au 31 mars 2028, les primo-accédants
+ * restant à 4,5 %) ; taxe communale 1,2 % ; frais d'assiette 2,37 % du droit
+ * départemental ; émoluments de l'article A444-91 du code de commerce (tarif
+ * en vigueur depuis le 1er janvier 2021) ; CSI 0,10 % ; débours estimés.
+ * Les forfaits sont des estimations (provenance « estimated »).
+ */
+export const DEFAULT_NOTARY_SCALE: NotaryScale = {
+  departmentalRate: 0.05,
+  communalRate: 0.012,
+  collectionFeeRate: 0.0237,
+  emolumentBands: [
+    { upTo: 6500, rate: 0.0387 },
+    { upTo: 17_000, rate: 0.01596 },
+    { upTo: 60_000, rate: 0.01064 },
+    { upTo: null, rate: 0.00799 },
+  ],
+  emolumentVatRate: 0.2,
+  securityContributionRate: 0.001,
+  securityContributionMinimum: 15,
+  disbursements: 800,
+  label:
+    'Gironde (droit départemental 5 % depuis le 1er mai 2025), relevé le 3 novembre 2026',
+}
 
 /**
  * Hypothèses de financement et d'exploitation. Les taux sont des fractions,
@@ -27,7 +115,15 @@ export const AssumptionsSchema = z.object({
     "Taux annuel d'assurance emprunteur appliqué au capital initial"
   ),
   notaryRate: fraction(
-    'Taux de frais de notaire appliqué au net vendeur (prix moins honoraires acquéreur)'
+    'Taux forfaitaire de frais de notaire appliqué au net vendeur (prix moins honoraires acquéreur) ; utilisé quand notaryMode vaut « rate »'
+  ),
+  notaryMode: NotaryModeSchema.default('rate').describe(
+    'Calcul des frais de notaire : « rate » (taux forfaitaire, défaut, parité avec l’artefact) ou « scale » (barème : droits, émoluments, CSI, débours)'
+  ),
+  notaryScale: NotaryScaleSchema.default(() =>
+    structuredClone(DEFAULT_NOTARY_SCALE)
+  ).describe(
+    'Barème détaillé des frais de notaire, utilisé quand notaryMode vaut « scale » ; versionné avec les hypothèses'
   ),
   vacancyMonths: z
     .number()
@@ -145,8 +241,71 @@ export type AssumptionsVersion = z.infer<typeof AssumptionsVersionSchema>
 export const AssumptionsUpdateSchema = z.object({
   label: z.string().max(120).optional(),
   values: AssumptionsSchema,
+  expectedVersion: z
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      'Garde-fou optimiste : identifiant de la version en vigueur lue avant la modification ; refus (409) si une autre version a été enregistrée depuis'
+    ),
 })
 export type AssumptionsUpdate = z.infer<typeof AssumptionsUpdateSchema>
+
+/** Une annonce dont le verdict change avec de nouvelles hypothèses. */
+export const VerdictChangeSchema = z.object({
+  listingId: z.string().uuid(),
+  title: z.string(),
+  before: VerdictSchema,
+  after: VerdictSchema,
+  targetPriceBefore: z
+    .number()
+    .nullable()
+    .describe('Prix cible avant, en euros'),
+  targetPriceAfter: z
+    .number()
+    .nullable()
+    .describe('Prix cible après, en euros'),
+})
+export type VerdictChange = z.infer<typeof VerdictChangeSchema>
+
+const verdictCounts = z.object({
+  target: z.number().int().min(0),
+  to_dig: z.number().int().min(0),
+  off_target: z.number().int().min(0),
+})
+
+/**
+ * Impact d'un jeu d'hypothèses sur les annonces actives de l'espace : combien
+ * changent de verdict, lesquelles, et la répartition avant et après.
+ */
+export const AssumptionsImpactSchema = z.object({
+  total: z.number().int().min(0).describe('Annonces actives évaluées'),
+  changedVerdicts: z
+    .number()
+    .int()
+    .min(0)
+    .describe('Annonces dont le verdict change'),
+  changes: z.array(VerdictChangeSchema),
+  byVerdictBefore: verdictCounts,
+  byVerdictAfter: verdictCounts,
+})
+export type AssumptionsImpact = z.infer<typeof AssumptionsImpactSchema>
+
+/** Aperçu de l'impact d'hypothèses candidates, sans enregistrement. */
+export const AssumptionsPreviewRequestSchema = z.object({
+  values: AssumptionsSchema,
+})
+export type AssumptionsPreviewRequest = z.infer<
+  typeof AssumptionsPreviewRequestSchema
+>
+
+/** Réponse d'un enregistrement : la version créée et son impact sur les annonces. */
+export const AssumptionsUpdateResultSchema = AssumptionsVersionSchema.extend({
+  impact: AssumptionsImpactSchema,
+})
+export type AssumptionsUpdateResult = z.infer<
+  typeof AssumptionsUpdateResultSchema
+>
 
 /** Hypothèses par défaut d'un nouvel espace : celles de l'artefact (modèle § 8). */
 export const DEFAULT_ASSUMPTIONS: Assumptions = AssumptionsSchema.parse({

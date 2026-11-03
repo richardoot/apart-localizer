@@ -2,7 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import { DEFAULT_ASSUMPTIONS } from '@apart/contracts'
-import { MEMBERS, fakeEvaluated } from '@/test/fixtures'
+import { DEFAULT_ASSUMPTIONS as A } from '@apart/contracts'
+import { financialsFromListing, sensitivityGrid } from '@apart/domain'
+import {
+  MEMBERS,
+  fakeEvaluated,
+  fakeOffer,
+  fakeTargetPriceReport,
+} from '@/test/fixtures'
 
 const apiMock = vi.hoisted(() => ({
   workspace: vi.fn(),
@@ -13,9 +20,12 @@ const apiMock = vi.hoisted(() => ({
     update: vi.fn(),
     setStatus: vi.fn(),
     recordPriceChange: vi.fn(),
+    targetPrice: vi.fn(),
+    sensitivity: vi.fn(),
   },
   opinions: { upsertMine: vi.fn() },
   tasks: { create: vi.fn(), update: vi.fn(), remove: vi.fn() },
+  offers: { create: vi.fn(), update: vi.fn() },
 }))
 
 vi.mock('@/lib/api', async () => {
@@ -61,6 +71,19 @@ describe('ListingPanel', () => {
       values: DEFAULT_ASSUMPTIONS,
     })
     apiMock.listings.get.mockResolvedValue(item)
+    apiMock.listings.targetPrice.mockResolvedValue(fakeTargetPriceReport(item))
+    apiMock.listings.sensitivity.mockImplementation(
+      (_id: string, request: { rowAxis: 'price'; colAxis: 'rent' }) =>
+        Promise.resolve(
+          sensitivityGrid(financialsFromListing(item.listing), A, request)
+        )
+    )
+    apiMock.offers.create.mockResolvedValue({
+      offer: fakeOffer(),
+      offers: [fakeOffer()],
+      currentStatus: 'to_study',
+      suggestedStatus: 'offer_made',
+    })
     apiMock.listings.markSeen.mockResolvedValue({ ...item, isNewForMe: false })
     apiMock.listings.setStatus.mockResolvedValue({
       ...item,
@@ -78,6 +101,57 @@ describe('ListingPanel', () => {
     expect(document.body.textContent).toContain('Compatibilité location')
     expect(document.body.textContent).toContain('À faire pour cette annonce')
     expect(document.body.textContent).toContain('Nos avis')
+    // Lot 3 : prix cible (rapport serveur), sensibilité, historique des offres.
+    expect(apiMock.listings.targetPrice).toHaveBeenCalledWith(item.listing.id)
+    expect(apiMock.listings.sensitivity).toHaveBeenCalledWith(item.listing.id, {
+      rowAxis: 'price',
+      colAxis: 'rent',
+    })
+    expect(document.body.textContent).toContain('À partir de quel prix ?')
+    expect(
+      document.body.querySelector('[data-testid="rank"]')?.textContent
+    ).toContain('sur 3')
+    expect(
+      document.body.querySelector('[data-testid="sensitivity-grid"]')
+    ).not.toBeNull()
+    expect(document.body.textContent).toContain(
+      'Historique des prix et des offres'
+    )
+    wrapper.unmount()
+  })
+
+  it('enregistre une offre puis propose le statut suggéré sans le forcer', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    const amount = document.body.querySelector<HTMLInputElement>(
+      'input[aria-label="Montant de l\'offre"]'
+    )
+    expect(amount).not.toBeNull()
+    if (amount) {
+      amount.value = '150000'
+      amount.dispatchEvent(new Event('input'))
+    }
+    document.body
+      .querySelector<HTMLFormElement>('form[aria-label="Nouvelle offre"]')
+      ?.dispatchEvent(new Event('submit', { cancelable: true }))
+    await flushPromises()
+    expect(apiMock.offers.create).toHaveBeenCalledWith(item.listing.id, {
+      amount: 150_000,
+      channel: null,
+      notes: null,
+    })
+    const suggestion = document.body.querySelector(
+      '[data-testid="suggested-status"]'
+    )
+    expect(suggestion?.textContent).toContain('Offre faite')
+    expect(apiMock.listings.setStatus).not.toHaveBeenCalled()
+    suggestion?.querySelector('button')?.click()
+    await flushPromises()
+    expect(apiMock.listings.setStatus).toHaveBeenCalledWith(item.listing.id, {
+      status: 'offer_made',
+      reason: null,
+      expectedStatus: 'to_study',
+    })
     wrapper.unmount()
   })
 

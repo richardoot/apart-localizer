@@ -59,3 +59,47 @@ describe('ListingsTable', () => {
     expect(empty.text()).toContain('Aucune annonce ne correspond')
   })
 })
+
+describe('ListingsTable : prix cible, décote, classement et comparaison', () => {
+  it('affiche le prix cible, la décote colorée et le rang par décote parmi les lignes', () => {
+    const wrapper = mount(ListingsTable, { props: { items: [cheap, dear] } })
+    const headers = wrapper.findAll('thead button').map(b => b.text())
+    expect(headers.some(h => h.startsWith('Prix cible'))).toBe(true)
+    expect(headers.some(h => h.startsWith('Décote'))).toBe(true)
+    expect(headers.some(h => h.startsWith('Classement'))).toBe(true)
+    const rows = wrapper.findAll('tbody tr')
+    // Moins cher : déjà dans la cible au prix affiché (marge), rang 1 sur 2.
+    expect(
+      rows[0]?.find('[data-discount-class]').attributes('data-discount-class')
+    ).toBe('in_target')
+    expect(rows[0]?.text()).toContain('1/2')
+    expect(
+      rows[1]?.find('[data-discount-class]').attributes('data-discount-class')
+    ).toBe('out_of_reach')
+    expect(rows[1]?.text()).toContain('2/2')
+  })
+
+  it('sélectionne des annonces et demande leur comparaison, sans ouvrir la fiche', async () => {
+    const wrapper = mount(ListingsTable, { props: { items: [cheap, dear] } })
+    expect(wrapper.find('[data-testid="compare-bar"]').exists()).toBe(false)
+    const boxes = wrapper.findAll('tbody input[type="checkbox"]')
+    expect(boxes).toHaveLength(2)
+    await boxes[0]?.setValue(true)
+    expect(wrapper.emitted('open')).toBeUndefined()
+    const bar = wrapper.get('[data-testid="compare-bar"]')
+    expect(bar.text()).toContain('1 annonce(s)')
+    const compareButton = bar
+      .findAll('button')
+      .find(b => b.text().startsWith('Comparer'))
+    expect(compareButton?.attributes('disabled')).toBeDefined()
+    await boxes[1]?.setValue(true)
+    await compareButton?.trigger('click')
+    expect(wrapper.emitted('compare')).toEqual([
+      [[cheap.listing.id, dear.listing.id]],
+    ])
+    await boxes[0]?.setValue(false)
+    expect(wrapper.get('[data-testid="compare-bar"]').text()).toContain(
+      '1 annonce(s)'
+    )
+  })
+})

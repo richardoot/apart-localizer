@@ -1,5 +1,6 @@
 import {
   ListingSchema,
+  OfferSchema,
   OpinionSchema,
   PointSchema,
   PriceEventSchema,
@@ -8,13 +9,20 @@ import {
 import type {
   FieldProvenanceMap,
   Listing as ListingDto,
+  Offer as OfferDto,
   Opinion as OpinionDto,
   Point,
   PriceEvent as PriceEventDto,
   RentComparable,
   Task as TaskDto,
 } from '@apart/contracts'
-import type { Opinion, PriceEvent, Prisma, Task } from '../generated/prisma'
+import type {
+  Offer,
+  Opinion,
+  PriceEvent,
+  Prisma,
+  Task,
+} from '../generated/prisma'
 
 /** Une annonce avec tout ce que l'API renvoie. */
 export const listingInclude = {
@@ -24,6 +32,7 @@ export const listingInclude = {
   opinions: { orderBy: { createdAt: 'asc' } },
   tasks: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] },
   priceEvents: { orderBy: { occurredAt: 'desc' } },
+  offers: { orderBy: { madeAt: 'desc' } },
 } satisfies Prisma.ListingInclude
 
 export type ListingRow = Prisma.ListingGetPayload<{
@@ -82,6 +91,23 @@ export function toPriceEventDto(event: PriceEvent): PriceEventDto {
     oldPrice: num(event.oldPrice),
     newPrice: Number(event.newPrice),
     source: event.source,
+  })
+}
+
+export function toOfferDto(offer: Offer): OfferDto {
+  return OfferSchema.parse({
+    id: offer.id,
+    listingId: offer.listingId,
+    madeAt: offer.madeAt.toISOString(),
+    amount: Number(offer.amount),
+    channel: offer.channel,
+    response: offer.response,
+    counterAmount: num(offer.counterAmount),
+    respondedAt: offer.respondedAt?.toISOString() ?? null,
+    notes: offer.notes,
+    createdById: offer.createdById,
+    createdAt: offer.createdAt.toISOString(),
+    updatedAt: offer.updatedAt.toISOString(),
   })
 }
 

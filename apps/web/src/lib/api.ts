@@ -1,7 +1,11 @@
 import { listingFiltersToQuery } from '@apart/contracts'
 import type {
+  Assumptions,
+  AssumptionsImpact,
   AssumptionsUpdate,
+  AssumptionsUpdateResult,
   AssumptionsVersion,
+  CompareResult,
   DuplicateCandidate,
   DuplicateProbe,
   EvaluateRequest,
@@ -15,9 +19,17 @@ import type {
   ListingList,
   ListingPatch,
   ListingStatusChange,
+  NegotiationBrief,
+  Offer,
+  OfferInputRaw,
+  OfferUpdate,
+  OfferWriteResult,
   Opinion,
   OpinionInput,
   PriceEventInput,
+  SensitivityGrid,
+  SensitivityRequestInput,
+  TargetPriceReport,
   Task,
   TaskInput,
   TaskUpdate,
@@ -103,9 +115,15 @@ export const api = {
     current: () => apiFetch<AssumptionsVersion>('/assumptions'),
     history: () => apiFetch<AssumptionsVersion[]>('/assumptions/history'),
     update: (update: AssumptionsUpdate) =>
-      apiFetch<AssumptionsVersion>('/assumptions', {
+      apiFetch<AssumptionsUpdateResult>('/assumptions', {
         method: 'PUT',
         json: update,
+      }),
+    /** Impact d'hypothèses candidates sur les annonces actives ; rien n'est enregistré. */
+    preview: (values: Assumptions) =>
+      apiFetch<AssumptionsImpact>('/assumptions/preview', {
+        method: 'POST',
+        json: { values },
       }),
   },
 
@@ -152,6 +170,36 @@ export const api = {
       apiFetch<EvaluateResult>('/listings/evaluate', {
         method: 'POST',
         json: request,
+      }),
+    /** « À partir de quel prix ? » : prix cibles, rang, brief de négociation, notaire. */
+    targetPrice: (id: string) =>
+      apiFetch<TargetPriceReport>(`/listings/${id}/target-price`),
+    sensitivity: (id: string, request: SensitivityRequestInput) =>
+      apiFetch<SensitivityGrid>(`/listings/${id}/sensitivity`, {
+        method: 'POST',
+        json: request,
+      }),
+    negotiation: (id: string) =>
+      apiFetch<NegotiationBrief>(`/listings/${id}/negotiation`),
+    compare: (listingIds: string[]) =>
+      apiFetch<CompareResult>('/listings/compare', {
+        method: 'POST',
+        json: { listingIds },
+      }),
+  },
+
+  offers: {
+    list: (listingId: string) =>
+      apiFetch<Offer[]>(`/listings/${listingId}/offers`),
+    create: (listingId: string, input: OfferInputRaw) =>
+      apiFetch<OfferWriteResult>(`/listings/${listingId}/offers`, {
+        method: 'POST',
+        json: input,
+      }),
+    update: (listingId: string, offerId: string, update: OfferUpdate) =>
+      apiFetch<OfferWriteResult>(`/listings/${listingId}/offers/${offerId}`, {
+        method: 'PATCH',
+        json: update,
       }),
   },
 

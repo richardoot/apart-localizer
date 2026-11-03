@@ -4,11 +4,13 @@ import type {
   Assumptions,
   ListingEvaluation,
   ListingFinancials,
+  NegotiationBrief,
 } from '@apart/contracts'
 import {
   compute,
   financialsFromListing,
   mergeAssumptions,
+  negotiationBrief,
   rentalChecks,
   targetPrice,
 } from '@apart/domain'
@@ -19,6 +21,8 @@ export interface LivePreview {
   evaluation: ListingEvaluation | null
   assumptions: Assumptions | null
   financials: ListingFinancials | null
+  /** Le brief de négociation du formulaire, sans historique (prix cibles, offre suggérée). */
+  negotiation: NegotiationBrief | null
 }
 
 /**
@@ -30,10 +34,22 @@ export function previewFromForm(
   form: ListingForm,
   base: Assumptions | null | undefined
 ): LivePreview {
-  if (!base) return { evaluation: null, assumptions: null, financials: null }
+  if (!base) {
+    return {
+      evaluation: null,
+      assumptions: null,
+      financials: null,
+      negotiation: null,
+    }
+  }
   const parsed = PreviewInputSchema.safeParse(formToRawInput(form))
   if (!parsed.success) {
-    return { evaluation: null, assumptions: base, financials: null }
+    return {
+      evaluation: null,
+      assumptions: base,
+      financials: null,
+      negotiation: null,
+    }
   }
   const listing = parsed.data
   const assumptions = mergeAssumptions(base, listing.assumptionsOverride)
@@ -54,14 +70,26 @@ export function previewFromForm(
     metrics,
     assumptions
   )
+  const target = targetPrice(financials, assumptions)
   return {
-    evaluation: {
-      metrics,
-      rental,
-      targetPrice: targetPrice(financials, assumptions),
-    },
+    evaluation: { metrics, rental, targetPrice: target },
     assumptions,
     financials,
+    negotiation: negotiationBrief(
+      {
+        price: financials.price,
+        publishedAt: null,
+        createdAt: null,
+        dpeClass: financials.dpeClass,
+        renovationTotal: metrics.renovationTotal,
+        annualCharges: financials.annualCharges,
+        surface: financials.surface > 0 ? financials.surface : null,
+        priceEvents: [],
+        offers: [],
+      },
+      target,
+      assumptions
+    ),
   }
 }
 

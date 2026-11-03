@@ -1,6 +1,9 @@
 import { createZodDto } from 'nestjs-zod'
 import {
+  AssumptionsImpactSchema,
+  AssumptionsPreviewRequestSchema,
   AssumptionsSchema,
+  AssumptionsUpdateResultSchema,
   AssumptionsUpdateSchema,
   AssumptionsVersionSchema,
 } from '@apart/contracts'
@@ -11,4 +14,13 @@ export class AssumptionsUpdateDto extends createZodDto(
 ) {}
 export class AssumptionsVersionDto extends createZodDto(
   AssumptionsVersionSchema
+) {}
+export class AssumptionsUpdateResultDto extends createZodDto(
+  AssumptionsUpdateResultSchema
+) {}
+export class AssumptionsPreviewRequestDto extends createZodDto(
+  AssumptionsPreviewRequestSchema
+) {}
+export class AssumptionsImpactDto extends createZodDto(
+  AssumptionsImpactSchema
 ) {}

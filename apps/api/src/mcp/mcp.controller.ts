@@ -14,13 +14,15 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { DuplicatesService } from '../listings/duplicates.service'
 import { ExtractionService } from '../listings/extraction.service'
 import { ListingsService } from '../listings/listings.service'
+import { TargetPriceService } from '../listings/target-price.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
+import { OffersService } from '../offers/offers.service'
 import { OpinionsService } from '../opinions/opinions.service'
 import { TasksService } from '../tasks/tasks.service'
 import { WorkspaceService } from '../workspace/workspace.service'
 import { McpAuthGuard } from './mcp-auth.guard'
 import type { McpAuthenticatedRequest } from './mcp-auth.guard'
-import { registerPrompts, registerTools } from './mcp-tools'
+import { registerPrompts, registerResources, registerTools } from './mcp-tools'
 
 export const MCP_SERVER_INFO = { name: 'apart-localizer', version: '0.1.0' }
 
@@ -42,7 +44,9 @@ export class McpController {
     private readonly assumptions: AssumptionsService,
     private readonly opinions: OpinionsService,
     private readonly tasks: TasksService,
-    private readonly workspace: WorkspaceService
+    private readonly workspace: WorkspaceService,
+    private readonly offers: OffersService,
+    private readonly targetPrice: TargetPriceService
   ) {}
 
   @Post()
@@ -77,8 +81,11 @@ export class McpController {
       opinions: this.opinions,
       tasks: this.tasks,
       workspace: this.workspace,
+      offers: this.offers,
+      targetPrice: this.targetPrice,
     })
     registerPrompts(server)
+    registerResources(server)
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

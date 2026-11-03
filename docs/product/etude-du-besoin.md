@@ -224,7 +224,7 @@ Lecture :
 | `get_listing` | Une annonce complète : champs, provenance, calculs, phase 2, avis, tâches, historique |
 | `get_assumptions` | Hypothèses globales en vigueur |
 | `evaluate_listing` | Calcule une annonce hypothétique ou une variante (taux, apport, loyer) sans rien enregistrer |
-| `get_target_price` | Prix cible par critère et décote nécessaire pour une annonce ou une hypothèse |
+| `get_target_price` | Prix cible par critère, décote nécessaire et sa classe, rang parmi les annonces actives, brief de négociation (offre suggérée, arguments), tableau de sensibilité en option, pour une annonce ou une hypothèse |
 | `compare_listings` | Tableau comparatif de 2 à 6 annonces |
 | `find_duplicates` | Doublons probables pour une URL, une adresse, un point (50 m) ou un trio commune, prix et surface, ou pour une annonce enregistrée |
 | `get_market_context` | Plafond d'encadrement, références DVF, desserte pour une commune ou une adresse |
@@ -240,14 +240,14 @@ Lecture :
 | `add_opinion` | Avis du membre connecté |
 | `add_task`, `complete_task` | Tâches |
 | `record_price_change` | Baisse ou hausse constatée sur l'annonce source |
-| `record_offer` | Offre et réponse |
-| `set_assumptions` | Hypothèses globales (portée écriture) |
+| `record_offer` | Offre (montant, date, canal) et, pour une offre existante, réponse du vendeur et contre-proposition ; renvoie le statut proposé |
+| `set_assumptions` | Hypothèses globales : champs modifiés seulement, garde-fou sur la version en vigueur, impact rendu (verdicts qui changent) (portée écriture) |
 | `create_search_criteria`, `update_search_criteria` | Critères de recherche : filtres et périmètre en GeoJSON (point et rayon, polygone) ou paramètres d'isochrone |
 
-Ressources et prompts : le schéma d'annonce en JSON Schema, le glossaire des indicateurs, un
-prompt « analyser cette annonce » qui enchaîne lecture de page, extraction (`extract_listing`),
-doublons, confirmation du membre, création, évaluation. Le prompt est livré au lot 2 ; les
-ressources suivent.
+Ressources et prompts : le schéma d'annonce en JSON Schema (`apart://schema/listing`), le
+glossaire des indicateurs (`apart://glossaire`), un prompt « analyser cette annonce » qui
+enchaîne lecture de page, extraction (`extract_listing`), doublons, confirmation du membre,
+création, évaluation. Le prompt est livré au lot 2, les ressources au lot 3.
 
 Portées OAuth `listings:read` et `listings:write`, limite connue de `bankin-analyzer` à corriger
 dès le départ.
@@ -317,8 +317,10 @@ Chaque champ saisi ou extrait porte une **provenance** (`listing`, `user`, `ai`,
 référence majoré au m², loyer visé, loyer de marché constaté et comparables, demande locative,
 règlement de copro, décence, permis de louer, notes.
 
-**Assumptions** : apport, taux, durée, assurance, frais de notaire (% ou barème), vacance, frais
-fixes, seuils ; versionnées (date d'effet) ; surcharge partielle par annonce.
+**Assumptions** : apport, taux, durée, assurance, frais de notaire (taux forfaitaire ou barème :
+droits de mutation, émoluments par tranches, CSI, débours), vacance, frais fixes, seuils de
+rendement et d'effort, critères retenus pour le prix cible, seuils de décote ; versionnées (date
+d'effet) ; surcharge partielle par annonce.
 
 **Opinion** : annonce, membre, note, texte, date.
 
@@ -326,7 +328,7 @@ fixes, seuils ; versionnées (date d'effet) ; surcharge partielle par annonce.
 
 **PriceEvent** : annonce, date, ancien prix, nouveau prix, source.
 
-**Offer** : annonce, date, montant, réponse, notes.
+**Offer** : annonce, date, montant, canal (e-mail, téléphone, agence, en personne, courrier), réponse (en attente, acceptée, refusée, contre-proposition), contre-proposition, date de la réponse, auteur, notes. Une offre ne se supprime pas ; sa réponse propose un statut à l'annonce sans le changer d'office (ADR 0009).
 
 **Visit** : annonce, date, participants, compte rendu, photos.
 

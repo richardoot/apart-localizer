@@ -93,6 +93,7 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     opinions: [],
     tasks: [],
     priceEvents: [],
+    offers: [],
     ...over,
   }
 }

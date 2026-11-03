@@ -1,9 +1,12 @@
 import { z } from 'zod'
+import { AssumptionsOverrideSchema } from './assumptions.js'
 import {
   CheckLevelSchema,
   DiscountClassSchema,
   DpeClassSchema,
+  NotaryModeSchema,
   RentalVerdictSchema,
+  SensitivityAxisSchema,
   TargetCriterionSchema,
   VerdictSchema,
 } from './enums.js'
@@ -86,6 +89,57 @@ export type ListingFinancialsInput = z.input<typeof ListingFinancialsSchema>
  */
 const metricNumber = z.number().or(z.nan())
 
+/**
+ * Détail des frais de notaire. En mode « rate », seul le total est connu (les
+ * postes sont null) ; en mode « scale », chaque poste est rendu. `estimated`
+ * est vrai dans les deux cas : taux forfaitaire, ou forfaits de débours.
+ */
+export const NotaryFeesBreakdownSchema = z.object({
+  mode: NotaryModeSchema,
+  base: z
+    .number()
+    .describe(
+      'Assiette en euros : net vendeur (prix moins honoraires acquéreur) moins le mobilier compris dans la vente'
+    ),
+  transferTax: z
+    .number()
+    .nullable()
+    .describe(
+      "Droits de mutation en euros (droit départemental, taxe communale, frais d'assiette) ; null en mode taux"
+    ),
+  emoluments: z
+    .number()
+    .nullable()
+    .describe(
+      'Émoluments proportionnels hors TVA, en euros ; null en mode taux'
+    ),
+  emolumentsVat: z
+    .number()
+    .nullable()
+    .describe('TVA sur les émoluments, en euros ; null en mode taux'),
+  securityContribution: z
+    .number()
+    .nullable()
+    .describe(
+      'Contribution de sécurité immobilière en euros ; null en mode taux'
+    ),
+  disbursements: z
+    .number()
+    .nullable()
+    .describe(
+      'Débours et formalités (forfait estimé) en euros ; null en mode taux'
+    ),
+  total: z
+    .number()
+    .describe('Frais de notaire retenus dans le coût total, en euros'),
+  estimated: z
+    .boolean()
+    .describe(
+      'Vrai : valeur estimée (taux forfaitaire ou forfaits), affichée « ≈ »'
+    ),
+})
+export type NotaryFeesBreakdown = z.infer<typeof NotaryFeesBreakdownSchema>
+
 /** Sortie de `compute` : coût, financement, exploitation, verdict. */
 export const ListingMetricsSchema = z.object({
   price: z.number().describe('Prix affiché en euros'),
@@ -100,6 +154,7 @@ export const ListingMetricsSchema = z.object({
     .nullable()
     .describe("Plafond mensuel d'encadrement en euros ; null si aucun"),
   notaryFees: z.number().describe('Frais de notaire en euros'),
+  notaryFeesDetail: NotaryFeesBreakdownSchema,
   renovationTotal: z.number().describe('Travaux en euros'),
   totalCost: z
     .number()
@@ -205,6 +260,12 @@ export const TargetPriceCriterionSchema = z.object({
       'Prix maximal en euros pour satisfaire le critère ; null si non calculable'
     ),
   active: z.boolean().describe('Critère retenu dans le minimum'),
+  discount: z
+    .number()
+    .nullable()
+    .describe(
+      'Décote nécessaire pour ce seul critère : (prix affiché − prix maximal) / prix affiché, fraction ; négatif = marge ; null si non calculable'
+    ),
 })
 export type TargetPriceCriterion = z.infer<typeof TargetPriceCriterionSchema>
 
@@ -246,6 +307,96 @@ export const SensitivitySchema = z.object({
   cells: z.array(SensitivityCellSchema),
 })
 export type Sensitivity = z.infer<typeof SensitivitySchema>
+
+/**
+ * Tableau de sensibilité à deux entrées (lot 3) : deux axes au choix parmi
+ * prix d'achat, loyer, taux, apport et durée. Les pas sont des multiplicateurs
+ * pour le prix et le loyer (0,85 = −15 %), des écarts absolus pour le taux
+ * (en fraction : −0,005 = −0,5 point), l'apport (euros) et la durée (années).
+ */
+export const SensitivityRequestSchema = z
+  .object({
+    rowAxis: SensitivityAxisSchema.default('price').describe(
+      'Axe des lignes (défaut : prix d’achat)'
+    ),
+    colAxis: SensitivityAxisSchema.default('rent').describe(
+      'Axe des colonnes (défaut : loyer)'
+    ),
+    rowSteps: z
+      .array(z.number())
+      .min(1)
+      .max(9)
+      .optional()
+      .describe(
+        'Pas des lignes ; absent = grille par défaut de l’axe (prix : 0,85 à 1 ; loyer : 0,9 à 1,1 ; taux : ±0,005 ; apport : ±20 000 € ; durée : ±5 ans)'
+      ),
+    colSteps: z
+      .array(z.number())
+      .min(1)
+      .max(9)
+      .optional()
+      .describe('Pas des colonnes ; absent = grille par défaut de l’axe'),
+    assumptions: AssumptionsOverrideSchema.optional().describe(
+      'Scénario : hypothèses remplacées champ par champ pour toute la grille'
+    ),
+  })
+  .refine(value => value.rowAxis !== value.colAxis, {
+    message: 'Les deux axes doivent être différents',
+    path: ['colAxis'],
+  })
+export type SensitivityRequest = z.infer<typeof SensitivityRequestSchema>
+export type SensitivityRequestInput = z.input<typeof SensitivityRequestSchema>
+
+export const SensitivityStepSchema = z.object({
+  step: z
+    .number()
+    .describe(
+      'Pas appliqué : multiplicateur (prix, loyer) ou écart (taux, apport, durée)'
+    ),
+  value: z
+    .number()
+    .describe("Valeur absolue de l'axe pour cette ligne ou colonne"),
+  isCurrent: z
+    .boolean()
+    .describe('Vrai pour le pas neutre (multiplicateur 1, écart 0)'),
+})
+export type SensitivityStep = z.infer<typeof SensitivityStepSchema>
+
+export const SensitivityGridCellSchema = z.object({
+  price: z.number().describe("Prix d'achat retenu en euros"),
+  targetRent: z.number().describe('Loyer visé retenu en euros par mois'),
+  rent: z.number().describe('Loyer retenu après plafond, euros par mois'),
+  interestRate: z.number().describe('Taux retenu, fraction'),
+  downPayment: z.number().describe('Apport retenu en euros'),
+  durationYears: z.number().int().describe('Durée retenue en années'),
+  totalCost: z.number(),
+  monthlyPayment: z.number(),
+  grossYield: metricNumber,
+  netYield: metricNumber,
+  effort: z.number(),
+  verdict: VerdictSchema,
+  isCurrent: z
+    .boolean()
+    .describe('Vrai pour la cellule des valeurs actuelles (pas neutres)'),
+})
+export type SensitivityGridCell = z.infer<typeof SensitivityGridCellSchema>
+
+export const SensitivityGridSchema = z.object({
+  rowAxis: SensitivityAxisSchema,
+  colAxis: SensitivityAxisSchema,
+  rows: z.array(SensitivityStepSchema),
+  cols: z.array(SensitivityStepSchema),
+  cells: z
+    .array(z.array(SensitivityGridCellSchema))
+    .describe('Une liste par ligne, une cellule par colonne'),
+  current: z
+    .object({ row: z.number().int().min(0), col: z.number().int().min(0) })
+    .nullable()
+    .describe(
+      'Position de la cellule des valeurs actuelles, si la grille la contient'
+    ),
+})
+export type SensitivityGrid = z.infer<typeof SensitivityGridSchema>
 
 /** Ce qu'une annonce « calculée » renvoie en plus de ses champs. */
 export const ListingEvaluationSchema = z.object({

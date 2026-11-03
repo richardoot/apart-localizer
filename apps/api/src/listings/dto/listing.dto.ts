@@ -1,5 +1,7 @@
 import { createZodDto } from 'nestjs-zod'
 import {
+  CompareRequestSchema,
+  CompareResultSchema,
   DuplicateCandidateSchema,
   DuplicateProbeSchema,
   EvaluatedListingSchema,
@@ -13,8 +15,12 @@ import {
   ListingListSchema,
   ListingPatchSchema,
   ListingStatusChangeSchema,
+  NegotiationBriefSchema,
   PriceEventInputSchema,
   PriceEventSchema,
+  SensitivityGridSchema,
+  SensitivityRequestSchema,
+  TargetPriceReportSchema,
 } from '@apart/contracts'
 
 export class CreateListingDto extends createZodDto(ListingCreateSchema) {}
@@ -42,3 +48,15 @@ export class EvaluateResultDto extends createZodDto(EvaluateResultSchema) {}
 /** Une annonce et ses calculs, telle que chaque lecture la renvoie. */
 export class EvaluatedListingDto extends createZodDto(EvaluatedListingSchema) {}
 export class ListingListDto extends createZodDto(ListingListSchema) {}
+
+/** Lot 3 : prix cible, sensibilité, négociation, comparaison. */
+export class TargetPriceReportDto extends createZodDto(
+  TargetPriceReportSchema
+) {}
+export class SensitivityRequestDto extends createZodDto(
+  SensitivityRequestSchema
+) {}
+export class SensitivityGridDto extends createZodDto(SensitivityGridSchema) {}
+export class NegotiationBriefDto extends createZodDto(NegotiationBriefSchema) {}
+export class CompareRequestDto extends createZodDto(CompareRequestSchema) {}
+export class CompareResultDto extends createZodDto(CompareResultSchema) {}

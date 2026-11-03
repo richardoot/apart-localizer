@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common'
+import { ConflictException, Injectable } from '@nestjs/common'
 import {
+  ACTIVE_LISTING_STATUSES,
   AssumptionsOverrideSchema,
   AssumptionsSchema,
   DEFAULT_ASSUMPTIONS,
@@ -7,13 +8,17 @@ import {
 import type {
   ActivityChannel,
   Assumptions,
+  AssumptionsImpact,
   AssumptionsUpdate,
+  AssumptionsUpdateResult,
   AssumptionsVersion as AssumptionsVersionDto,
 } from '@apart/contracts'
 import { mergeAssumptions } from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
+import { listingInclude, toListingDto } from '../listings/listing.mapper'
 import type { AssumptionsVersion, Member } from '../generated/prisma'
+import { assumptionsImpact } from './impact'
 
 /**
  * Hypothèses globales de l'espace, versionnées : chaque modification ajoute
@@ -68,12 +73,30 @@ export class AssumptionsService {
     return versions.map(toDto)
   }
 
+  /**
+   * Nouvelle version. `expectedVersion` est le garde-fou optimiste : si une
+   * autre version a été enregistrée depuis la lecture, rien n'est écrit. La
+   * réponse porte l'impact sur les annonces actives (verdicts qui changent).
+   */
   async update(
     member: Member,
     update: AssumptionsUpdate,
     channel: ActivityChannel = 'web'
-  ): Promise<AssumptionsVersionDto> {
+  ): Promise<AssumptionsUpdateResult> {
     const previous = await this.current(member.workspaceId)
+    if (
+      update.expectedVersion !== undefined &&
+      update.expectedVersion !== previous.id
+    ) {
+      throw new ConflictException(
+        `Les hypothèses ont changé depuis votre lecture (version en vigueur : « ${previous.label ?? 'sans libellé'} », ${previous.id}) : relisez-les avant de les modifier`
+      )
+    }
+    const impact = await this.impact(
+      member.workspaceId,
+      previous.values,
+      update.values
+    )
     const created = await this.prisma.$transaction(async tx => {
       const version = await tx.assumptionsVersion.create({
         data: {
@@ -89,13 +112,46 @@ export class AssumptionsService {
           channel,
           action: 'assumptions.updated',
           before: previous.values,
-          after: update.values,
+          after: {
+            ...update.values,
+            impact: {
+              total: impact.total,
+              changedVerdicts: impact.changedVerdicts,
+              changes: impact.changes.map(c => c.listingId),
+            },
+          },
         },
         tx
       )
       return version
     })
-    return toDto(created)
+    return { ...toDto(created), impact }
+  }
+
+  /** Impact d'hypothèses candidates sur les annonces actives, sans rien enregistrer. */
+  async preview(
+    workspaceId: string,
+    values: Assumptions
+  ): Promise<AssumptionsImpact> {
+    const current = await this.currentValues(workspaceId)
+    return this.impact(workspaceId, current, values)
+  }
+
+  private async impact(
+    workspaceId: string,
+    before: Assumptions,
+    after: Assumptions
+  ): Promise<AssumptionsImpact> {
+    const rows = await this.prisma.listing.findMany({
+      where: { workspaceId, status: { in: [...ACTIVE_LISTING_STATUSES] } },
+      include: listingInclude,
+      orderBy: { createdAt: 'asc' },
+    })
+    return assumptionsImpact(
+      rows.map(row => toListingDto(row)),
+      before,
+      after
+    )
   }
 }
 

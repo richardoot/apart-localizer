@@ -31,7 +31,9 @@ export function useAssumptions() {
   const values = computed(() => query.data.value?.values ?? null)
   const update = useMutation({
     mutationFn: (input: AssumptionsUpdate) => api.assumptions.update(input),
-    onSuccess: version => {
+    onSuccess: result => {
+      // La version en cache ne porte pas l'impact : c'est une information du moment.
+      const { impact: _impact, ...version } = result
       client.setQueryData(assumptionsKey, version)
       // Les indicateurs de chaque annonce dépendent des hypothèses.
       void client.invalidateQueries({ queryKey: ['listings'] })

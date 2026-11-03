@@ -14,7 +14,11 @@ import {
   sampleExtraction,
 } from './fixtures/ai-extraction'
 import { OAuthDiscoveryService } from '../src/mcp/oauth-discovery.service'
-import { MCP_PROMPT_NAMES, MCP_TOOL_NAMES } from '../src/mcp/mcp-tools'
+import {
+  MCP_PROMPT_NAMES,
+  MCP_RESOURCE_URIS,
+  MCP_TOOL_NAMES,
+} from '../src/mcp/mcp-tools'
 import { DATA_TAG } from '../src/mcp/tool-results'
 
 const richard = e2eIdentity('richard')
@@ -207,7 +211,7 @@ describe('MCP (e2e)', () => {
         (t: { name: string }) => t.name === 'get_listing'
       )
       expect(get.annotations.readOnlyHint).toBe(true)
-      expect(names).toHaveLength(12)
+      expect(names).toHaveLength(17)
       const extract = list.body.result.tools.find(
         (t: { name: string }) => t.name === 'extract_listing'
       )
@@ -774,6 +778,326 @@ describe('MCP (e2e)', () => {
       expect(names.some((n: string) => /delete|remove|supprim/i.test(n))).toBe(
         false
       )
+    })
+  })
+
+  describe('prix cible et négociation (lot 3)', () => {
+    let id: string
+
+    beforeEach(async () => {
+      const res = await request(ctx.server)
+        .post('/listings')
+        .set(ctx.auth(richard))
+        .send(EXAMPLE)
+        .expect(201)
+      id = res.body.listing.id
+    })
+
+    it('get_target_price : annonce enregistrée, scénario, hypothétique, sensibilité', async () => {
+      const result = await callTool(richard, 'get_target_price', {
+        listingId: id,
+      })
+      expect(result.isError).toBeUndefined()
+      expect(result.content[0]?.text).toContain('prix cible')
+      expect(result.content[0]?.text).toContain('Rendement brut')
+      expect(result.content[0]?.text).toContain('rang 1/1')
+      const report = fenced(result) as {
+        listingId: string
+        targetPrice: { bindingCriterion: string; targetPrice: number }
+        rank: { position: number; total: number } | null
+        negotiation: { suggestedOffer: number }
+        sensitivity: unknown
+      }
+      expect(report.listingId).toBe(id)
+      expect(report.targetPrice.bindingCriterion).toBe('gross_yield')
+      expect(Math.round(report.targetPrice.targetPrice / 100) * 100).toBe(
+        147_600
+      )
+      expect(report.rank).toEqual({ position: 1, total: 1 })
+      expect(report.negotiation.suggestedOffer).toBe(147_000)
+      expect(report.sensitivity).toBeNull()
+
+      const scenario = await callTool(richard, 'get_target_price', {
+        listingId: id,
+        assumptions: { grossYieldThreshold: 0.045 },
+        sensitivity: { rowAxis: 'rate', colAxis: 'rent' },
+      })
+      const withScenario = fenced(scenario) as {
+        rank: unknown
+        targetPrice: { targetPrice: number; bindingCriterion: string }
+        sensitivity: { rows: unknown[]; cols: unknown[] }
+      }
+      expect(withScenario.rank).toBeNull()
+      // Le brut relâché n'est plus liant : l'effort (≈ 161 900 €) l'est.
+      expect(withScenario.targetPrice.targetPrice).toBeGreaterThan(160_000)
+      expect(withScenario.targetPrice.bindingCriterion).toBe('effort')
+      expect(withScenario.sensitivity.rows).toHaveLength(3)
+      expect(scenario.content[0]?.text).toContain('Tableau de sensibilité')
+
+      const hypothetical = await callTool(richard, 'get_target_price', {
+        listing: {
+          price: 180_000,
+          surface: 40,
+          rentalPlan: { targetRent: 700 },
+        },
+      })
+      const hypo = fenced(hypothetical) as {
+        listingId: string | null
+        rank: unknown
+        negotiation: { daysOnline: number | null }
+      }
+      expect(hypo.listingId).toBeNull()
+      expect(hypo.rank).toBeNull()
+      expect(hypo.negotiation.daysOnline).toBeNull()
+
+      const nothing = await callTool(richard, 'get_target_price', {})
+      expect(nothing.isError).toBe(true)
+      const unknown = await callTool(richard, 'get_target_price', {
+        listingId: '99999999-9999-4999-8999-999999999999',
+      })
+      expect(unknown.isError).toBe(true)
+    })
+
+    it('compare_listings : rangs et meilleure par indicateur ; refus sous deux annonces', async () => {
+      const other = await request(ctx.server)
+        .post('/listings')
+        .set(ctx.auth(richard))
+        .send({ ...EXAMPLE, title: 'T2 moins cher', price: 150_000 })
+        .expect(201)
+      const otherId = other.body.listing.id as string
+      const result = await callTool(richard, 'compare_listings', {
+        listingIds: [id, otherId],
+      })
+      expect(result.content[0]?.text).toContain('2 annonces comparées')
+      const compared = fenced(result) as {
+        items: Array<{ listing: { id: string }; ranks: { grossYield: number } }>
+        best: { grossYield: string }
+      }
+      expect(compared.items.map(i => i.listing.id)).toEqual([id, otherId])
+      expect(compared.items[1]?.ranks.grossYield).toBe(1)
+      expect(compared.best.grossYield).toBe(otherId)
+      const one = await callTool(richard, 'compare_listings', {
+        listingIds: [id],
+      })
+      expect(one.isError).toBe(true)
+    })
+
+    it('record_price_change : garde-fou, prix à jour, historique, journal mcp', async () => {
+      const stale = await callTool(richard, 'record_price_change', {
+        listingId: id,
+        newPrice: 190_000,
+        expectedPrice: 210_000,
+      })
+      expect(stale.isError).toBe(true)
+      expect(stale.content[0]?.text).toContain('prix attendu')
+
+      const ok = await callTool(richard, 'record_price_change', {
+        listingId: id,
+        newPrice: 190_000,
+        expectedPrice: 200_000,
+        source: 'listing',
+      })
+      expect(ok.isError).toBeUndefined()
+      expect(ok.content[0]?.text).toMatch(/200\s000 € → 190\s000 €/)
+      const item = fenced(ok) as {
+        listing: { price: number }
+        priceEvents: Array<{ oldPrice: number | null; newPrice: number }>
+      }
+      expect(item.listing.price).toBe(190_000)
+      expect(item.priceEvents).toHaveLength(2)
+      expect(item.priceEvents[0]).toMatchObject({
+        oldPrice: 200_000,
+        newPrice: 190_000,
+      })
+      const logs = await ctx.prisma.activityLog.findMany({
+        where: { listingId: id, action: 'listing.price_changed' },
+      })
+      expect(logs).toHaveLength(1)
+      expect(logs[0]?.channel).toBe('mcp')
+
+      const denied = await callTool(reader, 'record_price_change', {
+        listingId: id,
+        newPrice: 185_000,
+      })
+      expect(denied.isError).toBe(true)
+    })
+
+    it('record_offer : nouvelle offre, réponse du vendeur, statut proposé jamais forcé', async () => {
+      const created = await callTool(writer, 'record_offer', {
+        listingId: id,
+        amount: 150_000,
+        channel: 'phone',
+        notes: 'Par téléphone avec l’agence',
+      })
+      expect(created.isError).toBeUndefined()
+      expect(created.content[0]?.text).toContain('Offre enregistrée')
+      expect(created.content[0]?.text).toContain(
+        'statut proposé : « Offre faite »'
+      )
+      const result = fenced(created) as {
+        offer: { id: string; response: string }
+        suggestedStatus: string | null
+        currentStatus: string
+      }
+      expect(result.offer.response).toBe('pending')
+      expect(result.suggestedStatus).toBe('offer_made')
+      expect(result.currentStatus).toBe('to_study')
+      const stillToStudy = await ctx.prisma.listing.findUnique({
+        where: { id },
+      })
+      expect(stillToStudy?.status).toBe('to_study')
+
+      const stale = await callTool(writer, 'record_offer', {
+        listingId: id,
+        offerId: result.offer.id,
+        response: 'accepted',
+        expectedResponse: 'refused',
+      })
+      expect(stale.isError).toBe(true)
+      const noChange = await callTool(writer, 'record_offer', {
+        listingId: id,
+        offerId: result.offer.id,
+      })
+      expect(noChange.isError).toBe(true)
+      const amountOnExisting = await callTool(writer, 'record_offer', {
+        listingId: id,
+        offerId: result.offer.id,
+        amount: 155_000,
+      })
+      expect(amountOnExisting.isError).toBe(true)
+
+      const answered = await callTool(writer, 'record_offer', {
+        listingId: id,
+        offerId: result.offer.id,
+        response: 'counter_offer',
+        counterAmount: 165_000,
+        expectedResponse: 'pending',
+      })
+      expect(answered.isError).toBeUndefined()
+      expect(answered.content[0]?.text).toMatch(
+        /Contre-proposition à 165\s000 €/
+      )
+      const updated = fenced(answered) as {
+        offer: { response: string; counterAmount: number }
+        offers: unknown[]
+      }
+      expect(updated.offer.response).toBe('counter_offer')
+      expect(updated.offer.counterAmount).toBe(165_000)
+      expect(updated.offers).toHaveLength(1)
+
+      const neither = await callTool(writer, 'record_offer', { listingId: id })
+      expect(neither.isError).toBe(true)
+      const denied = await callTool(reader, 'record_offer', {
+        listingId: id,
+        amount: 100_000,
+      })
+      expect(denied.isError).toBe(true)
+      const logs = await ctx.prisma.activityLog.findMany({
+        where: {
+          listingId: id,
+          action: { in: ['offer.created', 'offer.updated'] },
+        },
+      })
+      expect(logs).toHaveLength(2)
+      expect(logs.every(l => l.channel === 'mcp')).toBe(true)
+    })
+
+    it('set_assumptions : champs modifiés seulement, garde de version, impact, journal', async () => {
+      const before = fenced(await callTool(richard, 'get_assumptions', {})) as {
+        id: string
+        values: { interestRate: number; downPayment: number }
+      }
+      const stale = await callTool(writer, 'set_assumptions', {
+        values: { interestRate: 0.032 },
+        expectedVersion: '99999999-9999-4999-8999-999999999999',
+      })
+      expect(stale.isError).toBe(true)
+      expect(stale.content[0]?.text).toContain('changé depuis')
+      const empty = await callTool(writer, 'set_assumptions', { values: {} })
+      expect(empty.isError).toBe(true)
+      const invalid = await callTool(writer, 'set_assumptions', {
+        values: { interestRate: 3.2 },
+      })
+      expect(invalid.isError).toBe(true)
+      expect(
+        await ctx.prisma.assumptionsVersion.count({
+          where: {
+            workspaceId: (await ctx.prisma.workspace.findFirstOrThrow()).id,
+          },
+        })
+      ).toBe(1)
+
+      const ok = await callTool(writer, 'set_assumptions', {
+        values: { grossYieldThreshold: 0.04, maxMonthlyEffort: 400 },
+        label: 'Cible élargie',
+        expectedVersion: before.id,
+      })
+      expect(ok.isError).toBeUndefined()
+      expect(ok.content[0]?.text).toContain(
+        'grossYieldThreshold, maxMonthlyEffort'
+      )
+      expect(ok.content[0]?.text).toContain(
+        '1 annonce(s) sur 1 changent de verdict'
+      )
+      const result = fenced(ok) as {
+        id: string
+        label: string
+        values: {
+          grossYieldThreshold: number
+          interestRate: number
+          downPayment: number
+        }
+        impact: { changedVerdicts: number; changes: Array<{ after: string }> }
+      }
+      expect(result.id).not.toBe(before.id)
+      expect(result.label).toBe('Cible élargie')
+      expect(result.values.grossYieldThreshold).toBe(0.04)
+      // Les champs non cités gardent leur valeur en vigueur.
+      expect(result.values.interestRate).toBe(before.values.interestRate)
+      expect(result.values.downPayment).toBe(before.values.downPayment)
+      expect(result.impact.changedVerdicts).toBe(1)
+      expect(result.impact.changes[0]?.after).toBe('target')
+      const logs = await ctx.prisma.activityLog.findMany({
+        where: { action: 'assumptions.updated' },
+      })
+      expect(logs).toHaveLength(1)
+      expect(logs[0]?.channel).toBe('mcp')
+
+      const denied = await callTool(reader, 'set_assumptions', {
+        values: { interestRate: 0.03 },
+      })
+      expect(denied.isError).toBe(true)
+    })
+
+    it('ressources : schéma d’annonce et glossaire', async () => {
+      const list = await rpc(richard, 'resources/list')
+      expect(list.status).toBe(200)
+      const uris = list.body.result.resources.map((r: { uri: string }) => r.uri)
+      expect(uris.sort()).toEqual([...MCP_RESOURCE_URIS].sort())
+
+      const schema = await rpc(richard, 'resources/read', {
+        uri: 'apart://schema/listing',
+      })
+      expect(schema.status).toBe(200)
+      const schemaContent = schema.body.result.contents[0]
+      expect(schemaContent.mimeType).toBe('application/schema+json')
+      const parsed = JSON.parse(schemaContent.text) as {
+        properties: Record<string, { description?: string }>
+        required?: string[]
+      }
+      expect(parsed.properties.price?.description).toContain('euros')
+      expect(parsed.properties.rentalPlan).toBeDefined()
+      expect(parsed.required).toContain('title')
+
+      const glossary = await rpc(richard, 'resources/read', {
+        uri: 'apart://glossaire',
+      })
+      expect(glossary.status).toBe(200)
+      const text = glossary.body.result.contents[0].text as string
+      expect(glossary.body.result.contents[0].mimeType).toBe('text/markdown')
+      expect(text).toContain('## Rendement brut')
+      expect(text).toContain('## Décote nécessaire')
+      expect(text).toContain('rdtBrut(P_b) = s_b')
     })
   })
 })

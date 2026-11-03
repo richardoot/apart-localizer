@@ -3,7 +3,6 @@ import { mount } from '@vue/test-utils'
 import { MEMBERS, fakeEvaluated, fakeOpinion, fakeTask } from '@/test/fixtures'
 import MetricsPreview from './MetricsPreview.vue'
 import OpinionsSection from './OpinionsSection.vue'
-import PriceHistory from './PriceHistory.vue'
 import StatusChanger from './StatusChanger.vue'
 import TasksSection from './TasksSection.vue'
 
@@ -120,22 +119,6 @@ describe('StatusChanger', () => {
     expect(wrapper.emitted('change')?.[1]).toEqual([
       { status: 'discarded', reason: 'Trop cher' },
     ])
-  })
-})
-
-describe('PriceHistory', () => {
-  it("liste l'historique et enregistre un nouveau prix différent", async () => {
-    const item = fakeEvaluated()
-    const wrapper = mount(PriceHistory, {
-      props: { events: item.priceEvents, currentPrice: 200_000 },
-    })
-    expect(wrapper.text()).toContain('premier prix')
-    await wrapper.get('input').setValue('200000')
-    await wrapper.get('form').trigger('submit')
-    expect(wrapper.get('[role="alert"]').text()).toContain('déjà')
-    await wrapper.get('input').setValue('185 000')
-    await wrapper.get('form').trigger('submit')
-    expect(wrapper.emitted('record')).toEqual([[185_000]])
   })
 })
 

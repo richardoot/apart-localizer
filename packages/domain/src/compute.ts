@@ -5,6 +5,7 @@ import type {
   ListingMetrics,
 } from '@apart/contracts'
 import { monthlyFactor } from './loan.js'
+import { notaryFeesDetail } from './notary.js'
 import { score, verdict } from './verdict.js'
 
 /** Hypothèses de l'espace surchargées, champ par champ, par celles d'une annonce. */
@@ -41,9 +42,12 @@ export function retainedRent(input: ListingFinancials): number {
   return cap === null ? input.targetRent : Math.min(input.targetRent, cap)
 }
 
-/** Frais de notaire : taux × net vendeur (prix moins honoraires acquéreur). */
+/**
+ * Frais de notaire : taux × net vendeur (prix moins honoraires acquéreur) en
+ * mode « rate », barème détaillé en mode « scale » (voir `notaryFeesDetail`).
+ */
 export function notaryFees(input: ListingFinancials, a: Assumptions): number {
-  return a.notaryRate * Math.max(0, input.price - input.buyerFees)
+  return notaryFeesDetail(input, a).total
 }
 
 /** Coût total : prix + notaire + travaux + mobilier. */
@@ -113,8 +117,9 @@ export function compute(
   const a = assumptions
   const cap = rentCap(input)
   const operating = netOperating(input, a)
-  const fees = notaryFees(input, a)
-  const cost = totalCost(input, a)
+  const feesDetail = notaryFeesDetail(input, a)
+  const fees = feesDetail.total
+  const cost = input.price + fees + input.renovationTotal + input.furnitureValue
   const loanAmount = Math.max(0, cost - a.downPayment)
   const k = monthlyFactor(a.interestRate, a.durationYears, a.insuranceRate)
   const monthlyPayment = loanAmount > 0 ? loanAmount * k : 0
@@ -137,6 +142,7 @@ export function compute(
     rentControlled: input.rentControlled,
     rentCap: cap,
     notaryFees: fees,
+    notaryFeesDetail: feesDetail,
     renovationTotal: input.renovationTotal,
     totalCost: cost,
     loanAmount,

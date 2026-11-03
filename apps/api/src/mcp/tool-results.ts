@@ -1,5 +1,8 @@
 import { HttpException } from '@nestjs/common'
 import { ZodError } from 'zod'
+import { MCP_SCOPE_WRITE } from '@apart/contracts'
+import type { McpScope } from '@apart/contracts'
+import { hasScope } from './mcp-scopes'
 
 /** Ce qu'un outil renvoie : du texte lisible, du JSON structuré, ou un refus. */
 export interface ToolResult {
@@ -42,6 +45,14 @@ export function dataResult(
  */
 export function refusal(message: string): ToolResult {
   return { content: [{ type: 'text', text: message }], isError: true }
+}
+
+/** Le refus d'écriture d'un jeton sans la portée `listings:write`, ou null s'il peut écrire. */
+export function writeRefusal(scopes: McpScope[]): ToolResult | null {
+  if (hasScope(scopes, MCP_SCOPE_WRITE)) return null
+  return refusal(
+    `Refusé : le jeton ne porte pas la portée « ${MCP_SCOPE_WRITE} » ; reconnectez le connecteur en accordant l'écriture.`
+  )
 }
 
 /**

@@ -2,7 +2,9 @@ import { z } from 'zod'
 import {
   ActivityChannelSchema,
   FieldSourceSchema,
+  ListingStatusSchema,
   MemberRoleSchema,
+  OfferChannelSchema,
   OfferResponseSchema,
   TaskOriginSchema,
 } from './enums.js'
@@ -145,20 +147,104 @@ export const PriceEventInputSchema = z.object({
 })
 export type PriceEventInput = z.infer<typeof PriceEventInputSchema>
 
+/** Une offre d'achat à enregistrer : montant, date, canal, réponse connue. */
+export const OfferInputSchema = z.object({
+  amount: z.number().min(0).describe("Montant de l'offre en euros"),
+  madeAt: z
+    .string()
+    .datetime()
+    .optional()
+    .describe("Date de l'offre, ISO 8601 ; absent = maintenant"),
+  channel: OfferChannelSchema.nullable().default(null),
+  response: OfferResponseSchema.default('pending').describe(
+    'Réponse du vendeur déjà connue ; « pending » (défaut) en attendant'
+  ),
+  counterAmount: z
+    .number()
+    .min(0)
+    .nullable()
+    .default(null)
+    .describe(
+      'Contre-proposition du vendeur en euros, si réponse « counter_offer »'
+    ),
+  notes: z.string().max(5000).nullable().default(null),
+})
+export type OfferInput = z.infer<typeof OfferInputSchema>
+export type OfferInputRaw = z.input<typeof OfferInputSchema>
+
+/** Réponse du vendeur à une offre existante ; au moins un champ à modifier. */
+export const OfferUpdateSchema = z
+  .object({
+    response: OfferResponseSchema.optional(),
+    counterAmount: z
+      .number()
+      .min(0)
+      .nullable()
+      .optional()
+      .describe('Contre-proposition du vendeur en euros'),
+    notes: z.string().max(5000).nullable().optional(),
+    respondedAt: z
+      .string()
+      .datetime()
+      .optional()
+      .describe(
+        'Date de la réponse, ISO 8601 ; absent = maintenant quand la réponse change'
+      ),
+    expectedResponse: OfferResponseSchema.optional().describe(
+      'Garde-fou optimiste : réponse actuelle attendue ; refus si différente'
+    ),
+  })
+  .refine(
+    value =>
+      value.response !== undefined ||
+      value.counterAmount !== undefined ||
+      value.notes !== undefined,
+    { message: 'Au moins un champ à modifier (response, counterAmount, notes)' }
+  )
+export type OfferUpdate = z.infer<typeof OfferUpdateSchema>
+
 export const OfferSchema = z.object({
   id: z.string().uuid(),
   listingId: z.string().uuid(),
   madeAt: z.string().datetime(),
   amount: z.number().min(0).describe("Montant de l'offre en euros"),
+  channel: OfferChannelSchema.nullable(),
   response: OfferResponseSchema,
   counterAmount: z
     .number()
     .min(0)
     .nullable()
     .describe('Contre-proposition du vendeur en euros'),
+  respondedAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .describe('Date de la réponse du vendeur'),
   notes: z.string().max(5000).nullable(),
+  createdById: z.string().uuid().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
 })
 export type Offer = z.infer<typeof OfferSchema>
+
+/**
+ * Réponse d'une écriture d'offre : l'offre, la liste à jour, et le statut
+ * que l'offre suggère pour l'annonce (« offre faite », « offre acceptée »,
+ * « offre refusée ») ; il n'est jamais appliqué d'office.
+ */
+export const OfferWriteResultSchema = z.object({
+  offer: OfferSchema,
+  offers: z
+    .array(OfferSchema)
+    .describe(
+      'Toutes les offres de l’annonce, de la plus récente à la plus ancienne'
+    ),
+  currentStatus: ListingStatusSchema,
+  suggestedStatus: ListingStatusSchema.nullable().describe(
+    'Statut proposé à la suite de cette offre ; null si le statut actuel convient déjà'
+  ),
+})
+export type OfferWriteResult = z.infer<typeof OfferWriteResultSchema>
 
 export const ActivityLogSchema = z.object({
   id: z.string().uuid(),

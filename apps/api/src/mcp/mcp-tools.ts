@@ -1,43 +1,60 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { z } from 'zod'
 import {
+  AssumptionsSchema,
+  DISCOUNT_CLASS_LABELS,
   DUPLICATE_REASON_LABELS,
+  INDICATOR_GLOSSARY,
   LISTING_STATUS_LABELS,
-  MCP_SCOPE_WRITE,
+  ListingCreateSchema,
   McpAddOpinionInputSchema,
   McpAddTaskInputSchema,
   McpAnalyzeListingPromptArgsSchema,
+  McpCompareListingsInputSchema,
   McpCompleteTaskInputSchema,
   McpCreateListingInputSchema,
   McpEvaluateListingInputSchema,
   McpExtractListingInputSchema,
   McpFindDuplicatesInputSchema,
   McpGetListingInputSchema,
+  McpGetTargetPriceInputSchema,
   McpListListingsInputSchema,
+  McpRecordOfferInputSchema,
+  McpRecordPriceChangeInputSchema,
+  McpSetAssumptionsInputSchema,
   McpSetListingStatusInputSchema,
   McpUpdateListingInputSchema,
+  OFFER_RESPONSE_LABELS,
+  OfferInputSchema,
+  OfferUpdateSchema,
   RENTAL_VERDICT_LABELS,
+  TARGET_CRITERION_LABELS,
   VERDICT_LABELS,
   splitListingCreate,
 } from '@apart/contracts'
 import type {
+  AssumptionsImpact,
+  CompareResult,
   DuplicateCandidate,
   EvaluatedListing,
   ListingEvaluation,
   McpScope,
   MissingField,
+  OfferWriteResult,
+  TargetPriceReport,
 } from '@apart/contracts'
-import { formatEuros, formatPercent } from '@apart/domain'
+import { formatEuros, formatPercent, mergeAssumptions } from '@apart/domain'
 import type { Member } from '../generated/prisma'
 import type { DuplicatesService } from '../listings/duplicates.service'
 import type { ExtractionService } from '../listings/extraction.service'
 import type { ListingsService } from '../listings/listings.service'
+import type { TargetPriceService } from '../listings/target-price.service'
 import type { AssumptionsService } from '../assumptions/assumptions.service'
+import type { OffersService } from '../offers/offers.service'
 import type { OpinionsService } from '../opinions/opinions.service'
 import type { TasksService } from '../tasks/tasks.service'
 import type { WorkspaceService } from '../workspace/workspace.service'
-import { hasScope } from './mcp-scopes'
-import { answer, dataResult, refusal } from './tool-results'
-import type { ToolResult } from './tool-results'
+import { answer, dataResult, refusal, writeRefusal } from './tool-results'
 
 /** Ce dont les outils ont besoin : le membre, ses portées, les services métier. */
 export interface McpToolContext {
@@ -50,11 +67,17 @@ export interface McpToolContext {
   opinions: OpinionsService
   tasks: TasksService
   workspace: WorkspaceService
+  offers: OffersService
+  targetPrice: TargetPriceService
 }
 
 const CHANNEL = 'mcp' as const
 
-/** Les noms des outils (lot 1, puis lot 2 : extraction et doublons), dans l'ordre de la feuille de route. */
+/**
+ * Les noms des outils, dans l'ordre de la feuille de route : lot 1, lot 2
+ * (extraction et doublons), lot 3 (prix cible, offres, prix, comparaison,
+ * hypothèses).
+ */
 export const MCP_TOOL_NAMES = [
   'list_listings',
   'get_listing',
@@ -62,16 +85,27 @@ export const MCP_TOOL_NAMES = [
   'evaluate_listing',
   'extract_listing',
   'find_duplicates',
+  'get_target_price',
+  'compare_listings',
   'create_listing',
   'update_listing',
   'set_listing_status',
   'add_opinion',
   'add_task',
   'complete_task',
+  'record_price_change',
+  'record_offer',
+  'set_assumptions',
 ] as const
 
 /** Les prompts du connecteur. */
 export const MCP_PROMPT_NAMES = ['analyze_listing'] as const
+
+/** Les ressources du connecteur : schéma d'annonce et glossaire. */
+export const MCP_RESOURCE_URIS = [
+  'apart://schema/listing',
+  'apart://glossaire',
+] as const
 
 /** Une ligne lisible par annonce : titre, prix, surface, brut, effort, verdict. */
 export function describeListing(item: EvaluatedListing): string {
@@ -139,11 +173,109 @@ export function describeMissing(missing: MissingField[]): string {
     .join(', ')}.`
 }
 
-function writeRefusal(ctx: McpToolContext): ToolResult | null {
-  if (hasScope(ctx.scopes, MCP_SCOPE_WRITE)) return null
-  return refusal(
-    `Refusé : le jeton ne porte pas la portée « ${MCP_SCOPE_WRITE} » ; reconnectez le connecteur en accordant l'écriture.`
-  )
+/** Le rapport « à partir de quel prix ? » en quelques lignes lisibles. */
+export function describeTargetPrice(report: TargetPriceReport): string {
+  const t = report.targetPrice
+  const n = report.negotiation
+  const head = [
+    `${report.title} : prix affiché ${formatEuros(report.price)}`,
+    t.targetPrice !== null
+      ? `prix cible ${formatEuros(t.targetPrice)} (critère liant : ${t.bindingCriterion ? TARGET_CRITERION_LABELS[t.bindingCriterion] : '—'})`
+      : 'prix cible non calculable (loyer visé manquant ?)',
+    t.discount !== null && t.discountClass
+      ? `décote nécessaire ${formatPercent(t.discount)} (${DISCOUNT_CLASS_LABELS[t.discountClass]})`
+      : null,
+    n.suggestedOffer !== null
+      ? `offre suggérée ${formatEuros(n.suggestedOffer)} (marge ${formatEuros(n.marginToTarget ?? 0)} sous le prix cible)`
+      : null,
+    report.rank
+      ? `rang ${report.rank.position}/${report.rank.total} des annonces actives par décote`
+      : null,
+    `frais de notaire ≈ ${formatEuros(report.notaryFees.total)} (${report.notaryFees.mode === 'scale' ? 'barème' : 'taux forfaitaire'})`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const criteria = t.criteria
+    .filter(c => c.maxPrice !== null)
+    .map(
+      c =>
+        `- ${TARGET_CRITERION_LABELS[c.criterion]}${c.active ? '' : ' (non retenu)'} : prix maximal ${formatEuros(c.maxPrice as number)}${c.discount !== null ? `, décote ${formatPercent(c.discount)}` : ''}`
+    )
+  const args = n.arguments.map(a => `- ${a.text}`)
+  return [
+    head,
+    criteria.length ? `Par critère :\n${criteria.join('\n')}` : null,
+    args.length ? `Arguments de négociation :\n${args.join('\n')}` : null,
+    report.sensitivity
+      ? `Tableau de sensibilité ${report.sensitivity.rows.length} × ${report.sensitivity.cols.length} joint dans les données.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** Une offre écrite : montant, réponse, statut actuel et statut proposé (jamais appliqué d'office). */
+export function describeOffer(result: OfferWriteResult): string {
+  const o = result.offer
+  const parts = [
+    `Offre de ${formatEuros(o.amount)} : ${OFFER_RESPONSE_LABELS[o.response]}${o.counterAmount !== null ? ` à ${formatEuros(o.counterAmount)}` : ''} [id ${o.id}]`,
+    `statut de l'annonce : ${LISTING_STATUS_LABELS[result.currentStatus]}`,
+  ]
+  if (result.suggestedStatus) {
+    parts.push(
+      `statut proposé : « ${LISTING_STATUS_LABELS[result.suggestedStatus]} » (non appliqué : demandez au membre, puis set_listing_status avec expectedStatus « ${result.currentStatus} »)`
+    )
+  }
+  return parts.join(' · ')
+}
+
+/** La comparaison en une ligne par annonce, puis la meilleure par indicateur. */
+export function describeCompare(result: CompareResult): string {
+  const lines = result.items.map(item => {
+    const m = item.evaluation.metrics
+    const t = item.evaluation.targetPrice
+    return `- ${describeListing(item)} · prix cible ${t.targetPrice !== null ? formatEuros(t.targetPrice) : '—'} · décote ${t.discount !== null ? formatPercent(t.discount) : '—'} · €/m² ${Number.isFinite(m.pricePerM2) ? formatEuros(m.pricePerM2) : '—'} · rangs : score ${item.ranks.score ?? '—'}, brut ${item.ranks.grossYield ?? '—'}, effort ${item.ranks.effort ?? '—'}, décote ${item.ranks.discount ?? '—'} [id ${item.listing.id}]`
+  })
+  const title = (id: string | null): string =>
+    result.items.find(i => i.listing.id === id)?.listing.title ?? '—'
+  return [
+    `${result.items.length} annonces comparées :`,
+    ...lines,
+    `Meilleure par indicateur : score ${title(result.best.score)} · brut ${title(result.best.grossYield)} · net ${title(result.best.netYield)} · effort ${title(result.best.effort)} · €/m² ${title(result.best.pricePerM2)} · décote ${title(result.best.discount)}`,
+  ].join('\n')
+}
+
+/** L'impact d'un changement d'hypothèses : verdicts qui changent. */
+export function describeImpact(impact: AssumptionsImpact): string {
+  if (impact.changedVerdicts === 0) {
+    return `Impact : aucun changement de verdict sur ${impact.total} annonce(s) active(s).`
+  }
+  return [
+    `Impact : ${impact.changedVerdicts} annonce(s) sur ${impact.total} changent de verdict (cible ${impact.byVerdictBefore.target} → ${impact.byVerdictAfter.target}, à creuser ${impact.byVerdictBefore.to_dig} → ${impact.byVerdictAfter.to_dig}, hors cible ${impact.byVerdictBefore.off_target} → ${impact.byVerdictAfter.off_target}) :`,
+    ...impact.changes.map(
+      c =>
+        `- ${c.title} : ${VERDICT_LABELS[c.before]} → ${VERDICT_LABELS[c.after]}${c.targetPriceAfter !== null ? `, prix cible ${formatEuros(c.targetPriceAfter)}` : ''}`
+    ),
+  ].join('\n')
+}
+
+/** Le schéma JSON d'une annonce à créer, descriptions comprises (ressource `apart://schema/listing`). */
+export function listingJsonSchema(): Record<string, unknown> {
+  return z.toJSONSchema(ListingCreateSchema, {
+    io: 'input',
+    unrepresentable: 'any',
+  }) as Record<string, unknown>
+}
+
+/** Le glossaire des indicateurs en Markdown (ressource `apart://glossaire`). */
+export function glossaryMarkdown(): string {
+  return [
+    '# Glossaire des indicateurs',
+    '',
+    "Définitions du modèle de calcul d'apart-localizer. Les taux sont des fractions dans les données (0,055 = 5,5 %), les montants en euros.",
+    '',
+    ...INDICATOR_GLOSSARY.map(e => `## ${e.term}\n\n${e.definition}\n`),
+  ].join('\n')
 }
 
 /**
@@ -312,7 +444,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     },
     async ({ listing, provenance }) =>
       answer(async () => {
-        const denied = writeRefusal(ctx)
+        const denied = writeRefusal(ctx.scopes)
         if (denied) return denied
         const { input, ignoreDuplicates } = splitListingCreate(listing)
         const item = await ctx.listings.create(ctx.member, input, {
@@ -355,7 +487,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       provenance,
     }) =>
       answer(async () => {
-        const denied = writeRefusal(ctx)
+        const denied = writeRefusal(ctx.scopes)
         if (denied) return denied
         const guards = {
           ...(expectedUpdatedAt !== undefined ? { expectedUpdatedAt } : {}),
@@ -395,7 +527,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     },
     async ({ listingId, status, reason, expectedStatus }) =>
       answer(async () => {
-        const denied = writeRefusal(ctx)
+        const denied = writeRefusal(ctx.scopes)
         if (denied) return denied
         const item = await ctx.listings.setStatus(
           ctx.member,
@@ -426,7 +558,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     },
     async ({ listingId, rating, text }) =>
       answer(async () => {
-        const denied = writeRefusal(ctx)
+        const denied = writeRefusal(ctx.scopes)
         if (denied) return denied
         const opinion = await ctx.opinions.upsert(
           ctx.member,
@@ -457,7 +589,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     },
     async ({ listingId, label, assigneeHandle }) =>
       answer(async () => {
-        const denied = writeRefusal(ctx)
+        const denied = writeRefusal(ctx.scopes)
         if (denied) return denied
         let assigneeId: string | null = null
         if (assigneeHandle) {
@@ -500,7 +632,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     },
     async ({ listingId, taskId, done }) =>
       answer(async () => {
-        const denied = writeRefusal(ctx)
+        const denied = writeRefusal(ctx.scopes)
         if (denied) return denied
         const task = await ctx.tasks.update(
           ctx.member,
@@ -514,6 +646,250 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           { task }
         )
       })
+  )
+
+  server.registerTool(
+    'get_target_price',
+    {
+      title: 'À partir de quel prix ?',
+      description:
+        "Prix cible d'une annonce enregistrée (`listingId`) ou hypothétique (`listing`) : prix maximal pour chaque critère (rendement brut, rendement net, effort, repère 220 × loyer), critère liant, décote nécessaire et sa classe (dans la cible, négociable, tendu, hors de portée), " +
+        "rang parmi les annonces actives de l'espace, brief de négociation (offre suggérée au millier inférieur, marge, durée en ligne, baisses passées, dernière offre, arguments factuels) et détail des frais de notaire. " +
+        '`assumptions` : scénario (taux, apport…) pour ce calcul seulement (le rang est alors omis). `sensitivity` : ajoute un tableau à deux entrées (axes prix, loyer, taux, apport, durée). Rien n’est enregistré.',
+      inputSchema: McpGetTargetPriceInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ listingId, listing, assumptions, sensitivity }) =>
+      answer(async () => {
+        const report = listingId
+          ? await ctx.targetPrice.report(ctx.member, listingId, {
+              ...(sensitivity ? { sensitivity } : {}),
+              ...(assumptions ? { scenario: assumptions } : {}),
+            })
+          : await ctx.targetPrice.reportForHypothetical(
+              ctx.member,
+              listing as NonNullable<typeof listing>,
+              assumptions,
+              sensitivity
+            )
+        return dataResult(describeTargetPrice(report), report)
+      })
+  )
+
+  server.registerTool(
+    'compare_listings',
+    {
+      title: 'Comparer des annonces',
+      description:
+        "Compare 2 à 6 annonces de l'espace côte à côte : indicateurs (coût, mensualité, rendements, effort, prix au m²), verdicts, prix cibles et décotes, rang de chacune par indicateur (1 = meilleure) et meilleure annonce par indicateur. Répond : « laquelle visiter en premier ? ».",
+      inputSchema: McpCompareListingsInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ listingIds }) =>
+      answer(async () => {
+        const result = await ctx.targetPrice.compare(ctx.member, listingIds)
+        return dataResult(describeCompare(result), result)
+      })
+  )
+
+  server.registerTool(
+    'record_price_change',
+    {
+      title: 'Enregistrer un changement de prix',
+      description:
+        "Baisse ou hausse constatée sur l'annonce source : met le prix affiché à jour, ajoute une ligne à l'historique des prix (levier de négociation) et journalise. `expectedPrice` est le garde-fou optimiste : refus si le prix actuel diffère. `source` : « listing » quand le portail affiche le nouveau prix, « user » si le membre le dicte. Portée listings:write.",
+      inputSchema: McpRecordPriceChangeInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ listingId, newPrice, occurredAt, source, expectedPrice }) =>
+      answer(async () => {
+        const denied = writeRefusal(ctx.scopes)
+        if (denied) return denied
+        const item = await ctx.listings.recordPriceChange(
+          ctx.member,
+          listingId,
+          {
+            newPrice,
+            source,
+            ...(occurredAt ? { occurredAt } : {}),
+            ...(expectedPrice !== undefined ? { expectedPrice } : {}),
+          },
+          CHANNEL
+        )
+        const previous = item.priceEvents[0]?.oldPrice ?? null
+        const delta =
+          previous !== null && previous > 0
+            ? ` (${newPrice < previous ? '−' : '+'}${formatEuros(Math.abs(newPrice - previous))}, ${formatPercent(Math.abs(newPrice - previous) / previous)})`
+            : ''
+        return dataResult(
+          `Prix ${previous !== null ? `${formatEuros(previous)} → ` : ''}${formatEuros(newPrice)}${delta} enregistré · ${describeListing(item)}`,
+          item
+        )
+      })
+  )
+
+  server.registerTool(
+    'record_offer',
+    {
+      title: 'Enregistrer une offre',
+      description:
+        "Nouvelle offre d'achat (`amount`, `madeAt`, `channel`, `response` si déjà connue, `counterAmount`, `notes`) ou réponse du vendeur à une offre existante (`offerId` avec `response`, `counterAmount`, `notes` ; garde-fou `expectedResponse`). " +
+        "La réponse indique le statut que l'offre suggère pour l'annonce (offre faite, acceptée, refusée) : il n'est jamais appliqué d'office, proposez-le au membre puis utilisez set_listing_status. Aucune suppression. Portée listings:write.",
+      inputSchema: McpRecordOfferInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({
+      listingId,
+      offerId,
+      amount,
+      madeAt,
+      channel,
+      response,
+      counterAmount,
+      notes,
+      expectedResponse,
+    }) =>
+      answer(async () => {
+        const denied = writeRefusal(ctx.scopes)
+        if (denied) return denied
+        let result: OfferWriteResult
+        if (offerId) {
+          if (amount !== undefined) {
+            return refusal(
+              "Refusé : le montant d'une offre existante ne se modifie pas ; enregistrez une nouvelle offre (sans offerId)."
+            )
+          }
+          result = await ctx.offers.update(
+            ctx.member,
+            listingId,
+            offerId,
+            OfferUpdateSchema.parse({
+              response,
+              counterAmount,
+              notes,
+              expectedResponse,
+            }),
+            CHANNEL
+          )
+        } else {
+          result = await ctx.offers.create(
+            ctx.member,
+            listingId,
+            OfferInputSchema.parse({
+              amount,
+              madeAt,
+              channel,
+              response,
+              counterAmount,
+              notes,
+            }),
+            CHANNEL
+          )
+        }
+        return dataResult(
+          `${offerId ? 'Réponse enregistrée' : 'Offre enregistrée'} · ${describeOffer(result)}`,
+          result
+        )
+      })
+  )
+
+  server.registerTool(
+    'set_assumptions',
+    {
+      title: 'Modifier les hypothèses',
+      description:
+        "Enregistre une nouvelle version des hypothèses de l'espace à partir des champs modifiés seulement (`values` : taux en fractions, apport en euros, seuils, marges, critères du prix cible, seuils de décote, mode et barème des frais de notaire…) ; les autres champs gardent leur valeur en vigueur. " +
+        '`expectedVersion` (identifiant rendu par get_assumptions) est le garde-fou optimiste : refus si une autre version a été enregistrée depuis. La réponse donne l’impact : annonces actives dont le verdict change. Journalisé. Portée listings:write.',
+      inputSchema: McpSetAssumptionsInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ values, label, expectedVersion }) =>
+      answer(async () => {
+        const denied = writeRefusal(ctx.scopes)
+        if (denied) return denied
+        const changed = Object.entries(values)
+          .filter(([, value]) => value !== undefined)
+          .map(([key]) => key)
+        if (changed.length === 0) {
+          return refusal(
+            'Refusé : aucun champ à modifier dans `values` (exemples : interestRate, downPayment, grossYieldThreshold, notaryMode).'
+          )
+        }
+        const current = await ctx.assumptions.current(ctx.member.workspaceId)
+        const merged = AssumptionsSchema.parse(
+          mergeAssumptions(current.values, values)
+        )
+        const result = await ctx.assumptions.update(
+          ctx.member,
+          {
+            values: merged,
+            ...(label !== undefined ? { label } : {}),
+            ...(expectedVersion !== undefined ? { expectedVersion } : {}),
+          },
+          CHANNEL
+        )
+        return dataResult(
+          `Hypothèses enregistrées (version ${result.id}${result.label ? `, « ${result.label} »` : ''}) : ${changed.join(', ')}.\n${describeImpact(result.impact)}`,
+          result
+        )
+      })
+  )
+}
+
+/**
+ * Les ressources du connecteur : le schéma JSON d'une annonce (ce que
+ * create_listing accepte, descriptions et unités comprises) et le glossaire
+ * des indicateurs. Lecture seule, sans accès à la base.
+ */
+export function registerResources(server: McpServer): void {
+  server.registerResource(
+    'listing_schema',
+    'apart://schema/listing',
+    {
+      title: "Schéma d'une annonce",
+      description:
+        "Schéma JSON de la fiche d'annonce normalisée acceptée par create_listing : champs, unités, énumérations et descriptions en français.",
+      mimeType: 'application/schema+json',
+    },
+    uri => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: 'application/schema+json',
+          text: JSON.stringify(listingJsonSchema(), null, 2),
+        },
+      ],
+    })
+  )
+  server.registerResource(
+    'glossary',
+    'apart://glossaire',
+    {
+      title: 'Glossaire des indicateurs',
+      description:
+        'Définitions : coût total, frais de notaire, mensualité, rendements brut et net, effort, repère 220 × loyer, verdict, prix cible, critère liant, décote et ses classes, offre suggérée, louabilité, provenance.',
+      mimeType: 'text/markdown',
+    },
+    uri => ({
+      contents: [
+        { uri: uri.href, mimeType: 'text/markdown', text: glossaryMarkdown() },
+      ],
+    })
   )
 }
 

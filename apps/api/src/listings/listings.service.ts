@@ -45,6 +45,7 @@ import { evaluateListing } from './evaluate'
 import {
   listingInclude,
   toListingDto,
+  toOfferDto,
   toOpinionDto,
   toPriceEventDto,
   toTaskDto,
@@ -588,6 +589,7 @@ export class ListingsService {
       opinions: row.opinions.map(toOpinionDto),
       tasks: row.tasks.map(toTaskDto),
       priceEvents: row.priceEvents.map(toPriceEventDto),
+      offers: row.offers.map(toOfferDto),
     })
   }
 

@@ -5,12 +5,15 @@ import type {
   ExtractionResult,
   Listing,
   Member,
+  Offer,
   Opinion,
+  TargetPriceReport,
   Task,
 } from '@apart/contracts'
 import {
   compute,
   financialsFromListing,
+  negotiationBrief,
   rentalChecks,
   targetPrice,
 } from '@apart/domain'
@@ -206,6 +209,61 @@ export function fakeEvaluated(
         source: 'user',
       },
     ],
+    offers: [],
+    ...over,
+  }
+}
+
+/** Une offre fictive telle que l'API la renvoie. */
+export function fakeOffer(over: Partial<Offer> = {}): Offer {
+  return {
+    id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    listingId: '11111111-1111-4111-8111-111111111111',
+    madeAt: '2026-11-02T10:00:00.000Z',
+    amount: 150_000,
+    channel: 'email',
+    response: 'pending',
+    counterAmount: null,
+    respondedAt: null,
+    notes: null,
+    createdById: MEMBERS[0]?.id ?? null,
+    createdAt: '2026-11-02T10:00:00.000Z',
+    updatedAt: '2026-11-02T10:00:00.000Z',
+    ...over,
+  }
+}
+
+/** Le rapport « à partir de quel prix ? » d'une annonce vue, calculé par `domain`. */
+export function fakeTargetPriceReport(
+  item: EvaluatedListing = fakeEvaluated(),
+  over: Partial<TargetPriceReport> = {}
+): TargetPriceReport {
+  return {
+    listingId: item.listing.id,
+    title: item.listing.title,
+    status: item.listing.status,
+    price: item.listing.price,
+    targetPrice: item.evaluation.targetPrice,
+    rank: { position: 1, total: 3 },
+    negotiation: negotiationBrief(
+      {
+        price: item.listing.price,
+        publishedAt: item.listing.publishedAt,
+        createdAt: item.listing.createdAt,
+        dpeClass: item.listing.dpeClass,
+        renovationTotal: item.evaluation.metrics.renovationTotal,
+        annualCharges: item.listing.annualCharges,
+        surface: item.listing.surface,
+        priceEvents: item.priceEvents,
+        offers: item.offers,
+      },
+      item.evaluation.targetPrice,
+      DEFAULT_ASSUMPTIONS,
+      { now: new Date('2026-11-03T12:00:00.000Z') }
+    ),
+    notaryFees: item.evaluation.metrics.notaryFeesDetail,
+    assumptions: DEFAULT_ASSUMPTIONS,
+    sensitivity: null,
     ...over,
   }
 }

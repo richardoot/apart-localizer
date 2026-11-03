@@ -23,7 +23,10 @@ import type { Member } from '../generated/prisma'
 import { DuplicatesService } from './duplicates.service'
 import { ExtractionService } from './extraction.service'
 import { ListingsService } from './listings.service'
+import { TargetPriceService } from './target-price.service'
 import {
+  CompareRequestDto,
+  CompareResultDto,
   CreateListingDto,
   DuplicateCandidateDto,
   DuplicateProbeDto,
@@ -37,8 +40,12 @@ import {
   ListingListQueryDto,
   ListingPatchDto,
   ListingStatusChangeDto,
+  NegotiationBriefDto,
   PriceEventDto,
   PriceEventInputDto,
+  SensitivityGridDto,
+  SensitivityRequestDto,
+  TargetPriceReportDto,
 } from './dto/listing.dto'
 
 @ApiTags('listings')
@@ -49,7 +56,8 @@ export class ListingsController {
   constructor(
     private readonly listings: ListingsService,
     private readonly extraction: ExtractionService,
-    private readonly duplicates: DuplicatesService
+    private readonly duplicates: DuplicatesService,
+    private readonly targetPrice: TargetPriceService
   ) {}
 
   @Get()
@@ -124,6 +132,20 @@ export class ListingsController {
     return this.listings.evaluate(member, body)
   }
 
+  @Post('compare')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Compare 2 à 6 annonces côte à côte : indicateurs, prix cibles, rang par indicateur et meilleure annonce par indicateur',
+  })
+  @ZodResponse({ status: 200, type: CompareResultDto })
+  compare(
+    @CurrentMember() member: Member,
+    @Body() body: CompareRequestDto
+  ): Promise<CompareResultDto> {
+    return this.targetPrice.compare(member, body.listingIds)
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Une annonce, ses calculs, avis, tâches et prix' })
   @ZodResponse({ status: 200, type: EvaluatedListingDto })
@@ -174,6 +196,47 @@ export class ListingsController {
     @Param('id', ParseUUIDPipe) id: string
   ): Promise<EvaluatedListingDto> {
     return this.listings.markSeen(member, id)
+  }
+
+  @Get(':id/target-price')
+  @ApiOperation({
+    summary:
+      '« À partir de quel prix ? » : prix cibles par critère, critère liant, décote et sa classe, rang parmi les annonces actives, brief de négociation, détail des frais de notaire',
+  })
+  @ZodResponse({ status: 200, type: TargetPriceReportDto })
+  targetPriceReport(
+    @CurrentMember() member: Member,
+    @Param('id', ParseUUIDPipe) id: string
+  ): Promise<TargetPriceReportDto> {
+    return this.targetPrice.report(member, id)
+  }
+
+  @Post(':id/sensitivity')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Tableau de sensibilité à deux entrées (prix, loyer, taux, apport, durée), verdict par cellule, cellule courante repérée',
+  })
+  @ZodResponse({ status: 200, type: SensitivityGridDto })
+  sensitivity(
+    @CurrentMember() member: Member,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: SensitivityRequestDto
+  ): Promise<SensitivityGridDto> {
+    return this.targetPrice.sensitivity(member, id, body)
+  }
+
+  @Get(':id/negotiation')
+  @ApiOperation({
+    summary:
+      'Brief de négociation : décote par critère, offre suggérée, marge, durée en ligne, baisses passées, arguments factuels',
+  })
+  @ZodResponse({ status: 200, type: NegotiationBriefDto })
+  negotiation(
+    @CurrentMember() member: Member,
+    @Param('id', ParseUUIDPipe) id: string
+  ): Promise<NegotiationBriefDto> {
+    return this.targetPrice.negotiation(member, id)
   }
 
   @Get(':id/price-events')

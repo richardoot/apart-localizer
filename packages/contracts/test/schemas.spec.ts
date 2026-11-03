@@ -4,6 +4,8 @@ import {
   ACTIVE_LISTING_STATUSES,
   AssumptionsOverrideSchema,
   AssumptionsSchema,
+  DEFAULT_ASSUMPTIONS,
+  DEFAULT_NOTARY_SCALE,
   DEFAULT_TASKS,
   LinearRingSchema,
   ListingFiltersSchema,
@@ -11,6 +13,7 @@ import {
   ListingListQuerySchema,
   ListingStatusChangeSchema,
   ListingUpdateSchema,
+  NotaryScaleSchema,
   PerimeterSchema,
   PointRadiusSchema,
   PointSchema,
@@ -160,16 +163,39 @@ describe('hypothèses', () => {
     ).toBe(false)
   })
 
-  it('chaque champ numérique porte une description avec son unité', () => {
+  it('chaque champ porte une description, avec son unité quand il est numérique', () => {
+    const unwrap = (schema: z.ZodType): z.ZodType => {
+      let inner: z.ZodType = schema
+      for (;;) {
+        if (inner instanceof z.ZodDefault)
+          inner = inner.removeDefault() as z.ZodType
+        else if (
+          inner instanceof z.ZodNullable ||
+          inner instanceof z.ZodOptional
+        )
+          inner = inner.unwrap() as z.ZodType
+        else return inner
+      }
+    }
     for (const [key, schema] of Object.entries(AssumptionsSchema.shape)) {
       const description = (schema as z.ZodType).description ?? ''
       expect(description, key).not.toBe('')
-      expect(
-        /euros|fraction|années|mois|année/i.test(description) ||
-          key === 'targetCriteria',
-        key
-      ).toBe(true)
+      if (unwrap(schema as z.ZodType) instanceof z.ZodNumber) {
+        expect(/euros|fraction|années|mois|année/i.test(description), key).toBe(
+          true
+        )
+      }
     }
+    // Le barème lui-même : chaque poste numérique est décrit avec son unité.
+    for (const [key, schema] of Object.entries(NotaryScaleSchema.shape)) {
+      const description = (schema as z.ZodType).description ?? ''
+      expect(description, key).not.toBe('')
+      if (unwrap(schema as z.ZodType) instanceof z.ZodNumber) {
+        expect(/euros|fraction/i.test(description), key).toBe(true)
+      }
+    }
+    expect(DEFAULT_NOTARY_SCALE.departmentalRate).toBe(0.05)
+    expect(AssumptionsSchema.parse(DEFAULT_ASSUMPTIONS).notaryMode).toBe('rate')
   })
 })
 

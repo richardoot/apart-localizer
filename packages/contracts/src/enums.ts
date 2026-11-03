@@ -186,5 +186,84 @@ export type ActivityChannel = z.infer<typeof ActivityChannelSchema>
 
 export const OfferResponseSchema = z
   .enum(['pending', 'accepted', 'refused', 'counter_offer'])
-  .describe('Réponse du vendeur à une offre')
+  .describe(
+    'Réponse du vendeur à une offre : en attente, acceptée, refusée, contre-proposition'
+  )
 export type OfferResponse = z.infer<typeof OfferResponseSchema>
+
+export const OFFER_RESPONSE_LABELS: Record<OfferResponse, string> = {
+  pending: 'En attente',
+  accepted: 'Acceptée',
+  refused: 'Refusée',
+  counter_offer: 'Contre-proposition',
+}
+
+export const OfferChannelSchema = z
+  .enum(['email', 'phone', 'agency', 'in_person', 'letter', 'other'])
+  .describe(
+    "Canal par lequel l'offre a été transmise : e-mail, téléphone, agence, en personne, courrier, autre"
+  )
+export type OfferChannel = z.infer<typeof OfferChannelSchema>
+
+export const OFFER_CHANNEL_LABELS: Record<OfferChannel, string> = {
+  email: 'E-mail',
+  phone: 'Téléphone',
+  agency: 'Agence',
+  in_person: 'En personne',
+  letter: 'Courrier',
+  other: 'Autre',
+}
+
+export const NotaryModeSchema = z
+  .enum(['rate', 'scale'])
+  .describe(
+    'Calcul des frais de notaire : taux forfaitaire sur le net vendeur (« rate », parité avec l’artefact) ou barème détaillé (« scale » : droits de mutation, émoluments, débours, contribution de sécurité immobilière)'
+  )
+export type NotaryMode = z.infer<typeof NotaryModeSchema>
+
+export const SensitivityAxisSchema = z
+  .enum(['price', 'rent', 'rate', 'downPayment', 'duration'])
+  .describe(
+    "Axe d'un tableau de sensibilité : prix d'achat, loyer, taux du crédit, apport, durée"
+  )
+export type SensitivityAxis = z.infer<typeof SensitivityAxisSchema>
+
+export const SENSITIVITY_AXIS_LABELS: Record<SensitivityAxis, string> = {
+  price: "Prix d'achat",
+  rent: 'Loyer',
+  rate: 'Taux du crédit',
+  downPayment: 'Apport',
+  duration: 'Durée du crédit',
+}
+
+export const NegotiationArgumentKindSchema = z
+  .enum([
+    'time_on_market',
+    'price_drops',
+    'dpe',
+    'renovation',
+    'charges',
+    'previous_offer',
+    'in_target',
+  ])
+  .describe(
+    'Levier de négociation factuel : durée en ligne, baisses passées, DPE, travaux, charges élevées, offre précédente, déjà dans la cible'
+  )
+export type NegotiationArgumentKind = z.infer<
+  typeof NegotiationArgumentKindSchema
+>
+
+export const TARGET_CRITERION_LABELS: Record<TargetCriterion, string> = {
+  gross_yield: 'Rendement brut',
+  net_yield: 'Rendement net',
+  effort: 'Effort mensuel',
+  rent_x220: 'Repère 220 × loyer',
+  market: 'Marché (DVF)',
+}
+
+export const DISCOUNT_CLASS_LABELS: Record<DiscountClass, string> = {
+  in_target: 'Dans la cible au prix affiché',
+  negotiable: 'Négociable',
+  tight: 'Tendu',
+  out_of_reach: 'Hors de portée',
+}

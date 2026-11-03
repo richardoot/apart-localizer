@@ -26,8 +26,10 @@ apps/
   web/          Vue 3.5 + Vite, Tailwind 4, TanStack Query et Table, MapLibre GL, reka-ui,
                 Supabase Auth, PWA, Sentry en option
 packages/
-  contracts/    schémas Zod partagés (annonces, hypothèses, GeoJSON, filtres, sorties calculées)
-  domain/       calculs purs (coût, rendement, verdict, louabilité, prix cible, sensibilité)
+  contracts/    schémas Zod partagés (annonces, hypothèses et barème notaire, offres, GeoJSON,
+                filtres, sorties calculées, prix cible, négociation, comparaison, glossaire)
+  domain/       calculs purs (coût, rendement, verdict, louabilité, frais de notaire par taux ou
+                barème, prix cible, sensibilité, brief de négociation, rangs)
 scripts/        import de l'artefact Claude (annonces, réglages, géocodage)
 supabase/       configuration du Supabase CLI
 docker/         Postgres + PostGIS pour les tests e2e (repli au Supabase CLI)
@@ -86,6 +88,10 @@ pnpm --filter @apart/api prisma:deploy     # applique prisma/migrations (PostGIS
 pnpm --filter @apart/api prisma:migrate    # crée une migration après un changement de schéma (dev)
 ```
 
+Migrations : `20261103000000_init` (schéma complet, PostGIS, index GiST) puis
+`20261103120000_lot3_offers` (canal, date de réponse, auteur et dates des offres). Une base
+locale créée avant le lot 3 doit rejouer `prisma:deploy`.
+
 ## Démarrage
 
 ```bash
@@ -113,12 +119,28 @@ et garde-fous dans [docs/mcp.md](docs/mcp.md).
   « Saisie manuelle » inchangé. Demande `ANTHROPIC_API_KEY` côté API ([docs/ia.md](docs/ia.md)) ;
   sans clé, l'analyse répond 503 et la saisie manuelle reste.
 - **Fiche** (`/annonces/:id`) : panneau latéral (plein écran sur mobile) avec aperçu en direct des
-  indicateurs calculé dans le navigateur par `packages/domain`, contrôles de louabilité,
-  formulaire complet (bien, charges, travaux avec postes, phase 2, hypothèses surchargées),
-  changement de statut avec garde-fou, avis des deux membres, tâches (dont « IA · champ
-  manquant »), historique des prix, pastilles de provenance par champ. L'ouverture marque
-  l'annonce « vue » pour le membre ; le badge « nouvelle » s'éteint pour lui seul.
-- **Hypothèses** (`/hypotheses`) : hypothèses de l'espace, versionnées.
+  indicateurs calculé dans le navigateur par `packages/domain`, section **« À partir de quel
+  prix ? »** (prix maximal par critère avec le critère liant, décote nécessaire et sa classe
+  colorée, rang parmi les annonces actives, offre suggérée au millier inférieur avec sa marge,
+  arguments de négociation, détail des frais de notaire), **tableau de sensibilité** à deux axes
+  au choix (prix, loyer, taux, apport, durée) coloré par verdict avec la cellule courante
+  repérée, contrôles de louabilité, formulaire complet (bien, charges, travaux avec postes,
+  phase 2, hypothèses surchargées), changement de statut avec garde-fou, avis des deux membres,
+  tâches (dont « IA · champ manquant »), **frise des prix et des offres** (nouveau prix
+  constaté, nouvelle offre avec canal et date, réponse du vendeur et contre-proposition, statut
+  proposé après une réponse, jamais appliqué d'office), pastilles de provenance par champ.
+  L'ouverture marque l'annonce « vue » pour le membre ; le badge « nouvelle » s'éteint pour lui
+  seul.
+- **Comparer** (`/comparer?ids=…`) : depuis le tableau, cocher deux à six annonces puis
+  « Comparer » : indicateurs, prix cibles, décotes et verdicts côte à côte, la meilleure par
+  indicateur marquée ★. Le tableau comparatif porte aussi les colonnes triables « Prix cible »,
+  « Décote » et « Classement ».
+- **Hypothèses** (`/hypotheses`) : hypothèses de l'espace, versionnées : financement, frais de
+  notaire par taux forfaitaire ou par barème (droit départemental, taxe communale, frais
+  d'assiette, tranches d'émoluments, CSI, débours ; défauts Gironde datés, voir le modèle de
+  calcul § 2), seuils de brut et de net, effort maximal, critères retenus pour le prix cible,
+  seuils de décote « négociable » et « tendu », avec « Voir l'impact » (annonces dont le verdict
+  changerait) avant d'enregistrer ; garde-fou sur la version en vigueur.
 
 Fond de carte : `VITE_MAP_STYLE_URL` dans `apps/web/.env`, par défaut le style libre et sans clé
 d'OpenFreeMap (`https://tiles.openfreemap.org/styles/liberty`).
@@ -134,7 +156,7 @@ pnpm --filter @apart/domain test:cov
 pnpm build
 ```
 
-Les e2e (REST, géo, collaboration, extraction IA, MCP par appels JSON-RPC réels) demandent
+Les e2e (REST, géo, collaboration, prix cible et négociation, extraction IA, MCP par appels JSON-RPC réels) demandent
 `TEST_DATABASE_URL` (voie 2 ci-dessus, ou le Postgres du Supabase CLI sur 54322). Le client
 Anthropic et le géocodeur IGN sont remplacés par des factices dans le harnais ; les tests du web
 mockent MapLibre et Supabase : aucun réseau, aucune clé. La CI GitHub Actions (`.github/workflows/ci.yml`) rejoue lint,

@@ -6,23 +6,55 @@ import type {
   TargetPrice,
   TargetPriceCriterion,
 } from '@apart/contracts'
-import { netOperating } from './compute.js'
+import { netOperating, totalCost } from './compute.js'
 import { monthlyFactor } from './loan.js'
 
+/** Précision de la recherche numérique du prix : un demi-centime. */
+export const PRICE_SEARCH_TOLERANCE = 0.005
+
 /**
- * Prix correspondant à un coût total donné : l'inverse de
- * `cout = P + n × (P − H) + T + M`, soit `P = (cout − T − M + n × H) / (1 + n)`.
+ * Prix correspondant à un coût total donné.
+ *
+ * En mode taux, l'inverse en forme fermée de `cout = P + n × (P − H) + T + M`,
+ * soit `P = (cout − T − M + n × H) / (1 + n)`. En mode barème, les frais ne
+ * sont plus proportionnels (tranches, minimum, forfaits) : le prix est
+ * cherché par bissection sur `cout(P)`, qui est croissante en `P`.
  */
 export function priceForTotalCost(
   cost: number,
   input: ListingFinancials,
   a: Assumptions
 ): number {
+  if (a.notaryMode === 'scale') return priceForTotalCostBySearch(cost, input, a)
   const base = cost - input.renovationTotal - input.furnitureValue
   const withFees = (base + a.notaryRate * input.buyerFees) / (1 + a.notaryRate)
   // Des honoraires supérieurs au prix : la base des frais de notaire est
   // nulle (comme dans `notaryFees`), le prix est alors le coût sans frais.
   return withFees >= input.buyerFees ? withFees : base
+}
+
+/**
+ * Bissection : le plus grand prix `P` tel que `cout(P) ≤ cout`. `cout(P)` est
+ * croissante (prix, droits et émoluments croissants, forfaits constants) ;
+ * elle vaut `T + M` en zéro et dépasse `P + T + M` ensuite, donc la racine
+ * est dans `[0, cout − T − M]`. Arrêt au demi-centime.
+ */
+function priceForTotalCostBySearch(
+  cost: number,
+  input: ListingFinancials,
+  a: Assumptions
+): number {
+  const costAt = (price: number): number => totalCost({ ...input, price }, a)
+  let lo = 0
+  let hi = cost - input.renovationTotal - input.furnitureValue
+  if (!(hi > 0)) return 0
+  if (costAt(hi) <= cost) return hi
+  while (hi - lo > PRICE_SEARCH_TOLERANCE) {
+    const mid = (lo + hi) / 2
+    if (costAt(mid) <= cost) lo = mid
+    else hi = mid
+  }
+  return lo
 }
 
 /** Un prix maximal négatif ou nul signifie qu'aucun prix ne satisfait le critère. */
@@ -118,10 +150,16 @@ export function targetPrice(
     market: null,
   }
 
+  const discountFor = (maxPrice: number | null): number | null =>
+    maxPrice !== null && input.price > 0
+      ? (input.price - maxPrice) / input.price
+      : null
+
   const criteria: TargetPriceCriterion[] = CRITERIA.map(criterion => ({
     criterion,
     maxPrice: maxPrices[criterion],
     active: a.targetCriteria.includes(criterion),
+    discount: discountFor(maxPrices[criterion]),
   }))
 
   let target: number | null = null
@@ -134,10 +172,7 @@ export function targetPrice(
     }
   }
 
-  const discount =
-    target !== null && input.price > 0
-      ? (input.price - target) / input.price
-      : null
+  const discount = discountFor(target)
 
   return {
     criteria,

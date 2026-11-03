@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, h } from 'vue'
+  import { computed, h, ref } from 'vue'
   import {
     FlexRender,
     createColumnHelper,
@@ -11,6 +11,7 @@
   } from '@tanstack/vue-table'
   import type { ColumnDef } from '@tanstack/vue-table'
   import type { EvaluatedListing } from '@apart/contracts'
+  import { rankValues } from '@apart/domain'
   import {
     formatEuros,
     formatEurosPerM2,
@@ -18,6 +19,7 @@
     formatPercent,
     formatSurface,
   } from '@/lib/format'
+  import { DISCOUNT_CLASS_CLASSES, DISCOUNT_CLASS_LABELS } from '@/lib/labels'
   import DpeBadge from './DpeBadge.vue'
   import NewBadge from './NewBadge.vue'
   import RentalPill from './RentalPill.vue'
@@ -25,7 +27,29 @@
   import VerdictPill from './VerdictPill.vue'
 
   const props = defineProps<{ items: EvaluatedListing[] }>()
-  const emit = defineEmits<{ open: [id: string] }>()
+  const emit = defineEmits<{ open: [id: string]; compare: [ids: string[]] }>()
+
+  /** Au plus six annonces côte à côte. */
+  const COMPARE_MAX = 6
+  const selected = ref<string[]>([])
+  function toggle(id: string, checked: boolean): void {
+    selected.value = checked
+      ? selected.value.includes(id)
+        ? selected.value
+        : [...selected.value, id].slice(0, COMPARE_MAX)
+      : selected.value.filter(s => s !== id)
+  }
+
+  /** Rang par décote nécessaire croissante parmi les annonces affichées. */
+  const ranks = computed(() =>
+    rankValues(
+      props.items.map(item => ({
+        id: item.listing.id,
+        value: item.evaluation.targetPrice.discount,
+      })),
+      'asc'
+    )
+  )
 
   const features = tableFeatures({
     rowSortingFeature,
@@ -50,6 +74,24 @@
   // Les accesseurs rendent des types différents (texte, nombre) : la liste
   // est rapportée au type de colonne générique que `useTable` attend.
   const columns = [
+    helper.display({
+      id: 'select',
+      header: () =>
+        h('span', { class: 'sr-only' }, 'Sélectionner pour comparer'),
+      cell: ctx =>
+        h('input', {
+          type: 'checkbox',
+          class: 'size-4 accent-[var(--accent)]',
+          checked: selected.value.includes(ctx.row.original.listing.id),
+          'aria-label': `Sélectionner ${ctx.row.original.listing.title} pour comparer`,
+          onClick: (event: Event) => event.stopPropagation(),
+          onChange: (event: Event) =>
+            toggle(
+              ctx.row.original.listing.id,
+              (event.target as HTMLInputElement).checked
+            ),
+        }),
+    }),
     helper.accessor(row => row.listing.title, {
       id: 'title',
       header: 'Annonce',
@@ -156,6 +198,57 @@
       cell: ctx => formatEurosPerMonth(ctx.getValue()),
       sortFn: 'basic',
     }),
+    helper.accessor(row => num(row.evaluation.targetPrice.targetPrice), {
+      id: 'targetPrice',
+      header: 'Prix cible',
+      cell: ctx => {
+        const t = ctx.row.original.evaluation.targetPrice
+        return t.targetPrice === null ? '—' : formatEuros(t.targetPrice)
+      },
+      sortFn: 'basic',
+    }),
+    helper.accessor(
+      // Une décote inconnue descend en bas, quel que soit le sens.
+      row =>
+        row.evaluation.targetPrice.discount === null
+          ? Number.NEGATIVE_INFINITY
+          : -row.evaluation.targetPrice.discount,
+      {
+        id: 'discount',
+        header: 'Décote',
+        cell: ctx => {
+          const t = ctx.row.original.evaluation.targetPrice
+          if (t.discount === null || !t.discountClass) return '—'
+          return h(
+            'span',
+            {
+              class: `inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${DISCOUNT_CLASS_CLASSES[t.discountClass]}`,
+              title: DISCOUNT_CLASS_LABELS[t.discountClass],
+              'data-discount-class': t.discountClass,
+            },
+            t.discount > 0
+              ? `−${formatPercent(t.discount)}`
+              : `+${formatPercent(-t.discount)}`
+          )
+        },
+        sortFn: 'basic',
+      }
+    ),
+    helper.accessor(
+      row => {
+        const rank = ranks.value.get(row.listing.id) ?? null
+        return rank === null ? Number.NEGATIVE_INFINITY : -rank
+      },
+      {
+        id: 'rank',
+        header: 'Classement',
+        cell: ctx => {
+          const rank = ranks.value.get(ctx.row.original.listing.id) ?? null
+          return rank === null ? '—' : `${rank}/${ranks.value.size}`
+        },
+        sortFn: 'basic',
+      }
+    ),
     helper.accessor(row => row.evaluation.rental.rank, {
       id: 'rental',
       header: 'Phase 2',
@@ -201,7 +294,31 @@
 
 <template>
   <div class="overflow-x-auto rounded-xl border border-line bg-surface">
-    <table class="w-full min-w-[1100px] text-sm">
+    <div
+      v-if="selected.length > 0"
+      class="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-accent-soft px-3 py-2 text-sm"
+      data-testid="compare-bar"
+    >
+      <span>{{ selected.length }} annonce(s) sélectionnée(s) (6 au plus)</span>
+      <span class="flex gap-2">
+        <button
+          type="button"
+          class="rounded-lg border border-line px-3 py-1 text-xs hover:bg-surface"
+          @click="selected = []"
+        >
+          Tout désélectionner
+        </button>
+        <button
+          type="button"
+          class="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-accent-fg disabled:opacity-60"
+          :disabled="selected.length < 2"
+          @click="emit('compare', selected)"
+        >
+          Comparer ({{ selected.length }})
+        </button>
+      </span>
+    </div>
+    <table class="w-full min-w-[1300px] text-sm">
       <thead class="bg-surface-2 text-left text-xs text-muted">
         <tr
           v-for="headerGroup in table.getHeaderGroups()"

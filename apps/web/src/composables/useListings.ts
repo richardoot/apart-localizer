@@ -7,8 +7,11 @@ import type {
   ListingFiltersInput,
   ListingPatch,
   ListingStatusChange,
+  OfferInputRaw,
+  OfferUpdate,
   OpinionInput,
   PriceEventInput,
+  SensitivityRequestInput,
   TaskUpdate,
 } from '@apart/contracts'
 import { api } from '@/lib/api'
@@ -18,6 +21,44 @@ export const listingKeys = {
   list: (filters: ListingFiltersInput) =>
     ['listings', 'list', filters] as const,
   detail: (id: string) => ['listings', 'detail', id] as const,
+  targetPrice: (id: string) => ['listings', 'target-price', id] as const,
+  sensitivity: (id: string, request: SensitivityRequestInput) =>
+    ['listings', 'sensitivity', id, request] as const,
+  compare: (ids: string[]) => ['listings', 'compare', ids] as const,
+}
+
+/** « À partir de quel prix ? » : rapport de prix cible, rang et brief de négociation. */
+export function useTargetPrice(id: MaybeRef<string | null | undefined>) {
+  return useQuery({
+    queryKey: computed(() => listingKeys.targetPrice(unref(id) ?? '')),
+    queryFn: () => api.listings.targetPrice(unref(id) as string),
+    enabled: computed(() => Boolean(unref(id))),
+  })
+}
+
+/** Tableau de sensibilité, recalculé quand les axes ou les pas changent. */
+export function useSensitivity(
+  id: MaybeRef<string | null | undefined>,
+  request: MaybeRef<SensitivityRequestInput>
+) {
+  return useQuery({
+    queryKey: computed(() =>
+      listingKeys.sensitivity(unref(id) ?? '', unref(request))
+    ),
+    queryFn: () =>
+      api.listings.sensitivity(unref(id) as string, unref(request)),
+    enabled: computed(() => Boolean(unref(id))),
+    placeholderData: previous => previous,
+  })
+}
+
+/** Comparaison côte à côte de 2 à 6 annonces. */
+export function useCompare(ids: MaybeRef<string[]>) {
+  return useQuery({
+    queryKey: computed(() => listingKeys.compare(unref(ids))),
+    queryFn: () => api.listings.compare(unref(ids)),
+    enabled: computed(() => unref(ids).length >= 2),
+  })
 }
 
 /** La liste filtrée ; une page de 200 suffit à deux personnes et quelques dizaines d'annonces. */
@@ -48,11 +89,21 @@ export function useListingMutations() {
   function settle(item: EvaluatedListing): void {
     client.setQueryData(listingKeys.detail(item.listing.id), item)
     void client.invalidateQueries({ queryKey: ['listings', 'list'] })
+    // Le prix, le statut et l'historique nourrissent le rang et le brief.
+    void client.invalidateQueries({
+      queryKey: listingKeys.targetPrice(item.listing.id),
+    })
+    void client.invalidateQueries({
+      queryKey: ['listings', 'sensitivity', item.listing.id],
+    })
   }
 
   function refresh(listingId: string): void {
     void client.invalidateQueries({ queryKey: listingKeys.detail(listingId) })
     void client.invalidateQueries({ queryKey: ['listings', 'list'] })
+    void client.invalidateQueries({
+      queryKey: listingKeys.targetPrice(listingId),
+    })
   }
 
   const create = useMutation({
@@ -114,6 +165,23 @@ export function useListingMutations() {
       api.tasks.remove(id, taskId),
     onSuccess: (_void, { id }) => refresh(id),
   })
+  const addOffer = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: OfferInputRaw }) =>
+      api.offers.create(id, input),
+    onSuccess: (_result, { id }) => refresh(id),
+  })
+  const updateOffer = useMutation({
+    mutationFn: ({
+      id,
+      offerId,
+      update,
+    }: {
+      id: string
+      offerId: string
+      update: OfferUpdate
+    }) => api.offers.update(id, offerId, update),
+    onSuccess: (_result, { id }) => refresh(id),
+  })
 
   return {
     create,
@@ -125,5 +193,7 @@ export function useListingMutations() {
     addTask,
     updateTask,
     removeTask,
+    addOffer,
+    updateOffer,
   }
 }

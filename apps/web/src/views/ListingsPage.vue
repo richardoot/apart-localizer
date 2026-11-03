@@ -67,6 +67,9 @@
   function onNear(near: PointRadius | undefined): void {
     store.setNear(near)
   }
+  function compare(ids: string[]): void {
+    void router.push({ name: 'compare', query: { ids: ids.join(',') } })
+  }
 </script>
 
 <template>
@@ -123,6 +126,7 @@
         v-if="store.view === 'table'"
         :items="items"
         @open="open"
+        @compare="compare"
       />
       <ListingCards
         v-else-if="store.view === 'cards'"

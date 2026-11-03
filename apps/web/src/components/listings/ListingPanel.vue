@@ -1,8 +1,18 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue'
-  import type { ListingStatus } from '@apart/contracts'
+  import type {
+    ListingStatus,
+    OfferInputRaw,
+    OfferUpdate,
+    SensitivityAxis,
+  } from '@apart/contracts'
   import SidePanel from '@/components/ui/SidePanel.vue'
-  import { useListing, useListingMutations } from '@/composables/useListings'
+  import {
+    useListing,
+    useListingMutations,
+    useSensitivity,
+    useTargetPrice,
+  } from '@/composables/useListings'
   import { useLivePreview } from '@/composables/useLivePreview'
   import { useAssumptions, useWorkspace } from '@/composables/useWorkspace'
   import { ApiError } from '@/lib/api'
@@ -14,14 +24,16 @@
     validateForm,
   } from '@/lib/listing-form'
   import DpeBadge from './DpeBadge.vue'
+  import HistorySection from './HistorySection.vue'
   import ListingForm from './ListingForm.vue'
   import MetricsPreview from './MetricsPreview.vue'
   import NewBadge from './NewBadge.vue'
   import OpinionsSection from './OpinionsSection.vue'
-  import PriceHistory from './PriceHistory.vue'
   import RentalChecksList from './RentalChecksList.vue'
+  import SensitivityTable from './SensitivityTable.vue'
   import StatusBadge from './StatusBadge.vue'
   import StatusChanger from './StatusChanger.vue'
+  import TargetPriceSection from './TargetPriceSection.vue'
   import TasksSection from './TasksSection.vue'
 
   const props = defineProps<{ id: string }>()
@@ -59,9 +71,43 @@
   const shownEvaluation = computed(() =>
     editing.value ? preview.value.evaluation : (item.value?.evaluation ?? null)
   )
+
+  // « À partir de quel prix ? » : le rapport du serveur (rang, historique) ;
+  // pendant l'édition, l'aperçu calculé dans le navigateur par `domain`.
+  const { data: targetReport } = useTargetPrice(id)
+  const shownTargetPrice = computed(() =>
+    editing.value
+      ? (preview.value.evaluation?.targetPrice ?? null)
+      : (targetReport.value?.targetPrice ??
+        item.value?.evaluation.targetPrice ??
+        null)
+  )
+  const shownNegotiation = computed(() =>
+    editing.value
+      ? preview.value.negotiation
+      : (targetReport.value?.negotiation ?? null)
+  )
+  const shownNotaryFees = computed(
+    () => shownEvaluation.value?.metrics.notaryFeesDetail ?? null
+  )
+
+  // Tableau de sensibilité : axes au choix, recalculé côté serveur.
+  const rowAxis = ref<SensitivityAxis>('price')
+  const colAxis = ref<SensitivityAxis>('rent')
+  const sensitivityRequest = computed(() => ({
+    rowAxis: rowAxis.value,
+    colAxis: colAxis.value,
+  }))
+  const sensitivity = useSensitivity(id, sensitivityRequest)
+
+  /** Le statut proposé par la dernière offre écrite, jusqu'à ce qu'il soit appliqué ou que la fiche change. */
+  const suggestedStatus = ref<ListingStatus | null>(null)
   const busy = computed(
     () =>
-      mutations.update.isPending.value || mutations.setStatus.isPending.value
+      mutations.update.isPending.value ||
+      mutations.setStatus.isPending.value ||
+      mutations.addOffer.isPending.value ||
+      mutations.updateOffer.isPending.value
   )
   /** Combien de champs viennent de l'IA : la fiche a été extraite, pas saisie. */
   const aiFieldCount = computed(
@@ -114,6 +160,7 @@
         id: item.value.listing.id,
         change: { ...change, expectedStatus: item.value.listing.status },
       })
+      if (change.status === suggestedStatus.value) suggestedStatus.value = null
     } catch (err) {
       report(err)
     }
@@ -123,6 +170,40 @@
     failure.value = null
     try {
       await action
+    } catch (err) {
+      report(err)
+    }
+  }
+
+  async function addOffer(input: OfferInputRaw): Promise<void> {
+    if (!item.value) return
+    failure.value = null
+    try {
+      const result = await mutations.addOffer.mutateAsync({
+        id: item.value.listing.id,
+        input,
+      })
+      suggestedStatus.value = result.suggestedStatus
+      message.value = 'Offre enregistrée.'
+    } catch (err) {
+      report(err)
+    }
+  }
+
+  async function updateOffer(
+    offerId: string,
+    update: OfferUpdate
+  ): Promise<void> {
+    if (!item.value) return
+    failure.value = null
+    try {
+      const result = await mutations.updateOffer.mutateAsync({
+        id: item.value.listing.id,
+        offerId,
+        update,
+      })
+      suggestedStatus.value = result.suggestedStatus
+      message.value = 'Réponse enregistrée.'
     } catch (err) {
       report(err)
     }
@@ -190,6 +271,20 @@
       </header>
 
       <MetricsPreview :evaluation="shownEvaluation" />
+      <TargetPriceSection
+        :price="shownEvaluation?.metrics.price ?? item.listing.price"
+        :target-price="shownTargetPrice"
+        :negotiation="shownNegotiation"
+        :rank="editing ? null : (targetReport?.rank ?? null)"
+        :notary-fees="shownNotaryFees"
+        :live="editing"
+      />
+      <SensitivityTable
+        v-model:row-axis="rowAxis"
+        v-model:col-axis="colAxis"
+        :grid="sensitivity.data.value ?? null"
+        :loading="sensitivity.isFetching.value"
+      />
       <RentalChecksList
         v-if="shownEvaluation"
         :rental="shownEvaluation.rental"
@@ -285,9 +380,12 @@
         "
       />
 
-      <PriceHistory
+      <HistorySection
         :events="item.priceEvents"
+        :offers="item.offers"
         :current-price="item.listing.price"
+        :suggested-status="suggestedStatus"
+        :busy="busy"
         @record="
           newPrice =>
             run(
@@ -301,6 +399,9 @@
               })
             )
         "
+        @add-offer="addOffer"
+        @update-offer="updateOffer"
+        @set-status="status => changeStatus({ status, reason: null })"
       />
     </div>
   </SidePanel>

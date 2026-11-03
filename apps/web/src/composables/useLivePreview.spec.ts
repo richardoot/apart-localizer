@@ -21,6 +21,27 @@ describe('aperçu en direct', () => {
     expect(Math.round(m?.monthlyPayment ?? 0)).toBe(931)
     expect(m?.verdict).toBe('off_target')
     expect(preview.evaluation?.targetPrice.bindingCriterion).toBe('gross_yield')
+    // Le brief de négociation est calculé dans le navigateur, sans historique.
+    expect(preview.negotiation?.suggestedOffer).toBe(147_000)
+    expect(preview.negotiation?.discountClass).toBe('out_of_reach')
+    expect(preview.negotiation?.daysOnline).toBeNull()
+    expect(preview.negotiation?.arguments).toEqual([])
+    expect(m?.notaryFeesDetail.mode).toBe('rate')
+  })
+
+  it('suit le mode barème des hypothèses', () => {
+    const form = emptyForm()
+    form.price = '200000'
+    form.surface = '45'
+    form.furnitureValue = '5000'
+    form.rentalPlan.targetRent = '750'
+    const preview = previewFromForm(form, {
+      ...DEFAULT_ASSUMPTIONS,
+      notaryMode: 'scale',
+    })
+    expect(preview.evaluation?.metrics.notaryFeesDetail.mode).toBe('scale')
+    expect(preview.evaluation?.metrics.notaryFees).toBeGreaterThan(15_000)
+    expect(preview.evaluation?.targetPrice.targetPrice).toBeLessThan(147_600)
   })
 
   it('applique travaux et surcharges d’hypothèses, et réagit aux frappes', async () => {
@@ -51,6 +72,7 @@ describe('aperçu en direct', () => {
     expect(partial.evaluation?.metrics.price).toBe(0)
     expect(Number.isNaN(partial.evaluation?.metrics.pricePerM2)).toBe(true)
     expect(previewFromForm(form, null).evaluation).toBeNull()
+    expect(previewFromForm(form, null).negotiation).toBeNull()
     form.url = 'pas une url'
     expect(previewFromForm(form, DEFAULT_ASSUMPTIONS).evaluation).toBeNull()
   })

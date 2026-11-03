@@ -6,11 +6,22 @@ import { DuplicatesService } from './duplicates.service'
 import { ExtractionService } from './extraction.service'
 import { ListingsController } from './listings.controller'
 import { ListingsService } from './listings.service'
+import { TargetPriceService } from './target-price.service'
 
 @Module({
   imports: [AssumptionsModule, AiModule, OpendataModule],
   controllers: [ListingsController],
-  providers: [ListingsService, DuplicatesService, ExtractionService],
-  exports: [ListingsService, DuplicatesService, ExtractionService],
+  providers: [
+    ListingsService,
+    DuplicatesService,
+    ExtractionService,
+    TargetPriceService,
+  ],
+  exports: [
+    ListingsService,
+    DuplicatesService,
+    ExtractionService,
+    TargetPriceService,
+  ],
 })
 export class ListingsModule {}

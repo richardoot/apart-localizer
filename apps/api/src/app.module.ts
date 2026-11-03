@@ -14,6 +14,7 @@ import { AuthModule } from './auth/auth.module'
 import { AssumptionsModule } from './assumptions/assumptions.module'
 import { ListingsModule } from './listings/listings.module'
 import { OpinionsModule } from './opinions/opinions.module'
+import { OffersModule } from './offers/offers.module'
 import { TasksModule } from './tasks/tasks.module'
 import { McpModule } from './mcp/mcp.module'
 
@@ -41,6 +42,7 @@ import { McpModule } from './mcp/mcp.module'
     AssumptionsModule,
     ListingsModule,
     OpinionsModule,
+    OffersModule,
     TasksModule,
     McpModule,
   ],

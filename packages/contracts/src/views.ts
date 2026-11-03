@@ -1,10 +1,22 @@
 import { z } from 'zod'
 import { AssumptionsOverrideSchema, AssumptionsSchema } from './assumptions.js'
-import { OpinionSchema, PriceEventSchema, TaskSchema } from './collaboration.js'
+import {
+  OfferSchema,
+  OpinionSchema,
+  PriceEventSchema,
+  TaskSchema,
+} from './collaboration.js'
 import { DuplicateCandidateSchema } from './duplicates.js'
+import { ListingStatusSchema } from './enums.js'
 import { LISTING_PAGE_MAX } from './filters.js'
 import { ListingInputSchema, ListingSchema } from './listing.js'
-import { ListingEvaluationSchema } from './metrics.js'
+import {
+  ListingEvaluationSchema,
+  NotaryFeesBreakdownSchema,
+  SensitivityGridSchema,
+  TargetPriceSchema,
+} from './metrics.js'
+import { NegotiationBriefSchema } from './negotiation.js'
 import { withoutDefaults } from './zod-utils.js'
 
 /**
@@ -30,6 +42,10 @@ export const EvaluatedListingSchema = z.object({
     .array(PriceEventSchema)
     .default([])
     .describe('Historique des prix, du plus récent au plus ancien'),
+  offers: z
+    .array(OfferSchema)
+    .default([])
+    .describe('Offres faites, de la plus récente à la plus ancienne'),
 })
 export type EvaluatedListing = z.infer<typeof EvaluatedListingSchema>
 
@@ -124,3 +140,100 @@ export const ListingCreateResultSchema = EvaluatedListingSchema.extend({
     .describe('Tâches créées pour les champs indispensables manquants'),
 })
 export type ListingCreateResult = z.infer<typeof ListingCreateResultSchema>
+
+/** Rang d'une annonce par décote nécessaire parmi les annonces actives de l'espace. */
+export const TargetPriceRankSchema = z.object({
+  position: z
+    .number()
+    .int()
+    .min(1)
+    .describe(
+      'Rang par décote nécessaire croissante (1 = la plus proche de sa cible)'
+    ),
+  total: z
+    .number()
+    .int()
+    .min(1)
+    .describe('Annonces actives dont le prix cible est calculable'),
+})
+export type TargetPriceRank = z.infer<typeof TargetPriceRankSchema>
+
+/**
+ * « À partir de quel prix ? » : les prix cibles par critère, le critère liant,
+ * la décote et son classement, le rang parmi les annonces actives, le brief
+ * de négociation et le détail des frais de notaire, pour une annonce
+ * enregistrée (`listingId`) ou hypothétique (`listingId` null).
+ */
+export const TargetPriceReportSchema = z.object({
+  listingId: z
+    .string()
+    .uuid()
+    .nullable()
+    .describe('Annonce enregistrée ; null pour une annonce hypothétique'),
+  title: z.string(),
+  status: ListingStatusSchema.nullable(),
+  price: z.number().describe('Prix affiché en euros'),
+  targetPrice: TargetPriceSchema,
+  rank: TargetPriceRankSchema.nullable().describe(
+    'Rang parmi les annonces actives ; null pour une annonce hypothétique ou sans prix cible'
+  ),
+  negotiation: NegotiationBriefSchema,
+  notaryFees: NotaryFeesBreakdownSchema.describe(
+    'Frais de notaire au prix affiché, détaillés en mode barème'
+  ),
+  assumptions: AssumptionsSchema.describe('Les hypothèses utilisées'),
+  sensitivity: SensitivityGridSchema.nullable()
+    .default(null)
+    .describe('Tableau de sensibilité, si demandé'),
+})
+export type TargetPriceReport = z.infer<typeof TargetPriceReportSchema>
+
+/** Comparaison côte à côte de 2 à 6 annonces de l'espace. */
+export const CompareRequestSchema = z.object({
+  listingIds: z
+    .array(z.string().uuid())
+    .min(2)
+    .max(6)
+    .describe('Identifiants des annonces à comparer (2 à 6)'),
+})
+export type CompareRequest = z.infer<typeof CompareRequestSchema>
+
+const rank = (what: string) =>
+  z
+    .number()
+    .int()
+    .min(1)
+    .nullable()
+    .describe(`Rang (1 = meilleur) parmi les annonces comparées : ${what}`)
+
+export const CompareRanksSchema = z.object({
+  score: rank('score de verdict'),
+  grossYield: rank('rendement brut'),
+  netYield: rank('rendement net'),
+  effort: rank('effort mensuel (le moins lourd)'),
+  pricePerM2: rank('prix au m² (le plus bas)'),
+  discount: rank('décote nécessaire (la plus faible)'),
+})
+export type CompareRanks = z.infer<typeof CompareRanksSchema>
+
+export const CompareItemSchema = EvaluatedListingSchema.extend({
+  ranks: CompareRanksSchema,
+})
+export type CompareItem = z.infer<typeof CompareItemSchema>
+
+export const CompareResultSchema = z.object({
+  items: z
+    .array(CompareItemSchema)
+    .describe('Dans l’ordre des identifiants demandés'),
+  best: z
+    .object({
+      score: z.string().uuid().nullable(),
+      grossYield: z.string().uuid().nullable(),
+      netYield: z.string().uuid().nullable(),
+      effort: z.string().uuid().nullable(),
+      pricePerM2: z.string().uuid().nullable(),
+      discount: z.string().uuid().nullable(),
+    })
+    .describe('Identifiant de la meilleure annonce pour chaque indicateur'),
+})
+export type CompareResult = z.infer<typeof CompareResultSchema>

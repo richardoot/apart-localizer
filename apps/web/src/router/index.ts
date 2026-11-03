@@ -30,6 +30,12 @@ const routes: RouteRecordRaw[] = [
     ],
   },
   {
+    path: '/comparer',
+    name: 'compare',
+    component: () => import('@/views/ComparePage.vue'),
+    meta: { title: 'Comparer', requiresAuth: true },
+  },
+  {
     path: '/hypotheses',
     name: 'assumptions',
     component: () => import('@/views/AssumptionsPage.vue'),

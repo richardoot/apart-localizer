@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { ref } from 'vue'
   import { useQuery } from '@tanstack/vue-query'
+  import type { Assumptions, AssumptionsImpact } from '@apart/contracts'
   import AssumptionsForm from '@/components/assumptions/AssumptionsForm.vue'
   import { useAssumptions } from '@/composables/useWorkspace'
   import { ApiError, api } from '@/lib/api'
@@ -13,20 +14,45 @@
   })
   const message = ref<string | null>(null)
   const failure = ref<string | null>(null)
+  const impact = ref<AssumptionsImpact | null>(null)
+  const previewing = ref(false)
 
-  async function save(
-    input: Parameters<typeof update.mutateAsync>[0]
-  ): Promise<void> {
+  async function save(input: {
+    label: string | undefined
+    values: Assumptions
+  }): Promise<void> {
     failure.value = null
     message.value = null
     try {
-      await update.mutateAsync(input)
+      // Garde-fou : la version lue à l'écran doit encore être en vigueur.
+      const result = await update.mutateAsync({
+        ...input,
+        ...(data.value ? { expectedVersion: data.value.id } : {}),
+      })
+      impact.value = null
       await history.refetch()
       message.value =
-        'Hypothèses enregistrées : tous les indicateurs sont recalculés.'
+        result.impact.changedVerdicts === 0
+          ? `Hypothèses enregistrées : aucun verdict ne change sur ${result.impact.total} annonce(s) active(s).`
+          : `Hypothèses enregistrées : ${result.impact.changedVerdicts} annonce(s) sur ${result.impact.total} changent de verdict.`
     } catch (err) {
       failure.value =
         err instanceof ApiError ? err.message : "L'enregistrement a échoué."
+    }
+  }
+
+  async function preview(values: Assumptions): Promise<void> {
+    failure.value = null
+    previewing.value = true
+    try {
+      impact.value = await api.assumptions.preview(values)
+    } catch (err) {
+      failure.value =
+        err instanceof ApiError
+          ? err.message
+          : "Le calcul de l'impact a échoué."
+    } finally {
+      previewing.value = false
     }
   }
 </script>
@@ -61,7 +87,10 @@
       <AssumptionsForm
         :values="data.values"
         :saving="update.isPending.value"
+        :impact="impact"
+        :previewing="previewing"
         @save="save"
+        @preview="preview"
       />
       <p v-if="failure" role="alert" class="text-sm text-bad">{{ failure }}</p>
       <p v-else-if="message" class="text-sm text-good" aria-live="polite">
@@ -81,7 +110,12 @@
             {{ formatDate(version.effectiveFrom) }} · apport
             {{ formatEuros(version.values.downPayment) }} · taux
             {{ formatPercent(version.values.interestRate) }} ·
-            {{ version.values.durationYears }} ans
+            {{ version.values.durationYears }} ans · notaire
+            {{
+              version.values.notaryMode === 'scale'
+                ? 'barème'
+                : formatPercent(version.values.notaryRate)
+            }}
           </span>
         </li>
       </ul>

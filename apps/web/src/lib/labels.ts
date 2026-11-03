@@ -1,25 +1,53 @@
 import {
+  DISCOUNT_CLASS_LABELS,
   LEASE_TYPE_LABELS,
   LISTING_STATUS_LABELS,
+  OFFER_CHANNEL_LABELS,
+  OFFER_RESPONSE_LABELS,
   RENOVATION_LEVEL_LABELS,
   RENTAL_VERDICT_LABELS,
+  SENSITIVITY_AXIS_LABELS,
+  TARGET_CRITERION_LABELS,
   VERDICT_LABELS,
 } from '@apart/contracts'
 import type {
   CheckLevel,
+  DiscountClass,
   DpeClass,
   ListingSort,
   ListingStatus,
+  OfferResponse,
   RentalVerdict,
   Verdict,
 } from '@apart/contracts'
 
 export {
+  DISCOUNT_CLASS_LABELS,
   LEASE_TYPE_LABELS,
   LISTING_STATUS_LABELS,
+  OFFER_CHANNEL_LABELS,
+  OFFER_RESPONSE_LABELS,
   RENOVATION_LEVEL_LABELS,
   RENTAL_VERDICT_LABELS,
+  SENSITIVITY_AXIS_LABELS,
+  TARGET_CRITERION_LABELS,
   VERDICT_LABELS,
+}
+
+/** Classes Tailwind d'une classe de décote (≤ 0, ≤ 5 %, ≤ 10 %, au-delà). */
+export const DISCOUNT_CLASS_CLASSES: Record<DiscountClass, string> = {
+  in_target: 'bg-good-soft text-good',
+  negotiable: 'bg-good-soft text-good',
+  tight: 'bg-warn-soft text-warn',
+  out_of_reach: 'bg-bad-soft text-bad',
+}
+
+/** Classes Tailwind de la réponse du vendeur à une offre. */
+export const OFFER_RESPONSE_CLASSES: Record<OfferResponse, string> = {
+  pending: 'bg-surface-2 text-muted',
+  accepted: 'bg-good-soft text-good',
+  refused: 'bg-bad-soft text-bad',
+  counter_offer: 'bg-warn-soft text-warn',
 }
 
 /** Classes Tailwind (jetons de style.css) d'un verdict financier. */

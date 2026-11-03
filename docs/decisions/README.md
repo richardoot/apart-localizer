@@ -12,3 +12,5 @@ remplacée n'est pas effacée ; son statut passe à « remplacée par NNNN ».
 | [0005](0005-portees-mcp-lues-dans-le-jeton.md)              | Portées MCP lues dans le jeton ; jeton sans portée = toutes                                             | Acceptée, 3 novembre 2026 |
 | [0006](0006-verdict-tri-et-pagination-apres-evaluation.md)  | Verdict, tri et pagination en mémoire après l'évaluation                                                | Acceptée, 3 novembre 2026 |
 | [0007](0007-extraction-ia-journal-repli-et-taches.md)       | Extraction IA : coût dans le journal, repli côté client, tâches `missing_field`, doublons non bloquants | Acceptée, 3 novembre 2026 |
+| [0008](0008-frais-de-notaire-par-bareme.md)                 | Frais de notaire par barème : défauts Gironde datés, forfaits estimés, mode taux par défaut, bissection | Acceptée, 3 novembre 2026 |
+| [0009](0009-offres-negociation-et-hypotheses-partielles.md) | Offres : un outil `record_offer`, statut proposé jamais forcé, `set_assumptions` partiel avec impact    | Acceptée, 3 novembre 2026 |
