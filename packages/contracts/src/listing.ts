@@ -231,6 +231,42 @@ export const ListingUpdateSchema = z
   .partial()
 export type ListingUpdate = z.infer<typeof ListingUpdateSchema>
 
+/** Garde-fous optimistes d'une mise à jour : « je crois que l'annonce est dans cet état ». */
+export const ListingUpdateGuardsSchema = z.object({
+  expectedUpdatedAt: z
+    .string()
+    .datetime()
+    .optional()
+    .describe(
+      "Garde-fou : `updatedAt` lu avant la modification ; refus si l'annonce a changé depuis"
+    ),
+  expectedPrice: z
+    .number()
+    .min(0)
+    .optional()
+    .describe('Garde-fou : prix affiché attendu en euros ; refus si différent'),
+})
+export type ListingUpdateGuards = z.infer<typeof ListingUpdateGuardsSchema>
+
+/** Le corps d'un `PATCH /listings/:id` : le patch et ses garde-fous. */
+export const ListingPatchSchema = ListingUpdateSchema.extend(
+  ListingUpdateGuardsSchema.shape
+)
+export type ListingPatch = z.infer<typeof ListingPatchSchema>
+
+/** Sépare le patch de ses garde-fous. */
+export function splitListingPatch(patch: ListingPatch): {
+  update: ListingUpdate
+  guards: ListingUpdateGuards
+} {
+  const { expectedUpdatedAt, expectedPrice, ...update } = patch
+  const guards: ListingUpdateGuards = {}
+  if (expectedUpdatedAt !== undefined)
+    guards.expectedUpdatedAt = expectedUpdatedAt
+  if (expectedPrice !== undefined) guards.expectedPrice = expectedPrice
+  return { update, guards }
+}
+
 export const ListingStatusChangeSchema = z.object({
   status: ListingStatusSchema,
   reason: z

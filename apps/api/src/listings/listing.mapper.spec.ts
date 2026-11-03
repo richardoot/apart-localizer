@@ -90,6 +90,9 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
       notes: null,
     },
     views: [],
+    opinions: [],
+    tasks: [],
+    priceEvents: [],
     ...over,
   }
 }

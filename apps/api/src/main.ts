@@ -1,3 +1,5 @@
+// Sentry d'abord, avant les modules qu'il instrumente. Voir instrument.ts.
+import './instrument'
 import { NestFactory } from '@nestjs/core'
 import { Logger } from '@nestjs/common'
 import type { NestExpressApplication } from '@nestjs/platform-express'

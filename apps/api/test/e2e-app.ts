@@ -32,14 +32,34 @@ export interface E2eIdentity {
   name: string
 }
 
-/** Build an identity. Each spec file gets an empty database, so labels only have to be unique within a file. */
-export function e2eIdentity(label: string): E2eIdentity {
+/**
+ * Build an identity. Each spec file gets an empty database, so labels only
+ * have to be unique within a file. With `scope`, the token is shaped like the
+ * JWT Supabase's OAuth server issues to a third-party client (unsigned here:
+ * the harness replaces the verification), so the MCP guard reads its scopes.
+ */
+export function e2eIdentity(
+  label: string,
+  options: { scope?: string } = {}
+): E2eIdentity {
+  const supabaseId = `e2e-supabase-${label}`
+  const token =
+    options.scope === undefined
+      ? `e2e-token-${label}`
+      : fakeJwt({ sub: supabaseId, scope: options.scope, label })
   return {
-    token: `e2e-token-${label}`,
-    supabaseId: `e2e-supabase-${label}`,
+    token,
+    supabaseId,
     email: `${label}@e2e.invalid`,
     name: label.charAt(0).toUpperCase() + label.slice(1),
   }
+}
+
+/** An unsigned JWT: three base64url segments, a payload the guard can read. */
+export function fakeJwt(payload: Record<string, unknown>): string {
+  const b64 = (value: unknown): string =>
+    Buffer.from(JSON.stringify(value)).toString('base64url')
+  return `${b64({ alg: 'none', typ: 'JWT' })}.${b64(payload)}.e2e-signature`
 }
 
 export interface E2eContext {

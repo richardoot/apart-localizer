@@ -4,17 +4,32 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
-import { ACTIVE_LISTING_STATUSES, DEFAULT_TASKS } from '@apart/contracts'
+import {
+  ACTIVE_LISTING_STATUSES,
+  DEFAULT_TASKS,
+  EvaluatedListingSchema,
+  HypotheticalListingSchema,
+} from '@apart/contracts'
 import type {
   ActivityChannel,
+  Assumptions,
+  EvaluateRequest,
+  EvaluateResult,
+  EvaluatedListing,
+  FieldSource,
+  HypotheticalListing,
   Listing as ListingDto,
   ListingFilters,
   ListingInput,
+  ListingList,
   ListingStatusChange,
   ListingUpdate,
+  ListingUpdateGuards,
+  PriceEventInput,
   RenovationInput,
   RentalPlanInput,
 } from '@apart/contracts'
+import { mergeAssumptions } from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
@@ -22,18 +37,31 @@ import { GeoService } from '../geo/geo.service'
 import { Prisma } from '../generated/prisma'
 import type { Member } from '../generated/prisma'
 import { evaluateListing } from './evaluate'
-import { listingInclude, toListingDto } from './listing.mapper'
+import {
+  listingInclude,
+  toListingDto,
+  toOpinionDto,
+  toPriceEventDto,
+  toTaskDto,
+} from './listing.mapper'
 import type { ListingRow } from './listing.mapper'
-import type { EvaluatedListing } from './dto/listing.dto'
+import { provenanceAfterPatch, withProvenance } from './provenance'
 
 const dec = (value: number | null | undefined): Prisma.Decimal | null =>
   value == null ? null : new Prisma.Decimal(value)
 
+export interface WriteOptions {
+  channel?: ActivityChannel
+  /** Provenance attribuée aux champs écrits (web : `user`, MCP : `ai` ou `user`). */
+  provenance?: FieldSource
+}
+
 /**
- * Les annonces : lecture filtrée et calculée, création avec checklist par
- * défaut, mise à jour partielle, changement de statut avec garde-fou,
- * « vu par ». Chaque écriture passe par le journal d'activité ; le point
- * géographique passe par le module geo.
+ * Les annonces : lecture filtrée, calculée et paginée ; création avec
+ * checklist par défaut ; mise à jour partielle avec garde-fous optimistes ;
+ * changement de statut ; « vu par » ; historique des prix ; évaluation d'une
+ * annonce hypothétique. Chaque écriture passe par le journal d'activité ; le
+ * point géographique passe par le module geo ; tout calcul passe par `domain`.
  */
 @Injectable()
 export class ListingsService {
@@ -44,10 +72,13 @@ export class ListingsService {
     private readonly geo: GeoService
   ) {}
 
-  async list(
-    member: Member,
-    filters: ListingFilters
-  ): Promise<{ items: EvaluatedListing[]; total: number }> {
+  /**
+   * Liste filtrée. Les filtres SQL (statut, commune, DPE, prix, surface,
+   * pièces, texte, rayon PostGIS, critère) réduisent les lignes ; le verdict,
+   * le tri et la pagination s'appliquent ensuite sur les annonces évaluées,
+   * puisque le verdict dépend des hypothèses.
+   */
+  async list(member: Member, filters: ListingFilters): Promise<ListingList> {
     const where: Prisma.ListingWhereInput = {
       workspaceId: member.workspaceId,
       status: { in: filters.status ?? [...ACTIVE_LISTING_STATUSES] },
@@ -56,6 +87,23 @@ export class ListingsService {
       where.commune = { in: filters.commune, mode: 'insensitive' }
     }
     if (filters.dpe?.length) where.dpeClass = { in: filters.dpe }
+    if (filters.priceMin !== undefined || filters.priceMax !== undefined) {
+      where.price = {
+        ...(filters.priceMin !== undefined ? { gte: filters.priceMin } : {}),
+        ...(filters.priceMax !== undefined ? { lte: filters.priceMax } : {}),
+      }
+    }
+    if (filters.surfaceMin !== undefined || filters.surfaceMax !== undefined) {
+      where.surface = {
+        ...(filters.surfaceMin !== undefined
+          ? { gte: filters.surfaceMin }
+          : {}),
+        ...(filters.surfaceMax !== undefined
+          ? { lte: filters.surfaceMax }
+          : {}),
+      }
+    }
+    if (filters.roomsMin !== undefined) where.rooms = { gte: filters.roomsMin }
     if (filters.newForMe) where.views = { none: { memberId: member.id } }
     if (filters.search) {
       const contains = {
@@ -90,10 +138,8 @@ export class ListingsService {
       orderBy: { createdAt: 'desc' },
     })
     const base = await this.assumptions.currentValues(member.workspaceId)
-    let items = await Promise.all(
-      rows.map(row =>
-        this.evaluateRow(row, member, base, distances.get(row.id))
-      )
+    let items = rows.map(row =>
+      this.evaluateRow(row, member, base, distances.get(row.id))
     )
     if (filters.verdict?.length) {
       items = items.filter(item =>
@@ -101,23 +147,44 @@ export class ListingsService {
       )
     }
     items.sort(comparator(filters))
-    return { items, total: items.length }
+    const total = items.length
+    const start = (filters.page - 1) * filters.limit
+    return {
+      items: items.slice(start, start + filters.limit),
+      total,
+      page: filters.page,
+      limit: filters.limit,
+      pageCount: Math.ceil(total / filters.limit),
+    }
   }
 
   async get(member: Member, id: string): Promise<EvaluatedListing> {
     const row = await this.findRow(member, id)
-    return this.evaluateRow(row, member)
+    const base = await this.assumptions.currentValues(member.workspaceId)
+    return this.evaluateRow(row, member, base)
   }
 
   async create(
     member: Member,
     input: ListingInput,
-    channel: ActivityChannel = 'web'
+    options: WriteOptions = {}
   ): Promise<EvaluatedListing> {
+    const channel = options.channel ?? 'web'
+    const provenance = options.provenance ?? 'user'
+    const fieldSources = withProvenance(
+      input.fieldSources,
+      {
+        ...input,
+        ...input.location,
+        ...(input.rentalPlan ? { rentalPlan: input.rentalPlan } : {}),
+        ...(input.renovation ? { renovation: input.renovation } : {}),
+      },
+      provenance
+    )
     const id = await this.prisma.$transaction(async tx => {
       const created = await tx.listing.create({
         data: {
-          ...scalarData(input),
+          ...scalarData({ ...input, fieldSources }),
           title: input.title,
           price: new Prisma.Decimal(input.price),
           workspaceId: member.workspaceId,
@@ -138,8 +205,8 @@ export class ListingsService {
           priceEvents: {
             create: {
               oldPrice: null,
-              newPrice: dec(input.price) as Prisma.Decimal,
-              source: 'user',
+              newPrice: new Prisma.Decimal(input.price),
+              source: provenance,
             },
           },
         },
@@ -155,6 +222,7 @@ export class ListingsService {
             title: input.title,
             price: input.price,
             status: input.status,
+            provenance,
           },
         },
         tx
@@ -175,15 +243,31 @@ export class ListingsService {
     member: Member,
     id: string,
     patch: ListingUpdate,
-    channel: ActivityChannel = 'web'
+    guards: ListingUpdateGuards = {},
+    options: WriteOptions = {}
   ): Promise<EvaluatedListing> {
-    const before = toListingDto(await this.findRow(member, id))
+    const channel = options.channel ?? 'web'
+    const provenance = options.provenance ?? 'user'
+    const row = await this.findRow(member, id)
+    const before = toListingDto(row)
+    this.checkGuards(before, guards)
+    if (Object.keys(patch).length === 0) {
+      throw new BadRequestException('Aucun champ à modifier')
+    }
+    const fieldSources = provenanceAfterPatch(
+      before.fieldSources,
+      {
+        ...patch,
+        ...(patch.location ?? {}),
+      },
+      provenance
+    )
     await this.prisma.$transaction(async tx => {
       const { renovation, rentalPlan, location, ...rest } = patch
       await tx.listing.update({
         where: { id },
         data: {
-          ...scalarData(rest),
+          ...scalarData({ ...rest, fieldSources }),
           ...(location ? locationData(location) : {}),
           renovation:
             renovation === undefined
@@ -220,8 +304,8 @@ export class ListingsService {
           data: {
             listingId: id,
             oldPrice: dec(before.price),
-            newPrice: dec(patch.price) as Prisma.Decimal,
-            source: 'user',
+            newPrice: new Prisma.Decimal(patch.price),
+            source: provenance,
           },
         })
       }
@@ -233,7 +317,7 @@ export class ListingsService {
           channel,
           action: 'listing.updated',
           before: pick(before, Object.keys(patch)),
-          after: patch,
+          after: { ...patch, provenance },
         },
         tx
       )
@@ -299,6 +383,117 @@ export class ListingsService {
     return this.get(member, id)
   }
 
+  /** Baisse ou hausse constatée : nouveau prix affiché, ligne d'historique, journal. */
+  async recordPriceChange(
+    member: Member,
+    id: string,
+    input: PriceEventInput,
+    channel: ActivityChannel = 'web'
+  ): Promise<EvaluatedListing> {
+    const row = await this.findRow(member, id)
+    const currentPrice = Number(row.price)
+    if (
+      input.expectedPrice !== undefined &&
+      Math.abs(input.expectedPrice - currentPrice) > 0.005
+    ) {
+      throw new ConflictException(
+        `Le prix attendu était ${input.expectedPrice} €, l'annonce est à ${currentPrice} €`
+      )
+    }
+    if (Math.abs(input.newPrice - currentPrice) <= 0.005) {
+      throw new BadRequestException(
+        `Le prix est déjà de ${currentPrice} € : rien à enregistrer`
+      )
+    }
+    await this.prisma.$transaction(async tx => {
+      await tx.listing.update({
+        where: { id },
+        data: { price: new Prisma.Decimal(input.newPrice) },
+      })
+      await tx.priceEvent.create({
+        data: {
+          listingId: id,
+          occurredAt: input.occurredAt ? new Date(input.occurredAt) : undefined,
+          oldPrice: new Prisma.Decimal(currentPrice),
+          newPrice: new Prisma.Decimal(input.newPrice),
+          source: input.source,
+        },
+      })
+      await this.activity.record(
+        {
+          workspaceId: member.workspaceId,
+          listingId: id,
+          actorMemberId: member.id,
+          channel,
+          action: 'listing.price_changed',
+          before: { price: currentPrice },
+          after: { price: input.newPrice, source: input.source },
+        },
+        tx
+      )
+    })
+    return this.get(member, id)
+  }
+
+  /**
+   * Évalue sans rien enregistrer : une annonce enregistrée avec des champs
+   * surchargés, ou une annonce hypothétique ; dans les deux cas avec un
+   * scénario d'hypothèses facultatif.
+   */
+  async evaluate(
+    member: Member,
+    request: EvaluateRequest
+  ): Promise<EvaluateResult> {
+    let listing: HypotheticalListing
+    let base: Assumptions
+    if (request.listingId) {
+      const row = await this.findRow(member, request.listingId)
+      const stored = toListingDto(row)
+      const overrides = request.overrides ?? request.listing ?? {}
+      listing = HypotheticalListingSchema.parse({
+        ...stripStored(stored),
+        ...overrides,
+        location: { ...stored.location, ...(overrides.location ?? {}) },
+      })
+      base = await this.assumptions.forListing(
+        member.workspaceId,
+        listing.assumptionsOverride
+      )
+    } else {
+      listing = request.listing as HypotheticalListing
+      base = await this.assumptions.forListing(
+        member.workspaceId,
+        listing.assumptionsOverride
+      )
+    }
+    const assumptions = mergeAssumptions(base, request.assumptions ?? null)
+    return {
+      listing,
+      assumptions,
+      evaluation: evaluateListing(listing, assumptions),
+      persisted: false,
+    }
+  }
+
+  private checkGuards(before: ListingDto, guards: ListingUpdateGuards): void {
+    if (
+      guards.expectedUpdatedAt !== undefined &&
+      Date.parse(guards.expectedUpdatedAt) !== Date.parse(before.updatedAt)
+    ) {
+      throw new ConflictException(
+        `L'annonce a changé depuis votre lecture (modifiée le ${before.updatedAt}) : relisez-la avant de la modifier`
+      )
+    }
+    if (
+      guards.expectedPrice !== undefined &&
+      Math.abs(guards.expectedPrice - before.price) > 0.005
+    ) {
+      throw new ConflictException(
+        `Le prix attendu était ${guards.expectedPrice} €, l'annonce est à ${before.price} €`
+      )
+    }
+  }
+
   private async findRow(member: Member, id: string): Promise<ListingRow> {
     const row = await this.prisma.listing.findFirst({
       where: { id, workspaceId: member.workspaceId },
@@ -308,24 +503,24 @@ export class ListingsService {
     return row
   }
 
-  private async evaluateRow(
+  /** La forme « vue » d'une ligne : contrat, calculs, drapeaux pour le membre, avis, tâches, prix. */
+  evaluateRow(
     row: ListingRow,
     member: Member,
-    base?: Awaited<ReturnType<AssumptionsService['currentValues']>>,
+    base: Assumptions,
     distanceMeters?: number
-  ): Promise<EvaluatedListing> {
+  ): EvaluatedListing {
     const listing = toListingDto(row)
-    const assumptions = await this.assumptions.forListing(
-      member.workspaceId,
-      listing.assumptionsOverride
-    )
-    const merged = base && !listing.assumptionsOverride ? base : assumptions
-    return {
+    const assumptions = mergeAssumptions(base, listing.assumptionsOverride)
+    return EvaluatedListingSchema.parse({
       listing,
-      evaluation: evaluateListing(listing, merged),
+      evaluation: evaluateListing(listing, assumptions),
       distanceMeters: distanceMeters ?? null,
       isNewForMe: !listing.views.some(view => view.memberId === member.id),
-    }
+      opinions: row.opinions.map(toOpinionDto),
+      tasks: row.tasks.map(toTaskDto),
+      priceEvents: row.priceEvents.map(toPriceEventDto),
+    })
   }
 
   /** Applique un critère enregistré : filtres simples en SQL, périmètre par le module geo. */
@@ -392,6 +587,24 @@ export class ListingsService {
       where.id = { in: allowed }
     }
   }
+}
+
+/** Une annonce enregistrée réduite aux champs d'une annonce hypothétique. */
+function stripStored(listing: ListingDto): Record<string, unknown> {
+  const {
+    id: _id,
+    workspaceId: _workspaceId,
+    createdById: _createdById,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    views: _views,
+    status: _status,
+    discardReason: _discardReason,
+    discardedAt: _discardedAt,
+    fieldSources: _fieldSources,
+    ...rest
+  } = listing
+  return rest
 }
 
 type ScalarInput = Omit<
@@ -579,26 +792,37 @@ function pick(source: ListingDto, keys: string[]): Record<string, unknown> {
   return out
 }
 
+/** Note moyenne des avis notés (0 = pas de note) ; NaN sans avis noté. */
+export function averageRating(item: EvaluatedListing): number {
+  const rated = item.opinions.filter(o => o.rating > 0)
+  if (rated.length === 0) return Number.NaN
+  return rated.reduce((sum, o) => sum + o.rating, 0) / rated.length
+}
+
 const SORT_KEYS = {
   score: (item: EvaluatedListing) => item.evaluation.metrics.score,
   grossYield: (item: EvaluatedListing) => item.evaluation.metrics.grossYield,
+  netYield: (item: EvaluatedListing) => item.evaluation.metrics.netYield,
   effort: (item: EvaluatedListing) => item.evaluation.metrics.effort,
   pricePerM2: (item: EvaluatedListing) => item.evaluation.metrics.pricePerM2,
   price: (item: EvaluatedListing) => item.listing.price,
+  surface: (item: EvaluatedListing) => item.listing.surface ?? Number.NaN,
+  rentalRank: (item: EvaluatedListing) => item.evaluation.rental.rank,
+  opinion: averageRating,
   createdAt: (item: EvaluatedListing) => Date.parse(item.listing.createdAt),
   discount: (item: EvaluatedListing) =>
     item.evaluation.targetPrice.discount ?? Number.POSITIVE_INFINITY,
 } as const
 
-function comparator(
-  filters: ListingFilters
+export function comparator(
+  filters: Pick<ListingFilters, 'sort' | 'order'>
 ): (a: EvaluatedListing, b: EvaluatedListing) => number {
   const key = SORT_KEYS[filters.sort]
   const direction = filters.order === 'asc' ? 1 : -1
   return (a, b) => {
     const va = key(a)
     const vb = key(b)
-    // NaN (surface ou coût nul) va toujours en fin de liste.
+    // NaN (surface ou coût nul, pas d'avis) va toujours en fin de liste.
     if (Number.isNaN(va) && Number.isNaN(vb)) return 0
     if (Number.isNaN(va)) return 1
     if (Number.isNaN(vb)) return -1

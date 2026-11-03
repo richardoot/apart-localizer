@@ -26,7 +26,7 @@ describe('router guard', () => {
     authState.isAuthenticated = true
     await router.push('/')
     expect(router.currentRoute.value.name).toBe('home')
-    expect(document.title).toBe('Accueil — apart-localizer')
+    expect(document.title).toBe('Synthèse — apart-localizer')
   })
 
   it('sends a signed-in user away from the login page', async () => {
@@ -34,6 +34,19 @@ describe('router guard', () => {
     await router.push('/')
     await router.push('/login')
     expect(router.currentRoute.value.name).toBe('home')
+  })
+
+  it('protects the nested listing routes and titles them', async () => {
+    authState.isAuthenticated = true
+    await router.push('/annonces/11111111-1111-4111-8111-111111111111')
+    expect(router.currentRoute.value.name).toBe('listing')
+    expect(document.title).toBe('Annonce — apart-localizer')
+    await router.push('/annonces/nouvelle')
+    expect(router.currentRoute.value.name).toBe('listing-new')
+    authState.isAuthenticated = false
+    await router.push('/annonces?view=map')
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.query.redirect).toBe('/annonces?view=map')
   })
 
   it('redirects an unknown path to the home page (then to login when signed out)', async () => {

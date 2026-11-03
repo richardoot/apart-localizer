@@ -6,8 +6,34 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'home',
-    component: () => import('@/views/HomePage.vue'),
-    meta: { title: 'Accueil', requiresAuth: true },
+    component: () => import('@/views/DashboardPage.vue'),
+    meta: { title: 'Synthèse', requiresAuth: true },
+  },
+  {
+    path: '/annonces',
+    component: () => import('@/views/ListingsPage.vue'),
+    meta: { title: 'Annonces', requiresAuth: true },
+    children: [
+      { path: '', name: 'listings', component: { render: () => null } },
+      {
+        path: 'nouvelle',
+        name: 'listing-new',
+        component: { render: () => null },
+        meta: { title: 'Nouvelle annonce', requiresAuth: true },
+      },
+      {
+        path: ':id',
+        name: 'listing',
+        component: { render: () => null },
+        meta: { title: 'Annonce', requiresAuth: true },
+      },
+    ],
+  },
+  {
+    path: '/hypotheses',
+    name: 'assumptions',
+    component: () => import('@/views/AssumptionsPage.vue'),
+    meta: { title: 'Hypothèses', requiresAuth: true },
   },
   {
     path: '/login',
@@ -43,7 +69,8 @@ router.beforeEach(async to => {
     })
   }
 
-  if (to.meta.requiresAuth && !auth.isAuthenticated) {
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+  if (requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (to.meta.guestOnly && auth.isAuthenticated) {
@@ -53,7 +80,7 @@ router.beforeEach(async to => {
 })
 
 router.afterEach(to => {
-  const title = to.meta.title
+  const title = [...to.matched].reverse().find(r => r.meta.title)?.meta.title
   document.title = title ? `${title} — apart-localizer` : 'apart-localizer'
 })
 

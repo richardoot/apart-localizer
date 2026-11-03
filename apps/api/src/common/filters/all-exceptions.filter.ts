@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common'
 import type { Response } from 'express'
+import * as Sentry from '@sentry/nestjs'
 import { Prisma } from '../../generated/prisma'
 
 /** What the request-log middleware stamped on this response, if it ran. */
@@ -62,6 +63,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       `Unhandled exception: ${message} [${requestIdOf(response) ?? '-'}]`,
       exception instanceof Error ? exception.stack : undefined
     )
+    // Sans DSN le SDK n'est pas initialisé et cet appel ne fait rien.
+    Sentry.captureException(exception, {
+      tags: { requestId: requestIdOf(response) ?? 'none' },
+    })
     this.answer(response, {
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
       message: 'Internal server error',

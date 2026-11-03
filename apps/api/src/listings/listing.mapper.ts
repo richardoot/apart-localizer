@@ -1,17 +1,29 @@
-import { ListingSchema, PointSchema } from '@apart/contracts'
+import {
+  ListingSchema,
+  OpinionSchema,
+  PointSchema,
+  PriceEventSchema,
+  TaskSchema,
+} from '@apart/contracts'
 import type {
   FieldProvenanceMap,
   Listing as ListingDto,
+  Opinion as OpinionDto,
   Point,
+  PriceEvent as PriceEventDto,
   RentComparable,
+  Task as TaskDto,
 } from '@apart/contracts'
-import type { Prisma } from '../generated/prisma'
+import type { Opinion, PriceEvent, Prisma, Task } from '../generated/prisma'
 
 /** Une annonce avec tout ce que l'API renvoie. */
 export const listingInclude = {
   renovation: { include: { items: { orderBy: { position: 'asc' } } } },
   rentalPlan: true,
   views: true,
+  opinions: { orderBy: { createdAt: 'asc' } },
+  tasks: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] },
+  priceEvents: { orderBy: { occurredAt: 'desc' } },
 } satisfies Prisma.ListingInclude
 
 export type ListingRow = Prisma.ListingGetPayload<{
@@ -34,6 +46,43 @@ function pointOf(row: ListingRow): Point | null {
     return { type: 'Point', coordinates: [row.longitude, row.latitude] }
   }
   return null
+}
+
+export function toOpinionDto(opinion: Opinion): OpinionDto {
+  return OpinionSchema.parse({
+    id: opinion.id,
+    listingId: opinion.listingId,
+    memberId: opinion.memberId,
+    rating: opinion.rating,
+    text: opinion.text,
+    createdAt: opinion.createdAt.toISOString(),
+    updatedAt: opinion.updatedAt.toISOString(),
+  })
+}
+
+export function toTaskDto(task: Task): TaskDto {
+  return TaskSchema.parse({
+    id: task.id,
+    listingId: task.listingId,
+    label: task.label,
+    done: task.done,
+    doneAt: task.doneAt?.toISOString() ?? null,
+    assigneeId: task.assigneeId,
+    origin: task.origin,
+    position: task.position,
+    createdAt: task.createdAt.toISOString(),
+  })
+}
+
+export function toPriceEventDto(event: PriceEvent): PriceEventDto {
+  return PriceEventSchema.parse({
+    id: event.id,
+    listingId: event.listingId,
+    occurredAt: event.occurredAt.toISOString(),
+    oldPrice: num(event.oldPrice),
+    newPrice: Number(event.newPrice),
+    source: event.source,
+  })
 }
 
 /**

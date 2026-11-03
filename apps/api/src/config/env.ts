@@ -20,6 +20,20 @@ export const EnvSchema = z.object({
     .string()
     .min(1)
     .describe('Clé service_role, côté serveur uniquement'),
+  SUPABASE_EXTERNAL_URL: z
+    .string()
+    .url()
+    .optional()
+    .describe(
+      "URL du projet Supabase telle qu'un client MCP l'atteint (défaut : SUPABASE_URL)"
+    ),
+  MCP_PUBLIC_URL: z
+    .string()
+    .url()
+    .optional()
+    .describe(
+      "URL publique de l'endpoint MCP annoncée dans la découverte OAuth (défaut : déduite de la requête)"
+    ),
   FRONTEND_URL: z
     .string()
     .default('http://localhost:5173')
@@ -29,6 +43,10 @@ export const EnvSchema = z.object({
     .enum(['verbose', 'debug', 'log', 'warn', 'error', 'fatal'])
     .optional(),
   API_DOCS: z.string().optional(),
+  SENTRY_DSN: z.string().url().optional(),
+  SENTRY_TRACES_SAMPLE_RATE: z.string().optional(),
+  THROTTLE_TTL_MS: z.coerce.number().int().min(1000).default(60_000),
+  THROTTLE_LIMIT: z.coerce.number().int().min(1).default(300),
 })
 export type Env = z.infer<typeof EnvSchema>
 
@@ -38,6 +56,35 @@ export function corsOrigins(frontendUrl: string): string[] {
     .split(',')
     .map(s => s.trim())
     .filter(Boolean)
+}
+
+/** L'URL Supabase que les clients extérieurs (claude.ai) atteignent. */
+export function supabaseExternalUrl(env: {
+  SUPABASE_URL?: string | undefined
+  SUPABASE_EXTERNAL_URL?: string | undefined
+}): string {
+  return (env.SUPABASE_EXTERNAL_URL || env.SUPABASE_URL || '').replace(
+    /\/$/,
+    ''
+  )
+}
+
+/** Limites du garde-fou de débit : ttl en millisecondes, limite par fenêtre et par adresse. */
+export function throttleOptions(env: {
+  THROTTLE_TTL_MS?: string | undefined
+  THROTTLE_LIMIT?: string | undefined
+}): { ttl: number; limit: number } {
+  const parsed = EnvSchema.pick({
+    THROTTLE_TTL_MS: true,
+    THROTTLE_LIMIT: true,
+  }).safeParse(
+    Object.fromEntries(
+      Object.entries(env).filter(([, value]) => value !== '' && value != null)
+    )
+  )
+  return parsed.success
+    ? { ttl: parsed.data.THROTTLE_TTL_MS, limit: parsed.data.THROTTLE_LIMIT }
+    : { ttl: 60_000, limit: 300 }
 }
 
 /**

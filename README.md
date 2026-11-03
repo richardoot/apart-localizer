@@ -10,6 +10,8 @@ Documentation :
 - [Modèle de calcul](docs/product/modele-de-calcul.md)
 - [Choix techniques](docs/product/tech-stack.md)
 - [Feuille de route](docs/product/roadmap.md)
+- [Connecteur MCP](docs/mcp.md)
+- [Déploiement](docs/deploiement.md)
 - [Décisions d'architecture](docs/decisions/README.md)
 - [Règles de travail](CLAUDE.md)
 
@@ -17,8 +19,10 @@ Documentation :
 
 ```
 apps/
-  api/          NestJS 11, Prisma 7 + PostGIS, nestjs-zod, OpenAPI (/api/docs hors production)
-  web/          Vue 3.5 + Vite, Tailwind 4, TanStack Query, Supabase Auth, PWA
+  api/          NestJS 11, Prisma 7 + PostGIS, nestjs-zod, OpenAPI (/api/docs hors production),
+                MCP (/mcp, découverte OAuth), throttler, Sentry en option
+  web/          Vue 3.5 + Vite, Tailwind 4, TanStack Query et Table, MapLibre GL, reka-ui,
+                Supabase Auth, PWA, Sentry en option
 packages/
   contracts/    schémas Zod partagés (annonces, hypothèses, GeoJSON, filtres, sorties calculées)
   domain/       calculs purs (coût, rendement, verdict, louabilité, prix cible, sensibilité)
@@ -86,21 +90,46 @@ pnpm --filter @apart/api prisma:migrate    # crée une migration après un chang
 pnpm dev                  # api sur http://localhost:3000, web sur http://localhost:5173, paquets en watch
 ```
 
-OpenAPI : http://localhost:3000/api/docs. Santé : http://localhost:3000/health.
+OpenAPI : http://localhost:3000/api/docs. Santé : http://localhost:3000/health. MCP :
+`POST http://localhost:3000/mcp` (jeton Supabase en `Authorization: Bearer`), découverte sur
+`/.well-known/oauth-protected-resource` et `/.well-known/oauth-authorization-server` ; outils
+et garde-fous dans [docs/mcp.md](docs/mcp.md).
+
+### Écrans du web
+
+- **Synthèse** (`/`) : compteurs (nouvelles, suivies, dans la cible, meilleur brut, prix moyen au
+  m², à visiter), répartition par statut, tâches ouvertes et en retard, nouvelles annonces,
+  meilleures annonces.
+- **Annonces** (`/annonces`) : filtres partagés (statut, commune, verdict, DPE, prix, recherche,
+  « nouvelles pour moi », point et rayon) synchronisés avec l'URL, trois vues : tableau
+  comparatif (TanStack Table, tri par colonne), cartes (mobile), carte MapLibre (marqueurs colorés
+  par verdict ou statut, popup vers la fiche, clic = point du filtre, curseur de rayon).
+- **Fiche** (`/annonces/:id`) : panneau latéral (plein écran sur mobile) avec aperçu en direct des
+  indicateurs calculé dans le navigateur par `packages/domain`, contrôles de louabilité,
+  formulaire complet (bien, charges, travaux avec postes, phase 2, hypothèses surchargées),
+  changement de statut avec garde-fou, avis des deux membres, tâches, historique des prix.
+  L'ouverture marque l'annonce « vue » pour le membre ; le badge « nouvelle » s'éteint pour lui
+  seul.
+- **Hypothèses** (`/hypotheses`) : hypothèses de l'espace, versionnées.
+
+Fond de carte : `VITE_MAP_STYLE_URL` dans `apps/web/.env`, par défaut le style libre et sans clé
+d'OpenFreeMap (`https://tiles.openfreemap.org/styles/liberty`).
 
 ## Qualité et tests
 
 ```bash
 pnpm lint
+pnpm format:check
 pnpm type-check
 pnpm test                 # unitaires (contracts, domain, api, web, scripts) puis e2e de l'API
 pnpm --filter @apart/domain test:cov
 pnpm build
 ```
 
-Les e2e demandent `TEST_DATABASE_URL` (voie 2 ci-dessus, ou le Postgres du Supabase CLI sur
-54322). La CI GitHub Actions (`.github/workflows/ci.yml`) rejoue lint, type-check, unitaires,
-e2e sur un service PostGIS, puis le build.
+Les e2e (REST, géo, collaboration, MCP par appels JSON-RPC réels) demandent `TEST_DATABASE_URL`
+(voie 2 ci-dessus, ou le Postgres du Supabase CLI sur 54322). Les tests du web mockent MapLibre
+et Supabase : aucun réseau. La CI GitHub Actions (`.github/workflows/ci.yml`) rejoue lint,
+format, type-check, unitaires, e2e sur un service PostGIS, puis le build.
 
 ## Import des données de l'artefact
 
@@ -123,4 +152,6 @@ Relancer l'import est sans effet sur les annonces déjà présentes.
 ## Déploiement
 
 Vercel pour `apps/web` (statique) et `apps/api` (fonctions Node, `build:vercel`), Supabase
-cloud pour la base et l'authentification. Voir `apps/*/vercel.json` et `.env.example`.
+cloud pour la base et l'authentification (Google, serveur OAuth 2.1 pour le MCP), Sentry en
+option. Étapes concrètes, variables et déclaration du connecteur dans claude.ai :
+[docs/deploiement.md](docs/deploiement.md).

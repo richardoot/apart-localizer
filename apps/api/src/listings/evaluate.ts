@@ -1,8 +1,9 @@
 import type {
   Assumptions,
-  Listing,
+  DpeClass,
   ListingEvaluation,
   ListingFinancials,
+  RentalPlanInput,
 } from '@apart/contracts'
 import {
   compute,
@@ -10,14 +11,25 @@ import {
   rentalChecks,
   targetPrice,
 } from '@apart/domain'
+import type { ListingLike } from '@apart/domain'
 
 /**
- * Colle entre l'annonce enregistrée et le paquet `domain` : aucune formule
- * ici, seulement l'appel des fonctions pures dans l'ordre. L'interface et
- * le MCP font exactement le même appel.
+ * Ce qu'une évaluation lit : les champs financiers d'une annonce (enregistrée
+ * ou hypothétique), sa classe DPE et sa phase 2. Une `Listing` complète comme
+ * une `HypotheticalListing` conviennent.
+ */
+export type EvaluableListing = ListingLike & {
+  dpeClass: DpeClass | null
+  rentalPlan: RentalPlanInput | null
+}
+
+/**
+ * Colle entre l'annonce et le paquet `domain` : aucune formule ici, seulement
+ * l'appel des fonctions pures dans l'ordre. L'interface et le MCP font
+ * exactement le même appel.
  */
 export function evaluateListing(
-  listing: Listing,
+  listing: EvaluableListing,
   assumptions: Assumptions
 ): ListingEvaluation {
   const financials: ListingFinancials = financialsFromListing(listing)

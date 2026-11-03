@@ -1,0 +1,105 @@
+import {
+  LEASE_TYPE_LABELS,
+  LISTING_STATUS_LABELS,
+  RENOVATION_LEVEL_LABELS,
+  RENTAL_VERDICT_LABELS,
+  VERDICT_LABELS,
+} from '@apart/contracts'
+import type {
+  CheckLevel,
+  DpeClass,
+  ListingSort,
+  ListingStatus,
+  RentalVerdict,
+  Verdict,
+} from '@apart/contracts'
+
+export {
+  LEASE_TYPE_LABELS,
+  LISTING_STATUS_LABELS,
+  RENOVATION_LEVEL_LABELS,
+  RENTAL_VERDICT_LABELS,
+  VERDICT_LABELS,
+}
+
+/** Classes Tailwind (jetons de style.css) d'un verdict financier. */
+export const VERDICT_CLASSES: Record<Verdict, string> = {
+  target: 'bg-good-soft text-good',
+  to_dig: 'bg-warn-soft text-warn',
+  off_target: 'bg-bad-soft text-bad',
+}
+
+/** Couleur pleine d'un verdict, pour un marqueur de carte. */
+export const VERDICT_COLORS: Record<Verdict, string> = {
+  target: 'var(--good)',
+  to_dig: 'var(--warn)',
+  off_target: 'var(--bad)',
+}
+
+export const RENTAL_VERDICT_CLASSES: Record<RentalVerdict, string> = {
+  compatible: 'bg-good-soft text-good',
+  conditional: 'bg-warn-soft text-warn',
+  incompatible: 'bg-bad-soft text-bad',
+}
+
+export const CHECK_LEVEL_CLASSES: Record<CheckLevel, string> = {
+  ok: 'text-good',
+  warn: 'text-warn',
+  bad: 'text-bad',
+  unknown: 'text-muted',
+}
+
+export const CHECK_LEVEL_SYMBOLS: Record<CheckLevel, string> = {
+  ok: '✓',
+  warn: '!',
+  bad: '✕',
+  unknown: '?',
+}
+
+export const STATUS_CLASSES: Record<ListingStatus, string> = {
+  to_study: 'bg-surface-2 text-muted',
+  to_visit: 'bg-accent-soft text-fg',
+  visited: 'bg-accent-soft text-fg',
+  offer_made: 'bg-good-soft text-good',
+  offer_accepted: 'bg-good-soft text-good',
+  offer_refused: 'bg-bad-soft text-bad',
+  discarded: 'bg-surface-2 text-muted line-through',
+  sold_or_withdrawn: 'bg-surface-2 text-muted line-through',
+}
+
+/** Couleur de fond d'une classe DPE et encre lisible dessus. */
+export const DPE_CLASSES: Record<DpeClass, string> = {
+  A: 'bg-dpe-a text-white',
+  B: 'bg-dpe-b text-white',
+  C: 'bg-dpe-c text-[var(--dpe-ink-light)]',
+  D: 'bg-dpe-d text-[var(--dpe-ink-light)]',
+  E: 'bg-dpe-e text-[var(--dpe-ink-light)]',
+  F: 'bg-dpe-f text-white',
+  G: 'bg-dpe-g text-white',
+}
+
+export const SORT_LABELS: Record<ListingSort, string> = {
+  score: 'Meilleur verdict',
+  grossYield: 'Rendement brut',
+  netYield: 'Rendement net',
+  effort: 'Effort mensuel',
+  pricePerM2: 'Prix au m²',
+  price: 'Prix',
+  surface: 'Surface',
+  rentalRank: 'Compatibilité location (phase 2)',
+  opinion: 'Nos avis (moyenne)',
+  createdAt: "Date d'ajout",
+  discount: 'Décote nécessaire',
+}
+
+/** Communes de Bordeaux Métropole proposées dans le formulaire (liste ouverte). */
+export const SUGGESTED_COMMUNES: readonly string[] = [
+  'Talence',
+  'Mérignac',
+  'Pessac',
+  'Bègles',
+  'Bordeaux',
+  'Le Bouscat',
+  "Villenave-d'Ornon",
+  'Gradignan',
+]

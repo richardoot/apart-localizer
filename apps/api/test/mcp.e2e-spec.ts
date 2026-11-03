@@ -1,0 +1,540 @@
+/**
+ * Le connecteur MCP par de vrais appels HTTP JSON-RPC au contrôleur :
+ * découverte OAuth, authentification, portées, les dix outils du lot 1 avec
+ * leurs garde-fous, le journal d'activité au canal `mcp`.
+ */
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import request from 'supertest'
+import { DEFAULT_TASKS } from '@apart/contracts'
+import { createE2eApp, e2eIdentity } from './e2e-app'
+import type { E2eContext, E2eIdentity } from './e2e-app'
+import { OAuthDiscoveryService } from '../src/mcp/oauth-discovery.service'
+import { MCP_TOOL_NAMES } from '../src/mcp/mcp-tools'
+import { DATA_TAG } from '../src/mcp/tool-results'
+
+const richard = e2eIdentity('richard')
+const chloe = e2eIdentity('chloe')
+/** Un client OAuth qui n'a obtenu que la lecture. */
+const reader = e2eIdentity('richard-reader', { scope: 'openid listings:read' })
+/** Le même membre, avec l'écriture. */
+const writer = e2eIdentity('richard-writer', {
+  scope: 'listings:read listings:write',
+})
+
+const EXAMPLE = {
+  title: 'T2 exemple § 8',
+  price: 200_000,
+  surface: 45,
+  furnitureValue: 5000,
+  dpeClass: 'D',
+  location: {
+    commune: 'Talence',
+    point: { type: 'Point', coordinates: [-0.5906, 44.8083] },
+    precision: 'exact',
+  },
+  rentalPlan: { targetRent: 750, demand: 'strong' },
+}
+
+interface ToolResult {
+  content: Array<{ type: string; text: string }>
+  structuredContent?: Record<string, unknown>
+  isError?: boolean
+}
+
+describe('MCP (e2e)', () => {
+  let ctx: E2eContext
+  let nextId = 1
+
+  /** Un appel JSON-RPC complet, comme un client MCP sans session l'envoie. */
+  async function rpc(
+    identity: E2eIdentity | null,
+    method: string,
+    params?: unknown
+  ): Promise<request.Response> {
+    const req = request(ctx.server)
+      .post('/mcp')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('Content-Type', 'application/json')
+    if (identity) req.set(ctx.auth(identity))
+    return req.send({ jsonrpc: '2.0', id: nextId++, method, params })
+  }
+
+  async function callTool(
+    identity: E2eIdentity,
+    name: string,
+    args: unknown
+  ): Promise<ToolResult> {
+    const res = await rpc(identity, 'tools/call', { name, arguments: args })
+    expect(res.status).toBe(200)
+    expect(res.body.error).toBeUndefined()
+    return res.body.result as ToolResult
+  }
+
+  /** Le JSON encadré dans la balise de données. */
+  function fenced(result: ToolResult): Record<string, unknown> {
+    const text = result.content[0]?.text ?? ''
+    const match = text.match(
+      new RegExp(`<${DATA_TAG}>\\n([\\s\\S]*)\\n</${DATA_TAG}>`)
+    )
+    expect(match).not.toBeNull()
+    return JSON.parse(match?.[1] ?? '{}') as Record<string, unknown>
+  }
+
+  beforeAll(async () => {
+    // Un même membre (Richard) derrière trois jetons : session web, client
+    // OAuth en lecture, client OAuth en écriture.
+    reader.supabaseId = richard.supabaseId
+    reader.email = richard.email
+    writer.supabaseId = richard.supabaseId
+    writer.email = richard.email
+    ctx = await createE2eApp([richard, chloe, reader, writer])
+    // La découverte relaie GoTrue : ici, une réponse fabriquée, jamais le réseau.
+    const discovery = ctx.app.get(OAuthDiscoveryService)
+    discovery.fetchImpl = url =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            issuer: 'http://127.0.0.1:54321/auth/v1',
+            authorization_endpoint:
+              'http://127.0.0.1:54321/auth/v1/oauth/authorize',
+            token_endpoint: 'http://127.0.0.1:54321/auth/v1/oauth/token',
+            fetched_from: url,
+          }),
+      })
+  })
+
+  afterAll(async () => {
+    await ctx.close()
+  })
+
+  beforeEach(async () => {
+    await ctx.db.truncateAll()
+    await ctx.prisma.workspace.create({
+      data: {
+        name: 'Richard et Chloé',
+        members: {
+          create: [
+            {
+              handle: 'richard',
+              displayName: 'Richard',
+              email: richard.email,
+              role: 'owner',
+            },
+            { handle: 'chloe', displayName: 'Chloé', email: chloe.email },
+          ],
+        },
+      },
+    })
+  })
+
+  describe('découverte et authentification', () => {
+    it('publie les métadonnées de ressource protégée avec les portées', async () => {
+      const res = await request(ctx.server)
+        .get('/.well-known/oauth-protected-resource')
+        .expect(200)
+      expect(res.body.resource).toMatch(/\/mcp$/)
+      expect(res.body.authorization_servers).toEqual([
+        'http://127.0.0.1:54321/auth/v1',
+      ])
+      expect(res.body.scopes_supported).toEqual([
+        'listings:read',
+        'listings:write',
+      ])
+      await request(ctx.server)
+        .get('/.well-known/oauth-protected-resource/mcp')
+        .expect(200)
+    })
+
+    it("relaie les métadonnées du serveur d'autorisation de GoTrue", async () => {
+      const res = await request(ctx.server)
+        .get('/.well-known/oauth-authorization-server')
+        .expect(200)
+      expect(res.body.token_endpoint).toBe(
+        'http://127.0.0.1:54321/auth/v1/oauth/token'
+      )
+      expect(res.body.fetched_from).toBe(
+        'http://127.0.0.1:54321/auth/v1/.well-known/oauth-authorization-server'
+      )
+    })
+
+    it('sans jeton : 401 et WWW-Authenticate vers la découverte', async () => {
+      const res = await rpc(null, 'initialize', {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'e2e', version: '1' },
+      })
+      expect(res.status).toBe(401)
+      expect(res.headers['www-authenticate']).toMatch(
+        /^Bearer resource_metadata="http:\/\/[^"]+\/\.well-known\/oauth-protected-resource"$/
+      )
+      const bad = await request(ctx.server)
+        .post('/mcp')
+        .set('Accept', 'application/json, text/event-stream')
+        .set('Authorization', 'Bearer nope')
+        .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
+      expect(bad.status).toBe(401)
+      expect(bad.headers['www-authenticate']).toContain('error="invalid_token"')
+    })
+
+    it('initialize puis tools/list, sans session', async () => {
+      const init = await rpc(richard, 'initialize', {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'e2e', version: '1' },
+      })
+      expect(init.status).toBe(200)
+      expect(init.body.result.serverInfo.name).toBe('apart-localizer')
+      expect(init.headers['mcp-session-id']).toBeUndefined()
+
+      const list = await rpc(richard, 'tools/list')
+      expect(list.status).toBe(200)
+      const names = list.body.result.tools.map((t: { name: string }) => t.name)
+      expect(names.sort()).toEqual([...MCP_TOOL_NAMES].sort())
+      const create = list.body.result.tools.find(
+        (t: { name: string }) => t.name === 'create_listing'
+      )
+      expect(create.inputSchema.properties.listing).toBeDefined()
+      expect(create.inputSchema.properties.provenance).toBeDefined()
+      const get = list.body.result.tools.find(
+        (t: { name: string }) => t.name === 'get_listing'
+      )
+      expect(get.annotations.readOnlyHint).toBe(true)
+    })
+  })
+
+  describe('lecture', () => {
+    let id: string
+
+    beforeEach(async () => {
+      const res = await request(ctx.server)
+        .post('/listings')
+        .set(ctx.auth(richard))
+        .send(EXAMPLE)
+        .expect(201)
+      id = res.body.listing.id
+    })
+
+    it('list_listings : filtres, point et rayon, pagination, données encadrées', async () => {
+      const all = await callTool(richard, 'list_listings', {})
+      expect(all.isError).toBeUndefined()
+      expect(all.content[0]?.text).toContain(`<${DATA_TAG}>`)
+      expect(all.content[0]?.text).toContain('1 annonce(s), page 1/1')
+      const page = fenced(all) as { total: number; items: unknown[] }
+      expect(page.total).toBe(1)
+      expect(all.structuredContent).toEqual(page)
+
+      const near = await callTool(chloe, 'list_listings', {
+        near: { longitude: -0.5955, latitude: 44.8077, radiusMeters: 800 },
+        newForMe: true,
+      })
+      const nearPage = fenced(near) as {
+        items: Array<{ distanceMeters: number; isNewForMe: boolean }>
+      }
+      expect(nearPage.items).toHaveLength(1)
+      expect(nearPage.items[0]?.distanceMeters).toBeGreaterThan(300)
+      expect(nearPage.items[0]?.isNewForMe).toBe(true)
+
+      const far = await callTool(richard, 'list_listings', {
+        near: { longitude: -0.6, latitude: 44.865, radiusMeters: 500 },
+      })
+      expect((fenced(far) as { total: number }).total).toBe(0)
+
+      const invalid = await callTool(richard, 'list_listings', {
+        status: ['vendu'],
+      })
+      expect(invalid.isError).toBe(true)
+    })
+
+    it('get_listing : fiche, contrôles, tâches, avis ; refus lisible si inconnue', async () => {
+      const result = await callTool(richard, 'get_listing', { listingId: id })
+      expect(result.content[0]?.text).toContain('Contrôles de louabilité')
+      const item = fenced(result) as {
+        listing: { id: string }
+        evaluation: { metrics: { totalCost: number } }
+        tasks: unknown[]
+      }
+      expect(item.listing.id).toBe(id)
+      expect(item.evaluation.metrics.totalCost).toBe(220_000)
+      expect(item.tasks).toHaveLength(DEFAULT_TASKS.length)
+
+      const missing = await callTool(richard, 'get_listing', {
+        listingId: '99999999-9999-4999-8999-999999999999',
+      })
+      expect(missing.isError).toBe(true)
+      expect(missing.content[0]?.text).toBe('Refusé : Annonce introuvable')
+    })
+
+    it('get_assumptions et evaluate_listing', async () => {
+      const assumptions = await callTool(richard, 'get_assumptions', {})
+      const version = fenced(assumptions) as {
+        values: { interestRate: number }
+      }
+      expect(version.values.interestRate).toBe(0.0365)
+
+      const scenario = await callTool(richard, 'evaluate_listing', {
+        listingId: id,
+        overrides: { price: 150_000 },
+        assumptions: { interestRate: 0.032 },
+      })
+      expect(scenario.content[0]?.text).toContain('non enregistrée')
+      const evaluated = fenced(scenario) as {
+        persisted: boolean
+        listing: { price: number }
+        assumptions: { interestRate: number }
+      }
+      expect(evaluated.persisted).toBe(false)
+      expect(evaluated.listing.price).toBe(150_000)
+      expect(evaluated.assumptions.interestRate).toBe(0.032)
+
+      const hypothetical = await callTool(richard, 'evaluate_listing', {
+        listing: {
+          price: 180_000,
+          surface: 40,
+          rentalPlan: { targetRent: 700 },
+        },
+      })
+      expect((fenced(hypothetical) as { persisted: boolean }).persisted).toBe(
+        false
+      )
+      const nothing = await callTool(richard, 'evaluate_listing', {})
+      expect(nothing.isError).toBe(true)
+    })
+  })
+
+  describe('écriture', () => {
+    it('create_listing : nouvelle pour Chloé, provenance IA, journal au canal mcp', async () => {
+      const result = await callTool(richard, 'create_listing', {
+        listing: {
+          ...EXAMPLE,
+          title: 'T3 vu par Claude',
+          url: 'https://exemple.invalid/annonce/1',
+          fieldSources: {
+            price: { source: 'ai', confidence: 0.95, evidence: '200 000 €' },
+          },
+        },
+      })
+      expect(result.isError).toBeUndefined()
+      expect(result.content[0]?.text).toContain('Annonce créée')
+      const item = fenced(result) as {
+        listing: {
+          id: string
+          fieldSources: Record<string, { source: string }>
+        }
+      }
+      expect(item.listing.fieldSources.price?.source).toBe('ai')
+      expect(item.listing.fieldSources.surface?.source).toBe('ai')
+      expect(item.listing.fieldSources.commune?.source).toBe('ai')
+
+      const forChloe = await request(ctx.server)
+        .get('/listings?newForMe=true')
+        .set(ctx.auth(chloe))
+        .expect(200)
+      expect(forChloe.body.total).toBe(1)
+      expect(forChloe.body.items[0].listing.location.point).toEqual(
+        EXAMPLE.location.point
+      )
+      const logs = await ctx.prisma.activityLog.findMany({
+        where: { listingId: item.listing.id },
+      })
+      expect(logs).toHaveLength(1)
+      expect(logs[0]?.channel).toBe('mcp')
+      expect(logs[0]?.action).toBe('listing.created')
+      const prices = await ctx.prisma.priceEvent.findMany({
+        where: { listingId: item.listing.id },
+      })
+      expect(prices[0]?.source).toBe('ai')
+
+      const invalid = await callTool(richard, 'create_listing', {
+        listing: { title: '', price: -1 },
+      })
+      expect(invalid.isError).toBe(true)
+    })
+
+    it('update_listing : garde-fous, provenance utilisateur, historique de prix', async () => {
+      const created = await request(ctx.server)
+        .post('/listings')
+        .set(ctx.auth(richard))
+        .send(EXAMPLE)
+        .expect(201)
+      const id = created.body.listing.id as string
+      const updatedAt = created.body.listing.updatedAt as string
+
+      const stale = await callTool(richard, 'update_listing', {
+        listingId: id,
+        patch: { price: 190_000 },
+        expectedPrice: 210_000,
+      })
+      expect(stale.isError).toBe(true)
+      expect(stale.content[0]?.text).toContain('prix attendu')
+
+      const ok = await callTool(richard, 'update_listing', {
+        listingId: id,
+        patch: { price: 190_000, propertyTax: 900 },
+        expectedUpdatedAt: updatedAt,
+        expectedPrice: 200_000,
+        provenance: 'user',
+      })
+      expect(ok.isError).toBeUndefined()
+      const item = fenced(ok) as {
+        listing: {
+          price: number
+          fieldSources: Record<string, { source: string }>
+          updatedAt: string
+        }
+        priceEvents: Array<{ newPrice: number; source: string }>
+      }
+      expect(item.listing.price).toBe(190_000)
+      expect(item.listing.fieldSources.propertyTax?.source).toBe('user')
+      expect(item.priceEvents[0]).toMatchObject({
+        newPrice: 190_000,
+        source: 'user',
+      })
+
+      const replay = await callTool(richard, 'update_listing', {
+        listingId: id,
+        patch: { notes: 'encore' },
+        expectedUpdatedAt: updatedAt,
+      })
+      expect(replay.isError).toBe(true)
+      expect(replay.content[0]?.text).toContain('changé depuis')
+      const logs = await ctx.prisma.activityLog.findMany({
+        where: { listingId: id, action: 'listing.updated' },
+      })
+      expect(logs).toHaveLength(1)
+      expect(logs[0]?.channel).toBe('mcp')
+    })
+
+    it('set_listing_status, add_opinion, add_task, complete_task', async () => {
+      const created = await request(ctx.server)
+        .post('/listings')
+        .set(ctx.auth(richard))
+        .send(EXAMPLE)
+        .expect(201)
+      const id = created.body.listing.id as string
+
+      const refused = await callTool(richard, 'set_listing_status', {
+        listingId: id,
+        status: 'discarded',
+      })
+      expect(refused.isError).toBe(true)
+      expect(refused.content[0]?.text).toContain('raison')
+      const conflict = await callTool(richard, 'set_listing_status', {
+        listingId: id,
+        status: 'to_visit',
+        expectedStatus: 'visited',
+      })
+      expect(conflict.isError).toBe(true)
+      const visited = await callTool(richard, 'set_listing_status', {
+        listingId: id,
+        status: 'to_visit',
+        expectedStatus: 'to_study',
+      })
+      expect(visited.content[0]?.text).toContain('Statut : À visiter')
+
+      const opinion = await callTool(chloe, 'add_opinion', {
+        listingId: id,
+        rating: 4,
+        text: 'Lumineux',
+      })
+      expect(opinion.content[0]?.text).toContain('Avis de Chloé')
+      expect(
+        (fenced(opinion) as { opinion: { rating: number } }).opinion.rating
+      ).toBe(4)
+
+      const task = await callTool(richard, 'add_task', {
+        listingId: id,
+        label: 'Demander le DPE complet',
+        assigneeHandle: 'Chloe',
+      })
+      const taskId = (
+        fenced(task) as { task: { id: string; assigneeId: string } }
+      ).task.id
+      const unknownAssignee = await callTool(richard, 'add_task', {
+        listingId: id,
+        label: 'x',
+        assigneeHandle: 'nobody',
+      })
+      expect(unknownAssignee.isError).toBe(true)
+      expect(unknownAssignee.content[0]?.text).toContain('richard, chloe')
+
+      const done = await callTool(chloe, 'complete_task', {
+        listingId: id,
+        taskId,
+      })
+      expect((fenced(done) as { task: { done: boolean } }).task.done).toBe(true)
+      const undone = await callTool(chloe, 'complete_task', {
+        listingId: id,
+        taskId,
+        done: false,
+      })
+      expect((fenced(undone) as { task: { done: boolean } }).task.done).toBe(
+        false
+      )
+
+      const detail = await request(ctx.server)
+        .get(`/listings/${id}`)
+        .set(ctx.auth(richard))
+        .expect(200)
+      expect(detail.body.listing.status).toBe('to_visit')
+      expect(detail.body.opinions).toHaveLength(1)
+      expect(detail.body.tasks).toHaveLength(DEFAULT_TASKS.length + 1)
+      expect(detail.body.tasks.at(-1).assigneeId).toBe(
+        (fenced(task) as { task: { assigneeId: string } }).task.assigneeId
+      )
+      const channels = await ctx.prisma.activityLog.findMany({
+        where: { listingId: id, channel: 'mcp' },
+      })
+      expect(channels.map(l => l.action).sort()).toEqual(
+        [
+          'listing.status_changed',
+          'opinion.created',
+          'task.created',
+          'task.completed',
+          'task.reopened',
+        ].sort()
+      )
+    })
+
+    it("un jeton en lecture seule lit mais n'écrit pas ; l'écriture passe avec la portée", async () => {
+      const created = await request(ctx.server)
+        .post('/listings')
+        .set(ctx.auth(richard))
+        .send(EXAMPLE)
+        .expect(201)
+      const id = created.body.listing.id as string
+
+      const read = await callTool(reader, 'get_listing', { listingId: id })
+      expect(read.isError).toBeUndefined()
+      const denied = await callTool(reader, 'add_task', {
+        listingId: id,
+        label: 'Interdit',
+      })
+      expect(denied.isError).toBe(true)
+      expect(denied.content[0]?.text).toContain('listings:write')
+      const deniedStatus = await callTool(reader, 'set_listing_status', {
+        listingId: id,
+        status: 'to_visit',
+      })
+      expect(deniedStatus.isError).toBe(true)
+
+      const allowed = await callTool(writer, 'add_task', {
+        listingId: id,
+        label: 'Permis',
+      })
+      expect(allowed.isError).toBeUndefined()
+      const tasks = await ctx.prisma.task.findMany({ where: { listingId: id } })
+      expect(tasks.map(t => t.label)).toContain('Permis')
+      expect(tasks.map(t => t.label)).not.toContain('Interdit')
+    })
+
+    it("n'expose aucun outil de suppression", async () => {
+      const list = await rpc(richard, 'tools/list')
+      const names = list.body.result.tools.map((t: { name: string }) => t.name)
+      expect(names.some((n: string) => /delete|remove|supprim/i.test(n))).toBe(
+        false
+      )
+    })
+  })
+})

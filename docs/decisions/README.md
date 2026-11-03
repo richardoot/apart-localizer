@@ -9,3 +9,5 @@ remplacée n'est pas effacée ; son statut passe à « remplacée par NNNN ».
 | [0002](0002-prisma-et-postgis.md)                           | Prisma 7 conservé, PostGIS activé pour la géo                    | Acceptée, 3 novembre 2026 |
 | [0003](0003-tests-e2e-sur-postgis-reel.md)                  | Tests e2e sur un Postgres PostGIS réel, image multi-architecture | Acceptée, 3 novembre 2026 |
 | [0004](0004-membres-pre-crees-et-rattachement-par-email.md) | Membres pré-créés, rattachement par e-mail, espace automatique   | Acceptée, 3 novembre 2026 |
+| [0005](0005-portees-mcp-lues-dans-le-jeton.md)              | Portées MCP lues dans le jeton ; jeton sans portée = toutes      | Acceptée, 3 novembre 2026 |
+| [0006](0006-verdict-tri-et-pagination-apres-evaluation.md)  | Verdict, tri et pagination en mémoire après l'évaluation         | Acceptée, 3 novembre 2026 |

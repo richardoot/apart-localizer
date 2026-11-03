@@ -24,6 +24,7 @@
   "dependencies": {
     "@apart/contracts": "workspace:*",
     "@apart/domain": "workspace:*",
+    "@sentry/vue": "11.10.0",
     "@supabase/supabase-js": "2.118.0",
     "@tanstack/vue-query": "5.105.3",
     "@tanstack/vue-table": "9.3.1",

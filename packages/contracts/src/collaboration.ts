@@ -79,9 +79,26 @@ export const TaskSchema = TaskInputSchema.extend({
   listingId: z.string().uuid(),
   done: z.boolean(),
   doneAt: z.string().datetime().nullable(),
+  position: z.number().int().min(0).describe("Ordre d'affichage"),
   createdAt: z.string().datetime(),
 })
 export type Task = z.infer<typeof TaskSchema>
+
+/** Mise à jour d'une tâche : cocher ou décocher, renommer, assigner. */
+export const TaskUpdateSchema = z
+  .object({
+    done: z.boolean().optional().describe('Vrai = faite, faux = à faire'),
+    label: z.string().min(1).max(300).optional(),
+    assigneeId: z.string().uuid().nullable().optional(),
+  })
+  .refine(
+    value =>
+      value.done !== undefined ||
+      value.label !== undefined ||
+      value.assigneeId !== undefined,
+    { message: 'Au moins un champ à modifier' }
+  )
+export type TaskUpdate = z.infer<typeof TaskUpdateSchema>
 
 /** Checklist par défaut d'une nouvelle annonce, reprise de l'artefact. */
 export const DEFAULT_TASKS: readonly string[] = [
@@ -105,6 +122,28 @@ export const PriceEventSchema = z.object({
   source: FieldSourceSchema,
 })
 export type PriceEvent = z.infer<typeof PriceEventSchema>
+
+/**
+ * Baisse ou hausse constatée sur l'annonce source : met le prix affiché à
+ * jour et ajoute une ligne à l'historique.
+ */
+export const PriceEventInputSchema = z.object({
+  newPrice: z.number().min(0).describe('Nouveau prix affiché en euros'),
+  occurredAt: z
+    .string()
+    .datetime()
+    .optional()
+    .describe('Date du constat, ISO 8601 ; absent = maintenant'),
+  source: FieldSourceSchema.default('user'),
+  expectedPrice: z
+    .number()
+    .min(0)
+    .optional()
+    .describe(
+      'Garde-fou optimiste : prix actuel attendu en euros ; refus si différent'
+    ),
+})
+export type PriceEventInput = z.infer<typeof PriceEventInputSchema>
 
 export const OfferSchema = z.object({
   id: z.string().uuid(),
