@@ -75,7 +75,10 @@ pnpm --filter @apart/api exec web-push generate-vapid-keys   # clés VAPID du we
 ```
 
 Les paquets `contracts` et `domain` sont consommés par leur `dist` : lancer `pnpm build:packages`
-après les avoir modifiés (les scripts racine le font).
+après les avoir modifiés (les scripts racine le font). Ils sont publiés en ESM (`dist/index.js`,
+web et tests) et en CommonJS (`dist/index.cjs`, esbuild) : l'API est en CommonJS et le runtime
+Vercel interdit `require(esm)`. Toute nouvelle dépendance de l'API doit passer
+`pnpm --filter @apart/api check:vercel-runtime` (lancé par `build:vercel`).
 
 Environnement local (lot 7, `docs/developpement-local.md`, ADR 0016) : la connexion par e-mail et
 mot de passe n'existe qu'en local (`VITE_AUTH_PASSWORD=1`) ; le jeu de démo est fictif et ne

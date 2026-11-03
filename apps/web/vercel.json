@@ -1,6 +1,6 @@
 {
   "installCommand": "npx pnpm@$(node -p 'require(\"../../package.json\").packageManager.slice(5)') install",
-  "buildCommand": "npx pnpm@$(node -p 'require(\"../../package.json\").packageManager.slice(5)') build",
+  "buildCommand": "npx pnpm@$(node -p 'require(\"../../package.json\").packageManager.slice(5)') -w build:packages && npx pnpm@$(node -p 'require(\"../../package.json\").packageManager.slice(5)') build",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
   "headers": [
     {

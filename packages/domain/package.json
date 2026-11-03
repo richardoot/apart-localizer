@@ -8,6 +8,7 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
       "default": "./dist/index.js"
     }
   },
@@ -15,7 +16,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && pnpm build:cjs",
+    "build:cjs": "esbuild src/index.ts --bundle --platform=node --target=node24 --format=cjs --packages=external --sourcemap --outfile=dist/index.cjs --log-level=warning",
     "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
@@ -30,6 +32,7 @@
   "devDependencies": {
     "@types/node": "24.19.2",
     "@vitest/coverage-v8": "5.1.0",
+    "esbuild": "0.28.2",
     "fast-check": "4.10.2",
     "typescript": "6.0.3",
     "vitest": "5.1.0"

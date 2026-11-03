@@ -120,8 +120,12 @@ isochrones (Géoplateforme) sont appelés à la demande, sans clé, avec un cach
 ## 3. Projet Vercel : API
 
 Nouveau projet depuis le dépôt GitHub, **Root Directory** `apps/api`, framework « Other ». Le
-`vercel.json` fixe la région (`cdg1`), les commandes d'installation et de build (`build:vercel`)
-et le dossier de sortie (`dist`). Variables d'environnement (Production, et Preview si besoin) :
+`vercel.json` fixe la région (`dub1`, Dublin, à côté de la base Supabase en `eu-west-1`), les
+commandes d'installation et de build et le dossier de sortie (`dist`). Le build compile d'abord
+les paquets partagés (`pnpm -w build:packages`), puis lance `build:vercel`, qui applique les
+migrations et vérifie que l'application se charge sans `require(esm)`, comme dans le runtime
+Vercel : `contracts` et `domain` sont publiés en ESM et en CommonJS (`dist/index.cjs`) pour
+cela. Variables d'environnement (Production, et Preview si besoin) :
 
 | Variable                                                         | Valeur                                                                                                                 |
 | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
