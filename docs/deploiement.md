@@ -119,7 +119,8 @@ isochrones (Géoplateforme) sont appelés à la demande, sans clé, avec un cach
 
 ## 3. Projet Vercel : API
 
-Nouveau projet depuis le dépôt GitHub, **Root Directory** `apps/api`, framework « Other ». Le
+Projet `apart-localizer-backend` relié au dépôt GitHub, **Root Directory** `apps/api`, framework
+NestJS (avec « Other », Vercel servirait `dist` comme des fichiers statiques), Node 24.x. Le
 `vercel.json` fixe la région (`dub1`, Dublin, à côté de la base Supabase en `eu-west-1`), les
 commandes d'installation et de build et le dossier de sortie (`dist`). Le build compile d'abord
 les paquets partagés (`pnpm -w build:packages`), puis lance `build:vercel`, qui applique les
@@ -158,7 +159,7 @@ Après le premier déploiement : `GET https://<api>.vercel.app/health` doit rép
 
 ## 4. Projet Vercel : web
 
-Second projet, **Root Directory** `apps/web`, framework Vite (le `vercel.json` fixe la réécriture
+Projet `apart-localizer-frontend`, **Root Directory** `apps/web`, framework Vite, Node 24.x (le `vercel.json` fixe la réécriture
 SPA et les en-têtes de sécurité, dont une CSP qui autorise les tuiles et polices en `https:`).
 Variables :
 
