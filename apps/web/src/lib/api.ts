@@ -6,6 +6,19 @@ import type {
   AssumptionsUpdateResult,
   AssumptionsVersion,
   CompareResult,
+  ComplianceReport,
+  OccupancyReport,
+  ProjectionQuery,
+  ProjectionReport,
+  RentComparableInputRaw,
+  RentComparableList,
+  RentComparableUpdate,
+  RentComparableWriteResult,
+  Scenario,
+  ScenarioComparison,
+  ScenarioEvaluateRequest,
+  ScenarioInputRaw,
+  ScenarioUpdate,
   DpeVerifyRequest,
   DuplicateCandidate,
   DuplicateProbe,
@@ -261,6 +274,63 @@ export const api = {
         method: 'POST',
         json: request,
       }),
+  },
+
+  /** Lot 5 : phase 1, projection, scénarios, loyer de marché, conformité. */
+  study: {
+    occupancy: (id: string) =>
+      apiFetch<OccupancyReport>(`/listings/${id}/occupancy`),
+    projection: (id: string, query: ProjectionQuery = {}) =>
+      apiFetch<ProjectionReport>(
+        `/listings/${id}/projection${queryString(
+          Object.fromEntries(
+            Object.entries(query)
+              .filter(([, v]) => v !== undefined)
+              .map(([k, v]) => [k, String(v)])
+          )
+        )}`
+      ),
+    evaluateScenario: (id: string, request: ScenarioEvaluateRequest) =>
+      apiFetch<ScenarioComparison>(`/listings/${id}/scenarios/evaluate`, {
+        method: 'POST',
+        json: request,
+      }),
+    compliance: (id: string) =>
+      apiFetch<ComplianceReport>(`/listings/${id}/compliance`),
+    comparables: (id: string) =>
+      apiFetch<RentComparableList>(`/listings/${id}/rent-comparables`),
+    addComparable: (id: string, input: RentComparableInputRaw) =>
+      apiFetch<RentComparableWriteResult>(`/listings/${id}/rent-comparables`, {
+        method: 'POST',
+        json: input,
+      }),
+    updateComparable: (
+      id: string,
+      comparableId: string,
+      patch: RentComparableUpdate
+    ) =>
+      apiFetch<RentComparableWriteResult>(
+        `/listings/${id}/rent-comparables/${comparableId}`,
+        { method: 'PATCH', json: patch }
+      ),
+    removeComparable: (id: string, comparableId: string) =>
+      apiFetch<RentComparableList>(
+        `/listings/${id}/rent-comparables/${comparableId}`,
+        { method: 'DELETE' }
+      ),
+  },
+
+  scenarios: {
+    list: (listingId?: string) =>
+      apiFetch<Scenario[]>(
+        `/scenarios${listingId ? `?listingId=${listingId}` : ''}`
+      ),
+    create: (input: ScenarioInputRaw) =>
+      apiFetch<Scenario>('/scenarios', { method: 'POST', json: input }),
+    update: (id: string, update: ScenarioUpdate) =>
+      apiFetch<Scenario>(`/scenarios/${id}`, { method: 'PATCH', json: update }),
+    remove: (id: string) =>
+      apiFetch<void>(`/scenarios/${id}`, { method: 'DELETE' }),
   },
 
   offers: {

@@ -3,7 +3,15 @@
  * document donne un chiffre exact, et à l'arrondi indiqué sinon.
  */
 import { describe, expect, it } from 'vitest'
-import { compute, rentalChecks, targetPrice } from '../src/index.js'
+import { AssumptionsSchema } from '@apart/contracts'
+import {
+  compareScenario,
+  compute,
+  occupancyReport,
+  projection,
+  rentalChecks,
+  targetPrice,
+} from '../src/index.js'
 import { ARTIFACT_ASSUMPTIONS, DOC_EXAMPLE } from './helpers.js'
 
 describe('modèle de calcul § 8', () => {
@@ -73,5 +81,76 @@ describe('modèle de calcul § 8', () => {
     expect(rental.verdict).toBe('conditional')
     expect(rental.unknownCount).toBe(4)
     expect(rental.checks.find(c => c.key === 'effort')?.level).toBe('warn')
+  })
+})
+
+describe('modèle de calcul § 8, exemple étendu (lot 5)', () => {
+  const A = AssumptionsSchema.parse({
+    ...ARTIFACT_ASSUMPTIONS,
+    purchaseDate: '2026-01-01',
+    rentalStartDate: '2028-01-01',
+    currentRent: 850,
+    maintenanceAnnual: 600,
+    marginalTaxRate: 0.3,
+  })
+  const input = {
+    financials: { ...DOC_EXAMPLE, annualCharges: 1200 },
+    rental: {
+      dpeClass: 'D' as const,
+      year: null,
+      marketRent: null,
+      demand: 'strong' as const,
+      coOwnershipAllowsRental: 'yes' as const,
+      decencyCompliant: 'yes' as const,
+      rentalPermitRequired: 'no' as const,
+    },
+    leaseType: 'unfurnished' as const,
+  }
+  const at = new Date('2026-11-03T10:00:00Z')
+
+  it('phase 1 : coût d’occupation, capital, coût réel, écarts, bascule', () => {
+    const o = occupancyReport(input, A, { at })
+    expect(Math.round(o.monthly.total)).toBe(1143)
+    expect(Math.round(o.monthly.credit)).toBe(916)
+    expect(Math.round(o.capitalMonthly)).toBe(381)
+    expect(Math.round(o.realCostMonthly)).toBe(762)
+    expect(Math.round(o.gapToCurrentRent ?? 0)).toBe(293)
+    expect(Math.round(o.realGapToCurrentRent ?? 0)).toBe(-88)
+    expect(Math.round(o.phase1.netCost ?? 0)).toBe(-2236)
+    expect(Math.round(o.remainingPrincipalAtSwitch)).toBe(170_848)
+  })
+
+  it('projection sur quinze ans : 3e année, revente, TRI, régimes', () => {
+    const r = projection(input, A, { at })
+    const third = r.rows[2]
+    expect(third?.rentCollected).toBe(8625)
+    expect(Math.round(third?.tax?.taxableIncome ?? 0)).toBe(6038)
+    expect(Math.round(third?.tax?.total ?? 0)).toBe(2850)
+    expect(Math.round(r.summary.firstRentalYearMonthlyAfterTax ?? 0)).toBe(-630)
+    expect(Math.round(r.sale.remainingPrincipal)).toBe(91_944)
+    expect(r.sale.capitalGains.grossGain).toBe(0)
+    expect(Math.round(r.sale.netProceeds)).toBe(98_056)
+    expect(Math.round((r.summary.irrBeforeTax ?? 0) * 1000) / 10).toBe(-0.2)
+    expect(Math.round((r.summary.irrAfterTax ?? 0) * 1000) / 10).toBe(-4.2)
+    const reel = r.regimes.find(x => x.regime === 'reel_foncier')
+    expect(Math.round((reel?.irrAfterTax ?? 0) * 1000) / 10).toBe(-1.4)
+    expect(Math.round(r.summary.netWealthAfterTax ?? 0)).toBe(-42_445)
+    expect(Math.round(reel?.netWealthAfterTax ?? 0)).toBe(-13_879)
+    const furnished = projection({ ...input, leaseType: 'furnished' }, A, {
+      at,
+    })
+    const [micro, lmnp] = furnished.regimes
+    expect(Math.round((micro?.irrAfterTax ?? 0) * 1000) / 10).toBe(-3.1)
+    expect(Math.round((lmnp?.irrAfterTax ?? 0) * 1000) / 10).toBe(-0.2)
+    expect(lmnp?.totalRentalTax).toBe(0)
+  })
+
+  it('scénario « prix négocié à 150 000 € »', () => {
+    const s = compareScenario(input, A, { price: 150_000 }, { at })
+    expect(s.base.verdict).toBe('off_target')
+    expect(s.result.verdict).toBe('to_dig')
+    expect(s.result.totalCost).toBe(166_250)
+    expect(Math.round(s.result.effort)).toBe(-109)
+    expect(Math.round((s.result.irrAfterTax ?? 0) * 1000) / 10).toBe(-1.5)
   })
 })

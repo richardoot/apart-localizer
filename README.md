@@ -2,7 +2,9 @@
 
 Suivi d'annonces d'achat d'appartement assisté par IA : normalisation des critères, pipeline
 partagé (interface web et MCP), carte et critères géographiques, évaluation de la rentabilité et
-du prix cible.
+du prix cible, puis l'étude dans le temps : coût d'occupation en phase 1, scénarios « et si »,
+fiscalité estimée, projection jusqu'à la revente avec TRI, loyer de marché par comparables et
+checklist réglementaire datée avec les risques Géorisques.
 
 Documentation :
 
@@ -23,16 +25,21 @@ Documentation :
 apps/
   api/          NestJS 11, Prisma 7 + PostGIS, nestjs-zod, OpenAPI (/api/docs hors production),
                 MCP (/mcp, découverte OAuth), extraction IA (@anthropic-ai/sdk), géocodage et
-                isochrones IGN, DPE ADEME, encadrement, arrêts TBM, DVF, critères de recherche,
-                doublons, throttler, Sentry en option
+                isochrones IGN, DPE ADEME, encadrement, arrêts TBM, DVF, Géorisques, critères de
+                recherche, doublons, scénarios, comparables de loyer, projection et conformité
+                (module study), throttler, Sentry en option
   web/          Vue 3.5 + Vite, Tailwind 4, TanStack Query et Table, MapLibre GL + terra-draw,
                 reka-ui, Supabase Auth, PWA, Sentry en option
 packages/
-  contracts/    schémas Zod partagés (annonces, hypothèses et barème notaire, offres, GeoJSON,
-                filtres, sorties calculées, prix cible, négociation, comparaison, glossaire)
+  contracts/    schémas Zod partagés (annonces, hypothèses et barème notaire, paramètres fiscaux
+                datés, offres, GeoJSON, filtres, sorties calculées, prix cible, négociation,
+                comparaison, scénarios, projection, comparables, règles réglementaires datées,
+                glossaire)
   domain/       calculs purs (coût, rendement, verdict, louabilité, frais de notaire par taux ou
                 barème, prix cible et critère « marché », sensibilité, brief de négociation,
-                rangs, plafond d'encadrement, statistiques DVF, validité du DPE, filtres des critères)
+                rangs, plafond d'encadrement, statistiques DVF, validité du DPE, filtres des
+                critères, coût d'occupation, tableau d'amortissement, fiscalité locative,
+                plus-value, TRI et VAN, projection, scénarios, loyer de marché, checklist)
 scripts/        import de l'artefact Claude ; imports open data (encadrement, arrêts TBM, DVF) ;
                 géocodage des annonces manquantes
 supabase/       configuration du Supabase CLI
@@ -97,7 +104,9 @@ Migrations : `20261103000000_init` (schéma complet, PostGIS, index GiST),
 `20261103120000_lot3_offers` (canal, date de réponse, auteur et dates des offres), puis
 `20261103180000_lot4_criteria_opendata` (entrées des annonces dans les critères, zonage de
 l'encadrement, clés d'import des arrêts et des ventes DVF, numéro de DPE et instantané open data
-des annonces). Une base créée avant un lot doit rejouer `prisma:deploy`.
+des annonces), puis `20261103210000_lot5_scenarios_rent_comparables` (scénarios « et si »
+enregistrés, annonces de location comparables). Une base créée avant un lot doit rejouer
+`prisma:deploy`.
 
 ## Démarrage
 
@@ -151,7 +160,15 @@ et garde-fous dans [docs/mcp.md](docs/mcp.md).
   constaté, nouvelle offre avec canal et date, réponse du vendeur et contre-proposition, statut
   proposé après une réponse, jamais appliqué d'office), pastilles de provenance par champ.
   L'ouverture marque l'annonce « vue » pour le membre ; le badge « nouvelle » s'éteint pour lui
-  seul.
+  seul. Le bloc **« Étude »** (lot 5) a cinq onglets : **Phase 1** (coût d'occupation contre le
+  loyer actuel, part de capital remboursé, coût réel, date de bascule), **Scénarios** (éditeur
+  « et si » recalculé en direct par `domain`, base et scénario côte à côte, enregistrement pour
+  l'annonce ou l'espace, réapplication), **Projection** (TRI et VAN avant et après impôt,
+  enrichissement net, graphique SVG des cash-flows et de la position, comparaison des régimes,
+  tableau annuel, revente ; horizon, régime et TMI de l'aperçu ; « estimation, pas un conseil
+  fiscal »), **Loyer de marché** (comparables saisis, médiane et quartiles au m², position du
+  loyer visé et du plafond, « Retenir » écrit le loyer de marché de la phase 2) et
+  **Conformité** (checklist datée et sourcée, risques Géorisques à l'adresse).
 - **Comparer** (`/comparer?ids=…`) : depuis le tableau, cocher deux à six annonces puis
   « Comparer » : indicateurs, prix cibles, décotes et verdicts côte à côte, la meilleure par
   indicateur marquée ★. Le tableau comparatif porte aussi les colonnes triables « Prix cible »,
@@ -160,8 +177,11 @@ et garde-fous dans [docs/mcp.md](docs/mcp.md).
   notaire par taux forfaitaire ou par barème (droit départemental, taxe communale, frais
   d'assiette, tranches d'émoluments, CSI, débours ; défauts Gironde datés, voir le modèle de
   calcul § 2), seuils de brut et de net, effort maximal, critères retenus pour le prix cible,
-  seuils de décote « négociable » et « tendu », avec « Voir l'impact » (annonces dont le verdict
-  changerait) avant d'enregistrer ; garde-fou sur la version en vigueur.
+  seuils de décote « négociable » et « tendu », phase 1, fiscalité et horizon (loyer actuel,
+  entretien, dates d'achat et de mise en location, TMI, régime visé, nature du meublé, horizon,
+  revalorisation, IRL, frais de revente, taux d'actualisation ; paramètres fiscaux datés
+  affichés), avec « Voir l'impact » (annonces dont le verdict changerait) avant d'enregistrer ;
+  garde-fou sur la version en vigueur.
 
 Fond de carte : `VITE_MAP_STYLE_URL` dans `apps/web/.env`, par défaut le style libre et sans clé
 d'OpenFreeMap (`https://tiles.openfreemap.org/styles/liberty`).
@@ -177,10 +197,11 @@ pnpm --filter @apart/domain test:cov
 pnpm build
 ```
 
-Les e2e (REST, géo, collaboration, prix cible et négociation, extraction IA, MCP par appels JSON-RPC réels) demandent
+Les e2e (REST, géo, collaboration, prix cible et négociation, extraction IA, phase 1,
+scénarios, projection, comparables et conformité, MCP par appels JSON-RPC réels) demandent
 `TEST_DATABASE_URL` (voie 2 ci-dessus, ou le Postgres du Supabase CLI sur 54322). Le client
-Anthropic, le géocodeur et les isochrones IGN et la recherche DPE de l'ADEME sont remplacés par
-des factices dans le harnais ; les tests du web
+Anthropic, le géocodeur et les isochrones IGN, la recherche DPE de l'ADEME et le rapport
+Géorisques sont remplacés par des factices dans le harnais ; les tests du web
 mockent MapLibre, terra-draw et Supabase : aucun réseau, aucune clé. La CI GitHub Actions (`.github/workflows/ci.yml`) rejoue lint,
 format, type-check, unitaires, e2e sur un service PostGIS, puis le build.
 
@@ -215,9 +236,10 @@ pnpm import:dvf -- --year 2024           # ventes d'appartements de Bordeaux Mé
 pnpm geocode:missing -- --dry-run        # annonces à géocoder (sans point, ou au centroïde)
 ```
 
-Chaque script accepte `--help`, `--dry-run` et `--database-url`. Le DPE (ADEME), le géocodage
-et les isochrones (Géoplateforme) sont appelés à la demande par l'API, avec un cache en base ;
-`ISOCHRONE_URL` et `ADEME_DPE_URL` changent leur adresse.
+Chaque script accepte `--help`, `--dry-run` et `--database-url`. Le DPE (ADEME), le géocodage,
+les isochrones (Géoplateforme) et le rapport de risques Géorisques sont appelés à la demande par
+l'API, avec un cache en base ; `ISOCHRONE_URL`, `ADEME_DPE_URL` et `GEORISQUES_URL` changent
+leur adresse.
 
 ## Déploiement
 

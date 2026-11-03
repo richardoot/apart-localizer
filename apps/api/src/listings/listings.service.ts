@@ -1048,7 +1048,7 @@ function rentalPlanData(input: RentalPlanInput) {
     referenceRentPerM2: dec(input.referenceRentPerM2),
     targetRent: dec(input.targetRent),
     marketRent: dec(input.marketRent),
-    comparables: input.comparables as unknown as Prisma.InputJsonValue,
+
     demand: input.demand,
     coOwnershipAllowsRental: input.coOwnershipAllowsRental,
     decencyCompliant: input.decencyCompliant,

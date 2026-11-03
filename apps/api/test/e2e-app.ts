@@ -1,7 +1,7 @@
 /**
  * Boots the real application for e2e specs, on a database of its own.
  *
- * Five things are substituted, and only five:
+ * Six things are substituted, and only six:
  *  - PrismaService, pointed at a throwaway PostGIS database provisioned from
  *    prisma/migrations (see e2e-database.ts);
  *  - SupabaseService, the one call that leaves the machine to validate a
@@ -13,7 +13,9 @@
  *    result" unless a spec says otherwise (`ctx.geocoding.fetchImpl`);
  *  - the other open data clients' fetch: the ADEME DPE search answers "no
  *    DPE" (`ctx.dpe.fetchImpl`) and the Géoplateforme isochrone fails
- *    (`ctx.isochrone.fetchImpl`), unless a spec scripts them.
+ *    (`ctx.isochrone.fetchImpl`), unless a spec scripts them;
+ *  - the Géorisques report's fetch, which fails (`ctx.georisques.fetchImpl`)
+ *    unless a spec scripts it.
  *
  * Everything else runs for real: SupabaseGuard (token extraction, member
  * resolution), the Zod validation pipe, the exception filter, the services,
@@ -36,6 +38,7 @@ import { requestLogger } from '../src/common/request-log'
 import { GeocodingService } from '../src/opendata/geocoding.service'
 import { DpeService } from '../src/opendata/dpe.service'
 import { IsochroneService } from '../src/opendata/isochrone.service'
+import { GeorisquesService } from '../src/opendata/georisques.service'
 import { createE2eDatabase } from './e2e-database'
 import type { E2eDatabase } from './e2e-database'
 
@@ -96,6 +99,8 @@ export interface E2eContext {
   dpe: DpeService
   /** The Géoplateforme isochrones; set `fetchImpl` to script its answers. */
   isochrone: IsochroneService
+  /** The Géorisques report; set `fetchImpl` to script its answers. */
+  georisques: GeorisquesService
   /** Authorization header for a known identity. */
   auth: (identity: E2eIdentity) => { Authorization: string }
   /** Closes the app and drops the database. */
@@ -190,6 +195,8 @@ export async function createE2eApp(
   dpe.fetchImpl = NO_DPE_RESULT
   const isochrone = app.get(IsochroneService)
   isochrone.fetchImpl = ISOCHRONE_DOWN
+  const georisques = app.get(GeorisquesService)
+  georisques.fetchImpl = ISOCHRONE_DOWN
 
   return {
     app,
@@ -200,6 +207,7 @@ export async function createE2eApp(
     geocoding,
     dpe,
     isochrone,
+    georisques,
     auth: identity => ({ Authorization: `Bearer ${identity.token}` }),
     close: async () => {
       await app.close()

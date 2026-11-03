@@ -198,6 +198,7 @@ model Workspace {
   assumptions    AssumptionsVersion[]
   searchCriteria SearchCriteria[]
   activityLogs   ActivityLog[]
+  scenarios      Scenario[]
 
   @@map("workspaces")
   @@schema("app")
@@ -225,6 +226,8 @@ model Member {
   offers          Offer[]          @relation("OfferAuthor")
   searchCriteria  SearchCriteria[]
   activityLogs    ActivityLog[]
+  scenarios       Scenario[]       @relation("ScenarioAuthor")
+  rentComparables RentComparable[] @relation("RentComparableAuthor")
 
   @@unique([workspaceId, handle])
   @@index([workspaceId])
@@ -356,6 +359,8 @@ model Listing {
   activityLogs    ActivityLog[]
   views           ListingView[]
   criteriaMatches CriteriaMatch[]
+  scenarios       Scenario[]
+  rentComparables RentComparable[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, commune])
@@ -409,7 +414,10 @@ model RenovationItem {
   @@schema("app")
 }
 
-/// Phase 2 : mise en location.
+/// Phase 2 : mise en location. `comparables` (JSON) n'est plus lu depuis le
+/// lot 5 : les comparables de loyer sont dans `rent_comparables` (la
+/// migration du lot 5 y a recopié les éventuelles lignes) ; colonne gardée
+/// pour ne rien perdre, à supprimer plus tard.
 model RentalPlan {
   id                      String        @id @default(uuid())
   listingId               String        @unique @map("listing_id")
@@ -429,6 +437,57 @@ model RentalPlan {
   listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@map("rental_plans")
+  @@schema("app")
+}
+
+/// Scénario « et si » enregistré (besoin E4) : des surcharges de l'annonce et
+/// des hypothèses (JSON validé par `ScenarioOverridesSchema`), pour une
+/// annonce ou pour tout l'espace (`listingId` null).
+model Scenario {
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  listingId   String?  @map("listing_id")
+  name        String
+  overrides   Json     @default("{}")
+  notes       String?
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  listing   Listing?  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdBy Member?   @relation("ScenarioAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([listingId])
+  @@map("scenarios")
+  @@schema("app")
+}
+
+/// Annonce de location comparable saisie à la main (besoin L4) : la matière
+/// du loyer de marché d'une annonce.
+model RentComparable {
+  id          String        @id @default(uuid())
+  listingId   String        @map("listing_id")
+  rent        Decimal       @db.Decimal(10, 2)
+  surface     Decimal       @db.Decimal(8, 2)
+  furnished   Boolean       @default(false)
+  rooms       Int?
+  observedAt  DateTime?     @map("observed_at") @db.Date
+  source      ListingSource @default(autre)
+  sourceLabel String?       @map("source_label")
+  url         String?
+  address     String?
+  note        String?
+  createdById String?       @map("created_by_id")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdBy Member? @relation("RentComparableAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([listingId])
+  @@map("rent_comparables")
   @@schema("app")
 }
 

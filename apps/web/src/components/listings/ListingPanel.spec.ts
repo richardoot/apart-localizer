@@ -124,6 +124,8 @@ describe('ListingPanel', () => {
     expect(apiMock.listings.context).toHaveBeenCalledWith(item.listing.id)
     expect(document.body.textContent).toContain('Contexte (données ouvertes)')
     expect(document.body.textContent).toContain('Arrêt fictif')
+    // Lot 5 : l'étude en onglets, phase 1 ouverte.
+    expect(document.body.textContent).toContain("Coût d'occupation")
     wrapper.unmount()
   })
 
@@ -179,6 +181,36 @@ describe('ListingPanel', () => {
       reason: null,
       expectedStatus: 'to_study',
     })
+    wrapper.unmount()
+  })
+
+  it('retient le loyer de marché estimé dans la phase 2, avec le garde-fou', async () => {
+    apiMock.listings.update.mockResolvedValue(item)
+    const wrapper = mountPanel()
+    await flushPromises()
+    const study = wrapper.findComponent({ name: 'StudySection' })
+    study.vm.$emit('retainMarketRent', 765)
+    await flushPromises()
+    expect(apiMock.listings.update).toHaveBeenCalledWith(item.listing.id, {
+      rentalPlan: { ...item.listing.rentalPlan, marketRent: 765 },
+      expectedUpdatedAt: item.listing.updatedAt,
+    })
+    expect(document.body.textContent).toContain('Loyer de marché retenu')
+    wrapper.unmount()
+  })
+
+  it('sans phase 2 : invite à la créer avant de retenir un loyer de marché', async () => {
+    apiMock.listings.get.mockResolvedValueOnce(
+      fakeEvaluated({ rentalPlan: null }, { isNewForMe: false })
+    )
+    const wrapper = mountPanel()
+    await flushPromises()
+    wrapper
+      .findComponent({ name: 'StudySection' })
+      .vm.$emit('retainMarketRent', 700)
+    await flushPromises()
+    expect(apiMock.listings.update).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('Ajoutez d’abord la phase 2')
     wrapper.unmount()
   })
 

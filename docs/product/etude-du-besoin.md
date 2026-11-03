@@ -229,6 +229,9 @@ Lecture :
 | `find_duplicates` | Doublons probables pour une URL, une adresse, un point (50 m) ou un trio commune, prix et surface, ou pour une annonce enregistrée |
 | `get_market_context` | Plafond d'encadrement, références DVF, desserte pour une commune ou une adresse |
 | `list_search_criteria` | Critères de recherche enregistrés, avec le nombre d'annonces et de nouveautés dans chacun |
+| `evaluate_scenario` | Scénario « et si » sur une annonce (surcharges ou scénario enregistré) comparé à la base ; `saveAs` l'enregistre (portée écriture) |
+| `get_projection` | Fiscalité estimée par régime, projection annuelle jusqu'à la revente, plus-value, TRI, VAN, enrichissement net |
+| `get_compliance` | Checklist réglementaire datée à la date de mise en location, risques Géorisques à l'adresse |
 
 Écriture (toutes réversibles, aucune suppression) :
 
@@ -243,6 +246,7 @@ Lecture :
 | `record_offer` | Offre (montant, date, canal) et, pour une offre existante, réponse du vendeur et contre-proposition ; renvoie le statut proposé |
 | `set_assumptions` | Hypothèses globales : champs modifiés seulement, garde-fou sur la version en vigueur, impact rendu (verdicts qui changent) (portée écriture) |
 | `create_search_criteria`, `update_search_criteria` | Critères de recherche : filtres et périmètre en GeoJSON (point et rayon, polygone) ou paramètres d'isochrone |
+| `add_rent_comparable` | Une annonce de location comparable saisie (loyer, surface, meublé, date, source) ; répond avec la médiane à jour |
 
 Ressources et prompts : le schéma d'annonce en JSON Schema (`apart://schema/listing`), le
 glossaire des indicateurs (`apart://glossaire`), un prompt « analyser cette annonce » qui
@@ -314,13 +318,22 @@ Chaque champ saisi ou extrait porte une **provenance** (`listing`, `user`, `ai`,
 **ListingRenovation** : actif, niveau, durée, postes (libellé, montant), notes.
 
 **ListingRentalPlan** (phase 2) : année, type de bail, encadrement (auto, oui, non), loyer de
-référence majoré au m², loyer visé, loyer de marché constaté et comparables, demande locative,
-règlement de copro, décence, permis de louer, notes.
+référence majoré au m², loyer visé, loyer de marché constaté, demande locative, règlement de
+copro, décence, permis de louer, notes. Les comparables sont des lignes **RentComparable**
+depuis le lot 5 (ADR 0013).
+
+**RentComparable** (lot 5) : annonce, loyer hors charges, surface, meublé, pièces, date de
+l'annonce, source, lien, adresse, note, auteur ; la matière du loyer de marché (médiane au m²).
+
+**Scenario** (lot 5) : espace, annonce (ou aucune : scénario d'espace), nom, surcharges (champs
+de l'annonce et hypothèses), notes, auteur ; enregistré, réappliqué, jamais supprimé par le MCP.
 
 **Assumptions** : apport, taux, durée, assurance, frais de notaire (taux forfaitaire ou barème :
 droits de mutation, émoluments par tranches, CSI, débours), vacance, frais fixes, seuils de
-rendement et d'effort, critères retenus pour le prix cible, seuils de décote ; versionnées (date
-d'effet) ; surcharge partielle par annonce.
+rendement et d'effort, critères retenus pour le prix cible, seuils de décote ; au lot 5 : loyer
+actuel, entretien, dates d'achat et de mise en location, TMI, régime fiscal, nature du meublé,
+horizon, revalorisation, indexation (IRL), frais de revente, taux d'actualisation et paramètres
+fiscaux datés ; versionnées (date d'effet) ; surcharge partielle par annonce.
 
 **Opinion** : annonce, membre, note, texte, date.
 
@@ -356,8 +369,9 @@ Le **Listing** porte aussi le numéro de son DPE et un instantané des données 
 tram, médiane DVF, état du plafond, dernière recherche DPE) qui alimente le critère « marché ».
 
 **ReferenceData** : loyers de référence par arrêté (date d'application, zone, pièces, époque,
-meublé), calendrier DPE, barème des frais de notaire, cache des appels open data (géocodage, DPE,
-isochrones).
+meublé), table des règles réglementaires datées (sorte `regulatory_rules`, lot 5 ; défaut dans
+`contracts`), cache des appels open data (géocodage, DPE, isochrones, Géorisques). Le barème des
+frais de notaire et les paramètres fiscaux vivent dans les hypothèses (ADR 0008, 0012).
 
 ---
 

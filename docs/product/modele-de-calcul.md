@@ -1,7 +1,8 @@
 # Modèle de calcul
 
 Formules reprises de l'artefact actuel, puis étendues (coût d'occupation, prix cible,
-sensibilité). Tout ce qui est décrit ici vit dans le paquet `packages/domain`, en fonctions pures
+sensibilité, puis au lot 5 fiscalité estimée, projection jusqu'à la revente, TRI, scénarios,
+loyer de marché et checklist réglementaire). Tout ce qui est décrit ici vit dans le paquet `packages/domain`, en fonctions pures
 et testées, utilisé à l'identique par l'interface, l'API et le MCP.
 
 ## 1. Notations
@@ -25,6 +26,13 @@ et testées, utilisé à l'identique par l'interface, l'API et le MCP.
 | `F` | frais fixes annuels (PNO, CFE, comptable, entretien) | hypothèses |
 | `s_b`, `s_n` | seuils de rendement brut et net | hypothèses |
 | `E` | effort mensuel maximal accepté | hypothèses |
+| `L_a` | loyer actuel du foyer (`currentRent`), mensuel | hypothèses (lot 5) |
+| `e` | entretien annuel en phase 1 (`maintenanceAnnual`) | hypothèses |
+| `D_0`, `D_L` | date d'acquisition (`purchaseDate`, défaut : jour du calcul), date de mise en location (`rentalStartDate`, défaut : 1er janvier de l'année de mise en location) | hypothèses |
+| `h` | horizon de détention en années (`horizonYears`, défaut 15) | hypothèses |
+| `g`, `i` | revalorisation annuelle du bien (`appreciationRate`, défaut 0) ; indexation annuelle des loyers, charges, taxe foncière et loyer actuel (`rentIndexationRate`, défaut 1,57 %, IRL du 3e trimestre 2026) | hypothèses |
+| `f_r` | frais de revente en fraction du prix de vente (`resaleCostsRate`, défaut 5 %, estimation) | hypothèses |
+| `τ` | tranche marginale d'imposition du foyer (`marginalTaxRate`, défaut : non renseignée) | hypothèses |
 
 Toute valeur estimée est marquée `estimated` dans la provenance et affichée « ≈ ».
 
@@ -115,6 +123,10 @@ Repris de l'artefact, chacun rend `ok`, `warn`, `bad` ou `unknown` :
 Verdict : `Incompatible` dès un `bad` ; `Sous conditions` dès un `warn` ou à partir de trois
 `unknown` ; sinon `Compatible`.
 
+L'année de mise en location retenue est celle de la phase 2 de l'annonce, sinon celle de la date
+de mise en location des hypothèses (`rentalStartDate`, lot 5), sinon `rentalYear`. Sans date
+précise (cas des versions d'hypothèses antérieures), rien ne change.
+
 Ajouts du lot 4 (données ouvertes, voir [open-data.md](../open-data.md) et ADR 0011) :
 
 - **plafond automatique** : le loyer de référence majoré de l'arrêté en vigueur (zone, pièces,
@@ -131,25 +143,35 @@ Ajouts du lot 4 (données ouvertes, voir [open-data.md](../open-data.md) et ADR 
 
 Reste prévu : complément de loyer éventuel signalé.
 
-## 4. Phase 1 : coût d'occupation (lot E3)
+## 4. Phase 1 : coût d'occupation (lot 5, besoin E3)
 
-Pendant la période où le bien est habité :
+Pendant que le foyer habite le bien (de `D_0` à `D_L`) ; `occupancyReport` :
 
 ```
-occupation     = mens + chargesCopro / 12 + TF / 12 + entretien / 12
-fondsPerdus    = interets(annee 1) / 12 + assurance / 12 + chargesCopro / 12 + TF / 12 + entretien / 12
-ecartLoyer     = occupation − loyerActuel          ce que coûte (ou rapporte) le passage de locataire à propriétaire
+credit      = emprunt × r / (1 − (1 + r)^−N)        mensualité hors assurance
+assurance   = emprunt × a / 12
+charges     = chargesCopro / 12                     toutes : le propriétaire occupant paie aussi la part récupérable
+TF          = taxe foncière / 12                     estimée à un mois de loyer si absente (≈), comme en phase 2
+entretien   = e / 12                                 0 si non renseigné (signalé)
+occupation  = credit + assurance + charges + TF + entretien
+capital     = capital remboursé en moyenne par mois sur la phase 1 (sur les 12 premiers mois si elle est nulle),
+              lu dans le tableau d'amortissement exact
+coutReel    = occupation − capital                   la part qui ne construit aucun patrimoine
+ecartLoyer  = occupation − L_a ;  ecartReel = coutReel − L_a      (null si L_a n'est pas renseigné)
 ```
 
-`interets(annee 1) ≈ emprunt × t` (approximation au premier ordre ; la version exacte somme les
-intérêts des 12 premières mensualités du tableau d'amortissement). `loyerActuel` et `entretien`
-sont de nouvelles hypothèses.
-
-Capital restant dû après `m` mois (utile pour la revente et pour la bascule en phase 2) :
+Cumuls de la phase 1 (`n_1` mois révolus de `D_0` à `D_L`) : payé, capital remboursé, intérêts,
+assurance, charges + taxe + entretien, loyers évités `Σ L_a × (1 + i)^année`, et le coût net par
+rapport à rester locataire = payé − capital remboursé − loyers évités. Les montants des mois
+suivants suivent l'indexation `i` à chaque anniversaire de l'acquisition. La **bascule en phase 2**
+est `D_L`, avec le capital restant dû à cette date :
 
 ```
 CRD(m) = emprunt × ((1 + r)^N − (1 + r)^m) / ((1 + r)^N − 1)
 ```
+
+L'ancienne approximation `fondsPerdus ≈ intérêts de l'année 1 + …` (fonction `occupationCost`)
+reste disponible ; le rapport du lot 5 lui préfère la moyenne exacte sur la phase 1.
 
 ## 5. Prix cible (lot N1, N2)
 
@@ -236,18 +258,124 @@ cellule des pas neutres (valeurs actuelles) est repérée. Les pas sont modifiab
 par axe). La grille à trois entrées de l'artefact (prix × taux × loyer, `sensitivity`) est
 conservée. Le MCP expose la grille à deux entrées par `get_target_price` (`sensitivity`).
 
-## 7. Fiscalité et horizon (lots E6, E7, plus tard)
+## 7. Fiscalité, projection, revente et TRI (lot 5, besoins E6, E7)
 
-Estimations signalées comme simplifiées :
+Une **estimation simplifiée, pas un conseil fiscal** : un seul bien, pas d'autres revenus
+fonciers ni BIC dans le foyer, année de détention assimilée à l'année civile, pas de CSG
+déductible, pas de pénalité de remboursement anticipé. Aucun taux n'est écrit dans les formules :
+ils viennent de `Assumptions.taxParameters` (défauts datés `DEFAULT_TAX_PARAMETERS` dans
+`contracts`, modifiables, versionnés avec les hypothèses ; ADR 0012).
 
-- location vide : micro-foncier (abattement 30 %, revenus bruts ≤ 15 000 €) ou réel (intérêts,
-  charges, taxe foncière, travaux déductibles ; déficit foncier imputable à hauteur de 10 700 €) ;
-- location meublée : LMNP micro-BIC (abattement 50 %) ou réel avec amortissement ; depuis 2025
-  les amortissements sont réintégrés dans le calcul de la plus-value (à vérifier au moment du
-  lot) ;
-- impôt = (base × TMI) + prélèvements sociaux 17,2 % ;
-- cash-flow net d'impôt, TRI sur l'horizon de détention avec hypothèse de revalorisation et frais
-  de revente, capital restant dû par `CRD(m)`.
+### 7.1 Simulation mensuelle
+
+`simulateMonths` part de `D_0`, mois par mois sur `12 × h` mois. Mois de phase 1 (avant `D_L`) :
+loyer évité `L_a`, toutes les charges, taxe foncière, entretien, mensualité. Mois de phase 2 :
+loyer encaissé `L × (1 + i)^k × (12 − v) / 12` (`k` = années de bail révolues, la vacance
+étalée sur l'année), charges non récupérables, taxe foncière, frais fixes `F / 12`, mensualité.
+Les coûts et `L_a` sont indexés par `(1 + i)^années depuis D_0`. Les mensualités, les intérêts,
+le capital et le CRD viennent du tableau d'amortissement exact (`loanSchedule` ; à taux nul,
+linéaire ; la dernière mensualité solde le capital).
+
+La valeur du bien est `V_y = (P + T) × (1 + g)^y` : les travaux sont supposés valorisés à leur
+coût (hypothèse à garder en tête).
+
+### 7.2 Régimes fiscaux et impôt d'une année
+
+`rentalTaxYear` : une année de location à la fois, avec ses reports. Le régime par défaut suit le
+bail : vide → micro-foncier, meublé ou colocation (supposée meublée) → micro-BIC ; un régime
+demandé qui ne convient pas au bail est remplacé par son équivalent (signalé). Un régime micro
+dont le plafond de recettes est dépassé passe au réel pour l'année (signalé).
+
+```
+micro-foncier   imposable = loyers × (1 − 30 %)                         si loyers ≤ 15 000 €
+réel foncier    A = loyers − (intérêts + assurance emprunteur)
+                autres = charges non récupérables + frais fixes + taxe foncière + 20 € de frais de gestion
+                A ≥ 0 et A − autres ≥ 0  → net = A − autres
+                A ≥ 0 et A − autres < 0  → déficit = autres − A : jusqu'à 10 700 € sur le revenu global, le reste reporté
+                A < 0                    → −A reporté (intérêts) ; autres : jusqu'à 10 700 € sur le revenu global, le reste reporté
+                imposable = net − déficits antérieurs (10 ans, les plus anciens d'abord)
+micro-BIC       imposable = loyers − max(305 €, loyers × abattement)    abattement et plafond selon le meublé
+LMNP réel       résultat = loyers − (charges + frais fixes + taxe foncière + intérêts + assurance)
+                résultat < 0 → déficit BIC reporté 10 ans
+                sinon : déficits antérieurs, puis amortissements dans la limite du résultat (CGI, art. 39 C) ;
+                l'excédent est différé sans limite de durée
+impôt           IR = (imposable − déficit imputé sur le revenu global) × τ      (négatif = économie)
+                PS = imposable × taux des prélèvements sociaux (foncier ou BIC)
+```
+
+Sans `τ` (TMI non renseignée), l'impôt sur le revenu n'est pas estimé : `incomeTax` et le total
+sont `null`, les prélèvements sociaux restent calculés, et tout ce qui est « après impôt » est
+`null`.
+
+**Amortissements LMNP** (pratique comptable usuelle, pas des valeurs légales) : le bâti entre à
+sa valeur estimée à la mise en location `V(D_L)` (la valeur vénale à l'affectation, approchée par
+la revalorisation), terrain déduit (15 %), par composants : gros œuvre 55 % sur 50 ans, façade et
+toiture 15 % sur 25 ans, installations techniques 15 % sur 20 ans, agencements 15 % sur 12 ans ;
+mobilier `M` sur 7 ans ; dotations au prorata des mois loués.
+
+### 7.3 Paramètres fiscaux par défaut (relevés le 3 novembre 2026)
+
+| Paramètre | Valeur | Source | Certitude |
+| --- | --- | --- | --- |
+| Micro-foncier | abattement 30 %, recettes ≤ 15 000 € | CGI art. 32 ; ANIL, fiche « Location vide » | sûr |
+| Déficit foncier | 10 700 €/an sur le revenu global hors intérêts, report 10 ans ; 21 400 € pour des travaux de rénovation énergétique (E, F, G vers A à D) payés jusqu'au 31 décembre 2027, prolongation par la loi de finances pour 2026 (non appliqué : les travaux d'avant location ne sont pas déductibles) | CGI art. 156 ; weblex.fr | sûr / probable |
+| Frais de gestion forfaitaires (réel) | 20 € par local | CGI art. 31 | sûr |
+| Micro-BIC, meublé de longue durée et tourisme classé | abattement 50 %, recettes ≤ 83 600 € (revenus 2026 à 2028 ; 77 700 € pour 2025) | loi n° 2024-1039 du 19 novembre 2024 ; revalorisation triennale (arrêté du 27 janvier 2026) ; weblex.fr, entreprendre.service-public.gouv.fr A18813 (26 février 2026) | probable |
+| Micro-BIC, tourisme non classé | abattement 30 %, recettes ≤ 15 000 € (non revalorisé) | loi n° 2024-1039 | sûr |
+| Abattement minimal micro-BIC | 305 € | CGI art. 50-0 | sûr |
+| Prélèvements sociaux, revenus fonciers | 17,2 % | CSS art. L. 136-8 | sûr |
+| Prélèvements sociaux, BIC LMNP | **18,6 %** dès les revenus 2025 (CSG + 1,4 point) | LFSS pour 2026, loi n° 2025-1403 du 30 décembre 2025 ; synthèses de cabinets, doctrine BOFiP non publiée au relevé | probable, à confirmer |
+| Prélèvements sociaux, plus-value immobilière | 17,2 % | service-public.gouv.fr F10864 | sûr |
+| Plus-value : IR | 19 % | CGI art. 200 B ; F10864 | sûr |
+| Abattements pour durée de détention | IR : 6 %/an de la 6e à la 21e année, 4 % la 22e ; PS : 1,65 %/an de la 6e à la 21e, 1,60 % la 22e, 9 %/an de la 23e à la 30e | F10864 (vérifiée le 15 avril 2026) | sûr |
+| Forfaits | frais d'acquisition 7,5 % du prix d'achat, travaux 15 % au-delà de 5 ans de détention | F10864 | sûr |
+| Surtaxe | 2 % à 6 % au-delà de 50 000 € de plus-value imposable, barème lissé | CGI art. 1609 nonies G | sûr |
+| Exonération de la résidence principale | si le bien l'est au jour de la cession | CGI art. 150 U II 1° ; F10864 | sûr |
+| Réintégration des amortissements LMNP | oui, cessions depuis le 15 février 2025, mobilier exclu, résidences de services exceptées | loi de finances pour 2025 (n° 2025-127) ; réponse ministérielle n° 10097 (JO AN, 24 mars 2026) | probable |
+
+Non modélisé : le dispositif « Jeanbrun » de la loi de finances pour 2026 (amortissement en
+location nue de logements neufs ou rénovés acquis du 21 février 2026 au 31 décembre 2028) exige
+une location dans les douze mois suivant l'acquisition et interdit au propriétaire de se réserver
+le logement, incompatible avec une phase 1 en résidence principale.
+
+### 7.4 Revente et plus-value
+
+À `D_0 + h` ans : prix `V_h`, frais `f_r × V_h`, capital restant dû `CRD(12 h)`.
+
+```
+prixRevient = (P − H) + max(frais réels, 7,5 % × (P − H)) + max(T, 15 % × (P − H) si détention > 5 ans)
+              − amortissements LMNP du bâti déduits (si réintégration)
+PV          = max(0, V_h − frais − prixRevient)
+impôt       = PV × (1 − abattIR(h)) × 19 % + PV × (1 − abattPS(h)) × 17,2 % + surtaxe(PV × (1 − abattIR(h)))
+```
+
+`H` = honoraires à charge acquéreur (§ 1) ; frais réels = notaire + `H`. **Exonération** si le
+bien est encore la résidence principale au jour de la vente (vente avant `D_L`). Une fois loué, il
+ne l'est plus : la plus-value est imposable, sans exonération partielle pour les années habitées.
+La doctrine admet une vente dans un délai normal (un an en principe, BOI-RFPI-PVI-10-40-10) après
+le départ si le logement n'a pas été loué entre-temps : ce cas (vente au lieu de la location)
+n'est pas modélisé. La surtaxe est calculée sur la plus-value totale, alors que son seuil
+s'apprécie par vendeur selon les quotes-parts (signalé).
+
+### 7.5 TRI, VAN, enrichissement
+
+Les flux du foyer, une valeur par année de détention :
+
+```
+flux_0  = − min(A, cout)                                  la mise de départ
+flux_y  = loyersEvités + loyers − mensualités − charges − taxe foncière − entretien − frais fixes − impôt_y
+flux_h += V_h − frais − CRD(12 h) − impôt sur la plus-value
+TRI     = le taux qui annule Σ flux_y / (1 + TRI)^y       Newton, bissection de secours sur [−99,99 %, 1 000 %]
+VAN     = Σ flux_y / (1 + taux)^y                          taux = discountRate, sinon le taux du crédit
+enrichissementNet = Σ flux_y
+```
+
+Avant impôt : sans impôt sur les loyers ni sur la plus-value. Le loyer actuel évité en phase 1
+compte comme une recette : le TRI compare l'achat au fait de rester locataire (sans `L_a`, il
+est sous-estimé, signalé). Pas de TRI quand les flux ne changent pas de signe. La projection
+compare aussi les deux régimes possibles pour le bail et désigne celui qui enrichit le plus
+après impôt (`bestRegime`, null sans TMI). La série du graphique (`wealthSeries`) cumule les
+cash-flows et y ajoute `V_y − CRD` : la position latente, avant frais et impôt de revente.
 
 ## 8. Exemple chiffré (cas de test de référence)
 
@@ -286,3 +414,75 @@ récente, sans baisse, DPE D et sans travaux.
 
 Ces valeurs servent de premier jeu de tests du paquet `domain` ; les autres cas sont tirés des
 annonces réelles exportées de l'artefact.
+
+**Exemple étendu (lot 5).** Le même bien avec 1 200 € de charges annuelles, un loyer actuel de
+850 €, 600 € d'entretien par an, un achat le 1er janvier 2026, une mise en location le 1er janvier
+2028, TMI 30 %, IRL 1,57 %, revalorisation nulle, frais de revente 5 %, horizon 15 ans, location
+vide en micro-foncier :
+
+| Grandeur | Valeur (arrondie) |
+| --- | --- |
+| coût d'occupation (phase 1) | ≈ 1 143 €/mois (916 € de crédit, 15 € d'assurance, 100 € de charges, 62,50 € de taxe estimée, 50 € d'entretien) |
+| capital remboursé (moyenne sur 24 mois) | ≈ 381 €/mois ; coût réel ≈ 762 €/mois |
+| écart au loyer actuel | + 293 €/mois (coût réel : − 88 €/mois) ; sur la phase 1, rester propriétaire coûte ≈ 2 236 € de moins que rester locataire |
+| capital restant dû à la bascule | ≈ 170 848 € |
+| 3e année (première louée) | loyers 8 625 €, imposable 6 038 €, impôt ≈ 2 850 €, cash-flow net d'impôt ≈ − 630 €/mois |
+| revente en 2041 | 200 000 €, frais 10 000 €, capital restant dû ≈ 91 944 €, plus-value nulle (forfaits), produit net ≈ 98 056 € |
+| TRI avant / après impôt | ≈ − 0,2 % / ≈ − 4,2 % (réel foncier : ≈ − 1,4 % après impôt) |
+| enrichissement net après impôt | ≈ − 42 445 € en micro-foncier, ≈ − 13 879 € au réel |
+| en meublé | micro-BIC ≈ − 3,1 % après impôt ; LMNP réel ≈ − 0,2 % (amortissements : aucun impôt sur les loyers) |
+
+Scénario « prix négocié à 150 000 € » : verdict « Hors cible » → « À creuser », coût total
+166 250 €, effort ≈ − 109 €/mois, TRI après impôt ≈ − 1,5 %.
+
+## 9. Scénarios « et si » (lot 5, besoin E4)
+
+Un scénario est un jeu de surcharges (`ScenarioOverrides`) : champs de l'annonce (prix, loyer
+visé, travaux, mobilier, taxe foncière, charges, bail) et hypothèses (`AssumptionsOverride` :
+taux, apport, durée, vacance, date de mise en location, TMI, régime, horizon, revalorisation…).
+`applyScenario` les applique ; une date ou une année de mise en location du scénario l'emporte
+sur l'année de la phase 2 de l'annonce. `compareScenario` calcule la base et le scénario
+(financement, verdicts, prix cible, phase 1, projection) et rend les écarts indicateur par
+indicateur avec leur sens (`better` : vrai si le scénario est meilleur ; plus bas = mieux pour le
+coût, la mensualité et le coût d'occupation, plus haut = mieux pour le reste). Un scénario
+enregistré, complété par d'autres surcharges, les fusionne champ par champ
+(`mergeScenarioOverrides`). Une évaluation n'enregistre rien.
+
+## 10. Loyer de marché par comparables (lot 5, besoin L4)
+
+`rentMarket` : seules les annonces comparables du même type (vide ou meublé ; une colocation est
+traitée comme meublée) et complètes comptent.
+
+```
+loyerM2_j     = loyer_j / surface_j
+médiane, quartiles (interpolation linéaire, comme DVF) des loyerM2 retenus ; loyer médian
+loyerEstimé   = médiane(loyerM2) × S                    fiable à partir de 5 comparables (10 idéalement)
+écart         = loyerVisé / loyerEstimé − 1             > 8 % : attention (risque de vacance), comme le contrôle 3
+position      = part des comparables dont le loyer au m² est sous celui du loyer visé
+écartPlafond  = plafond / loyerEstimé − 1               loyer visé > plafond : attention
+```
+
+Un comparable relevé il y a plus de 12 mois est signalé « ancien ». Le loyer estimé n'entre dans
+les contrôles de louabilité que si le membre le retient comme loyer de marché de la phase 2.
+
+## 11. Checklist réglementaire datée (lot 5, besoins L5, D6)
+
+`complianceReport` évalue une table de règles datées et sourcées (`DEFAULT_REGULATORY_RULES`
+dans `contracts`, remplaçable par une ligne `reference_data` de sorte `regulatory_rules`, clé
+`current`) à la date de mise en location `D_L` :
+
+| Règle (relevée le 3 novembre 2026) | Évaluation |
+| --- | --- |
+| Décence énergétique : G non décent depuis le 1er janvier 2025, F à partir du 1er janvier 2028, E à partir du 1er janvier 2034 (loi Climat et résilience ; service-public F2042) | bloquant si l'interdiction est en vigueur à `D_L`, attention si elle viendra ensuite, à vérifier si le DPE est inconnu |
+| Gel des loyers des logements F et G depuis le 24 août 2022 (service-public F1311) | attention |
+| Validité du DPE (méthode d'avant juillet 2021 : plus valable ; dix ans sinon) | bloquant, attention si expiré à `D_L`, ok |
+| Encadrement à Bordeaux (33063) du 15 juillet 2022 au 24 novembre 2026 ; prolongation de deux ans votée par le Sénat le 21 octobre 2026, non définitive au relevé | à vérifier si `D_L` est après la fin ; sinon attention au-dessus du plafond, ok sous le plafond ; ok hors Bordeaux |
+| Permis de louer : une partie des secteurs Victoire, Saint-Michel et Belcier à Bordeaux, d'autres secteurs dans la métropole (carte de Bordeaux Métropole) | attention si la phase 2 dit « exigé », ok si « non », à vérifier sinon |
+| Diagnostics du bail (service-public F33463) : DPE, plomb (construit avant 1949), amiante (permis avant le 1er juillet 1997, tenu à disposition), électricité et gaz (installations de plus de 15 ans), état des risques (moins de six mois), bruit (plan d'exposition au bruit d'un aérodrome) | attention pour le plomb, ok ou à vérifier pour les autres selon l'année de construction ; bruit à vérifier à Mérignac (plan non importé) |
+| Décence : une pièce d'au moins 9 m² (ou 20 m³) ; critères de la fiche ; règlement de copropriété | bloquant, ok ou à vérifier |
+| Meublé : mobilier minimal (décret n° 2015-981) | rappel (ok) |
+| Risques Géorisques à l'adresse | attention pour un aléa « existant » à l'adresse (sauf « faible »), à vérifier pour un aléa « non connu » à l'adresse, ok sinon |
+
+Verdict comme la louabilité : incompatible dès un bloquant, sous conditions dès une attention ou
+à partir de trois points à vérifier, sinon compatible. Chaque point porte sa date et sa source
+(table de référence, donnée ouverte ou fiche).

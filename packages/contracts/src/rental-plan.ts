@@ -6,21 +6,11 @@ import {
   TriStateSchema,
 } from './enums.js'
 
-/** Une annonce de location comparable, pour établir le loyer de marché. */
-export const RentComparableSchema = z.object({
-  rent: z.number().min(0).describe('Loyer hors charges en euros par mois'),
-  surface: z
-    .number()
-    .positive()
-    .nullable()
-    .default(null)
-    .describe('Surface en m²'),
-  url: z.string().url().nullable().default(null),
-  note: z.string().max(500).nullable().default(null),
-})
-export type RentComparable = z.infer<typeof RentComparableSchema>
-
-/** Phase 2 : mise en location. */
+/**
+ * Phase 2 : mise en location. Les annonces de location comparables (loyer de
+ * marché, besoin L4) sont des lignes à part depuis le lot 5
+ * (`RentComparable`, `/listings/:id/rent-comparables`).
+ */
 export const RentalPlanInputSchema = z.object({
   year: z
     .number()
@@ -56,7 +46,6 @@ export const RentalPlanInputSchema = z.object({
     .describe(
       'Loyer de marché constaté hors charges en euros par mois (médiane des comparables)'
     ),
-  comparables: z.array(RentComparableSchema).default([]),
   demand: RentalDemandSchema.nullable().default(null),
   coOwnershipAllowsRental: TriStateSchema.default('unknown').describe(
     'Le règlement de copropriété autorise la location visée'

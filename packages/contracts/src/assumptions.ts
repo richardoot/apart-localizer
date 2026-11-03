@@ -5,6 +5,12 @@ import {
   VerdictSchema,
 } from './enums.js'
 import { withoutDefaults } from './zod-utils.js'
+import {
+  DEFAULT_TAX_PARAMETERS,
+  FurnishedRentalKindSchema,
+  TaxParametersSchema,
+  TaxRegimeSchema,
+} from './fiscal.js'
 
 const fraction = (what: string) =>
   z.number().min(0).max(1).describe(`${what}, en fraction (0,05 = 5 %)`)
@@ -213,6 +219,84 @@ export const AssumptionsSchema = z.object({
     .describe(
       "Entretien annuel estimé en euros pendant l'occupation (phase 1)"
     ),
+  purchaseDate: z
+    .string()
+    .date()
+    .nullable()
+    .default(null)
+    .describe(
+      "Date d'acquisition prévue (AAAA-MM-JJ), début du crédit et de la phase 1 ; null = date du calcul"
+    ),
+  rentalStartDate: z
+    .string()
+    .date()
+    .nullable()
+    .default(null)
+    .describe(
+      'Date de mise en location (bascule en phase 2, AAAA-MM-JJ) ; null = 1er janvier de l’année de mise en location'
+    ),
+  marginalTaxRate: z
+    .number()
+    .min(0)
+    .max(0.6)
+    .nullable()
+    .default(null)
+    .describe(
+      "Tranche marginale d'imposition du foyer, en fraction (0, 0,11, 0,30, 0,41 ou 0,45) ; null = non renseignée, l'impôt sur le revenu n'est pas estimé"
+    ),
+  taxRegime: TaxRegimeSchema.nullable()
+    .default(null)
+    .describe(
+      'Régime fiscal visé ; null = selon le bail (vide : micro-foncier, meublé ou colocation : micro-BIC), réel imposé si le plafond du micro est dépassé'
+    ),
+  furnishedRentalKind: FurnishedRentalKindSchema.default('long_term').describe(
+    'Nature de la location meublée pour le micro-BIC (meublé de longue durée par défaut)'
+  ),
+  horizonYears: z
+    .number()
+    .int()
+    .min(1)
+    .max(40)
+    .default(15)
+    .describe('Horizon de détention en années, revente à son terme'),
+  appreciationRate: z
+    .number()
+    .min(-0.2)
+    .max(0.2)
+    .default(0)
+    .describe(
+      'Revalorisation annuelle du bien, en fraction (0,01 = 1 % par an) ; 0 = valeur constante'
+    ),
+  rentIndexationRate: z
+    .number()
+    .min(-0.1)
+    .max(0.2)
+    .default(0.0157)
+    .describe(
+      'Indexation annuelle des loyers, des charges et de la taxe foncière (IRL), en fraction ; défaut : variation de l’IRL sur un an au 3e trimestre 2026 (INSEE, 15 octobre 2026)'
+    ),
+  resaleCostsRate: z
+    .number()
+    .min(0)
+    .max(0.2)
+    .default(0.05)
+    .describe(
+      'Frais de revente (honoraires d’agence, diagnostics) en fraction du prix de vente ; estimation'
+    ),
+  discountRate: z
+    .number()
+    .min(0)
+    .max(1)
+    .nullable()
+    .default(null)
+    .describe(
+      'Taux d’actualisation de la VAN, en fraction ; null = taux nominal du crédit'
+    ),
+  taxParameters: TaxParametersSchema.default(() =>
+    structuredClone(DEFAULT_TAX_PARAMETERS)
+  ).describe(
+    'Paramètres fiscaux datés (prélèvements sociaux, abattements, plafonds, amortissements, plus-value) ; versionnés avec les hypothèses'
+  ),
 })
 export type Assumptions = z.infer<typeof AssumptionsSchema>
 /** Entrée avant application des valeurs par défaut. */

@@ -22,6 +22,10 @@ import { OffersService } from '../offers/offers.service'
 import { OpinionsService } from '../opinions/opinions.service'
 import { TasksService } from '../tasks/tasks.service'
 import { WorkspaceService } from '../workspace/workspace.service'
+import { StudyService } from '../study/study.service'
+import { ScenariosService } from '../study/scenarios.service'
+import { RentComparablesService } from '../study/rent-comparables.service'
+import { ComplianceService } from '../study/compliance.service'
 import { McpAuthGuard } from './mcp-auth.guard'
 import type { McpAuthenticatedRequest } from './mcp-auth.guard'
 import { registerPrompts, registerResources, registerTools } from './mcp-tools'
@@ -50,7 +54,11 @@ export class McpController {
     private readonly offers: OffersService,
     private readonly targetPrice: TargetPriceService,
     private readonly criteria: SearchCriteriaService,
-    private readonly enrichment: ListingEnrichmentService
+    private readonly enrichment: ListingEnrichmentService,
+    private readonly study: StudyService,
+    private readonly scenarios: ScenariosService,
+    private readonly comparables: RentComparablesService,
+    private readonly compliance: ComplianceService
   ) {}
 
   @Post()
@@ -89,6 +97,10 @@ export class McpController {
       targetPrice: this.targetPrice,
       criteria: this.criteria,
       enrichment: this.enrichment,
+      study: this.study,
+      scenarios: this.scenarios,
+      comparables: this.comparables,
+      compliance: this.compliance,
     })
     registerPrompts(server)
     registerResources(server)

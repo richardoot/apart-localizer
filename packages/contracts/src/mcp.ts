@@ -13,6 +13,8 @@ import {
 } from './listing.js'
 import { SensitivityRequestSchema } from './metrics.js'
 import { MarketContextRequestSchema } from './opendata.js'
+import { RentComparableInputSchema } from './rent-market.js'
+import { ProjectionRequestSchema, ScenarioOverridesSchema } from './study.js'
 import {
   SearchCriteriaInputSchema,
   SearchCriteriaUpdateSchema,
@@ -307,4 +309,71 @@ export type McpUpdateSearchCriteriaInput = z.infer<
 export const McpGetMarketContextInputSchema = MarketContextRequestSchema
 export type McpGetMarketContextInput = z.infer<
   typeof McpGetMarketContextInputSchema
+>
+
+// ---------------------------------------------------------------------------
+// Lot 5 : scénarios, projection, conformité, loyer de marché
+// ---------------------------------------------------------------------------
+
+/**
+ * `evaluate_scenario` : « et si » sur une annonce enregistrée, à partir de
+ * surcharges (sans enregistrement) ou d'un scénario enregistré ; `saveAs`
+ * enregistre les surcharges comme scénario (portée écriture).
+ */
+export const McpEvaluateScenarioInputSchema = z
+  .object({
+    listingId,
+    scenarioId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe('Scénario enregistré à appliquer (voir la réponse de saveAs)'),
+    overrides: ScenarioOverridesSchema.optional().describe(
+      'Surcharges : price, targetRent, renovationTotal, furnitureValue, propertyTax, annualCharges, leaseType, assumptions (interestRate, downPayment, durationYears, vacancyMonths, rentalStartDate, marginalTaxRate, taxRegime, horizonYears…)'
+    ),
+    saveAs: z
+      .object({
+        name: z.string().trim().min(1).max(120).describe('Nom du scénario'),
+        scope: z
+          .enum(['listing', 'workspace'])
+          .default('listing')
+          .describe(
+            'Attaché à l’annonce, ou applicable à toute annonce de l’espace'
+          ),
+        notes: z.string().max(2000).optional(),
+      })
+      .optional()
+      .describe(
+        'Enregistre les surcharges comme scénario (portée listings:write)'
+      ),
+  })
+  .refine(v => v.scenarioId !== undefined || v.overrides !== undefined, {
+    message: 'Donnez scenarioId (scénario enregistré) ou overrides',
+  })
+  .refine(v => v.saveAs === undefined || v.overrides !== undefined, {
+    message: 'saveAs enregistre des overrides : donnez-les',
+    path: ['saveAs'],
+  })
+export type McpEvaluateScenarioInput = z.infer<
+  typeof McpEvaluateScenarioInputSchema
+>
+
+/** `get_projection` : fiscalité estimée, projection annuelle, revente, TRI, VAN. */
+export const McpGetProjectionInputSchema = z.object({
+  listingId,
+  ...ProjectionRequestSchema.shape,
+})
+export type McpGetProjectionInput = z.infer<typeof McpGetProjectionInputSchema>
+
+/** `get_compliance` : checklist réglementaire datée et risques Géorisques. */
+export const McpGetComplianceInputSchema = z.object({ listingId })
+export type McpGetComplianceInput = z.infer<typeof McpGetComplianceInputSchema>
+
+/** `add_rent_comparable` : une annonce de location comparable saisie. */
+export const McpAddRentComparableInputSchema = z.object({
+  listingId,
+  ...RentComparableInputSchema.shape,
+})
+export type McpAddRentComparableInput = z.infer<
+  typeof McpAddRentComparableInputSchema
 >

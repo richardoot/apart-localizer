@@ -5,7 +5,7 @@
  */
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_NOTARY_SCALE } from '@apart/contracts'
+import { DEFAULT_NOTARY_SCALE, DEFAULT_TAX_PARAMETERS } from '@apart/contracts'
 import type { Assumptions, ListingFinancials } from '@apart/contracts'
 import {
   compute,
@@ -98,6 +98,18 @@ const arbAssumptionsWith = (
     rentalYear: fc.constant(2028),
     currentRent: fc.constant(null),
     maintenanceAnnual: fc.constant(null),
+    // Lot 5 : sans effet sur le coût, le rendement et le prix cible.
+    purchaseDate: fc.constant(null),
+    rentalStartDate: fc.constant(null),
+    marginalTaxRate: fc.constant(null),
+    taxRegime: fc.constant(null),
+    furnishedRentalKind: fc.constant('long_term' as const),
+    horizonYears: fc.constant(15),
+    appreciationRate: fc.constant(0),
+    rentIndexationRate: fc.constant(0.0157),
+    resaleCostsRate: fc.constant(0.05),
+    discountRate: fc.constant(null),
+    taxParameters: fc.constant(DEFAULT_TAX_PARAMETERS),
   })
 
 /** Mode taux : la forme fermée de l'artefact. */

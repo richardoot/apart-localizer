@@ -294,7 +294,8 @@ describe('annonce', () => {
     expect(
       RenovationInputSchema.safeParse({ durationMonths: -1 }).success
     ).toBe(false)
-    expect(RentalPlanInputSchema.parse({}).comparables).toEqual([])
+    // Les comparables de loyer sont des lignes à part depuis le lot 5.
+    expect('comparables' in RentalPlanInputSchema.parse({})).toBe(false)
     expect(RentalPlanInputSchema.safeParse({ year: 1999 }).success).toBe(false)
   })
 })

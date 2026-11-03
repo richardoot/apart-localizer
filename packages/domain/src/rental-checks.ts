@@ -10,6 +10,7 @@ import type {
   TriState,
 } from '@apart/contracts'
 import { formatEuros, formatPercent } from './format.js'
+import { rentalStartYear } from './study-input.js'
 
 /**
  * Calendrier d'interdiction de location selon le DPE (loi Climat et
@@ -29,7 +30,7 @@ export const MARKET_RENT_WARN_RATIO = 0.08
 
 export interface RentalChecksInput {
   dpeClass: DpeClass | null
-  /** Année de mise en location ; null = année par défaut des hypothèses. */
+  /** Année de mise en location ; null = année de la date de mise en location des hypothèses, sinon `rentalYear`. */
   year: number | null
   marketRent: number | null
   demand: RentalDemand | null
@@ -61,7 +62,7 @@ export function rentalChecks(
   options: RentalChecksOptions = {}
 ): RentalChecksResult {
   const schedule = options.banSchedule ?? DEFAULT_DPE_BAN_SCHEDULE
-  const year = input.year ?? a.rentalYear
+  const year = rentalStartYear(input.year, a)
   const checks: RentalCheck[] = []
 
   // 1. Calendrier DPE

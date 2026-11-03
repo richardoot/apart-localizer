@@ -1,4 +1,7 @@
 import {
+  COMPLIANCE_CATEGORY_LABELS,
+  FURNISHED_RENTAL_KIND_LABELS,
+  TAX_REGIME_LABELS,
   DISCOUNT_CLASS_LABELS,
   LEASE_TYPE_LABELS,
   LISTING_STATUS_LABELS,
@@ -22,6 +25,9 @@ import type {
 } from '@apart/contracts'
 
 export {
+  COMPLIANCE_CATEGORY_LABELS,
+  FURNISHED_RENTAL_KIND_LABELS,
+  TAX_REGIME_LABELS,
   DISCOUNT_CLASS_LABELS,
   LEASE_TYPE_LABELS,
   LISTING_STATUS_LABELS,
@@ -75,6 +81,14 @@ export const CHECK_LEVEL_CLASSES: Record<CheckLevel, string> = {
   warn: 'text-warn',
   bad: 'text-bad',
   unknown: 'text-muted',
+}
+
+/** Libellé d'un niveau de contrôle dans la checklist réglementaire. */
+export const CHECK_LEVEL_LABELS: Record<CheckLevel, string> = {
+  ok: 'conforme',
+  warn: 'attention',
+  bad: 'bloquant',
+  unknown: 'à vérifier',
 }
 
 export const CHECK_LEVEL_SYMBOLS: Record<CheckLevel, string> = {

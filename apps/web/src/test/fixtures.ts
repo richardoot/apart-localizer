@@ -121,7 +121,6 @@ export function fakeListing(over: Partial<Listing> = {}): Listing {
       referenceRentPerM2: null,
       targetRent: 750,
       marketRent: null,
-      comparables: [],
       demand: 'strong',
       coOwnershipAllowsRental: 'unknown',
       decencyCompliant: 'unknown',

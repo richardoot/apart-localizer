@@ -60,6 +60,7 @@ export const EnvSchema = z.object({
   GEOCODING_URL: z.string().url().optional(),
   ISOCHRONE_URL: z.string().url().optional(),
   ADEME_DPE_URL: z.string().url().optional(),
+  GEORISQUES_URL: z.string().url().optional(),
 })
 export type Env = z.infer<typeof EnvSchema>
 

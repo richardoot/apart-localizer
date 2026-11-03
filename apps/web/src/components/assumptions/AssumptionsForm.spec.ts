@@ -130,3 +130,86 @@ describe('AssumptionsForm : notaire, critères, décote, impact', () => {
     expect(impact.text()).toContain('T2 fictif : Hors cible → Cible')
   })
 })
+
+describe('AssumptionsForm : phase 1, fiscalité et horizon (lot 5)', () => {
+  it('affiche les défauts datés et renvoie les nouveaux champs', async () => {
+    const wrapper = mount(AssumptionsForm, {
+      props: { values: DEFAULT_ASSUMPTIONS },
+    })
+    expect((wrapper.get('#h-irl').element as HTMLInputElement).value).toBe(
+      '1.57'
+    )
+    expect((wrapper.get('#h-horizon').element as HTMLInputElement).value).toBe(
+      '15'
+    )
+    expect((wrapper.get('#h-tmi').element as HTMLSelectElement).value).toBe('')
+    expect(wrapper.get('[data-testid="tax-parameters"]').text()).toContain(
+      '17.2 %'
+    )
+    await wrapper.get('#h-current-rent').setValue('850')
+    await wrapper.get('#h-maintenance').setValue('600')
+    await wrapper.get('#h-purchase').setValue('2026-12-01')
+    await wrapper.get('#h-rental-start').setValue('2028-09-01')
+    await wrapper.get('#h-tmi').setValue('30')
+    await wrapper.get('#h-regime').setValue('lmnp_reel')
+    await wrapper.get('#h-furnished-kind').setValue('tourism_classified')
+    await wrapper.get('#h-horizon').setValue('20')
+    await wrapper.get('#h-appreciation').setValue('1,5')
+    await wrapper.get('#h-resale').setValue('4')
+    await wrapper.get('#h-discount').setValue('3')
+    await wrapper.get('form').trigger('submit')
+    const [update] = wrapper.emitted('save')?.[0] as [
+      { values: typeof DEFAULT_ASSUMPTIONS },
+    ]
+    expect(update.values).toMatchObject({
+      currentRent: 850,
+      maintenanceAnnual: 600,
+      purchaseDate: '2026-12-01',
+      rentalStartDate: '2028-09-01',
+      taxRegime: 'lmnp_reel',
+      furnishedRentalKind: 'tourism_classified',
+      horizonYears: 20,
+    })
+    expect(update.values.marginalTaxRate).toBeCloseTo(0.3, 10)
+    expect(update.values.appreciationRate).toBeCloseTo(0.015, 10)
+    expect(update.values.resaleCostsRate).toBeCloseTo(0.04, 10)
+    expect(update.values.discountRate).toBeCloseTo(0.03, 10)
+  })
+
+  it('champs facultatifs vidés : null ; valeurs relues', async () => {
+    const wrapper = mount(AssumptionsForm, {
+      props: {
+        values: {
+          ...DEFAULT_ASSUMPTIONS,
+          currentRent: 900,
+          maintenanceAnnual: 300,
+          marginalTaxRate: 0.11,
+          taxRegime: 'reel_foncier',
+          discountRate: 0.02,
+          purchaseDate: '2027-01-15',
+        },
+      },
+    })
+    expect((wrapper.get('#h-tmi').element as HTMLSelectElement).value).toBe(
+      '11'
+    )
+    await wrapper.get('#h-current-rent').setValue('')
+    await wrapper.get('#h-maintenance').setValue(' ')
+    await wrapper.get('#h-tmi').setValue('')
+    await wrapper.get('#h-regime').setValue('')
+    await wrapper.get('#h-discount').setValue('')
+    await wrapper.get('#h-purchase').setValue('')
+    await wrapper.get('form').trigger('submit')
+    const [update] = wrapper.emitted('save')?.[0] as [
+      { values: typeof DEFAULT_ASSUMPTIONS },
+    ]
+    expect(update.values).toMatchObject({
+      currentRent: null,
+      maintenanceAnnual: null,
+      marginalTaxRate: null,
+      taxRegime: null,
+      discountRate: null,
+      purchaseDate: null,
+    })
+  })
+})

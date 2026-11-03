@@ -45,7 +45,8 @@ Ce qui change par rapport à bankin-analyzer :
   `contracts`, et la spécification OpenAPI est produite par `@nestjs/swagger` depuis ces schémas.
   Il n'y a plus deux descriptions d'une même entrée.
 - **Modules** : `workspace`, `listings`, `assumptions`, `rental`, `renovation`, `opinions`,
-  `tasks`, `search-criteria`, `geo`, `opendata`, `ai`, `mcp`, `auth`, `health`. Chaque module
+  `tasks`, `search-criteria`, `geo`, `opendata`, `ai`, `mcp`, `auth`, `health`, et `study` au
+  lot 5 (phase 1, scénarios, projection, comparables de loyer, conformité). Chaque module
   expose ses services ; le module `mcp` ne fait qu'orchestrer.
 - Repris tels quels : le garde MCP, `/.well-known/oauth-protected-resource`, le journal de
   requêtes avec identifiant, les en-têtes de sécurité, le filtre d'exceptions et le mapping des
@@ -136,7 +137,8 @@ l'agent qui appelle le MCP. La provenance par champ est un type générique `Sou
 - Formulaires validés par les schémas Zod de `contracts`, aperçu en direct par `domain`.
 - PWA installable, cache de lecture hors ligne, `share_target` prévu pour le lot de partage
   mobile.
-- Graphiques limités au tableau de sensibilité ; ApexCharts si besoin, déjà connu.
+- Graphiques limités au tableau de sensibilité et, au lot 5, au graphique de la projection : un
+  SVG écrit à la main (barres et une ligne) a suffi, sans bibliothèque (ADR 0012).
 
 ### 2.8 Données ouvertes
 
@@ -152,7 +154,8 @@ Chaque source est un connecteur isolé dans le module `opendata` avec cache en b
 - arrêts TBM : import des données Bordeaux Métropole dans `TransitStop` ;
 - DVF : import des fichiers ouverts DGFiP pour la Gironde dans `DvfSale` (PostGIS), plutôt
   qu'une API tierce ;
-- Géorisques plus tard (lot 5, checklist réglementaire ; ADR 0011).
+- Géorisques (lot 5) : rapport « risques près de chez moi » de l'API v1, sans jeton, au point de
+  l'annonce, mis en cache trente jours, intégré à la checklist réglementaire (ADR 0013).
 
 Mise en œuvre au lot 4 : [docs/open-data.md](../open-data.md) (sources, licences, dates, imports
 et règles) et ADR 0010, 0011 (isochrone à vélo approchée, zonage de l'encadrement dans une table

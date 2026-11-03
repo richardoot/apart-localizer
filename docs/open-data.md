@@ -1,9 +1,10 @@
 # Données ouvertes
 
-Lot 4 de la [feuille de route](product/roadmap.md) (besoins D1 à D5 et D7, L2, L3, N4) : chaque
+Lots 4 et 5 de la [feuille de route](product/roadmap.md) (besoins D1 à D7, L2, L3, N4) : chaque
 annonce localisée reçoit l'arrêt de tram le plus proche, le plafond de loyer de l'encadrement
 (commune de Bordeaux), un DPE vérifié auprès de l'ADEME et l'ancrage marché des ventes DVF
-comparables ; les critères de recherche se dessinent sur la carte ou se calculent en isochrone.
+comparables ; les critères de recherche se dessinent sur la carte ou se calculent en isochrone ;
+au lot 5, la checklist réglementaire lit les risques Géorisques à l'adresse.
 Rien n'est inventé : une donnée ambiguë, périmée ou absente rend l'état « à vérifier » avec sa
 raison.
 
@@ -32,6 +33,7 @@ nouveau téléchargement des URL ci-dessous le même jour : identiques, sauf men
 | DPE logements existants (depuis juillet 2021)                                       | aucun (appel à la demande)                                              | API data-fair `https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines` (identifiant du jeu et noms de champs relevés sur le schéma du jeu)                                                                                                                                                                                                                             | ADEME, Licence Ouverte 2.0                                                                                                                           | 15 893 454 DPE, données mises à jour le 28 octobre 2026                                                                                                               |
 | Géocodage                                                                           | aucun                                                                   | `https://data.geopf.fr/geocodage/search/` (lot 2)                                                                                                                                                                                                                                                                                                                                   | IGN Géoplateforme, Licence Ouverte                                                                                                                   |                                                                                                                                                                       |
 | Isochrones                                                                          | aucun                                                                   | `https://data.geopf.fr/navigation/isochrone` ; capacités relues sur `https://data.geopf.fr/navigation/getcapabilities`                                                                                                                                                                                                                                                              | IGN Géoplateforme (ressource `bdtopo-valhalla`), Licence Ouverte                                                                                     | profils disponibles : `car`, `pedestrian` ; pas de vélo ni de transports en commun                                                                                    |
+| Risques à l'adresse (lot 5)                                                         | aucun (appel à la demande)                                              | `https://www.georisques.gouv.fr/api/v1/resultats_rapport_risque?latlon=lon,lat` (spécification OpenAPI « Services API Géorisques V1 » 1.12.2, `https://www.georisques.gouv.fr/doc-api`)                                                                                                                                                                                             | BRGM et ministère de la Transition écologique ; « sauf mention contraire, tous les contenus de ce site sont sous licence etalab-2.0 » (pied de page) | consulté le 3 novembre 2026 ; v1 sans jeton, un appel par seconde au plus sur cet endpoint ; la v2 exige un jeton                                                     |
 
 Le contrôle croisé de l'import de l'encadrement a trouvé les 128 valeurs du classeur de la
 préfecture identiques à celles du référentiel national. Le classeur ne porte pas les dates
@@ -43,8 +45,31 @@ encore l'adopter conforme ([Public Sénat](https://www.publicsenat.fr/emission/1
 consultés le 3 novembre 2026). À partir du 25 novembre 2026, sans nouvel arrêté importé, le
 plafond passe « à vérifier » et un plafond posé d'office ne plafonne plus le loyer retenu.
 
-Géorisques (besoin D6) n'est pas dans ce lot : les choix techniques (§ 2.8) le placent « plus
-tard » et son usage prévu est la checklist réglementaire du lot 5 (ADR 0011).
+### Géorisques (lot 5, besoin D6)
+
+Client sans état `apps/api/src/opendata/georisques.ts`, service avec cache
+`georisques.service.ts` (sorte `georisques`, clé = point arrondi au mètre, trente jours). Un seul
+appel par annonce : le rapport « risques près de chez moi » au point de l'annonce, qui agrège les
+aléas naturels (inondation, remontée de nappe, risques côtiers, séisme, mouvements de terrain,
+recul du trait de côte, retrait-gonflement des argiles, avalanche, feu de forêt, volcan, vent
+violent, radon) et technologiques (installations classées, nucléaire, canalisations de matières
+dangereuses, pollution des sols, rupture de barrage, risques miniers), chacun avec `present`
+(recensé dans la commune) et deux libellés, dans la commune et à l'adresse (« Risque Existant »,
+« Risque Existant - faible | modéré | important », « Risque non Connu », « Risque Inconnu »,
+« Risque Concerne », « Risque non Concerne »). Format vérifié le 3 novembre 2026 sur deux points
+(Bordeaux, place Rohan ; Talence, allée Peixotto) : par exemple retrait-gonflement des argiles
+« important » dans la commune et « modéré » à l'adresse dans les deux cas, radon « modéré » à
+Bordeaux et « faible » à Talence, inondation recensée à Bordeaux et pas à Talence. Les endpoints
+détaillés (GASPAR, `rga`, `radon`, `zonage_sismique`, `tri_zonage`) existent aussi en v1 ; le
+rapport agrégé suffit à la checklist.
+
+Règle d'évaluation (`georisqueLevel`, domain) : un aléa non recensé, « non concerné » ou
+« faible » à l'adresse est conforme ; « non connu » ou « inconnu » à l'adresse, ou recensé dans la
+commune sans libellé à l'adresse, est « à vérifier » ; tout autre risque existant ou concerné à
+l'adresse est un point d'attention. Le rapport complet est lié depuis la fiche (URL rendue par
+l'API, gardée seulement si elle est en `https`). Sans point : « sans objet » ; service en panne ou
+réponse illisible : « indisponible », jamais mis en cache, jamais de risque inventé. `GEORISQUES_URL`
+change l'adresse ; le harnais e2e remplace `fetch` (aucun appel réseau dans les tests).
 
 ## Imports
 
@@ -78,14 +103,16 @@ Les commandes acceptent les options avec ou sans le séparateur `--` de pnpm.
 
 ## Fréquence de rafraîchissement
 
-| Donnée                  | Rythme de la source                                         | À faire                                                                                                                                                                             |
-| ----------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Arrêté de l'encadrement | annuel (juin ou juillet, application au 15 juillet)         | télécharger le nouveau classeur, mettre à jour le référentiel CSV ou passer `--valid-from`, relancer `import:rent-control` ; surveiller la prolongation au-delà du 24 novembre 2026 |
-| Zonage                  | rare (inchangé de 2022 à 2026)                              | relancer l'import si la DDTM publie un nouveau zonage                                                                                                                               |
-| Arrêts TBM              | quotidien (jeu modifié chaque nuit)                         | trimestriel suffit, ou à chaque changement de réseau (nouvelle ligne de tram)                                                                                                       |
-| DVF                     | semestriel (avril et octobre), décalage de six mois à un an | importer chaque nouvelle année ; la fenêtre des comparables (trois ans) avance d'elle-même                                                                                          |
-| DPE ADEME               | hebdomadaire                                                | rien : appel à la demande, cache de sept jours                                                                                                                                      |
-| Isochrones              | graphe routier mis à jour régulièrement                     | rien : une isochrone est figée à l'enregistrement ; la recalculer en renvoyant ses paramètres (`update_search_criteria`)                                                            |
+| Donnée                  | Rythme de la source                                         | À faire                                                                                                                                                                                            |
+| ----------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Arrêté de l'encadrement | annuel (juin ou juillet, application au 15 juillet)         | télécharger le nouveau classeur, mettre à jour le référentiel CSV ou passer `--valid-from`, relancer `import:rent-control` ; surveiller la prolongation au-delà du 24 novembre 2026                |
+| Zonage                  | rare (inchangé de 2022 à 2026)                              | relancer l'import si la DDTM publie un nouveau zonage                                                                                                                                              |
+| Arrêts TBM              | quotidien (jeu modifié chaque nuit)                         | trimestriel suffit, ou à chaque changement de réseau (nouvelle ligne de tram)                                                                                                                      |
+| DVF                     | semestriel (avril et octobre), décalage de six mois à un an | importer chaque nouvelle année ; la fenêtre des comparables (trois ans) avance d'elle-même                                                                                                         |
+| DPE ADEME               | hebdomadaire                                                | rien : appel à la demande, cache de sept jours                                                                                                                                                     |
+| Isochrones              | graphe routier mis à jour régulièrement                     | rien : une isochrone est figée à l'enregistrement ; la recalculer en renvoyant ses paramètres (`update_search_criteria`)                                                                           |
+| Géorisques              | au fil des procédures (PPR, arrêtés)                        | rien : appel à la demande, cache de trente jours                                                                                                                                                   |
+| Règles réglementaires   | lois et décrets (calendrier DPE, encadrement, diagnostics)  | mettre à jour `DEFAULT_REGULATORY_RULES` (version, date, sources) ou déposer une table en `reference_data` (sorte `regulatory_rules`, clé `current`) ; surveiller la prolongation de l'encadrement |
 
 Après un import, les annonces gardent leur instantané (`open_data_context`) jusqu'à la prochaine
 modification ; `POST /listings/:id/geocode` (bouton « Relancer le géocodage » de la fiche) le
@@ -146,3 +173,7 @@ sont toujours calculés à la lecture.
 - Un plafond posé d'office (provenance `open_data`) est retiré à l'enrichissement suivant s'il ne
   vaut plus : adresse en limite de zone ou hors Bordeaux, phase 2 en colocation, arrêté expiré ;
   il ne reste jamais périmé sous une provenance « données ouvertes ».
+- Géorisques : le rapport porte sur le point de l'annonce (une adresse à la rue ou au centroïde
+  donne les aléas de ce point-là) ; le plan d'exposition au bruit de l'aérodrome de
+  Bordeaux-Mérignac n'en fait pas partie (diagnostic bruit « à vérifier » à Mérignac) ; l'état des
+  risques annexé au bail reste à établir à la date du bail.

@@ -38,6 +38,7 @@
   import StatusChanger from './StatusChanger.vue'
   import TargetPriceSection from './TargetPriceSection.vue'
   import TasksSection from './TasksSection.vue'
+  import StudySection from '@/components/study/StudySection.vue'
 
   const props = defineProps<{
     id: string
@@ -199,6 +200,30 @@
     }
   }
 
+  /** « Retenir » le loyer de marché estimé par les comparables dans la phase 2. */
+  async function retainMarketRent(rent: number): Promise<void> {
+    if (!item.value) return
+    const plan = item.value.listing.rentalPlan
+    if (!plan) {
+      failure.value =
+        'Ajoutez d’abord la phase 2 (mise en location) dans la fiche pour y retenir un loyer de marché.'
+      return
+    }
+    failure.value = null
+    try {
+      await mutations.update.mutateAsync({
+        id: item.value.listing.id,
+        patch: {
+          rentalPlan: { ...plan, marketRent: rent },
+          expectedUpdatedAt: item.value.listing.updatedAt,
+        },
+      })
+      message.value = 'Loyer de marché retenu dans la phase 2.'
+    } catch (err) {
+      report(err)
+    }
+  }
+
   async function addOffer(input: OfferInputRaw): Promise<void> {
     if (!item.value) return
     failure.value = null
@@ -313,6 +338,12 @@
       <RentalChecksList
         v-if="shownEvaluation"
         :rental="shownEvaluation.rental"
+      />
+      <StudySection
+        :item="item"
+        :assumptions="assumptions"
+        :busy="busy"
+        @retain-market-rent="retainMarketRent"
       />
       <ContextSection
         :listing-id="item.listing.id"

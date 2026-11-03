@@ -20,6 +20,7 @@ import {
   MCP_TOOL_NAMES,
 } from '../src/mcp/mcp-tools'
 import { DATA_TAG } from '../src/mcp/tool-results'
+import { georisquesFetch } from './fixtures/georisques'
 
 const richard = e2eIdentity('richard')
 const chloe = e2eIdentity('chloe')
@@ -211,8 +212,9 @@ describe('MCP (e2e)', () => {
         (t: { name: string }) => t.name === 'get_listing'
       )
       expect(get.annotations.readOnlyHint).toBe(true)
-      // Dix-sept outils jusqu'au lot 3, quatre au lot 4 (critères, marché).
-      expect(names).toHaveLength(21)
+      // Dix-sept outils jusqu'au lot 3, quatre au lot 4 (critères, marché),
+      // quatre au lot 5 (scénario, projection, conformité, comparable).
+      expect(names).toHaveLength(25)
       const extract = list.body.result.tools.find(
         (t: { name: string }) => t.name === 'extract_listing'
       )
@@ -1073,6 +1075,134 @@ describe('MCP (e2e)', () => {
       expect(denied.isError).toBe(true)
     })
 
+    it('lot 5 : evaluate_scenario sans enregistrement, puis saveAs avec la portée d’écriture', async () => {
+      const dry = await callTool(richard, 'evaluate_scenario', {
+        listingId: id,
+        overrides: { price: 150_000, assumptions: { interestRate: 0.032 } },
+      })
+      expect(dry.isError).toBeUndefined()
+      expect(dry.content[0]?.text).toMatch(
+        /Scénario sur T2 exemple § 8 \(non enregistré\)/
+      )
+      const data = fenced(dry) as {
+        persisted: boolean
+        savedScenarioId: string | null
+        deltas: Array<{ key: string; better: boolean | null }>
+      }
+      expect(data.persisted).toBe(false)
+      expect(data.savedScenarioId).toBeNull()
+      expect(data.deltas.find(d => d.key === 'totalCost')?.better).toBe(true)
+      expect(await ctx.prisma.scenario.count()).toBe(0)
+
+      const denied = await callTool(reader, 'evaluate_scenario', {
+        listingId: id,
+        overrides: { price: 150_000 },
+        saveAs: { name: 'Prix négocié' },
+      })
+      expect(denied.isError).toBe(true)
+      expect(denied.content[0]?.text).toMatch(/listings:write/)
+      expect(await ctx.prisma.scenario.count()).toBe(0)
+
+      const saved = await callTool(writer, 'evaluate_scenario', {
+        listingId: id,
+        overrides: { price: 150_000 },
+        saveAs: { name: 'Prix négocié' },
+      })
+      expect(saved.isError).toBeUndefined()
+      const savedId = (saved.structuredContent as { savedScenarioId: string })
+        .savedScenarioId
+      expect(savedId).toMatch(/^[0-9a-f-]{36}$/)
+      const again = await callTool(reader, 'evaluate_scenario', {
+        listingId: id,
+        scenarioId: savedId,
+      })
+      expect(
+        (again.structuredContent as { scenario: { name: string } }).scenario
+          .name
+      ).toBe('Prix négocié')
+      const log = await ctx.prisma.activityLog.findFirst({
+        where: { action: 'scenario.created' },
+      })
+      expect(log?.channel).toBe('mcp')
+      const invalid = await callTool(richard, 'evaluate_scenario', {
+        listingId: id,
+      })
+      expect(invalid.isError).toBe(true)
+    })
+
+    it('lot 5 : get_projection et get_compliance (Géorisques scripté)', async () => {
+      const projection = await callTool(richard, 'get_projection', {
+        listingId: id,
+        horizonYears: 10,
+        assumptions: { marginalTaxRate: 0.3, purchaseDate: '2026-01-01' },
+      })
+      expect(projection.isError).toBeUndefined()
+      expect(projection.content[0]?.text).toMatch(
+        /Projection de T2 exemple § 8 sur 10 ans/
+      )
+      expect(projection.content[0]?.text).toMatch(/pas un conseil fiscal/)
+      const report = fenced(projection) as {
+        rows: unknown[]
+        summary: { irrAfterTax: number | null }
+      }
+      expect(report.rows).toHaveLength(10)
+      expect(report.summary.irrAfterTax).not.toBeNull()
+
+      const geo = georisquesFetch()
+      ctx.georisques.fetchImpl = geo.fetchImpl
+      const compliance = await callTool(richard, 'get_compliance', {
+        listingId: id,
+      })
+      expect(compliance.isError).toBeUndefined()
+      expect(compliance.content[0]?.text).toMatch(
+        /Conformité de T2 exemple § 8/
+      )
+      expect(compliance.content[0]?.text).toMatch(
+        /Retrait gonflement des argiles/
+      )
+      const items = (
+        compliance.structuredContent as { items: Array<{ key: string }> }
+      ).items
+      expect(items.some(i => i.key === 'dpe_ban')).toBe(true)
+      expect(geo.calls).toHaveLength(1)
+      const missing = await callTool(richard, 'get_compliance', {
+        listingId: '11111111-1111-4111-8111-111111111111',
+      })
+      expect(missing.isError).toBe(true)
+    })
+
+    it('lot 5 : add_rent_comparable refusé sans la portée, journalisé au canal mcp avec', async () => {
+      const denied = await callTool(reader, 'add_rent_comparable', {
+        listingId: id,
+        rent: 700,
+        surface: 40,
+      })
+      expect(denied.isError).toBe(true)
+      expect(await ctx.prisma.rentComparable.count()).toBe(0)
+      const added = await callTool(writer, 'add_rent_comparable', {
+        listingId: id,
+        rent: 700,
+        surface: 40,
+        furnished: false,
+        observedAt: '2026-10-15',
+        source: 'leboncoin',
+      })
+      expect(added.isError).toBeUndefined()
+      expect(added.content[0]?.text).toMatch(
+        /Comparable ajouté : 700 €\/mois pour 40 m²/
+      )
+      expect(added.content[0]?.text).toMatch(/il en faut au moins 5/)
+      const log = await ctx.prisma.activityLog.findFirst({
+        where: { action: 'rent_comparable.created' },
+      })
+      expect(log?.channel).toBe('mcp')
+      const invalid = await callTool(writer, 'add_rent_comparable', {
+        listingId: id,
+        rent: 700,
+      })
+      expect(invalid.isError).toBe(true)
+    })
+
     it('ressources : schéma d’annonce et glossaire', async () => {
       const list = await rpc(richard, 'resources/list')
       expect(list.status).toBe(200)
@@ -1102,6 +1232,9 @@ describe('MCP (e2e)', () => {
       expect(text).toContain('## Rendement brut')
       expect(text).toContain('## Décote nécessaire')
       expect(text).toContain('rdtBrut(P_b) = s_b')
+      expect(text).toContain('## TRI (taux de rendement interne)')
+      expect(text).toContain('## VAN (valeur actuelle nette)')
+      expect(text).toContain('## Cash-flow net d’impôt')
     })
   })
 })

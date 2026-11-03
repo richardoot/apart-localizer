@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { DpeService } from './dpe.service'
 import { GeocodingService } from './geocoding.service'
+import { GeorisquesService } from './georisques.service'
 import { IsochroneService } from './isochrone.service'
 import { MarketService } from './market.service'
 import { OpendataController } from './opendata.controller'
@@ -10,7 +11,8 @@ import { TransitService } from './transit.service'
 
 /**
  * Connecteurs de données ouvertes, chacun isolé derrière un service avec
- * cache en base (`ReferenceData`) : géocodage et isochrones IGN, DPE ADEME ;
+ * cache en base (`ReferenceData`) : géocodage et isochrones IGN, DPE ADEME,
+ * risques Géorisques ;
  * et les données importées par les scripts (arrêts TBM, zonage et arrêtés
  * de l'encadrement, ventes DVF), lues par le module geo.
  */
@@ -24,6 +26,7 @@ import { TransitService } from './transit.service'
     RentControlService,
     MarketService,
     TransitService,
+    GeorisquesService,
   ],
   exports: [
     GeocodingService,
@@ -33,6 +36,7 @@ import { TransitService } from './transit.service'
     RentControlService,
     MarketService,
     TransitService,
+    GeorisquesService,
   ],
 })
 export class OpendataModule {}

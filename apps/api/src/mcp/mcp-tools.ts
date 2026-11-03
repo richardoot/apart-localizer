@@ -33,6 +33,12 @@ import {
   McpSetAssumptionsInputSchema,
   McpSetListingStatusInputSchema,
   McpUpdateListingInputSchema,
+  McpEvaluateScenarioInputSchema,
+  McpGetProjectionInputSchema,
+  McpGetComplianceInputSchema,
+  McpAddRentComparableInputSchema,
+  COMPLIANCE_CATEGORY_LABELS,
+  TAX_REGIME_LABELS,
   OFFER_RESPONSE_LABELS,
   OfferInputSchema,
   OfferUpdateSchema,
@@ -58,6 +64,11 @@ import type {
   MissingField,
   OfferWriteResult,
   TargetPriceReport,
+  ComplianceReport,
+  ProjectionReport,
+  RentMarketReport,
+  ScenarioComparison,
+  ScenarioDelta,
 } from '@apart/contracts'
 import { formatEuros, formatPercent, mergeAssumptions } from '@apart/domain'
 import type { Member } from '../generated/prisma'
@@ -72,6 +83,10 @@ import type { OffersService } from '../offers/offers.service'
 import type { OpinionsService } from '../opinions/opinions.service'
 import type { TasksService } from '../tasks/tasks.service'
 import type { WorkspaceService } from '../workspace/workspace.service'
+import type { StudyService } from '../study/study.service'
+import type { ScenariosService } from '../study/scenarios.service'
+import type { RentComparablesService } from '../study/rent-comparables.service'
+import type { ComplianceService } from '../study/compliance.service'
 import { answer, dataResult, refusal, writeRefusal } from './tool-results'
 
 /** Ce dont les outils ont besoin : le membre, ses portées, les services métier. */
@@ -89,6 +104,10 @@ export interface McpToolContext {
   targetPrice: TargetPriceService
   criteria: SearchCriteriaService
   enrichment: ListingEnrichmentService
+  study: StudyService
+  scenarios: ScenariosService
+  comparables: RentComparablesService
+  compliance: ComplianceService
 }
 
 const CHANNEL = 'mcp' as const
@@ -96,7 +115,8 @@ const CHANNEL = 'mcp' as const
 /**
  * Les noms des outils, dans l'ordre de la feuille de route : lot 1, lot 2
  * (extraction et doublons), lot 3 (prix cible, offres, prix, comparaison,
- * hypothèses), lot 4 (critères de recherche, contexte de marché).
+ * hypothèses), lot 4 (critères de recherche, contexte de marché), lot 5
+ * (scénarios, projection, conformité, comparables de loyer).
  */
 export const MCP_TOOL_NAMES = [
   'list_listings',
@@ -120,6 +140,10 @@ export const MCP_TOOL_NAMES = [
   'get_market_context',
   'create_search_criteria',
   'update_search_criteria',
+  'evaluate_scenario',
+  'get_projection',
+  'get_compliance',
+  'add_rent_comparable',
 ] as const
 
 /** Les prompts du connecteur. */
@@ -408,6 +432,101 @@ async function openDataAnswer(
     }
     throw error
   }
+}
+
+const pct = (value: number | null): string =>
+  value === null ? '—' : formatPercent(value)
+const eur = (value: number | null): string =>
+  value === null ? '—' : formatEuros(value)
+
+/** Une valeur d'écart selon son unité. */
+function formatDeltaValue(
+  unit: ScenarioDelta['unit'],
+  value: number | null
+): string {
+  if (value === null) return '—'
+  if (unit === 'fraction') return formatPercent(value)
+  return unit === 'eur_month'
+    ? `${formatEuros(value)}/mois`
+    : formatEuros(value)
+}
+
+/** Un scénario comparé à la base, en quelques lignes. */
+export function describeScenario(comparison: ScenarioComparison): string {
+  const name = comparison.scenario.name
+    ? ` « ${comparison.scenario.name} »`
+    : ''
+  const changed = comparison.deltas.filter(
+    d => d.delta !== null && Math.abs(d.delta) > 1e-9
+  )
+  return [
+    `Scénario${name} sur ${comparison.title} (non enregistré) : verdict ${VERDICT_LABELS[comparison.base.verdict]} → ${VERDICT_LABELS[comparison.result.verdict]}, location ${RENTAL_VERDICT_LABELS[comparison.base.rentalVerdict]} → ${RENTAL_VERDICT_LABELS[comparison.result.rentalVerdict]}.`,
+    changed.length
+      ? `Écarts :\n${changed
+          .map(
+            d =>
+              `- ${d.label} : ${formatDeltaValue(d.unit, d.base)} → ${formatDeltaValue(d.unit, d.scenario)}${d.better === null ? '' : d.better ? ' (mieux)' : ' (moins bien)'}`
+          )
+          .join('\n')}`
+      : 'Aucun indicateur ne change.',
+    comparison.disclaimer,
+  ].join('\n')
+}
+
+/** La projection : TRI, VAN, enrichissement, revente, régimes, avertissements. */
+export function describeProjection(report: ProjectionReport): string {
+  const s = report.summary
+  const cg = report.sale.capitalGains
+  return [
+    `Projection de ${report.title} sur ${s.horizonYears} ans (${TAX_REGIME_LABELS[s.regime]}, mise en location le ${report.parameters.rentalStartDate}) : TRI avant impôt ${pct(s.irrBeforeTax)}, après impôt ${pct(s.irrAfterTax)} ; VAN après impôt ${eur(s.npvAfterTax)} au taux de ${formatPercent(s.discountRate)} ; enrichissement net ${eur(s.netWealthAfterTax)} après impôt (${eur(s.netWealthBeforeTax)} avant).`,
+    s.firstRentalYear !== null
+      ? `Première année entièrement louée (année ${s.firstRentalYear}) : cash-flow net d'impôt ${s.firstRentalYearMonthlyAfterTax === null ? '— (TMI à renseigner)' : `${formatEuros(s.firstRentalYearMonthlyAfterTax)}/mois`}.`
+      : null,
+    `Revente le ${report.sale.date} à ${formatEuros(report.sale.salePrice)} (frais ${formatEuros(report.sale.saleCosts)}, capital restant dû ${formatEuros(report.sale.remainingPrincipal)}) : ${cg.exempt ? 'plus-value exonérée (résidence principale)' : `plus-value brute ${formatEuros(cg.grossGain)}, impôt ${formatEuros(cg.total)}`} ; produit net ${formatEuros(report.sale.netProceeds)}.`,
+    `Régimes comparés : ${report.regimes
+      .map(
+        r =>
+          `${TAX_REGIME_LABELS[r.regime]}${r.eligible ? '' : ' (plafond dépassé)'} : impôt sur les loyers ${eur(r.totalRentalTax)}, enrichissement ${eur(r.netWealthAfterTax)}`
+      )
+      .join(
+        ' ; '
+      )}${report.bestRegime ? ` — le plus favorable : ${TAX_REGIME_LABELS[report.bestRegime]}` : ''}.`,
+    report.warnings.length ? `À noter : ${report.warnings.join(' ')}` : null,
+    report.disclaimer,
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** La checklist : verdict, puis les points non conformes ou à vérifier, datés et sourcés. */
+export function describeCompliance(report: ComplianceReport): string {
+  const tag = {
+    bad: 'bloquant',
+    warn: 'attention',
+    unknown: 'à vérifier',
+    ok: 'ok',
+  } as const
+  const notable = report.items.filter(i => i.level !== 'ok')
+  return [
+    `Conformité de ${report.title} pour une mise en location le ${report.rentalStartDate} : ${RENTAL_VERDICT_LABELS[report.verdict]} (${report.counts.bad} bloquant(s), ${report.counts.warn} point(s) d'attention, ${report.counts.unknown} à vérifier, ${report.counts.ok} conforme(s)) ; règles du ${report.rules.asOf}.`,
+    ...notable.map(
+      i =>
+        `- [${tag[i.level]}] ${COMPLIANCE_CATEGORY_LABELS[i.category]} — ${i.title} : ${i.message}${i.date ? ` (date : ${i.date})` : ''}${i.source ? ` [source : ${i.source.label}${i.source.url ? `, ${i.source.url}` : ''}]` : ''}`
+    ),
+    report.georisques?.status === 'ok'
+      ? `Géorisques (${report.georisques.address ?? 'adresse'}, relevé ${report.georisques.fetchedAt?.slice(0, 10) ?? '—'}) : ${report.georisques.hazards.filter(h => h.present).length} aléa(s) recensé(s) dans la commune.`
+      : `Géorisques : ${report.georisques?.message ?? 'non consulté'}`,
+    report.disclaimer,
+  ].join('\n')
+}
+
+/** Le loyer de marché d'après les comparables. */
+export function describeRentMarket(market: RentMarketReport): string {
+  const s = market.stats
+  return [
+    `Loyer de marché (${market.comparables.length} comparable(s), ${market.comparables.filter(c => c.included).length} retenu(s)) : ${s ? `médiane ${s.medianRentPerM2.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €/m², quartiles ${s.p25RentPerM2.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} à ${s.p75RentPerM2.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €/m²` : 'aucun comparable retenu'}${market.estimatedRent !== null ? `, loyer estimé ≈ ${formatEuros(market.estimatedRent)}/mois` : ''}.`,
+    ...market.messages,
+  ].join(' ')
 }
 
 /** Le schéma JSON d'une annonce à créer, descriptions comprises (ressource `apart://schema/listing`). */
@@ -1122,6 +1241,126 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         })
       )
   )
+
+  server.registerTool(
+    'evaluate_scenario',
+    {
+      title: 'Scénario « et si »',
+      description:
+        'Compare une annonce enregistrée sous un scénario à sa base : `overrides` (price, targetRent, renovationTotal, furnitureValue, propertyTax, annualCharges, leaseType, assumptions : interestRate, downPayment, durationYears, vacancyMonths, rentalStartDate, marginalTaxRate, taxRegime, horizonYears, appreciationRate…) ou `scenarioId` (scénario enregistré, complété des overrides). ' +
+        'La réponse donne les deux côtés (coût, mensualité, rendements, effort, verdicts, coût d’occupation en phase 1, TRI, VAN, enrichissement net) et les écarts indicateur par indicateur. Rien n’est enregistré, sauf avec `saveAs` (nom, portée annonce ou espace) qui enregistre les overrides comme scénario (portée listings:write, journalisé). Aucune suppression. Estimation, pas un conseil fiscal.',
+      inputSchema: McpEvaluateScenarioInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ listingId, scenarioId, overrides, saveAs }) =>
+      answer(async () => {
+        let savedId: string | undefined
+        let savedLine: string | null = null
+        if (saveAs) {
+          const denied = writeRefusal(ctx.scopes)
+          if (denied) return denied
+          const saved = await ctx.scenarios.create(
+            ctx.member,
+            {
+              name: saveAs.name,
+              listingId: saveAs.scope === 'workspace' ? null : listingId,
+              overrides: overrides ?? {},
+              notes: saveAs.notes ?? null,
+            },
+            CHANNEL
+          )
+          savedId = saved.id
+          savedLine = `Scénario « ${saved.name} » enregistré${saved.listingId ? '' : ' pour tout l’espace'} [id ${saved.id}].`
+        }
+        const comparison = await ctx.scenarios.evaluate(ctx.member, listingId, {
+          ...(savedId
+            ? { scenarioId: savedId }
+            : scenarioId
+              ? { scenarioId }
+              : {}),
+          ...(savedId ? {} : overrides ? { overrides } : {}),
+        })
+        return dataResult(
+          [savedLine, describeScenario(comparison)].filter(Boolean).join('\n'),
+          { ...comparison, savedScenarioId: savedId ?? null }
+        )
+      })
+  )
+
+  server.registerTool(
+    'get_projection',
+    {
+      title: 'Projection, fiscalité, TRI',
+      description:
+        "Projection annuelle d'une annonce enregistrée sur l'horizon de détention (`horizonYears`, sinon celui des hypothèses) : phase 1 (loyer actuel évité, charges, taxe foncière, entretien), phase 2 (loyers indexés par l'IRL, vacance, charges, impôt estimé du régime `regime` : micro_foncier, reel_foncier, micro_bic, lmnp_reel), mensualités et capital restant dû, revente au terme (revalorisation, frais, impôt sur la plus-value, exonération si résidence principale), TRI et VAN avant et après impôt, enrichissement net, comparaison des régimes possibles pour le bail. " +
+        '`assumptions` : scénario pour ce calcul seulement (TMI, revalorisation, date de mise en location…). Sans TMI renseignée, l’impôt sur le revenu n’est pas estimé. Paramètres fiscaux datés dans les hypothèses ; estimation, pas un conseil fiscal. Rien n’est enregistré.',
+      inputSchema: McpGetProjectionInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ listingId, horizonYears, regime, assumptions }) =>
+      answer(async () => {
+        const report = await ctx.study.projection(ctx.member, listingId, {
+          ...(horizonYears !== undefined ? { horizonYears } : {}),
+          ...(regime ? { regime } : {}),
+          ...(assumptions ? { assumptions } : {}),
+        })
+        return dataResult(describeProjection(report), report)
+      })
+  )
+
+  server.registerTool(
+    'get_compliance',
+    {
+      title: 'Conformité réglementaire et risques',
+      description:
+        "Checklist réglementaire datée d'une annonce enregistrée, évaluée à sa date de mise en location prévue : calendrier d'interdiction selon le DPE (G 2025, F 2028, E 2034) et gel des loyers, validité du DPE, encadrement des loyers et sa date de fin, permis de louer, diagnostics du bail (plomb, amiante, électricité, gaz, état des risques, bruit), décence, copropriété, mobilier d'un meublé ; " +
+        "et les risques Géorisques à l'adresse (inondation, argiles, radon, séisme, industriels…, libellés à l'adresse et dans la commune). Chaque point : ok, attention, bloquant ou à vérifier, avec sa date et sa source. Rien n'est inventé : un doute rend « à vérifier ».",
+      inputSchema: McpGetComplianceInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ listingId }) =>
+      answer(async () => {
+        const report = await ctx.compliance.compliance(ctx.member, listingId)
+        return dataResult(describeCompliance(report), report)
+      })
+  )
+
+  server.registerTool(
+    'add_rent_comparable',
+    {
+      title: 'Ajouter un loyer comparable',
+      description:
+        "Ajoute à une annonce une annonce de location comparable lue par le membre (loyer hors charges `rent` en euros par mois, `surface` en m², `furnished`, `rooms`, `observedAt` date de l'annonce, `source`, `url`, `address`, `note`) : la matière du loyer de marché (5 à 10 comparables, médiane au m²). " +
+        'La réponse donne la synthèse à jour : médiane et quartiles au m², loyer estimé, écart du loyer visé et du plafond. Aucune collecte automatique sur les portails. Journalisé ; aucune suppression par le MCP. Portée listings:write.',
+      inputSchema: McpAddRentComparableInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ listingId, ...input }) =>
+      answer(async () => {
+        const denied = writeRefusal(ctx.scopes)
+        if (denied) return denied
+        const result = await ctx.comparables.create(
+          ctx.member,
+          listingId,
+          input,
+          CHANNEL
+        )
+        return dataResult(
+          `Comparable ajouté : ${formatEuros(result.comparable.rent)}/mois pour ${result.comparable.surface} m²${result.comparable.furnished ? ', meublé' : ''} [id ${result.comparable.id}].\n${describeRentMarket(result.market)}`,
+          result
+        )
+      })
+  )
 }
 
 /**
@@ -1155,7 +1394,7 @@ export function registerResources(server: McpServer): void {
     {
       title: 'Glossaire des indicateurs',
       description:
-        'Définitions : coût total, frais de notaire, mensualité, rendements brut et net, effort, repère 220 × loyer, verdict, prix cible, critère liant, décote et ses classes, offre suggérée, louabilité, provenance.',
+        'Définitions : coût total, frais de notaire, mensualité, rendements brut et net, effort, repère 220 × loyer, verdict, prix cible, critère liant, décote et ses classes, offre suggérée, louabilité, provenance, coût d’occupation, scénario, régimes fiscaux, cash-flow net d’impôt, TRI, VAN, enrichissement net, plus-value, loyer de marché, checklist réglementaire.',
       mimeType: 'text/markdown',
     },
     uri => ({

@@ -94,3 +94,55 @@ describe('api (lot 4)', () => {
     ])
   })
 })
+
+describe('api (lot 5)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockReset()
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    })
+  })
+
+  it('phase 1, projection, scénarios, comparables, conformité : chemins et méthodes', async () => {
+    await api.study.occupancy('id-1')
+    await api.study.projection('id-1', {
+      horizonYears: 20,
+      regime: 'reel_foncier',
+    })
+    await api.study.projection('id-1')
+    await api.study.evaluateScenario('id-1', { overrides: { price: 1 } })
+    await api.study.compliance('id-1')
+    await api.study.comparables('id-1')
+    await api.study.addComparable('id-1', { rent: 700, surface: 40 })
+    await api.study.updateComparable('id-1', 'c-1', { rent: 710 })
+    await api.study.removeComparable('id-1', 'c-1')
+    await api.scenarios.list('id-1')
+    await api.scenarios.list()
+    await api.scenarios.create({ name: 'x', overrides: {} })
+    await api.scenarios.update('s-1', { name: 'y' })
+    await api.scenarios.remove('s-1')
+    const calls = fetchMock.mock.calls.map(
+      ([url, init]) =>
+        `${(init as RequestInit).method ?? 'GET'} ${String(url).replace(/^https?:\/\/[^/]+/, '')}`
+    )
+    expect(calls).toEqual([
+      'GET /listings/id-1/occupancy',
+      'GET /listings/id-1/projection?horizonYears=20&regime=reel_foncier',
+      'GET /listings/id-1/projection',
+      'POST /listings/id-1/scenarios/evaluate',
+      'GET /listings/id-1/compliance',
+      'GET /listings/id-1/rent-comparables',
+      'POST /listings/id-1/rent-comparables',
+      'PATCH /listings/id-1/rent-comparables/c-1',
+      'DELETE /listings/id-1/rent-comparables/c-1',
+      'GET /scenarios?listingId=id-1',
+      'GET /scenarios',
+      'POST /scenarios',
+      'PATCH /scenarios/s-1',
+      'DELETE /scenarios/s-1',
+    ])
+  })
+})

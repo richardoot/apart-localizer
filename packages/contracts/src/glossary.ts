@@ -94,4 +94,64 @@ export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
     definition:
       'Chaque champ sait d’où il vient : annonce, membre, IA (avec confiance et extrait), données ouvertes, ou estimé. Une valeur estimée faute de saisie s’affiche avec « ≈ ».',
   },
+  {
+    key: 'occupancy_cost',
+    term: 'Coût d’occupation (phase 1)',
+    definition:
+      'Pendant que le foyer habite le bien : mensualité + assurance + toutes les charges de copropriété + taxe foncière + entretien, comparé au loyer actuel. Coût réel = coût d’occupation − capital remboursé chaque mois (la part qui construit un patrimoine). La bascule en phase 2 est la date de mise en location.',
+  },
+  {
+    key: 'scenario',
+    term: 'Scénario « et si »',
+    definition:
+      'Un jeu de surcharges (prix, loyer, travaux, bail, taux, apport, durée, vacance, date de mise en location, TMI, régime…) appliqué à une annonce et comparé à la base, indicateur par indicateur. Enregistrable, mais une évaluation n’écrit rien.',
+  },
+  {
+    key: 'tax_regimes',
+    term: 'Régimes fiscaux',
+    definition:
+      'Location vide : micro-foncier (abattement de 30 % si les loyers bruts du foyer ne dépassent pas 15 000 €) ou réel foncier (charges, intérêts, taxe foncière déduits ; déficit hors intérêts imputable sur le revenu global jusqu’à 10 700 € par an, le reste reporté dix ans). Location meublée : micro-BIC (abattement de 50 % en meublé de longue durée, plafonds selon le classement) ou LMNP réel (charges et amortissements, qui ne peuvent pas créer de déficit). Impôt = revenu imposable × TMI + prélèvements sociaux. Paramètres datés dans les hypothèses ; une estimation, pas un conseil fiscal.',
+  },
+  {
+    key: 'cash_flow_after_tax',
+    term: 'Cash-flow net d’impôt',
+    definition:
+      'Par année de détention : loyers encaissés (ou loyer actuel évité en phase 1) − mensualités − charges − taxe foncière − frais − impôt sur les loyers. Négatif = somme à sortir.',
+  },
+  {
+    key: 'irr',
+    term: 'TRI (taux de rendement interne)',
+    definition:
+      'Le taux annuel qui annule la valeur actuelle des flux du foyer : mise de départ (apport), cash-flows de chaque année, produit net de la revente au terme (prix − frais − capital restant dû − impôt sur la plus-value). Avant impôt : sans impôt sur les loyers ni sur la plus-value. Le loyer actuel évité en phase 1 compte : le TRI compare l’achat au fait de rester locataire.',
+  },
+  {
+    key: 'npv',
+    term: 'VAN (valeur actuelle nette)',
+    definition:
+      'Somme des flux actualisés au taux d’actualisation des hypothèses (par défaut le taux du crédit). Positive : le projet rapporte plus que ce taux.',
+  },
+  {
+    key: 'net_wealth',
+    term: 'Enrichissement net',
+    definition:
+      'Somme des flux sur l’horizon, mise de départ déduite : ce que le projet laisse au foyer à la revente, comparé au fait de rester locataire.',
+  },
+  {
+    key: 'capital_gains',
+    term: 'Plus-value immobilière',
+    definition:
+      'Prix de vente − frais de cession − (prix d’achat + frais d’acquisition réels ou forfait 7,5 % + travaux réels ou forfait 15 % après cinq ans − amortissements LMNP déduits). Abattements pour durée de détention : exonération d’impôt sur le revenu (19 %) après 22 ans et de prélèvements sociaux après 30 ans ; surtaxe au-delà de 50 000 €. Exonérée si le bien est la résidence principale au jour de la vente, ce qui n’est plus le cas une fois loué.',
+  },
+  {
+    key: 'market_rent',
+    term: 'Loyer de marché (comparables)',
+    definition:
+      'Médiane des loyers au m² de 5 à 10 annonces de location comparables saisies (même type, vide ou meublé) × surface de l’annonce. Le loyer visé est jugé exposé à la vacance s’il dépasse le marché de plus de 8 %.',
+  },
+  {
+    key: 'compliance',
+    term: 'Checklist réglementaire',
+    definition:
+      'Règles datées et sourcées (interdictions de location selon le DPE, encadrement et sa date de fin, permis de louer, diagnostics du bail, décence, meublé) évaluées à la date de mise en location prévue, et risques Géorisques à l’adresse : ok, attention, bloquant ou à vérifier.',
+  },
 ]

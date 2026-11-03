@@ -96,6 +96,13 @@ export function useListingMutations() {
     void client.invalidateQueries({
       queryKey: ['listings', 'sensitivity', item.listing.id],
     })
+    // La checklist et le loyer de marché lisent la fiche (DPE, loyer visé, plafond).
+    void client.invalidateQueries({
+      queryKey: ['listings', 'compliance', item.listing.id],
+    })
+    void client.invalidateQueries({
+      queryKey: ['listings', 'rent-comparables', item.listing.id],
+    })
   }
 
   function refresh(listingId: string): void {

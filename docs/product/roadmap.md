@@ -74,6 +74,14 @@ DVF du quartier s'affichent avec leur date.
 - Coût d'occupation contre loyer actuel, scénarios « et si » enregistrables, fiscalité estimée,
   TRI et revente, loyer de marché par comparables saisis, checklist réglementaire datée
   (risques Géorisques à l'adresse compris).
+- `evaluate_scenario`, `get_projection`, `get_compliance` et `add_rent_comparable` dans le MCP
+  (25 outils) ; paramètres fiscaux et règles réglementaires datés et sourcés (ADR 0012, 0013).
+
+Fini quand : la fiche dit ce que coûte la phase 1 par rapport au loyer actuel, compare un
+scénario à la base en direct, projette jusqu'à la revente avec un TRI avant et après impôt par
+régime (« estimation, pas un conseil fiscal »), calcule le loyer de marché de cinq comparables et
+liste les points réglementaires datés et sourcés à la date de mise en location, risques à
+l'adresse compris.
 
 ## Lot 6 : confort
 

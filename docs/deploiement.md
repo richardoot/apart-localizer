@@ -108,6 +108,7 @@ et le dossier de sortie (`dist`). Variables d'environnement (Production, et Prev
 | `GEOCODING_URL`                                                  | facultatif, défaut Géoplateforme IGN                                                                                   |
 | `ISOCHRONE_URL`                                                  | facultatif, défaut Géoplateforme IGN (`https://data.geopf.fr/navigation/isochrone`)                                    |
 | `ADEME_DPE_URL`                                                  | facultatif, défaut API data-fair de l'ADEME (jeu `dpe03existant`)                                                      |
+| `GEORISQUES_URL`                                                 | facultatif, défaut rapport de risques Géorisques v1 (`https://www.georisques.gouv.fr/api/v1/resultats_rapport_risque`) |
 
 Après le premier déploiement : `GET https://<api>.vercel.app/health` doit répondre `200` avec
 `checks.postgis.status: "ok"`, et `GET /.well-known/oauth-protected-resource` doit annoncer

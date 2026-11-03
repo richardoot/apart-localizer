@@ -15,7 +15,6 @@ import type {
   Opinion as OpinionDto,
   Point,
   PriceEvent as PriceEventDto,
-  RentComparable,
   Task as TaskDto,
 } from '@apart/contracts'
 import type {
@@ -205,7 +204,7 @@ export function toListingDto(row: ListingRow): ListingDto {
           referenceRentPerM2: num(row.rentalPlan.referenceRentPerM2),
           targetRent: num(row.rentalPlan.targetRent),
           marketRent: num(row.rentalPlan.marketRent),
-          comparables: (row.rentalPlan.comparables ?? []) as RentComparable[],
+
           demand: row.rentalPlan.demand,
           coOwnershipAllowsRental: row.rentalPlan.coOwnershipAllowsRental,
           decencyCompliant: row.rentalPlan.decencyCompliant,

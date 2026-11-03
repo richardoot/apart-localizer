@@ -16,3 +16,5 @@ remplacée n'est pas effacée ; son statut passe à « remplacée par NNNN ».
 | [0009](0009-offres-negociation-et-hypotheses-partielles.md) | Offres : un outil `record_offer`, statut proposé jamais forcé, `set_assumptions` partiel avec impact           | Acceptée, 3 novembre 2026 |
 | [0010](0010-criteres-alertes-et-isochrones.md)              | Critères : un prédicat PostGIS, filtres par `domain`, table des entrées, compteurs à la lecture, vélo approché | Acceptée, 3 novembre 2026 |
 | [0011](0011-donnees-ouvertes-encadrement-dvf-dpe-tbm.md)    | Données ouvertes : arrêté contrôlé, zonage PostGIS, instantané sur l'annonce, règles DVF, DPE, TBM             | Acceptée, 3 novembre 2026 |
+| [0012](0012-fiscalite-estimee-et-projection.md)             | Fiscalité estimée : paramètres datés dans les hypothèses, pas de TMI inventée, conventions de projection, SVG  | Acceptée, 3 novembre 2026 |
+| [0013](0013-scenarios-comparables-checklist-georisques.md)  | Scénarios et comparables en tables, évaluation sans écriture, règles datées remplaçables, Géorisques v1        | Acceptée, 3 novembre 2026 |

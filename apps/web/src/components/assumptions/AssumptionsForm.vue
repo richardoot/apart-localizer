@@ -1,11 +1,17 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue'
-  import { AssumptionsSchema } from '@apart/contracts'
+  import {
+    AssumptionsSchema,
+    FURNISHED_RENTAL_KIND_LABELS,
+    TAX_REGIME_LABELS,
+  } from '@apart/contracts'
   import type {
     Assumptions,
     AssumptionsImpact,
+    FurnishedRentalKind,
     NotaryMode,
     TargetCriterion,
+    TaxRegime,
   } from '@apart/contracts'
   import FormField from '@/components/ui/FormField.vue'
   import {
@@ -60,8 +66,29 @@
     negotiableDiscountPercent: string
     tightDiscountPercent: string
     rentalYear: string
+    /** Lot 5 : phase 1, fiscalité, horizon. */
+    currentRent: string
+    maintenanceAnnual: string
+    purchaseDate: string
+    rentalStartDate: string
+    marginalTaxPercent: string
+    taxRegime: TaxRegime | ''
+    furnishedRentalKind: FurnishedRentalKind
+    horizonYears: string
+    appreciationPercent: string
+    rentIndexationPercent: string
+    resaleCostsPercent: string
+    discountPercent: string
     label: string
   }
+
+  const TMI_CHOICES = ['0', '11', '30', '41', '45'] as const
+  const REGIMES = Object.keys(TAX_REGIME_LABELS) as TaxRegime[]
+  const FURNISHED_KINDS = Object.keys(
+    FURNISHED_RENTAL_KIND_LABELS
+  ) as FurnishedRentalKind[]
+  const optionalText = (value: number | null): string =>
+    value === null ? '' : String(value)
 
   /** Les critères qu'on peut retenir ; le marché (DVF) attend le lot 4. */
   const CRITERIA: readonly TargetCriterion[] = [
@@ -120,6 +147,21 @@
       ),
       tightDiscountPercent: fractionToPercentInput(values.tightDiscount),
       rentalYear: String(values.rentalYear),
+      currentRent: optionalText(values.currentRent),
+      maintenanceAnnual: optionalText(values.maintenanceAnnual),
+      purchaseDate: values.purchaseDate ?? '',
+      rentalStartDate: values.rentalStartDate ?? '',
+      marginalTaxPercent:
+        values.marginalTaxRate === null
+          ? ''
+          : fractionToPercentInput(values.marginalTaxRate),
+      taxRegime: values.taxRegime ?? '',
+      furnishedRentalKind: values.furnishedRentalKind,
+      horizonYears: String(values.horizonYears),
+      appreciationPercent: fractionToPercentInput(values.appreciationRate),
+      rentIndexationPercent: fractionToPercentInput(values.rentIndexationRate),
+      resaleCostsPercent: fractionToPercentInput(values.resaleCostsRate),
+      discountPercent: fractionToPercentInput(values.discountRate),
       label: '',
     }
   }
@@ -177,6 +219,30 @@
       negotiableDiscount: percentToFraction(model.negotiableDiscountPercent),
       tightDiscount: percentToFraction(model.tightDiscountPercent),
       rentalYear: parseNumberInput(model.rentalYear),
+      currentRent:
+        model.currentRent.trim() === ''
+          ? null
+          : parseNumberInput(model.currentRent),
+      maintenanceAnnual:
+        model.maintenanceAnnual.trim() === ''
+          ? null
+          : parseNumberInput(model.maintenanceAnnual),
+      purchaseDate: model.purchaseDate || null,
+      rentalStartDate: model.rentalStartDate || null,
+      marginalTaxRate:
+        model.marginalTaxPercent === ''
+          ? null
+          : percentToFraction(model.marginalTaxPercent),
+      taxRegime: model.taxRegime || null,
+      furnishedRentalKind: model.furnishedRentalKind,
+      horizonYears: parseNumberInput(model.horizonYears),
+      appreciationRate: percentToFraction(model.appreciationPercent),
+      rentIndexationRate: percentToFraction(model.rentIndexationPercent),
+      resaleCostsRate: percentToFraction(model.resaleCostsPercent),
+      discountRate:
+        model.discountPercent.trim() === ''
+          ? null
+          : percentToFraction(model.discountPercent),
     }
     const parsed = AssumptionsSchema.safeParse(candidate)
     if (parsed.success) {
@@ -545,6 +611,178 @@
           <span class="text-xs text-muted">Marché (DVF) : lot 4</span>
         </div>
       </fieldset>
+    </fieldset>
+
+    <fieldset class="grid gap-3" data-testid="study-assumptions">
+      <legend class="font-display text-base font-semibold">
+        Phase 1, fiscalité et horizon
+      </legend>
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <FormField
+          label="Loyer actuel du foyer (€/mois)"
+          for-id="h-current-rent"
+          hint="Comparé au coût d'occupation en phase 1 ; vide = non renseigné"
+        >
+          <input
+            id="h-current-rent"
+            v-model="form.currentRent"
+            :class="inputClass"
+            inputmode="numeric"
+          />
+        </FormField>
+        <FormField
+          label="Entretien en phase 1 (€/an)"
+          for-id="h-maintenance"
+          hint="Vide = non renseigné (compté 0)"
+        >
+          <input
+            id="h-maintenance"
+            v-model="form.maintenanceAnnual"
+            :class="inputClass"
+            inputmode="numeric"
+          />
+        </FormField>
+        <FormField
+          label="Date d'achat prévue"
+          for-id="h-purchase"
+          hint="Vide = date du calcul"
+        >
+          <input
+            id="h-purchase"
+            v-model="form.purchaseDate"
+            type="date"
+            :class="inputClass"
+          />
+        </FormField>
+        <FormField
+          label="Date de mise en location"
+          for-id="h-rental-start"
+          hint="Bascule en phase 2 ; vide = 1er janvier de l'année ci-dessus"
+        >
+          <input
+            id="h-rental-start"
+            v-model="form.rentalStartDate"
+            type="date"
+            :class="inputClass"
+          />
+        </FormField>
+        <FormField
+          label="Tranche marginale d'imposition"
+          for-id="h-tmi"
+          hint="Celle du foyer : sans elle, l'impôt sur le revenu n'est pas estimé"
+        >
+          <select
+            id="h-tmi"
+            v-model="form.marginalTaxPercent"
+            :class="inputClass"
+          >
+            <option value="">Non renseignée</option>
+            <option v-for="t in TMI_CHOICES" :key="t" :value="t">
+              {{ t }} %
+            </option>
+          </select>
+        </FormField>
+        <FormField label="Régime fiscal visé" for-id="h-regime">
+          <select id="h-regime" v-model="form.taxRegime" :class="inputClass">
+            <option value="">Selon le bail (micro)</option>
+            <option v-for="r in REGIMES" :key="r" :value="r">
+              {{ TAX_REGIME_LABELS[r] }}
+            </option>
+          </select>
+        </FormField>
+        <FormField
+          label="Location meublée (micro-BIC)"
+          for-id="h-furnished-kind"
+        >
+          <select
+            id="h-furnished-kind"
+            v-model="form.furnishedRentalKind"
+            :class="inputClass"
+          >
+            <option v-for="k in FURNISHED_KINDS" :key="k" :value="k">
+              {{ FURNISHED_RENTAL_KIND_LABELS[k] }}
+            </option>
+          </select>
+        </FormField>
+        <FormField label="Horizon de détention (ans)" for-id="h-horizon">
+          <input
+            id="h-horizon"
+            v-model="form.horizonYears"
+            :class="inputClass"
+            inputmode="numeric"
+          />
+        </FormField>
+        <FormField
+          label="Revalorisation du bien (%/an)"
+          for-id="h-appreciation"
+          hint="0 = valeur constante"
+        >
+          <input
+            id="h-appreciation"
+            v-model="form.appreciationPercent"
+            :class="inputClass"
+            inputmode="decimal"
+          />
+        </FormField>
+        <FormField
+          label="Indexation des loyers et charges (IRL, %/an)"
+          for-id="h-irl"
+          hint="Défaut : IRL du 3e trimestre 2026, +1,57 % sur un an (INSEE)"
+        >
+          <input
+            id="h-irl"
+            v-model="form.rentIndexationPercent"
+            :class="inputClass"
+            inputmode="decimal"
+          />
+        </FormField>
+        <FormField
+          label="Frais de revente (% du prix)"
+          for-id="h-resale"
+          hint="Estimation : honoraires et diagnostics"
+        >
+          <input
+            id="h-resale"
+            v-model="form.resaleCostsPercent"
+            :class="inputClass"
+            inputmode="decimal"
+          />
+        </FormField>
+        <FormField
+          label="Taux d'actualisation de la VAN (%)"
+          for-id="h-discount"
+          hint="Vide = taux du crédit"
+        >
+          <input
+            id="h-discount"
+            v-model="form.discountPercent"
+            :class="inputClass"
+            inputmode="decimal"
+          />
+        </FormField>
+      </div>
+      <p class="text-xs text-muted" data-testid="tax-parameters">
+        Paramètres fiscaux : {{ values.taxParameters.label }} (prélèvements
+        sociaux
+        {{
+          fractionToPercentInput(
+            values.taxParameters.socialContributions.landIncomeRate
+          )
+        }}
+        % en location vide,
+        {{
+          fractionToPercentInput(
+            values.taxParameters.socialContributions.furnishedIncomeRate
+          )
+        }}
+        % en meublé ; micro-foncier jusqu'à
+        {{ formatEuros(values.taxParameters.microFoncier.receiptsCeiling) }},
+        micro-BIC longue durée jusqu'à
+        {{
+          formatEuros(values.taxParameters.microBic.longTerm.receiptsCeiling)
+        }}). Estimation, pas un conseil fiscal ; détail et sources dans le
+        modèle de calcul, modifiables par l'API et le MCP (set_assumptions).
+      </p>
     </fieldset>
 
     <FormField
