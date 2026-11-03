@@ -11,6 +11,8 @@ import { ApiExcludeController } from '@nestjs/swagger'
 import type { Request, Response } from 'express'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
+import { DuplicatesService } from '../listings/duplicates.service'
+import { ExtractionService } from '../listings/extraction.service'
 import { ListingsService } from '../listings/listings.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
 import { OpinionsService } from '../opinions/opinions.service'
@@ -18,7 +20,7 @@ import { TasksService } from '../tasks/tasks.service'
 import { WorkspaceService } from '../workspace/workspace.service'
 import { McpAuthGuard } from './mcp-auth.guard'
 import type { McpAuthenticatedRequest } from './mcp-auth.guard'
-import { registerTools } from './mcp-tools'
+import { registerPrompts, registerTools } from './mcp-tools'
 
 export const MCP_SERVER_INFO = { name: 'apart-localizer', version: '0.1.0' }
 
@@ -35,6 +37,8 @@ export const MCP_SERVER_INFO = { name: 'apart-localizer', version: '0.1.0' }
 export class McpController {
   constructor(
     private readonly listings: ListingsService,
+    private readonly extraction: ExtractionService,
+    private readonly duplicates: DuplicatesService,
     private readonly assumptions: AssumptionsService,
     private readonly opinions: OpinionsService,
     private readonly tasks: TasksService,
@@ -67,11 +71,14 @@ export class McpController {
       member: req.member,
       scopes: req.mcpScopes,
       listings: this.listings,
+      extraction: this.extraction,
+      duplicates: this.duplicates,
       assumptions: this.assumptions,
       opinions: this.opinions,
       tasks: this.tasks,
       workspace: this.workspace,
     })
+    registerPrompts(server)
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

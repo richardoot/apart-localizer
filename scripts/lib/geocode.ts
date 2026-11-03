@@ -1,62 +1,27 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { z } from 'zod'
-import type { LocationPrecision, Point } from '@apart/contracts'
+import {
+  GEOCODE_ENDPOINT,
+  GEOCODE_MIN_SCORE,
+  geocodeCacheKey,
+  geocodeOnce,
+  precisionOf,
+} from '../../apps/api/src/opendata/geoplateforme.js'
+import type {
+  FetchLike,
+  GeocodeKind,
+  GeocodeResult,
+} from '../../apps/api/src/opendata/geoplateforme.js'
+
+export { GEOCODE_ENDPOINT, precisionOf }
+export type { FetchLike, GeocodeResult }
 
 /**
- * Géocodage par la Géoplateforme IGN (successeur de l'API Adresse), avec un
- * cache sur disque : une requête déjà posée ne repart jamais sur le réseau,
- * et le mode « cache seul » (`--no-geocode`) n'appelle rien du tout.
+ * Géocodage pour le script d'import : le même client Géoplateforme que l'API
+ * (`apps/api/src/opendata/geoplateforme.ts`), avec un cache sur disque au
+ * lieu du cache en base. Une requête déjà posée ne repart jamais sur le
+ * réseau, et le mode « cache seul » (`--no-geocode`) n'appelle rien du tout.
  */
-
-export const GEOCODE_ENDPOINT = 'https://data.geopf.fr/geocodage/search/'
-
-export interface GeocodeResult {
-  point: Point
-  precision: LocationPrecision
-  label: string
-  city: string | null
-  citycode: string | null
-  banId: string | null
-  score: number
-}
-
-const FeatureCollection = z.object({
-  features: z.array(
-    z.object({
-      geometry: z.object({
-        type: z.literal('Point'),
-        coordinates: z.tuple([z.number(), z.number()]),
-      }),
-      properties: z.object({
-        label: z.string(),
-        score: z.number().optional(),
-        type: z.string().optional(),
-        city: z.string().optional(),
-        citycode: z.string().optional(),
-        id: z.string().optional(),
-      }),
-    })
-  ),
-})
-
-/** La précision selon le type de résultat de l'API Adresse. */
-export function precisionOf(type: string | undefined): LocationPrecision {
-  switch (type) {
-    case 'housenumber':
-      return 'exact'
-    case 'street':
-      return 'street'
-    case 'locality':
-      return 'district'
-    default:
-      return 'commune'
-  }
-}
-
-export type FetchLike = (
-  url: string
-) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>
 
 export interface GeocoderOptions {
   cacheFile: string
@@ -77,50 +42,22 @@ export class Geocoder {
 
   constructor(private readonly options: GeocoderOptions) {
     this.cache = loadCache(options.cacheFile)
-    this.fetchImpl = options.fetch ?? (url => fetch(url))
-    this.minScore = options.minScore ?? 0.4
+    this.fetchImpl = options.fetch ?? ((url, init) => fetch(url, init))
+    this.minScore = options.minScore ?? GEOCODE_MIN_SCORE
   }
 
   /** `municipality` restreint la recherche aux communes (centroïde). */
   async geocode(
     query: string,
-    kind: 'address' | 'municipality' = 'address'
+    kind: GeocodeKind = 'address'
   ): Promise<GeocodeResult | null> {
-    const key = `${kind}:${query.trim().toLowerCase()}`
+    const key = geocodeCacheKey(query, kind)
     if (key in this.cache) return this.cache[key] ?? null
     if (!this.options.online) return null
-
-    const params = new URLSearchParams({
-      q: query,
-      limit: '1',
-      index: 'address',
-    })
-    if (kind === 'municipality') params.set('type', 'municipality')
     this.calls++
-    const response = await this.fetchImpl(
-      `${GEOCODE_ENDPOINT}?${params.toString()}`
-    )
-    if (!response.ok) {
-      throw new Error(`Géocodage « ${query} » : HTTP ${response.status}`)
-    }
-    const parsed = FeatureCollection.safeParse(await response.json())
-    const feature = parsed.success ? parsed.data.features[0] : undefined
-    const score = feature?.properties.score ?? 0
-    const result: CacheEntry =
-      feature && score >= this.minScore
-        ? {
-            point: { type: 'Point', coordinates: feature.geometry.coordinates },
-            precision:
-              kind === 'municipality'
-                ? 'commune'
-                : precisionOf(feature.properties.type),
-            label: feature.properties.label,
-            city: feature.properties.city ?? null,
-            citycode: feature.properties.citycode ?? null,
-            banId: feature.properties.id ?? null,
-            score,
-          }
-        : null
+    const result = await geocodeOnce(this.fetchImpl, query, kind, {
+      minScore: this.minScore,
+    })
     this.cache[key] = result
     this.save()
     return result

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import DpeBadge from './DpeBadge.vue'
 import NewBadge from './NewBadge.vue'
+import ProvenanceBadge from './ProvenanceBadge.vue'
 import RentalPill from './RentalPill.vue'
 import StatusBadge from './StatusBadge.vue'
 import VerdictPill from './VerdictPill.vue'
@@ -41,5 +42,54 @@ describe('badges', () => {
     expect(
       mount(RentalPill, { props: { verdict: 'conditional' } }).text()
     ).toBe('Sous conditions')
+  })
+})
+
+describe('ProvenanceBadge', () => {
+  it('l’IA porte sa confiance en pourcentage, colorée, avec l’extrait au survol', () => {
+    const sure = mount(ProvenanceBadge, {
+      props: {
+        provenance: {
+          source: 'ai',
+          confidence: 0.95,
+          evidence: '189 000 € FAI',
+        },
+      },
+    })
+    expect(sure.text()).toBe('IA 95 %')
+    expect(sure.classes()).toContain('text-good')
+    expect(sure.attributes('title')).toContain('« 189 000 € FAI »')
+    expect(sure.attributes('data-source')).toBe('ai')
+    const doubtful = mount(ProvenanceBadge, {
+      props: { provenance: { source: 'ai', confidence: 0.3 } },
+    })
+    expect(doubtful.text()).toBe('IA 30 %')
+    expect(doubtful.classes()).toContain('text-bad')
+  })
+
+  it('annonce, vous, open data, estimé ; rien sans provenance', () => {
+    expect(
+      mount(ProvenanceBadge, {
+        props: { provenance: { source: 'listing' } },
+      }).text()
+    ).toBe('annonce')
+    expect(
+      mount(ProvenanceBadge, {
+        props: { provenance: { source: 'user' } },
+      }).text()
+    ).toBe('vous')
+    expect(
+      mount(ProvenanceBadge, {
+        props: { provenance: { source: 'open_data' } },
+      }).text()
+    ).toBe('open data')
+    expect(
+      mount(ProvenanceBadge, {
+        props: { provenance: { source: 'estimated' } },
+      }).text()
+    ).toBe('estimé')
+    expect(mount(ProvenanceBadge, { props: { provenance: null } }).text()).toBe(
+      ''
+    )
   })
 })

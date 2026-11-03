@@ -17,13 +17,90 @@
   } from '@/lib/labels'
   import { itemKey } from '@/lib/listing-form'
   import type { ListingForm } from '@/lib/listing-form'
+  import { provenanceOf } from '@/lib/provenance'
+  import type { FieldProvenanceMap, Provenance } from '@apart/contracts'
 
-  defineProps<{
+  const props = defineProps<{
     errors: Record<string, string>
     /** Le statut se change par le menu dédié sur une fiche existante. */
     hideStatus?: boolean
+    /** Provenance par champ : pastilles IA (avec confiance), annonce, vous, open data. */
+    fieldSources?: FieldProvenanceMap | null
+    /** Chemins du formulaire (`surface`, `rentalPlan.targetRent`) à mettre en évidence. */
+    missing?: readonly string[]
   }>()
   const form = defineModel<ListingForm>({ required: true })
+
+  /** Du `for-id` d'un champ au chemin du formulaire, pour la provenance. */
+  const FIELD_PATHS: Record<string, string> = {
+    'f-title': 'title',
+    'f-url': 'url',
+    'f-source': 'source',
+    'f-status': 'status',
+    'f-address': 'addressRaw',
+    'f-commune': 'commune',
+    'f-district': 'district',
+    'f-lng': 'longitude',
+    'f-lat': 'latitude',
+    'f-price': 'price',
+    'f-surface': 'surface',
+    'f-rooms': 'rooms',
+    'f-bedrooms': 'bedrooms',
+    'f-floor': 'floorLabel',
+    'f-year': 'constructionYear',
+    'f-dpe': 'dpeClass',
+    'f-ges': 'gesClass',
+    'f-dpe-date': 'dpeDate',
+    'f-heating': 'heatingType',
+    'f-outdoor': 'outdoor',
+    'f-parking': 'parking',
+    'f-rent': 'rentalPlan.targetRent',
+    'f-charges': 'annualCharges',
+    'f-nonrec': 'nonRecoverableChargesMonthly',
+    'f-tax': 'propertyTax',
+    'f-furniture': 'furnitureValue',
+    'f-fees': 'feesAmount',
+    'f-fees-payer': 'feesPayer',
+    'f-lots': 'lotsCount',
+    'f-syndic': 'syndic',
+    'f-proceedings': 'proceedings',
+    'f-voted': 'votedWorks',
+    'f-ren-level': 'renovation.level',
+    'f-ren-duration': 'renovation.durationMonths',
+    'f-ren-notes': 'renovation.notes',
+    'f-p2-year': 'rentalPlan.year',
+    'f-p2-lease': 'rentalPlan.leaseType',
+    'f-p2-control': 'rentalPlan.rentControl',
+    'f-p2-ref': 'rentalPlan.referenceRentPerM2',
+    'f-p2-market': 'rentalPlan.marketRent',
+    'f-p2-demand': 'rentalPlan.demand',
+    'f-p2-coown': 'rentalPlan.coOwnershipAllowsRental',
+    'f-p2-decency': 'rentalPlan.decencyCompliant',
+    'f-p2-permit': 'rentalPlan.rentalPermitRequired',
+    'f-p2-notes': 'rentalPlan.notes',
+    'f-notes': 'notes',
+    'f-description': 'description',
+  }
+
+  /** La pastille et la mise en évidence d'un champ, par son identifiant. */
+  function meta(id: string): {
+    provenance: Provenance | null
+    missing: boolean
+  } {
+    const path = FIELD_PATHS[id] ?? id
+    // L'étage est saisi en libellé ; sa provenance est celle de l'étage lu.
+    const key = path === 'floorLabel' ? 'floor' : path
+    return {
+      provenance:
+        provenanceOf(props.fieldSources, key) ??
+        (path === 'floorLabel'
+          ? provenanceOf(props.fieldSources, 'floorLabel')
+          : null),
+      missing: (props.missing ?? []).includes(
+        path === 'floorLabel' ? 'floor' : path
+      ),
+    }
+  }
   const statuses = ListingStatusSchema.options
   const sources = ListingSourceSchema.options
   const dpeClasses = DpeClassSchema.options
@@ -62,7 +139,13 @@
   <div class="grid gap-6">
     <fieldset class="grid gap-3 sm:grid-cols-2">
       <legend class="mb-2 font-display text-base font-semibold">Annonce</legend>
-      <FormField label="Titre *" for-id="f-title" :error="errors.title" full>
+      <FormField
+        label="Titre *"
+        for-id="f-title"
+        v-bind="meta('f-title')"
+        :error="errors.title"
+        full
+      >
         <input
           id="f-title"
           v-model="form.title"
@@ -74,6 +157,7 @@
       <FormField
         label="Lien de l'annonce"
         for-id="f-url"
+        v-bind="meta('f-url')"
         :error="errors.url"
         full
       >
@@ -85,21 +169,31 @@
           placeholder="https://…"
         />
       </FormField>
-      <FormField label="Source" for-id="f-source">
+      <FormField label="Source" for-id="f-source" v-bind="meta('f-source')">
         <select id="f-source" v-model="form.source" :class="inputClass">
           <option v-for="source in sources" :key="source" :value="source">
             {{ SOURCE_LABELS[source] }}
           </option>
         </select>
       </FormField>
-      <FormField v-if="!hideStatus" label="Statut" for-id="f-status">
+      <FormField
+        v-if="!hideStatus"
+        label="Statut"
+        for-id="f-status"
+        v-bind="meta('f-status')"
+      >
         <select id="f-status" v-model="form.status" :class="inputClass">
           <option v-for="status in statuses" :key="status" :value="status">
             {{ LISTING_STATUS_LABELS[status] }}
           </option>
         </select>
       </FormField>
-      <FormField label="Adresse exacte" for-id="f-address" full>
+      <FormField
+        label="Adresse exacte"
+        for-id="f-address"
+        v-bind="meta('f-address')"
+        full
+      >
         <input
           id="f-address"
           v-model="form.addressRaw"
@@ -107,7 +201,7 @@
           placeholder="12 rue …, 33400 Talence (à demander à l'agence)"
         />
       </FormField>
-      <FormField label="Commune" for-id="f-commune">
+      <FormField label="Commune" for-id="f-commune" v-bind="meta('f-commune')">
         <input
           id="f-commune"
           v-model="form.commune"
@@ -123,7 +217,11 @@
           />
         </datalist>
       </FormField>
-      <FormField label="Quartier / arrêt de tram" for-id="f-district">
+      <FormField
+        label="Quartier / arrêt de tram"
+        for-id="f-district"
+        v-bind="meta('f-district')"
+      >
         <input
           id="f-district"
           v-model="form.district"
@@ -134,6 +232,7 @@
       <FormField
         label="Longitude"
         for-id="f-lng"
+        v-bind="meta('f-lng')"
         :error="errors['location.point']"
         hint="Coordonnées WGS 84 ; vide = pas de point sur la carte"
       >
@@ -145,7 +244,7 @@
           placeholder="-0.5906"
         />
       </FormField>
-      <FormField label="Latitude" for-id="f-lat">
+      <FormField label="Latitude" for-id="f-lat" v-bind="meta('f-lat')">
         <input
           id="f-lat"
           v-model="form.latitude"
@@ -158,7 +257,12 @@
 
     <fieldset class="grid gap-3 sm:grid-cols-2">
       <legend class="mb-2 font-display text-base font-semibold">Bien</legend>
-      <FormField label="Prix FAI (€) *" for-id="f-price" :error="errors.price">
+      <FormField
+        label="Prix FAI (€) *"
+        for-id="f-price"
+        v-bind="meta('f-price')"
+        :error="errors.price"
+      >
         <input
           id="f-price"
           v-model="form.price"
@@ -167,7 +271,11 @@
           required
         />
       </FormField>
-      <FormField label="Surface Carrez (m²)" for-id="f-surface">
+      <FormField
+        label="Surface Carrez (m²)"
+        for-id="f-surface"
+        v-bind="meta('f-surface')"
+      >
         <input
           id="f-surface"
           v-model="form.surface"
@@ -175,7 +283,7 @@
           inputmode="decimal"
         />
       </FormField>
-      <FormField label="Pièces" for-id="f-rooms">
+      <FormField label="Pièces" for-id="f-rooms" v-bind="meta('f-rooms')">
         <input
           id="f-rooms"
           v-model="form.rooms"
@@ -183,7 +291,11 @@
           inputmode="numeric"
         />
       </FormField>
-      <FormField label="Chambres" for-id="f-bedrooms">
+      <FormField
+        label="Chambres"
+        for-id="f-bedrooms"
+        v-bind="meta('f-bedrooms')"
+      >
         <input
           id="f-bedrooms"
           v-model="form.bedrooms"
@@ -191,7 +303,7 @@
           inputmode="numeric"
         />
       </FormField>
-      <FormField label="Étage" for-id="f-floor">
+      <FormField label="Étage" for-id="f-floor" v-bind="meta('f-floor')">
         <input
           id="f-floor"
           v-model="form.floorLabel"
@@ -199,7 +311,11 @@
           placeholder="3e avec ascenseur"
         />
       </FormField>
-      <FormField label="Année de construction" for-id="f-year">
+      <FormField
+        label="Année de construction"
+        for-id="f-year"
+        v-bind="meta('f-year')"
+      >
         <input
           id="f-year"
           v-model="form.constructionYear"
@@ -207,7 +323,7 @@
           inputmode="numeric"
         />
       </FormField>
-      <FormField label="DPE" for-id="f-dpe">
+      <FormField label="DPE" for-id="f-dpe" v-bind="meta('f-dpe')">
         <select id="f-dpe" v-model="form.dpeClass" :class="inputClass">
           <option value="">Inconnu</option>
           <option v-for="dpe in dpeClasses" :key="dpe" :value="dpe">
@@ -215,7 +331,7 @@
           </option>
         </select>
       </FormField>
-      <FormField label="GES" for-id="f-ges">
+      <FormField label="GES" for-id="f-ges" v-bind="meta('f-ges')">
         <select id="f-ges" v-model="form.gesClass" :class="inputClass">
           <option value="">Inconnu</option>
           <option v-for="dpe in dpeClasses" :key="dpe" :value="dpe">
@@ -226,6 +342,7 @@
       <FormField
         label="Date du DPE"
         for-id="f-dpe-date"
+        v-bind="meta('f-dpe-date')"
         :error="errors.dpeDate"
       >
         <input
@@ -235,7 +352,11 @@
           :class="inputClass"
         />
       </FormField>
-      <FormField label="Chauffage" for-id="f-heating">
+      <FormField
+        label="Chauffage"
+        for-id="f-heating"
+        v-bind="meta('f-heating')"
+      >
         <input
           id="f-heating"
           v-model="form.heatingType"
@@ -243,7 +364,11 @@
           placeholder="Gaz individuel"
         />
       </FormField>
-      <FormField label="Extérieur" for-id="f-outdoor">
+      <FormField
+        label="Extérieur"
+        for-id="f-outdoor"
+        v-bind="meta('f-outdoor')"
+      >
         <input
           id="f-outdoor"
           v-model="form.outdoor"
@@ -251,7 +376,11 @@
           placeholder="Balcon 6 m²"
         />
       </FormField>
-      <FormField label="Stationnement" for-id="f-parking">
+      <FormField
+        label="Stationnement"
+        for-id="f-parking"
+        v-bind="meta('f-parking')"
+      >
         <input
           id="f-parking"
           v-model="form.parking"
@@ -265,7 +394,11 @@
       <legend class="mb-2 font-display text-base font-semibold">
         Charges et budget
       </legend>
-      <FormField label="Loyer visé HC (€/mois)" for-id="f-rent">
+      <FormField
+        label="Loyer visé HC (€/mois)"
+        for-id="f-rent"
+        v-bind="meta('f-rent')"
+      >
         <input
           id="f-rent"
           v-model="form.rentalPlan.targetRent"
@@ -276,6 +409,7 @@
       <FormField
         label="Charges de copropriété (€/an, total)"
         for-id="f-charges"
+        v-bind="meta('f-charges')"
         hint="Budget prévisionnel"
       >
         <input
@@ -288,6 +422,7 @@
       <FormField
         label="dont non récupérables (€/mois)"
         for-id="f-nonrec"
+        v-bind="meta('f-nonrec')"
         hint="Vide = 25 % des charges"
       >
         <input
@@ -300,6 +435,7 @@
       <FormField
         label="Taxe foncière (€/an)"
         for-id="f-tax"
+        v-bind="meta('f-tax')"
         hint="Vide = un mois de loyer"
       >
         <input
@@ -309,7 +445,11 @@
           inputmode="numeric"
         />
       </FormField>
-      <FormField label="Mobilier (€)" for-id="f-furniture">
+      <FormField
+        label="Mobilier (€)"
+        for-id="f-furniture"
+        v-bind="meta('f-furniture')"
+      >
         <input
           id="f-furniture"
           v-model="form.furnitureValue"
@@ -320,6 +460,7 @@
       <FormField
         label="Honoraires acquéreur (€)"
         for-id="f-fees"
+        v-bind="meta('f-fees')"
         hint="Vide = inclus ou à charge vendeur"
       >
         <input
@@ -329,14 +470,18 @@
           inputmode="numeric"
         />
       </FormField>
-      <FormField label="Honoraires à charge de" for-id="f-fees-payer">
+      <FormField
+        label="Honoraires à charge de"
+        for-id="f-fees-payer"
+        v-bind="meta('f-fees-payer')"
+      >
         <select id="f-fees-payer" v-model="form.feesPayer" :class="inputClass">
           <option value="">Non précisé</option>
           <option value="buyer">L'acquéreur</option>
           <option value="seller">Le vendeur</option>
         </select>
       </FormField>
-      <FormField label="Nombre de lots" for-id="f-lots">
+      <FormField label="Nombre de lots" for-id="f-lots" v-bind="meta('f-lots')">
         <input
           id="f-lots"
           v-model="form.lotsCount"
@@ -344,17 +489,27 @@
           inputmode="numeric"
         />
       </FormField>
-      <FormField label="Syndic" for-id="f-syndic">
+      <FormField label="Syndic" for-id="f-syndic" v-bind="meta('f-syndic')">
         <input id="f-syndic" v-model="form.syndic" :class="inputClass" />
       </FormField>
-      <FormField label="Procédures en cours" for-id="f-proceedings" full>
+      <FormField
+        label="Procédures en cours"
+        for-id="f-proceedings"
+        v-bind="meta('f-proceedings')"
+        full
+      >
         <input
           id="f-proceedings"
           v-model="form.proceedings"
           :class="inputClass"
         />
       </FormField>
-      <FormField label="Travaux votés" for-id="f-voted" full>
+      <FormField
+        label="Travaux votés"
+        for-id="f-voted"
+        v-bind="meta('f-voted')"
+        full
+      >
         <input id="f-voted" v-model="form.votedWorks" :class="inputClass" />
       </FormField>
     </fieldset>
@@ -376,7 +531,11 @@
       </p>
       <div v-else class="grid gap-3">
         <div class="grid gap-3 sm:grid-cols-2">
-          <FormField label="Ampleur" for-id="f-ren-level">
+          <FormField
+            label="Ampleur"
+            for-id="f-ren-level"
+            v-bind="meta('f-ren-level')"
+          >
             <select
               id="f-ren-level"
               v-model="form.renovation.level"
@@ -392,7 +551,11 @@
               </option>
             </select>
           </FormField>
-          <FormField label="Durée estimée (mois)" for-id="f-ren-duration">
+          <FormField
+            label="Durée estimée (mois)"
+            for-id="f-ren-duration"
+            v-bind="meta('f-ren-duration')"
+          >
             <input
               id="f-ren-duration"
               v-model="form.renovation.durationMonths"
@@ -472,6 +635,7 @@
         <FormField
           label="Notes travaux (devis, artisans, contraintes copro)"
           for-id="f-ren-notes"
+          v-bind="meta('f-ren-notes')"
         >
           <input
             id="f-ren-notes"
@@ -489,6 +653,7 @@
       <FormField
         label="Année de mise en location"
         for-id="f-p2-year"
+        v-bind="meta('f-p2-year')"
         hint="Vide = année des hypothèses"
       >
         <input
@@ -499,7 +664,11 @@
           placeholder="2028"
         />
       </FormField>
-      <FormField label="Type de location" for-id="f-p2-lease">
+      <FormField
+        label="Type de location"
+        for-id="f-p2-lease"
+        v-bind="meta('f-p2-lease')"
+      >
         <select
           id="f-p2-lease"
           v-model="form.rentalPlan.leaseType"
@@ -510,7 +679,11 @@
           </option>
         </select>
       </FormField>
-      <FormField label="Encadrement des loyers" for-id="f-p2-control">
+      <FormField
+        label="Encadrement des loyers"
+        for-id="f-p2-control"
+        v-bind="meta('f-p2-control')"
+      >
         <select
           id="f-p2-control"
           v-model="form.rentalPlan.rentControl"
@@ -524,6 +697,7 @@
       <FormField
         label="Loyer de référence majoré (€/m²)"
         for-id="f-p2-ref"
+        v-bind="meta('f-p2-ref')"
         hint="Simulateur Bordeaux Métropole"
       >
         <input
@@ -536,6 +710,7 @@
       <FormField
         label="Loyer de marché constaté (€/mois HC)"
         for-id="f-p2-market"
+        v-bind="meta('f-p2-market')"
         hint="Médiane de 5 à 10 annonces"
       >
         <input
@@ -545,7 +720,11 @@
           inputmode="numeric"
         />
       </FormField>
-      <FormField label="Demande locative" for-id="f-p2-demand">
+      <FormField
+        label="Demande locative"
+        for-id="f-p2-demand"
+        v-bind="meta('f-p2-demand')"
+      >
         <select
           id="f-p2-demand"
           v-model="form.rentalPlan.demand"
@@ -560,6 +739,7 @@
       <FormField
         label="Règlement de copro autorise la location visée"
         for-id="f-p2-coown"
+        v-bind="meta('f-p2-coown')"
       >
         <select
           id="f-p2-coown"
@@ -571,7 +751,11 @@
           <option value="no">Non</option>
         </select>
       </FormField>
-      <FormField label="Critères de décence respectés" for-id="f-p2-decency">
+      <FormField
+        label="Critères de décence respectés"
+        for-id="f-p2-decency"
+        v-bind="meta('f-p2-decency')"
+      >
         <select
           id="f-p2-decency"
           v-model="form.rentalPlan.decencyCompliant"
@@ -585,6 +769,7 @@
       <FormField
         label="Permis de louer exigé dans le secteur"
         for-id="f-p2-permit"
+        v-bind="meta('f-p2-permit')"
       >
         <select
           id="f-p2-permit"
@@ -596,7 +781,12 @@
           <option value="yes">Oui (demande à faire)</option>
         </select>
       </FormField>
-      <FormField label="Notes location" for-id="f-p2-notes" full>
+      <FormField
+        label="Notes location"
+        for-id="f-p2-notes"
+        v-bind="meta('f-p2-notes')"
+        full
+      >
         <input
           id="f-p2-notes"
           v-model="form.rentalPlan.notes"
@@ -614,7 +804,7 @@
         Vide = hypothèses de l'espace. Un apport différent, un taux négocié, une
         durée ou des frais de notaire propres à ce bien.
       </p>
-      <FormField label="Apport (€)" for-id="f-o-dp">
+      <FormField label="Apport (€)" for-id="f-o-dp" v-bind="meta('f-o-dp')">
         <input
           id="f-o-dp"
           v-model="form.overrides.downPayment"
@@ -622,7 +812,11 @@
           inputmode="numeric"
         />
       </FormField>
-      <FormField label="Taux nominal (%)" for-id="f-o-rate">
+      <FormField
+        label="Taux nominal (%)"
+        for-id="f-o-rate"
+        v-bind="meta('f-o-rate')"
+      >
         <input
           id="f-o-rate"
           v-model="form.overrides.interestRatePercent"
@@ -631,7 +825,11 @@
           placeholder="3,65"
         />
       </FormField>
-      <FormField label="Durée (ans)" for-id="f-o-years">
+      <FormField
+        label="Durée (ans)"
+        for-id="f-o-years"
+        v-bind="meta('f-o-years')"
+      >
         <input
           id="f-o-years"
           v-model="form.overrides.durationYears"
@@ -639,7 +837,11 @@
           inputmode="numeric"
         />
       </FormField>
-      <FormField label="Frais de notaire (%)" for-id="f-o-notary">
+      <FormField
+        label="Frais de notaire (%)"
+        for-id="f-o-notary"
+        v-bind="meta('f-o-notary')"
+      >
         <input
           id="f-o-notary"
           v-model="form.overrides.notaryRatePercent"
@@ -655,6 +857,7 @@
       <FormField
         label="Notes (visite, copro, points d'attention)"
         for-id="f-notes"
+        v-bind="meta('f-notes')"
       >
         <textarea
           id="f-notes"
@@ -664,7 +867,11 @@
           placeholder="PV d'AG à demander, ravalement prévu ?"
         />
       </FormField>
-      <FormField label="Description brute de l'annonce" for-id="f-description">
+      <FormField
+        label="Description brute de l'annonce"
+        for-id="f-description"
+        v-bind="meta('f-description')"
+      >
         <textarea
           id="f-description"
           v-model="form.description"

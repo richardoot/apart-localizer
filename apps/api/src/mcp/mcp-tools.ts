@@ -1,26 +1,35 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
+  DUPLICATE_REASON_LABELS,
   LISTING_STATUS_LABELS,
   MCP_SCOPE_WRITE,
   McpAddOpinionInputSchema,
   McpAddTaskInputSchema,
+  McpAnalyzeListingPromptArgsSchema,
   McpCompleteTaskInputSchema,
   McpCreateListingInputSchema,
   McpEvaluateListingInputSchema,
+  McpExtractListingInputSchema,
+  McpFindDuplicatesInputSchema,
   McpGetListingInputSchema,
   McpListListingsInputSchema,
   McpSetListingStatusInputSchema,
   McpUpdateListingInputSchema,
   RENTAL_VERDICT_LABELS,
   VERDICT_LABELS,
+  splitListingCreate,
 } from '@apart/contracts'
 import type {
+  DuplicateCandidate,
   EvaluatedListing,
   ListingEvaluation,
   McpScope,
+  MissingField,
 } from '@apart/contracts'
 import { formatEuros, formatPercent } from '@apart/domain'
 import type { Member } from '../generated/prisma'
+import type { DuplicatesService } from '../listings/duplicates.service'
+import type { ExtractionService } from '../listings/extraction.service'
 import type { ListingsService } from '../listings/listings.service'
 import type { AssumptionsService } from '../assumptions/assumptions.service'
 import type { OpinionsService } from '../opinions/opinions.service'
@@ -35,6 +44,8 @@ export interface McpToolContext {
   member: Member
   scopes: McpScope[]
   listings: ListingsService
+  extraction: ExtractionService
+  duplicates: DuplicatesService
   assumptions: AssumptionsService
   opinions: OpinionsService
   tasks: TasksService
@@ -43,12 +54,14 @@ export interface McpToolContext {
 
 const CHANNEL = 'mcp' as const
 
-/** Les noms des outils du lot 1, dans l'ordre de la feuille de route. */
+/** Les noms des outils (lot 1, puis lot 2 : extraction et doublons), dans l'ordre de la feuille de route. */
 export const MCP_TOOL_NAMES = [
   'list_listings',
   'get_listing',
   'get_assumptions',
   'evaluate_listing',
+  'extract_listing',
+  'find_duplicates',
   'create_listing',
   'update_listing',
   'set_listing_status',
@@ -56,6 +69,9 @@ export const MCP_TOOL_NAMES = [
   'add_task',
   'complete_task',
 ] as const
+
+/** Les prompts du connecteur. */
+export const MCP_PROMPT_NAMES = ['analyze_listing'] as const
 
 /** Une ligne lisible par annonce : titre, prix, surface, brut, effort, verdict. */
 export function describeListing(item: EvaluatedListing): string {
@@ -95,6 +111,32 @@ export function describeEvaluation(evaluation: ListingEvaluation): string {
       ? `prix cible ${formatEuros(target)}`
       : 'prix cible non calculable',
   ].join(' · ')
+}
+
+/** Une ligne par doublon probable : titre, statut, motifs. */
+export function describeDuplicates(duplicates: DuplicateCandidate[]): string {
+  if (duplicates.length === 0) return 'Aucun doublon probable.'
+  return [
+    `${duplicates.length} doublon(s) probable(s) :`,
+    ...duplicates.map(
+      d =>
+        `- ${d.title} (${LISTING_STATUS_LABELS[d.status]}, ${formatEuros(d.price)}) [id ${d.listingId}] : ${d.reasons
+          .map(r => DUPLICATE_REASON_LABELS[r.kind])
+          .join(', ')} (score ${d.score})`
+    ),
+  ].join('\n')
+}
+
+/** Les champs indispensables manquants ou douteux, en une ligne. */
+export function describeMissing(missing: MissingField[]): string {
+  if (missing.length === 0) return 'Aucun champ indispensable manquant.'
+  return `Champs manquants ou douteux : ${missing
+    .map(m =>
+      m.reason === 'doubtful'
+        ? `${m.label} (confiance ${Math.round((m.confidence ?? 0) * 100)} %)`
+        : m.label
+    )
+    .join(', ')}.`
 }
 
 function writeRefusal(ctx: McpToolContext): ToolResult | null {
@@ -200,12 +242,65 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
   )
 
   server.registerTool(
+    'extract_listing',
+    {
+      title: 'Extraire une annonce (IA, sans enregistrer)',
+      description:
+        "Lit le texte d'une annonce (page lue dans le navigateur, mail d'agence) et/ou des captures d'écran (base64) par le modèle d'extraction côté serveur, et rend une fiche normalisée pré-remplie : " +
+        'pour chaque champ la valeur, la provenance « ai », la confiance (0 à 1) et l’extrait justificatif dans `listing.fieldSources` ; les champs indispensables manquants ou douteux ; les doublons probables déjà dans l’espace ; l’adresse géocodée si possible ; le coût de l’appel. ' +
+        "Rien n'est enregistré : présentez la fiche au membre, laissez-le corriger, puis appelez create_listing avec `listing` tel que rendu (fieldSources compris). Répond 503 si l'IA n'est pas configurée côté serveur.",
+      inputSchema: McpExtractListingInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async request =>
+      answer(async () => {
+        const result = await ctx.extraction.extract(
+          ctx.member,
+          request,
+          CHANNEL
+        )
+        const l = result.listing
+        const summary = [
+          `Fiche extraite (non enregistrée) : ${l.title}, ${formatEuros(l.price)}, ${l.surface ? `${l.surface} m²` : 'surface inconnue'}, ${l.location.commune ?? 'commune inconnue'}${result.geocoded ? ', adresse géocodée' : ''}.`,
+          describeMissing(result.missingFields),
+          describeDuplicates(result.duplicates),
+          result.warnings.length
+            ? `Remarques : ${result.warnings.join(' ')}`
+            : null,
+          `Coût : ${result.usage.model}, ${result.usage.inputTokens} jetons en entrée, ${result.usage.outputTokens} en sortie${result.usage.estimatedCostUsd !== null ? `, ≈ ${result.usage.estimatedCostUsd} $` : ''}.`,
+        ]
+          .filter(Boolean)
+          .join('\n')
+        return dataResult(summary, result)
+      })
+  )
+
+  server.registerTool(
+    'find_duplicates',
+    {
+      title: 'Chercher des doublons',
+      description:
+        "Annonces de l'espace qui ressemblent à une annonce donnée par son lien (`url`), son adresse (`address`), son point GeoJSON (`point`, à moins de 50 m), le trio `commune` + `price` + `surface` (surface à ±3 %, prix à ±5 %), ou par l'identifiant d'une annonce enregistrée (`listingId`, exclue des résultats). " +
+        'Chaque candidat porte ses motifs et un score de 0 à 1. Toutes les étapes sont comparées, y compris les annonces écartées.',
+      inputSchema: McpFindDuplicatesInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async probe =>
+      answer(async () => {
+        const duplicates = await ctx.duplicates.find(ctx.member, probe)
+        return dataResult(describeDuplicates(duplicates), { duplicates })
+      })
+  )
+
+  server.registerTool(
     'create_listing',
     {
       title: 'Créer une annonce',
       description:
         "Enregistre une annonce normalisée dans l'espace, avec la checklist par défaut et un premier événement de prix. Elle apparaît « nouvelle » pour les autres membres. " +
-        "Donnez tout ce que l'annonce dit (prix FAI, surface Carrez, pièces, étage, DPE, charges annuelles, taxe foncière, adresse, commune, quartier, loyer visé dans rentalPlan, point GeoJSON [lng, lat] si connu). " +
+        "Donnez tout ce que l'annonce dit (prix FAI, surface Carrez, pièces, étage, DPE, charges annuelles, taxe foncière, adresse, commune, quartier, loyer visé dans rentalPlan, point GeoJSON [lng, lat] si connu) ; sans point, l'adresse est géocodée côté serveur. " +
+        'Passez la fiche rendue par extract_listing telle quelle (fieldSources : provenance, confiance et extrait par champ ; mettez `user` sur les champs que le membre a corrigés). ' +
+        'La réponse liste les doublons probables (la création n’est pas bloquée ; `ignoreDuplicates: true` quand le membre a vu l’alerte et confirme) et les tâches créées pour les champs indispensables manquants. ' +
         '`provenance` : « ai » si Claude a lu la page, « user » si le membre a dicté les valeurs. Portée listings:write.',
       inputSchema: McpCreateListingInputSchema,
       annotations: {
@@ -219,14 +314,20 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       answer(async () => {
         const denied = writeRefusal(ctx)
         if (denied) return denied
-        const item = await ctx.listings.create(ctx.member, listing, {
+        const { input, ignoreDuplicates } = splitListingCreate(listing)
+        const item = await ctx.listings.create(ctx.member, input, {
           channel: CHANNEL,
           provenance,
+          ignoreDuplicates,
         })
-        return dataResult(
+        const lines = [
           `Annonce créée : ${describeListing(item)} [id ${item.listing.id}]`,
-          item
-        )
+          describeDuplicates(item.duplicates),
+          item.createdTasks.length
+            ? `Tâches créées pour les champs manquants : ${item.createdTasks.map(t => t.label).join(' ; ')}.`
+            : null,
+        ].filter(Boolean)
+        return dataResult(lines.join('\n'), item)
       })
   )
 
@@ -414,4 +515,56 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         )
       })
   )
+}
+
+/**
+ * Le prompt « analyser cette annonce » : guide Claude de la lecture de la
+ * page à la création, en passant par extract_listing, la présentation de la
+ * fiche au membre et sa confirmation explicite avant toute écriture.
+ */
+export function registerPrompts(server: McpServer): void {
+  server.registerPrompt(
+    'analyze_listing',
+    {
+      title: 'Analyser cette annonce',
+      description:
+        "À partir du texte d'une page d'annonce (et de captures jointes), extrait la fiche normalisée par l'IA, montre provenance, confiance, champs manquants et doublons, demande confirmation, puis crée l'annonce et l'évalue.",
+      argsSchema: McpAnalyzeListingPromptArgsSchema.shape,
+    },
+    ({ pageText, url, notes }) => ({
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: analyzeListingPrompt({ pageText, url, notes }),
+          },
+        },
+      ],
+    })
+  )
+}
+
+/** Le texte du prompt, pur, pour les tests. */
+export function analyzeListingPrompt(args: {
+  pageText: string
+  url?: string | undefined
+  notes?: string | undefined
+}): string {
+  return [
+    "Analyse cette annonce immobilière pour l'espace apart-localizer, en suivant ces étapes dans l'ordre :",
+    '',
+    `1. Appelle l'outil extract_listing avec le texte ci-dessous dans \`text\`${args.url ? `, l'URL \`${args.url}\` dans \`url\`` : ''} et, si des captures d'écran sont jointes à la conversation, chacune dans \`images\` (base64, type MIME). N'invente aucune valeur toi-même : c'est le modèle d'extraction côté serveur qui lit.`,
+    "2. Présente la fiche rendue au membre en français : prix, surface, pièces, étage, DPE, charges, taxe foncière, adresse et commune, travaux évoqués ; pour chaque valeur, sa confiance et l'extrait justificatif (listing.fieldSources) ; la liste des champs indispensables manquants ou douteux ; les doublons probables avec leur motif.",
+    "3. S'il y a un doublon probable, demande au membre s'il s'agit de la même annonce (dans ce cas n'enregistre rien et propose update_listing ou get_listing sur l'existante) ou s'il veut créer quand même (ignoreDuplicates: true).",
+    "4. Attends la confirmation explicite du membre avant d'écrire. Applique ses corrections dans la fiche et marque chaque champ corrigé avec la provenance « user » dans fieldSources.",
+    "5. Après confirmation seulement, appelle create_listing avec « listing » = la fiche rendue par extract_listing (corrections comprises, fieldSources conservé, sourceText conservé) et « provenance: ai ». Rapporte l'identifiant, les indicateurs (coût total, mensualité, rendement brut, effort, verdict), le verdict de louabilité et les tâches créées pour les champs manquants.",
+    '',
+    args.notes ? `Consignes du membre : ${args.notes}\n` : null,
+    '<annonce_source>',
+    args.pageText,
+    '</annonce_source>',
+  ]
+    .filter(line => line !== null)
+    .join('\n')
 }

@@ -2,11 +2,16 @@ import { listingFiltersToQuery } from '@apart/contracts'
 import type {
   AssumptionsUpdate,
   AssumptionsVersion,
+  DuplicateCandidate,
+  DuplicateProbe,
   EvaluateRequest,
   EvaluateResult,
   EvaluatedListing,
+  ExtractionRequestInput,
+  ExtractionResult,
+  ListingCreateRaw,
+  ListingCreateResult,
   ListingFiltersInput,
-  ListingInputRaw,
   ListingList,
   ListingPatch,
   ListingStatusChange,
@@ -110,8 +115,22 @@ export const api = {
         `/listings${queryString(listingFiltersToQuery(filters))}`
       ),
     get: (id: string) => apiFetch<EvaluatedListing>(`/listings/${id}`),
-    create: (input: ListingInputRaw) =>
-      apiFetch<EvaluatedListing>('/listings', { method: 'POST', json: input }),
+    create: (input: ListingCreateRaw) =>
+      apiFetch<ListingCreateResult>('/listings', {
+        method: 'POST',
+        json: input,
+      }),
+    /** Texte collé et/ou captures vers une fiche pré-remplie ; rien n'est enregistré. */
+    extract: (request: ExtractionRequestInput) =>
+      apiFetch<ExtractionResult>('/listings/extract', {
+        method: 'POST',
+        json: request,
+      }),
+    findDuplicates: (probe: DuplicateProbe) =>
+      apiFetch<DuplicateCandidate[]>('/listings/duplicates', {
+        method: 'POST',
+        json: probe,
+      }),
     update: (id: string, patch: ListingPatch) =>
       apiFetch<EvaluatedListing>(`/listings/${id}`, {
         method: 'PATCH',

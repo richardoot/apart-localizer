@@ -1,9 +1,14 @@
 import { createZodDto } from 'nestjs-zod'
 import {
+  DuplicateCandidateSchema,
+  DuplicateProbeSchema,
   EvaluatedListingSchema,
   EvaluateRequestSchema,
   EvaluateResultSchema,
-  ListingInputSchema,
+  ExtractionRequestSchema,
+  ExtractionResultSchema,
+  ListingCreateResultSchema,
+  ListingCreateSchema,
   ListingListQuerySchema,
   ListingListSchema,
   ListingPatchSchema,
@@ -12,7 +17,18 @@ import {
   PriceEventSchema,
 } from '@apart/contracts'
 
-export class CreateListingDto extends createZodDto(ListingInputSchema) {}
+export class CreateListingDto extends createZodDto(ListingCreateSchema) {}
+export class ListingCreateResultDto extends createZodDto(
+  ListingCreateResultSchema
+) {}
+export class ExtractionRequestDto extends createZodDto(
+  ExtractionRequestSchema
+) {}
+export class ExtractionResultDto extends createZodDto(ExtractionResultSchema) {}
+export class DuplicateProbeDto extends createZodDto(DuplicateProbeSchema) {}
+export class DuplicateCandidateDto extends createZodDto(
+  DuplicateCandidateSchema
+) {}
 export class ListingPatchDto extends createZodDto(ListingPatchSchema) {}
 export class ListingStatusChangeDto extends createZodDto(
   ListingStatusChangeSchema

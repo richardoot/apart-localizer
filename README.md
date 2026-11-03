@@ -11,6 +11,7 @@ Documentation :
 - [Choix techniques](docs/product/tech-stack.md)
 - [Feuille de route](docs/product/roadmap.md)
 - [Connecteur MCP](docs/mcp.md)
+- [Extraction par IA](docs/ia.md)
 - [Déploiement](docs/deploiement.md)
 - [Décisions d'architecture](docs/decisions/README.md)
 - [Règles de travail](CLAUDE.md)
@@ -20,7 +21,8 @@ Documentation :
 ```
 apps/
   api/          NestJS 11, Prisma 7 + PostGIS, nestjs-zod, OpenAPI (/api/docs hors production),
-                MCP (/mcp, découverte OAuth), throttler, Sentry en option
+                MCP (/mcp, découverte OAuth), extraction IA (@anthropic-ai/sdk), géocodage IGN,
+                doublons, throttler, Sentry en option
   web/          Vue 3.5 + Vite, Tailwind 4, TanStack Query et Table, MapLibre GL, reka-ui,
                 Supabase Auth, PWA, Sentry en option
 packages/
@@ -104,12 +106,18 @@ et garde-fous dans [docs/mcp.md](docs/mcp.md).
   « nouvelles pour moi », point et rayon) synchronisés avec l'URL, trois vues : tableau
   comparatif (TanStack Table, tri par colonne), cartes (mobile), carte MapLibre (marqueurs colorés
   par verdict ou statut, popup vers la fiche, clic = point du filtre, curseur de rayon).
+- **Nouvelle annonce** (`/annonces/nouvelle`) : onglet « Coller une annonce » (texte de la page,
+  lien, captures d'écran, bouton Analyser avec coût affiché) qui pré-remplit la fiche avec une
+  pastille de provenance et de confiance par champ, les champs indispensables à compléter et le
+  bandeau des doublons probables (« ouvrir l'existante » / « créer quand même ») ; onglet
+  « Saisie manuelle » inchangé. Demande `ANTHROPIC_API_KEY` côté API ([docs/ia.md](docs/ia.md)) ;
+  sans clé, l'analyse répond 503 et la saisie manuelle reste.
 - **Fiche** (`/annonces/:id`) : panneau latéral (plein écran sur mobile) avec aperçu en direct des
   indicateurs calculé dans le navigateur par `packages/domain`, contrôles de louabilité,
   formulaire complet (bien, charges, travaux avec postes, phase 2, hypothèses surchargées),
-  changement de statut avec garde-fou, avis des deux membres, tâches, historique des prix.
-  L'ouverture marque l'annonce « vue » pour le membre ; le badge « nouvelle » s'éteint pour lui
-  seul.
+  changement de statut avec garde-fou, avis des deux membres, tâches (dont « IA · champ
+  manquant »), historique des prix, pastilles de provenance par champ. L'ouverture marque
+  l'annonce « vue » pour le membre ; le badge « nouvelle » s'éteint pour lui seul.
 - **Hypothèses** (`/hypotheses`) : hypothèses de l'espace, versionnées.
 
 Fond de carte : `VITE_MAP_STYLE_URL` dans `apps/web/.env`, par défaut le style libre et sans clé
@@ -126,9 +134,10 @@ pnpm --filter @apart/domain test:cov
 pnpm build
 ```
 
-Les e2e (REST, géo, collaboration, MCP par appels JSON-RPC réels) demandent `TEST_DATABASE_URL`
-(voie 2 ci-dessus, ou le Postgres du Supabase CLI sur 54322). Les tests du web mockent MapLibre
-et Supabase : aucun réseau. La CI GitHub Actions (`.github/workflows/ci.yml`) rejoue lint,
+Les e2e (REST, géo, collaboration, extraction IA, MCP par appels JSON-RPC réels) demandent
+`TEST_DATABASE_URL` (voie 2 ci-dessus, ou le Postgres du Supabase CLI sur 54322). Le client
+Anthropic et le géocodeur IGN sont remplacés par des factices dans le harnais ; les tests du web
+mockent MapLibre et Supabase : aucun réseau, aucune clé. La CI GitHub Actions (`.github/workflows/ci.yml`) rejoue lint,
 format, type-check, unitaires, e2e sur un service PostGIS, puis le build.
 
 ## Import des données de l'artefact
@@ -144,8 +153,9 @@ pnpm import:artifact -- --dry-run         # affiche la correspondance sans écri
 
 L'import crée l'espace « Richard et Chloé » et ses deux membres (rattachés à leur compte Google à
 la première connexion grâce à l'e-mail, ADR 0004), les hypothèses, les annonces avec travaux,
-phase 2, avis, tâches et « vu par ». Les adresses sont géocodées par la Géoplateforme IGN avec
-un cache dans `data/private/geocode-cache.json` ; une annonce sans adresse exacte reçoit le
+phase 2, avis, tâches et « vu par ». Les adresses sont géocodées par la Géoplateforme IGN (même
+client que l'API, `apps/api/src/opendata/geoplateforme.ts`) avec un cache dans
+`data/private/geocode-cache.json` ; une annonce sans adresse exacte reçoit le
 centroïde de sa commune (précision `commune`) et une tâche « demander l'adresse exacte ».
 Relancer l'import est sans effet sur les annonces déjà présentes.
 

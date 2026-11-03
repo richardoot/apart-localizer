@@ -8,8 +8,13 @@ import request from 'supertest'
 import { DEFAULT_TASKS } from '@apart/contracts'
 import { createE2eApp, e2eIdentity } from './e2e-app'
 import type { E2eContext, E2eIdentity } from './e2e-app'
+import {
+  SAMPLE_LISTING_TEXT,
+  fakeParsedMessage,
+  sampleExtraction,
+} from './fixtures/ai-extraction'
 import { OAuthDiscoveryService } from '../src/mcp/oauth-discovery.service'
-import { MCP_TOOL_NAMES } from '../src/mcp/mcp-tools'
+import { MCP_PROMPT_NAMES, MCP_TOOL_NAMES } from '../src/mcp/mcp-tools'
 import { DATA_TAG } from '../src/mcp/tool-results'
 
 const richard = e2eIdentity('richard')
@@ -111,6 +116,7 @@ describe('MCP (e2e)', () => {
 
   beforeEach(async () => {
     await ctx.db.truncateAll()
+    ctx.ai.messages.parse.mockReset()
     await ctx.prisma.workspace.create({
       data: {
         name: 'Richard et Chloé',
@@ -201,6 +207,63 @@ describe('MCP (e2e)', () => {
         (t: { name: string }) => t.name === 'get_listing'
       )
       expect(get.annotations.readOnlyHint).toBe(true)
+      expect(names).toHaveLength(12)
+      const extract = list.body.result.tools.find(
+        (t: { name: string }) => t.name === 'extract_listing'
+      )
+      expect(extract.annotations.readOnlyHint).toBe(true)
+      expect(extract.inputSchema.properties.images).toBeDefined()
+      expect(
+        create.inputSchema.properties.listing.properties.ignoreDuplicates
+      ).toBeDefined()
+    })
+
+    it('prompts/list et prompts/get : « analyser cette annonce »', async () => {
+      const list = await rpc(richard, 'prompts/list')
+      expect(list.status).toBe(200)
+      const names = list.body.result.prompts.map(
+        (p: { name: string }) => p.name
+      )
+      expect(names).toEqual([...MCP_PROMPT_NAMES])
+      const prompt = list.body.result.prompts[0]
+      expect(
+        prompt.arguments.map((a: { name: string }) => a.name).sort()
+      ).toEqual(['notes', 'pageText', 'url'])
+      expect(
+        prompt.arguments.find((a: { name: string }) => a.name === 'pageText')
+          .required
+      ).toBe(true)
+
+      const got = await rpc(richard, 'prompts/get', {
+        name: 'analyze_listing',
+        arguments: {
+          pageText: 'T2 Talence 189 000 € FAI',
+          url: 'https://agence-fictive.invalid/annonce/1',
+          notes: 'Une capture est jointe.',
+        },
+      })
+      expect(got.status).toBe(200)
+      const messages = got.body.result.messages as Array<{
+        role: string
+        content: { type: string; text: string }
+      }>
+      expect(messages).toHaveLength(1)
+      expect(messages[0]?.role).toBe('user')
+      const text = messages[0]?.content.text ?? ''
+      expect(text).toContain('extract_listing')
+      expect(text).toContain('create_listing')
+      expect(text).toContain('confirmation explicite')
+      expect(text).toContain('https://agence-fictive.invalid/annonce/1')
+      expect(text).toContain('Une capture est jointe.')
+      expect(text).toContain(
+        '<annonce_source>\nT2 Talence 189 000 € FAI\n</annonce_source>'
+      )
+
+      const missing = await rpc(richard, 'prompts/get', {
+        name: 'analyze_listing',
+        arguments: {},
+      })
+      expect(missing.body.error ?? missing.body.result.isError).toBeTruthy()
     })
   })
 
@@ -303,6 +366,123 @@ describe('MCP (e2e)', () => {
     })
   })
 
+  describe('extraction et doublons (lot 2)', () => {
+    it('extract_listing : fiche pré-remplie, doublons, champs manquants, coût, sans écriture', async () => {
+      await request(ctx.server)
+        .post('/listings')
+        .set(ctx.auth(chloe))
+        .send({
+          ...EXAMPLE,
+          title: 'Déjà suivie',
+          url: 'https://agence-fictive.invalid/annonce/AGF-12345',
+        })
+        .expect(201)
+      ctx.ai.messages.parse.mockResolvedValue(
+        fakeParsedMessage(sampleExtraction())
+      )
+      const result = await callTool(richard, 'extract_listing', {
+        text: SAMPLE_LISTING_TEXT,
+        url: 'https://agence-fictive.invalid/annonce/AGF-12345',
+      })
+      expect(result.isError).toBeUndefined()
+      const text = result.content[0]?.text ?? ''
+      expect(text).toContain('Fiche extraite (non enregistrée)')
+      expect(text).toContain('Champs manquants ou douteux : Loyer visé')
+      expect(text).toContain('1 doublon(s) probable(s)')
+      expect(text).toContain('Même lien')
+      expect(text).toContain('Coût : claude-opus-5-5')
+      const data = fenced(result) as {
+        persisted: boolean
+        listing: {
+          price: number
+          fieldSources: Record<string, { source: string }>
+        }
+        duplicates: Array<{ title: string }>
+        missingFields: Array<{ field: string }>
+        usage: { estimatedCostUsd: number }
+      }
+      expect(data.persisted).toBe(false)
+      expect(data.listing.price).toBe(189_000)
+      expect(data.listing.fieldSources.surface?.source).toBe('ai')
+      expect(data.duplicates.map(d => d.title)).toEqual(['Déjà suivie'])
+      expect(data.missingFields.map(m => m.field)).toEqual([
+        'rentalPlan.targetRent',
+      ])
+      expect(data.usage.estimatedCostUsd).toBe(0.0453)
+      expect(await ctx.prisma.listing.count()).toBe(1)
+      const logs = await ctx.prisma.activityLog.findMany({
+        where: { action: 'ai.extraction' },
+      })
+      expect(logs).toHaveLength(1)
+      expect(logs[0]?.channel).toBe('mcp')
+
+      // Lecture seule : un jeton sans écriture peut extraire.
+      const asReader = await callTool(reader, 'extract_listing', {
+        text: 'T2 Talence',
+      })
+      expect(asReader.isError).toBeUndefined()
+      const empty = await callTool(richard, 'extract_listing', {})
+      expect(empty.isError).toBe(true)
+      expect(empty.content[0]?.text).toMatch(/Entrée invalide|validation/i)
+    })
+
+    it('extract_listing : refus lisible quand l’IA est indisponible', async () => {
+      ctx.ai.messages.parse.mockResolvedValue(
+        fakeParsedMessage(null, { stopReason: 'refusal' })
+      )
+      const result = await callTool(richard, 'extract_listing', { text: 'x' })
+      expect(result.isError).toBe(true)
+      expect(result.content[0]?.text).toContain("refusé d'analyser")
+    })
+
+    it('find_duplicates : par lien, adresse, trio ou annonce', async () => {
+      const created = await request(ctx.server)
+        .post('/listings')
+        .set(ctx.auth(richard))
+        .send({
+          ...EXAMPLE,
+          url: 'https://www.seloger.com/annonces/achat/appartement/talence-33/987.htm',
+          location: { ...EXAMPLE.location, addressRaw: '12 rue du Forum' },
+        })
+        .expect(201)
+      const id = created.body.listing.id as string
+
+      const byUrl = await callTool(richard, 'find_duplicates', {
+        url: 'https://seloger.com/annonces/achat/appartement/talence-33/987.htm?utm_source=x',
+      })
+      expect(byUrl.content[0]?.text).toContain('Même lien')
+      const byTrio = fenced(
+        await callTool(richard, 'find_duplicates', {
+          commune: 'Talence',
+          price: 205_000,
+          surface: 44,
+        })
+      ) as {
+        duplicates: Array<{
+          listingId: string
+          reasons: Array<{ kind: string }>
+        }>
+      }
+      expect(byTrio.duplicates[0]?.listingId).toBe(id)
+      expect(byTrio.duplicates[0]?.reasons.map(r => r.kind)).toEqual([
+        'same_commune_price_surface',
+      ])
+      const nearby = fenced(
+        await callTool(richard, 'find_duplicates', {
+          point: { type: 'Point', coordinates: [-0.5905, 44.8083] },
+          surface: 45,
+        })
+      ) as { duplicates: Array<{ reasons: Array<{ kind: string }> }> }
+      expect(nearby.duplicates[0]?.reasons.map(r => r.kind)).toEqual([
+        'nearby_similar',
+      ])
+      const self = await callTool(richard, 'find_duplicates', { listingId: id })
+      expect(self.content[0]?.text).toContain('Aucun doublon probable.')
+      const nothing = await callTool(richard, 'find_duplicates', {})
+      expect(nothing.isError).toBe(true)
+    })
+  })
+
   describe('écriture', () => {
     it('create_listing : nouvelle pour Chloé, provenance IA, journal au canal mcp', async () => {
       const result = await callTool(richard, 'create_listing', {
@@ -350,6 +530,65 @@ describe('MCP (e2e)', () => {
         listing: { title: '', price: -1 },
       })
       expect(invalid.isError).toBe(true)
+    })
+
+    it('create_listing : doublons signalés sans bloquer, ignoreDuplicates journalisé, tâches des champs manquants', async () => {
+      ctx.ai.messages.parse.mockResolvedValue(
+        fakeParsedMessage(sampleExtraction())
+      )
+      const extracted = fenced(
+        await callTool(richard, 'extract_listing', {
+          text: SAMPLE_LISTING_TEXT,
+          url: 'https://agence-fictive.invalid/annonce/AGF-12345',
+        })
+      ) as { listing: Record<string, unknown> }
+
+      const first = await callTool(richard, 'create_listing', {
+        listing: extracted.listing,
+      })
+      expect(first.isError).toBeUndefined()
+      expect(first.content[0]?.text).toContain('Aucun doublon probable.')
+      expect(first.content[0]?.text).toContain(
+        'Tâches créées pour les champs manquants : Fixer le loyer visé'
+      )
+      const created = fenced(first) as {
+        listing: {
+          id: string
+          fieldSources: Record<string, { source: string }>
+        }
+        createdTasks: Array<{ origin: string; label: string }>
+        duplicates: unknown[]
+      }
+      expect(created.listing.fieldSources.price?.source).toBe('ai')
+      expect(created.createdTasks).toHaveLength(1)
+      expect(created.createdTasks[0]?.origin).toBe('missing_field')
+      expect(created.duplicates).toEqual([])
+
+      const again = await callTool(writer, 'create_listing', {
+        listing: { ...extracted.listing, ignoreDuplicates: true },
+      })
+      expect(again.isError).toBeUndefined()
+      expect(again.content[0]?.text).toContain('1 doublon(s) probable(s)')
+      const second = fenced(again) as {
+        listing: { id: string }
+        duplicates: Array<{
+          listingId: string
+          reasons: Array<{ kind: string }>
+        }>
+      }
+      expect(second.duplicates[0]?.listingId).toBe(created.listing.id)
+      expect(second.duplicates[0]?.reasons.map(r => r.kind)).toContain(
+        'same_url'
+      )
+      const log = await ctx.prisma.activityLog.findFirst({
+        where: { listingId: second.listing.id, action: 'listing.created' },
+      })
+      expect(log?.channel).toBe('mcp')
+      expect(log?.after).toMatchObject({
+        ignoreDuplicates: true,
+        duplicates: [created.listing.id],
+        provenance: 'ai',
+      })
     })
 
     it('update_listing : garde-fous, provenance utilisateur, historique de prix', async () => {

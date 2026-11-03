@@ -1,8 +1,10 @@
 import { z } from 'zod'
+import { ExtractionRequestSchema } from './ai.js'
 import { OpinionInputSchema } from './collaboration.js'
+import { DuplicateProbeSchema } from './duplicates.js'
 import { ListingFiltersSchema } from './filters.js'
 import {
-  ListingInputSchema,
+  ListingCreateSchema,
   ListingStatusChangeSchema,
   ListingUpdateGuardsSchema,
   ListingUpdateSchema,
@@ -47,8 +49,8 @@ export type McpEvaluateListingInput = z.infer<
 >
 
 export const McpCreateListingInputSchema = z.object({
-  listing: ListingInputSchema.describe(
-    "L'annonce normalisée : titre et prix obligatoires, le reste si l'annonce le donne"
+  listing: ListingCreateSchema.describe(
+    "L'annonce normalisée : titre et prix obligatoires, le reste si l'annonce le donne ; fieldSources pour la provenance et la confiance par champ ; ignoreDuplicates si le membre a vu les doublons et confirme"
   ),
   provenance: McpProvenanceSchema,
 })
@@ -103,3 +105,34 @@ export const McpCompleteTaskInputSchema = z.object({
     .describe('Vrai = cocher (défaut), faux = décocher'),
 })
 export type McpCompleteTaskInput = z.infer<typeof McpCompleteTaskInputSchema>
+
+/** `extract_listing` : texte et/ou captures vers une fiche pré-remplie, sans écriture. */
+export const McpExtractListingInputSchema = ExtractionRequestSchema
+export type McpExtractListingInput = z.infer<
+  typeof McpExtractListingInputSchema
+>
+
+/** `find_duplicates` : par identifiant, URL, adresse, point ou trio commune + prix + surface. */
+export const McpFindDuplicatesInputSchema = DuplicateProbeSchema
+export type McpFindDuplicatesInput = z.infer<
+  typeof McpFindDuplicatesInputSchema
+>
+
+/** Arguments du prompt MCP « analyser cette annonce » (chaînes, par protocole). */
+export const McpAnalyzeListingPromptArgsSchema = z.object({
+  pageText: z
+    .string()
+    .describe(
+      "Texte de la page d'annonce lu dans le navigateur (ou texte collé, mail d'agence)"
+    ),
+  url: z.string().optional().describe("URL de la page d'annonce"),
+  notes: z
+    .string()
+    .optional()
+    .describe(
+      'Consignes du membre : captures jointes à la conversation, valeurs déjà connues, doutes'
+    ),
+})
+export type McpAnalyzeListingPromptArgs = z.infer<
+  typeof McpAnalyzeListingPromptArgsSchema
+>

@@ -42,6 +42,29 @@ describe('TasksSection', () => {
   })
 })
 
+describe('TasksSection : tâches issues de l’IA', () => {
+  it('marque les tâches « champ manquant » et ne permet pas de les supprimer', () => {
+    const wrapper = mount(TasksSection, {
+      props: {
+        tasks: [
+          fakeTask({
+            id: 'aaaaaaaa-0000-4000-8000-000000000003',
+            label: 'Fixer le loyer visé (phase 2) à partir du marché locatif',
+            origin: 'missing_field',
+          }),
+        ],
+        members: MEMBERS,
+      },
+    })
+    expect(wrapper.get('[data-testid="task-ai"]').text()).toBe(
+      'IA · champ manquant'
+    )
+    expect(wrapper.find('[aria-label="Supprimer la tâche"]').exists()).toBe(
+      false
+    )
+  })
+})
+
 describe('OpinionsSection', () => {
   it("montre mon avis en édition et celui de l'autre en lecture", async () => {
     const wrapper = mount(OpinionsSection, {

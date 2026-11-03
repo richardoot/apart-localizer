@@ -9,6 +9,7 @@ import {
   DEFAULT_TASKS,
   EvaluatedListingSchema,
   HypotheticalListingSchema,
+  missingListingFields,
 } from '@apart/contracts'
 import type {
   ActivityChannel,
@@ -19,9 +20,11 @@ import type {
   FieldSource,
   HypotheticalListing,
   Listing as ListingDto,
+  ListingCreateResult,
   ListingFilters,
   ListingInput,
   ListingList,
+  ListingLocationInput,
   ListingStatusChange,
   ListingUpdate,
   ListingUpdateGuards,
@@ -34,8 +37,10 @@ import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
 import { GeoService } from '../geo/geo.service'
+import { GeocodingService } from '../opendata/geocoding.service'
 import { Prisma } from '../generated/prisma'
 import type { Member } from '../generated/prisma'
+import { DuplicatesService } from './duplicates.service'
 import { evaluateListing } from './evaluate'
 import {
   listingInclude,
@@ -45,6 +50,12 @@ import {
   toTaskDto,
 } from './listing.mapper'
 import type { ListingRow } from './listing.mapper'
+import {
+  applyLocated,
+  needsGeocoding,
+  withOpenDataProvenance,
+} from './location'
+import { missingFieldTaskLabels } from './missing-field-tasks'
 import { provenanceAfterPatch, withProvenance } from './provenance'
 
 const dec = (value: number | null | undefined): Prisma.Decimal | null =>
@@ -54,6 +65,11 @@ export interface WriteOptions {
   channel?: ActivityChannel
   /** Provenance attribuée aux champs écrits (web : `user`, MCP : `ai` ou `user`). */
   provenance?: FieldSource
+}
+
+export interface CreateOptions extends WriteOptions {
+  /** Le membre a vu les doublons probables et crée quand même (journalisé). */
+  ignoreDuplicates?: boolean
 }
 
 /**
@@ -69,7 +85,9 @@ export class ListingsService {
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly assumptions: AssumptionsService,
-    private readonly geo: GeoService
+    private readonly geo: GeoService,
+    private readonly geocoding: GeocodingService,
+    private readonly duplicates: DuplicatesService
   ) {}
 
   /**
@@ -164,14 +182,19 @@ export class ListingsService {
     return this.evaluateRow(row, member, base)
   }
 
+  /**
+   * Création : géocode l'adresse si aucun point n'est donné, cherche les
+   * doublons probables (sans bloquer), pose la checklist par défaut et, pour
+   * une fiche issue de l'IA, une tâche par champ indispensable manquant.
+   */
   async create(
     member: Member,
     input: ListingInput,
-    options: WriteOptions = {}
-  ): Promise<EvaluatedListing> {
+    options: CreateOptions = {}
+  ): Promise<ListingCreateResult> {
     const channel = options.channel ?? 'web'
     const provenance = options.provenance ?? 'user'
-    const fieldSources = withProvenance(
+    let fieldSources = withProvenance(
       input.fieldSources,
       {
         ...input,
@@ -181,10 +204,31 @@ export class ListingsService {
       },
       provenance
     )
+    let location = input.location
+    if (needsGeocoding(location)) {
+      const located = await this.geocoding.locate(location)
+      if (located) {
+        const applied = applyLocated(location, located)
+        location = applied.location
+        fieldSources = withOpenDataProvenance(fieldSources, applied.keys)
+      }
+    }
+    const listing: ListingInput = { ...input, location, fieldSources }
+    const duplicates = await this.duplicates.findForInput(member, listing)
+    const aiSourced =
+      provenance === 'ai' ||
+      Object.values(fieldSources).some(p => p.source === 'ai')
+    const missingTaskLabels = aiSourced
+      ? missingFieldTaskLabels(
+          missingListingFields(listing, fieldSources),
+          DEFAULT_TASKS
+        )
+      : []
+
     const id = await this.prisma.$transaction(async tx => {
       const created = await tx.listing.create({
         data: {
-          ...scalarData({ ...input, fieldSources }),
+          ...scalarData({ ...listing, fieldSources }),
           title: input.title,
           price: new Prisma.Decimal(input.price),
           workspaceId: member.workspaceId,
@@ -196,11 +240,18 @@ export class ListingsService {
             ? { create: rentalPlanData(input.rentalPlan) }
             : undefined,
           tasks: {
-            create: DEFAULT_TASKS.map((label, position) => ({
-              label,
-              origin: 'default' as const,
-              position,
-            })),
+            create: [
+              ...DEFAULT_TASKS.map((label, position) => ({
+                label,
+                origin: 'default' as const,
+                position,
+              })),
+              ...missingTaskLabels.map((label, index) => ({
+                label,
+                origin: 'missing_field' as const,
+                position: DEFAULT_TASKS.length + index,
+              })),
+            ],
           },
           priceEvents: {
             create: {
@@ -223,20 +274,25 @@ export class ListingsService {
             price: input.price,
             status: input.status,
             provenance,
+            geocoded: location.point !== null && input.location.point === null,
+            duplicates: duplicates.map(d => d.listingId),
+            ignoreDuplicates: options.ignoreDuplicates ?? false,
+            missingFieldTasks: missingTaskLabels,
           },
         },
         tx
       )
       return created.id
     })
-    if (input.location.point) {
-      await this.geo.setListingPoint(
-        id,
-        input.location.point,
-        input.location.precision
-      )
+    if (location.point) {
+      await this.geo.setListingPoint(id, location.point, location.precision)
     }
-    return this.get(member, id)
+    const item = await this.get(member, id)
+    return {
+      ...item,
+      duplicates,
+      createdTasks: item.tasks.filter(task => task.origin === 'missing_field'),
+    }
   }
 
   async update(
@@ -254,7 +310,7 @@ export class ListingsService {
     if (Object.keys(patch).length === 0) {
       throw new BadRequestException('Aucun champ à modifier')
     }
-    const fieldSources = provenanceAfterPatch(
+    let fieldSources = provenanceAfterPatch(
       before.fieldSources,
       {
         ...patch,
@@ -262,8 +318,20 @@ export class ListingsService {
       },
       provenance
     )
+    let location = patch.location
+    if (location && addressChanged(before.location, location)) {
+      const merged: ListingLocationInput = { ...before.location, ...location }
+      if (needsGeocoding({ ...merged, point: location.point ?? null })) {
+        const located = await this.geocoding.locate(merged)
+        if (located) {
+          const applied = applyLocated(merged, located)
+          location = applied.location
+          fieldSources = withOpenDataProvenance(fieldSources, applied.keys)
+        }
+      }
+    }
     await this.prisma.$transaction(async tx => {
-      const { renovation, rentalPlan, location, ...rest } = patch
+      const { renovation, rentalPlan, ...rest } = patch
       await tx.listing.update({
         where: { id },
         data: {
@@ -322,11 +390,11 @@ export class ListingsService {
         tx
       )
     })
-    if (patch.location && 'point' in patch.location) {
+    if (location && 'point' in location) {
       await this.geo.setListingPoint(
         id,
-        patch.location.point ?? null,
-        patch.location.precision ?? null
+        location.point ?? null,
+        location.precision ?? null
       )
     }
     return this.get(member, id)
@@ -587,6 +655,18 @@ export class ListingsService {
       where.id = { in: allowed }
     }
   }
+}
+
+/** Vrai si le patch change l'adresse ou la commune (ce qui relance le géocodage). */
+function addressChanged(
+  before: ListingLocationInput,
+  patch: Partial<ListingLocationInput>
+): boolean {
+  const changed = (key: 'addressRaw' | 'commune'): boolean =>
+    patch[key] !== undefined &&
+    (patch[key] ?? '').trim().toLowerCase() !==
+      (before[key] ?? '').trim().toLowerCase()
+  return changed('addressRaw') || changed('commune')
 }
 
 /** Une annonce enregistrée réduite aux champs d'une annonce hypothétique. */

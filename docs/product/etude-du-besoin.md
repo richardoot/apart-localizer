@@ -226,7 +226,7 @@ Lecture :
 | `evaluate_listing` | Calcule une annonce hypothétique ou une variante (taux, apport, loyer) sans rien enregistrer |
 | `get_target_price` | Prix cible par critère et décote nécessaire pour une annonce ou une hypothèse |
 | `compare_listings` | Tableau comparatif de 2 à 6 annonces |
-| `find_duplicates` | Doublons probables pour une URL, une adresse ou un couple prix et surface |
+| `find_duplicates` | Doublons probables pour une URL, une adresse, un point (50 m) ou un trio commune, prix et surface, ou pour une annonce enregistrée |
 | `get_market_context` | Plafond d'encadrement, références DVF, desserte pour une commune ou une adresse |
 | `list_search_criteria` | Critères de recherche enregistrés, avec le nombre d'annonces et de nouveautés dans chacun |
 
@@ -234,7 +234,7 @@ Lecture :
 
 | Outil | Rôle |
 | --- | --- |
-| `create_listing` | Crée une annonce à partir du schéma normalisé, avec le texte source en option ; répond avec les doublons probables si la création est refusée pour cette raison |
+| `create_listing` | Crée une annonce à partir du schéma normalisé, avec le texte source et la provenance par champ en option ; répond avec les doublons probables sans bloquer la création (`ignoreDuplicates` journalisé, ADR 0007) et les tâches posées pour les champs manquants |
 | `update_listing` | Met à jour des champs avec garde-fous sur les valeurs attendues |
 | `set_listing_status` | Change le statut avec raison |
 | `add_opinion` | Avis du membre connecté |
@@ -245,8 +245,9 @@ Lecture :
 | `create_search_criteria`, `update_search_criteria` | Critères de recherche : filtres et périmètre en GeoJSON (point et rayon, polygone) ou paramètres d'isochrone |
 
 Ressources et prompts : le schéma d'annonce en JSON Schema, le glossaire des indicateurs, un
-prompt « analyser cette annonce » qui enchaîne lecture de page, normalisation, doublons,
-création, évaluation.
+prompt « analyser cette annonce » qui enchaîne lecture de page, extraction (`extract_listing`),
+doublons, confirmation du membre, création, évaluation. Le prompt est livré au lot 2 ; les
+ressources suivent.
 
 Portées OAuth `listings:read` et `listings:write`, limite connue de `bankin-analyzer` à corriger
 dès le départ.

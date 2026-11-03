@@ -47,6 +47,17 @@ export const EnvSchema = z.object({
   SENTRY_TRACES_SAMPLE_RATE: z.string().optional(),
   THROTTLE_TTL_MS: z.coerce.number().int().min(1000).default(60_000),
   THROTTLE_LIMIT: z.coerce.number().int().min(1).default(300),
+  // IA : la clé reste côté serveur ; sans elle, l'extraction répond 503 et
+  // le reste fonctionne. Les bornes fines sont vérifiées par ai/ai.config.ts.
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  AI_MODEL: z.string().min(1).optional(),
+  AI_MODEL_BULK: z.string().min(1).optional(),
+  AI_EFFORT: z.enum(['low', 'medium', 'high']).optional(),
+  AI_MAX_TOKENS: z.coerce.number().int().min(1024).optional(),
+  AI_MAX_IMAGES: z.coerce.number().int().min(0).optional(),
+  AI_MAX_IMAGE_MB: z.coerce.number().positive().optional(),
+  // Données ouvertes : géocodeur IGN Géoplateforme (défaut dans opendata/geoplateforme.ts).
+  GEOCODING_URL: z.string().url().optional(),
 })
 export type Env = z.infer<typeof EnvSchema>
 

@@ -3,8 +3,8 @@ import type { MaybeRef } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import type {
   EvaluatedListing,
+  ListingCreateRaw,
   ListingFiltersInput,
-  ListingInputRaw,
   ListingPatch,
   ListingStatusChange,
   OpinionInput,
@@ -56,8 +56,17 @@ export function useListingMutations() {
   }
 
   const create = useMutation({
-    mutationFn: (input: ListingInputRaw) => api.listings.create(input),
-    onSuccess: settle,
+    mutationFn: (input: ListingCreateRaw) => api.listings.create(input),
+    onSuccess: result => {
+      // La fiche en cache ne porte ni doublons ni tâches créées : ce sont des
+      // informations du moment de la création.
+      const {
+        duplicates: _duplicates,
+        createdTasks: _createdTasks,
+        ...item
+      } = result
+      settle(item)
+    },
   })
   const update = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: ListingPatch }) =>

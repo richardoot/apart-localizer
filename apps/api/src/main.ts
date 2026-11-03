@@ -13,6 +13,9 @@ import { createLogger, logFormat } from './common/logging'
 import { requestLogger } from './common/request-log'
 import { corsOrigins } from './config/env'
 
+/** Taille maximale d'un corps JSON (captures en base64 comprises). */
+export const JSON_BODY_LIMIT = '25mb'
+
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     // JSON lines in production so Vercel indexes them, readable ones at a
@@ -23,6 +26,11 @@ async function bootstrap(): Promise<void> {
   // One line per request, with an id the response also carries. First in
   // the chain so that a request refused by a guard is logged too.
   app.use(requestLogger(logFormat(process.env)))
+
+  // Les captures d'écran de l'extraction IA voyagent en base64 dans le JSON :
+  // la limite par défaut (100 ko) ne suffit pas. Vercel plafonne de son côté
+  // le corps d'une requête à 4,5 Mo ; le web réduit les images avant envoi.
+  app.useBodyParser('json', { limit: JSON_BODY_LIMIT })
 
   // Trust the reverse proxy (Vercel) so that `req.protocol` reflects the
   // client-facing scheme and the OAuth discovery URLs say https://.

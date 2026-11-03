@@ -9,6 +9,7 @@ import type {
   ListingSource,
   ListingStatus,
   ListingUpdate,
+  LocationPrecision,
   RenovationLevel,
   RentControl,
   RentalDemand,
@@ -44,6 +45,8 @@ export interface ListingForm {
   district: string
   longitude: string
   latitude: string
+  /** Précision du point (géocodeur) ; vide = déduite de l'adresse. */
+  precision: LocationPrecision | ''
   price: string
   feesAmount: string
   feesPayer: FeesPayer | ''
@@ -116,6 +119,7 @@ export function emptyForm(): ListingForm {
     district: '',
     longitude: '',
     latitude: '',
+    precision: '',
     price: '',
     feesAmount: '',
     feesPayer: '',
@@ -176,6 +180,55 @@ const num = (value: number | null | undefined): string =>
 
 /** Une annonce enregistrée vers le formulaire qui l'édite. */
 export function formFromListing(listing: Listing): ListingForm {
+  return formFromInput(listing)
+}
+
+/** Les champs communs à une annonce enregistrée et à une fiche extraite (non enregistrée). */
+type FormSource = Pick<
+  ListingInput,
+  | 'title'
+  | 'url'
+  | 'source'
+  | 'sourceLabel'
+  | 'status'
+  | 'location'
+  | 'price'
+  | 'feesAmount'
+  | 'feesPayer'
+  | 'surface'
+  | 'rooms'
+  | 'bedrooms'
+  | 'floorLabel'
+  | 'elevator'
+  | 'constructionYear'
+  | 'dpeClass'
+  | 'gesClass'
+  | 'dpeDate'
+  | 'heatingType'
+  | 'outdoor'
+  | 'parking'
+  | 'annualCharges'
+  | 'nonRecoverableChargesMonthly'
+  | 'propertyTax'
+  | 'furnitureValue'
+  | 'lotsCount'
+  | 'syndic'
+  | 'proceedings'
+  | 'votedWorks'
+  | 'description'
+  | 'notes'
+  | 'rentalPlan'
+  | 'assumptionsOverride'
+> & {
+  renovation:
+    | (Omit<NonNullable<ListingInput['renovation']>, 'items'> & {
+        items: Array<{ id?: string; label: string; amount: number | null }>
+      })
+    | null
+}
+
+/** Une fiche (enregistrée ou extraite par l'IA) vers le formulaire. */
+export function formFromInput(listing: FormSource): ListingForm {
   const form = emptyForm()
   form.title = listing.title
   form.url = text(listing.url)
@@ -187,6 +240,7 @@ export function formFromListing(listing: Listing): ListingForm {
   form.district = text(listing.location.district)
   form.longitude = num(listing.location.point?.coordinates[0])
   form.latitude = num(listing.location.point?.coordinates[1])
+  form.precision = listing.location.precision ?? ''
   form.price = num(listing.price)
   form.feesAmount = num(listing.feesAmount)
   form.feesPayer = listing.feesPayer ?? ''
@@ -218,7 +272,7 @@ export function formFromListing(listing: Listing): ListingForm {
       level: listing.renovation.level ?? '',
       durationMonths: num(listing.renovation.durationMonths),
       items: listing.renovation.items.map(item => ({
-        key: item.id,
+        key: item.id ?? itemKey(),
         label: item.label,
         amount: num(item.amount),
       })),
@@ -295,9 +349,7 @@ export function formToRawInput(form: ListingForm): ListingInputRaw {
           : null,
       precision:
         lng !== null && lat !== null
-          ? orNull(form.addressRaw)
-            ? 'exact'
-            : 'district'
+          ? form.precision || (orNull(form.addressRaw) ? 'exact' : 'district')
           : null,
     },
     price: parseNumberInput(form.price) ?? Number.NaN,
@@ -404,3 +456,21 @@ export const PreviewInputSchema = ListingInputSchema.extend({
   title: z.string().default('Aperçu'),
   price: z.number().min(0).catch(0),
 })
+
+/**
+ * La fiche à enregistrer après validation d'une extraction : les champs du
+ * formulaire (corrigés ou non) priment, les champs que le formulaire ne
+ * montre pas (étage en nombre, cave, orientation, référence, dates, adresse
+ * normalisée, texte source...) viennent de la fiche extraite.
+ */
+export function mergeExtractedInput(
+  extracted: ListingInput,
+  form: ListingInputRaw
+): ListingInputRaw {
+  const { fieldSources: _fieldSources, ...base } = extracted
+  return {
+    ...base,
+    ...form,
+    location: { ...extracted.location, ...(form.location ?? {}) },
+  }
+}

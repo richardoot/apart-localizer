@@ -12,16 +12,27 @@ import {
 } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { ZodResponse } from 'nestjs-zod'
-import { listingFiltersFromQuery, splitListingPatch } from '@apart/contracts'
+import {
+  listingFiltersFromQuery,
+  splitListingCreate,
+  splitListingPatch,
+} from '@apart/contracts'
 import { SupabaseGuard } from '../auth/guards/supabase.guard'
 import { CurrentMember } from '../auth/decorators/current-member.decorator'
 import type { Member } from '../generated/prisma'
+import { DuplicatesService } from './duplicates.service'
+import { ExtractionService } from './extraction.service'
 import { ListingsService } from './listings.service'
 import {
   CreateListingDto,
+  DuplicateCandidateDto,
+  DuplicateProbeDto,
   EvaluateRequestDto,
   EvaluateResultDto,
   EvaluatedListingDto,
+  ExtractionRequestDto,
+  ExtractionResultDto,
+  ListingCreateResultDto,
   ListingListDto,
   ListingListQueryDto,
   ListingPatchDto,
@@ -35,7 +46,11 @@ import {
 @UseGuards(SupabaseGuard)
 @Controller('listings')
 export class ListingsController {
-  constructor(private readonly listings: ListingsService) {}
+  constructor(
+    private readonly listings: ListingsService,
+    private readonly extraction: ExtractionService,
+    private readonly duplicates: DuplicatesService
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -54,13 +69,45 @@ export class ListingsController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Crée une annonce avec sa checklist par défaut' })
-  @ZodResponse({ status: 201, type: EvaluatedListingDto })
+  @ApiOperation({
+    summary:
+      'Crée une annonce avec sa checklist par défaut ; géocode l’adresse, signale les doublons probables (sans bloquer) et pose une tâche par champ indispensable manquant quand la fiche vient de l’IA',
+  })
+  @ZodResponse({ status: 201, type: ListingCreateResultDto })
   create(
     @CurrentMember() member: Member,
     @Body() body: CreateListingDto
-  ): Promise<EvaluatedListingDto> {
-    return this.listings.create(member, body)
+  ): Promise<ListingCreateResultDto> {
+    const { input, ignoreDuplicates } = splitListingCreate(body)
+    return this.listings.create(member, input, { ignoreDuplicates })
+  }
+
+  @Post('extract')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Extraction par IA : texte collé et/ou captures d’écran vers une fiche pré-remplie (provenance et confiance par champ), champs manquants, doublons probables ; rien n’est enregistré. 503 si ANTHROPIC_API_KEY n’est pas configurée.',
+  })
+  @ZodResponse({ status: 200, type: ExtractionResultDto })
+  extract(
+    @CurrentMember() member: Member,
+    @Body() body: ExtractionRequestDto
+  ): Promise<ExtractionResultDto> {
+    return this.extraction.extract(member, body)
+  }
+
+  @Post('duplicates')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Doublons probables pour un lien, une adresse, un point, un trio commune + prix + surface, ou une annonce enregistrée',
+  })
+  @ZodResponse({ status: 200, type: [DuplicateCandidateDto] })
+  findDuplicates(
+    @CurrentMember() member: Member,
+    @Body() body: DuplicateProbeDto
+  ): Promise<DuplicateCandidateDto[]> {
+    return this.duplicates.find(member, body)
   }
 
   @Post('evaluate')

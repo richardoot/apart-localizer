@@ -63,6 +63,13 @@
     () =>
       mutations.update.isPending.value || mutations.setStatus.isPending.value
   )
+  /** Combien de champs viennent de l'IA : la fiche a été extraite, pas saisie. */
+  const aiFieldCount = computed(
+    () =>
+      Object.values(item.value?.listing.fieldSources ?? {}).filter(
+        p => p.source === 'ai'
+      ).length
+  )
 
   function report(err: unknown): void {
     failure.value =
@@ -152,6 +159,12 @@
         <p class="text-xs text-muted">
           Ajoutée le {{ formatDate(item.listing.createdAt) }} · modifiée le
           {{ formatDate(item.listing.updatedAt) }}
+          <template v-if="aiFieldCount > 0">
+            ·
+            <span data-testid="ai-field-count"
+              >{{ aiFieldCount }} champ(s) extraits par l'IA</span
+            ></template
+          >
           <a
             v-if="item.listing.url"
             :href="item.listing.url"
@@ -201,7 +214,12 @@
           Fiche et saisie
         </summary>
         <div class="grid gap-4 px-4 pb-4">
-          <ListingForm v-model="form" :errors="errors" hide-status />
+          <ListingForm
+            v-model="form"
+            :errors="errors"
+            :field-sources="item.listing.fieldSources"
+            hide-status
+          />
           <div class="flex flex-wrap justify-end gap-2">
             <button
               type="button"

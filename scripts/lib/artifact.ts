@@ -3,6 +3,7 @@ import {
   AssumptionsSchema,
   DEFAULT_TASKS,
   ListingInputSchema,
+  listingSourceFromUrl,
 } from '@apart/contracts'
 import type {
   Assumptions,
@@ -10,7 +11,6 @@ import type {
   FieldProvenanceMap,
   LeaseType,
   ListingInput,
-  ListingSource,
   ListingStatus,
   RenovationLevel,
   RentControl,
@@ -177,21 +177,8 @@ const DEMAND: Record<string, RentalDemand> = {
 const TRI_STATE: Record<string, TriState> = { oui: 'yes', non: 'no' }
 const DPE = new Set<string>(['A', 'B', 'C', 'D', 'E', 'F', 'G'])
 
-/** Le portail, déduit de l'URL. */
-export function sourceFromUrl(url: string | null): ListingSource {
-  if (!url) return 'autre'
-  let host: string
-  try {
-    host = new URL(url).hostname.toLowerCase()
-  } catch {
-    return 'autre'
-  }
-  if (host.includes('leboncoin')) return 'leboncoin'
-  if (host.includes('seloger')) return 'seloger'
-  if (host.includes('bienici') || host.includes('bien-ici')) return 'bienici'
-  if (host.includes('pap.fr')) return 'pap'
-  return 'agence'
-}
+/** Le portail, déduit de l'URL (même règle que l'API : `listingSourceFromUrl`). */
+export const sourceFromUrl = listingSourceFromUrl
 
 export interface FloorInfo {
   floor: number | null

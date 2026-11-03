@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { AssumptionsOverrideSchema, AssumptionsSchema } from './assumptions.js'
 import { OpinionSchema, PriceEventSchema, TaskSchema } from './collaboration.js'
+import { DuplicateCandidateSchema } from './duplicates.js'
 import { LISTING_PAGE_MAX } from './filters.js'
 import { ListingInputSchema, ListingSchema } from './listing.js'
 import { ListingEvaluationSchema } from './metrics.js'
@@ -106,3 +107,20 @@ export const EvaluateResultSchema = z.object({
   persisted: z.boolean().describe('Faux : rien n’a été enregistré'),
 })
 export type EvaluateResult = z.infer<typeof EvaluateResultSchema>
+
+/**
+ * Réponse d'une création : l'annonce vue, les doublons probables trouvés au
+ * moment de créer (la création n'est pas bloquée) et les tâches posées pour
+ * les champs manquants d'une annonce extraite par l'IA.
+ */
+export const ListingCreateResultSchema = EvaluatedListingSchema.extend({
+  duplicates: z
+    .array(DuplicateCandidateSchema)
+    .default([])
+    .describe('Annonces existantes qui ressemblent à celle créée'),
+  createdTasks: z
+    .array(TaskSchema)
+    .default([])
+    .describe('Tâches créées pour les champs indispensables manquants'),
+})
+export type ListingCreateResult = z.infer<typeof ListingCreateResultSchema>

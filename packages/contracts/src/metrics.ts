@@ -79,6 +79,13 @@ export const ListingFinancialsSchema = z.object({
 export type ListingFinancials = z.infer<typeof ListingFinancialsSchema>
 export type ListingFinancialsInput = z.input<typeof ListingFinancialsSchema>
 
+/**
+ * Un indicateur qui peut valoir NaN (surface ou coût nul) : accepté par le
+ * schéma, rendu `null` en JSON par la sérialisation ; l'interface et le MCP
+ * affichent « — ».
+ */
+const metricNumber = z.number().or(z.nan())
+
 /** Sortie de `compute` : coût, financement, exploitation, verdict. */
 export const ListingMetricsSchema = z.object({
   price: z.number().describe('Prix affiché en euros'),
@@ -124,23 +131,23 @@ export const ListingMetricsSchema = z.object({
   netOperating: z
     .number()
     .describe("Résultat net d'exploitation annuel en euros (avant crédit)"),
-  grossYield: z
-    .number()
-    .describe(
-      'Rendement brut : 12 × loyer / coût total (fraction) ; NaN si coût nul'
-    ),
-  netYield: z
-    .number()
-    .describe("Rendement net : net d'exploitation / coût total (fraction)"),
+  grossYield: metricNumber.describe(
+    'Rendement brut : 12 × loyer / coût total (fraction) ; NaN si coût nul'
+  ),
+  netYield: metricNumber.describe(
+    "Rendement net : net d'exploitation / coût total (fraction) ; NaN si coût nul"
+  ),
   effort: z
     .number()
     .describe(
       'Effort mensuel en euros : net / 12 − mensualité ; négatif = à sortir'
     ),
-  pricePerM2: z.number().describe('Prix au m² en euros ; NaN si surface nulle'),
-  rentPerM2: z
-    .number()
-    .describe('Loyer au m² en euros par mois ; NaN si surface nulle'),
+  pricePerM2: metricNumber.describe(
+    'Prix au m² en euros ; NaN si surface nulle'
+  ),
+  rentPerM2: metricNumber.describe(
+    'Loyer au m² en euros par mois ; NaN si surface nulle'
+  ),
   maxCostRule220: z
     .number()
     .describe(

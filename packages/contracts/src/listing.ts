@@ -303,3 +303,28 @@ export const ListingSchema = ListingInputSchema.omit({
   views: z.array(ListingViewSchema).default([]),
 })
 export type Listing = z.infer<typeof ListingSchema>
+
+/**
+ * Le corps d'un `POST /listings` : l'annonce, plus le choix explicite de
+ * créer malgré des doublons signalés. La création n'est jamais bloquée ;
+ * `ignoreDuplicates` est journalisé pour savoir que le membre a vu l'alerte.
+ */
+export const ListingCreateSchema = ListingInputSchema.extend({
+  ignoreDuplicates: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Vrai si le membre a vu les doublons probables et choisit de créer quand même (journalisé)'
+    ),
+})
+export type ListingCreate = z.infer<typeof ListingCreateSchema>
+export type ListingCreateRaw = z.input<typeof ListingCreateSchema>
+
+/** Sépare l'annonce de l'option `ignoreDuplicates`. */
+export function splitListingCreate(body: ListingCreate): {
+  input: ListingInput
+  ignoreDuplicates: boolean
+} {
+  const { ignoreDuplicates, ...input } = body
+  return { input, ignoreDuplicates }
+}

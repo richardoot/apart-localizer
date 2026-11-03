@@ -159,6 +159,11 @@
     </p>
 
     <ListingPanel v-if="openedId" :id="openedId" @close="closePanel" />
-    <ListingCreatePanel v-if="creating" @close="closePanel" @created="open" />
+    <ListingCreatePanel
+      v-if="creating"
+      @close="closePanel"
+      @created="open"
+      @open="open"
+    />
   </section>
 </template>

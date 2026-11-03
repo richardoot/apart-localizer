@@ -69,18 +69,22 @@ Nouveau projet depuis le dépôt GitHub, **Root Directory** `apps/api`, framewor
 `vercel.json` fixe la région (`cdg1`), les commandes d'installation et de build (`build:vercel`)
 et le dossier de sortie (`dist`). Variables d'environnement (Production, et Preview si besoin) :
 
-| Variable                            | Valeur                                                                                     |
-| ----------------------------------- | ------------------------------------------------------------------------------------------ |
-| `DATABASE_URL`                      | chaîne du pooler Supabase (transaction, 6543), avec `?pgbouncer=true` si Prisma le demande |
-| `DIRECT_URL`                        | connexion directe (5432), pour les migrations au build                                     |
-| `SUPABASE_URL`                      | `https://<ref>.supabase.co`                                                                |
-| `SUPABASE_SERVICE_ROLE_KEY`         | clé `service_role`                                                                         |
-| `SUPABASE_EXTERNAL_URL`             | identique à `SUPABASE_URL` en cloud (peut rester vide)                                     |
-| `MCP_PUBLIC_URL`                    | `https://<api>.vercel.app/mcp` (recommandé : l'URL exacte annoncée au connecteur)          |
-| `FRONTEND_URL`                      | `https://<web>.vercel.app` (plusieurs origines séparées par des virgules)                  |
-| `NODE_ENV`                          | `production`                                                                               |
-| `SENTRY_DSN`                        | DSN du projet Sentry « api » (vide = Sentry inactif)                                       |
-| `THROTTLE_LIMIT`, `THROTTLE_TTL_MS` | facultatif, défauts 300 requêtes par 60 000 ms et par adresse                              |
+| Variable                                                         | Valeur                                                                                                                 |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                   | chaîne du pooler Supabase (transaction, 6543), avec `?pgbouncer=true` si Prisma le demande                             |
+| `DIRECT_URL`                                                     | connexion directe (5432), pour les migrations au build                                                                 |
+| `SUPABASE_URL`                                                   | `https://<ref>.supabase.co`                                                                                            |
+| `SUPABASE_SERVICE_ROLE_KEY`                                      | clé `service_role`                                                                                                     |
+| `SUPABASE_EXTERNAL_URL`                                          | identique à `SUPABASE_URL` en cloud (peut rester vide)                                                                 |
+| `MCP_PUBLIC_URL`                                                 | `https://<api>.vercel.app/mcp` (recommandé : l'URL exacte annoncée au connecteur)                                      |
+| `FRONTEND_URL`                                                   | `https://<web>.vercel.app` (plusieurs origines séparées par des virgules)                                              |
+| `NODE_ENV`                                                       | `production`                                                                                                           |
+| `SENTRY_DSN`                                                     | DSN du projet Sentry « api » (vide = Sentry inactif)                                                                   |
+| `THROTTLE_LIMIT`, `THROTTLE_TTL_MS`                              | facultatif, défauts 300 requêtes par 60 000 ms et par adresse                                                          |
+| `ANTHROPIC_API_KEY`                                              | clé Anthropic (console.anthropic.com), côté API seulement ; vide = extraction IA désactivée (503), le reste fonctionne |
+| `AI_MODEL`, `AI_MODEL_BULK`                                      | facultatif, défauts `claude-opus-5-5` et `claude-haiku-5-5` ([ia.md](ia.md))                                           |
+| `AI_EFFORT`, `AI_MAX_TOKENS`, `AI_MAX_IMAGES`, `AI_MAX_IMAGE_MB` | facultatif ; Vercel plafonne le corps d'une requête à 4,5 Mo, le web réduit les captures avant envoi                   |
+| `GEOCODING_URL`                                                  | facultatif, défaut Géoplateforme IGN                                                                                   |
 
 Après le premier déploiement : `GET https://<api>.vercel.app/health` doit répondre `200` avec
 `checks.postgis.status: "ok"`, et `GET /.well-known/oauth-protected-resource` doit annoncer
@@ -117,8 +121,9 @@ carte s'affichent (la carte charge les tuiles OpenFreeMap sans clé).
 2. Portées à accorder : `listings:read` et `listings:write` (si le serveur les propose ; sinon le
    jeton vaut les deux, ADR 0005).
 3. Tester dans une conversation : « Liste mes annonces à visiter » (`list_listings`), puis depuis
-   une page d'annonce avec Claude in Chrome : « Ajoute cette annonce » (`create_listing`).
-   L'annonce doit apparaître « nouvelle » dans le web pour l'autre membre.
+   une page d'annonce avec Claude in Chrome : le prompt « Analyser cette annonce »
+   (`extract_listing`, confirmation, `create_listing`). L'annonce doit apparaître « nouvelle »
+   dans le web pour l'autre membre, avec ses pastilles de provenance.
 
 Les outils, paramètres et garde-fous sont décrits dans [mcp.md](mcp.md).
 
@@ -139,4 +144,6 @@ URL des fils d'Ariane sont anonymisées (`apps/api/src/common/sentry.ts`, `apps/
 - [ ] Projet Vercel API déployé, `/health` et `/.well-known/oauth-protected-resource` vérifiés.
 - [ ] Projet Vercel web déployé, connexion Google et carte vérifiées.
 - [ ] Connecteur déclaré dans claude.ai, `list_listings` puis `create_listing` testés.
+- [ ] `ANTHROPIC_API_KEY` posée sur le projet Vercel API, puis « Coller une annonce » testé
+      depuis le web (coût affiché) et `extract_listing` depuis claude.ai.
 - [ ] Sentry : DSN posés si souhaité.

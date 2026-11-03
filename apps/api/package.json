@@ -30,6 +30,7 @@
     "prisma:studio": "prisma studio --config prisma/prisma.config.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.4.0",
     "@apart/contracts": "workspace:*",
     "@apart/domain": "workspace:*",
     "@modelcontextprotocol/sdk": "1.32.2",

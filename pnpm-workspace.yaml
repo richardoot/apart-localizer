@@ -46,3 +46,4 @@ minimumReleaseAgeExclude:
   - '@vitest/spy@5.1.0'
   - tailwindcss@4.3.4
   - vitest@5.1.0
+  - '@anthropic-ai/sdk@1.4.0'

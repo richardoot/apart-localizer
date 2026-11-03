@@ -59,6 +59,13 @@
           :class="task.done ? 'text-muted line-through' : ''"
         >
           {{ task.label }}
+          <span
+            v-if="task.origin === 'missing_field'"
+            class="ml-1 rounded-full bg-warn-soft px-1.5 py-px text-[10px] font-semibold tracking-wide text-warn uppercase"
+            title="Champ non trouvé par l'extraction IA, transformé en tâche"
+            data-testid="task-ai"
+            >IA · champ manquant</span
+          >
           <span v-if="nameOf(task.assigneeId)" class="text-xs text-muted">
             · {{ nameOf(task.assigneeId) }}</span
           >
