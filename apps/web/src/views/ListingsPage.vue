@@ -3,6 +3,7 @@
   import { useRoute, useRouter } from 'vue-router'
   import type { CriteriaMatchChanges, PointRadius } from '@apart/contracts'
   import { criteriaChangesMessage } from '@/lib/criteria'
+  import CostBasisBadge from '@/components/listings/CostBasisBadge.vue'
   import FiltersBar from '@/components/listings/FiltersBar.vue'
   import ListingCards from '@/components/listings/ListingCards.vue'
   import ListingCreatePanel from '@/components/listings/ListingCreatePanel.vue'
@@ -18,6 +19,12 @@
   } from '@/composables/useMapLayers'
   import type { MapLayerToggles } from '@/composables/useMapLayers'
   import { useSearchCriteriaList } from '@/composables/useSearchCriteria'
+  import {
+    listingTabFromQuery,
+    listingTabQuery,
+    withoutListingTab,
+  } from '@/lib/listing-tabs'
+  import type { ListingTab } from '@/lib/listing-tabs'
   import { criteriaFeatures } from '@/lib/perimeter'
   import { useFiltersStore } from '@/stores/filters'
 
@@ -25,25 +32,42 @@
   const router = useRouter()
   const store = useFiltersStore()
 
+  /** L'onglet de la fiche ouverte, lu et écrit dans l'URL : le retour et un lien partagé le gardent. */
+  const panelTab = computed<ListingTab>({
+    get: () => listingTabFromQuery(route.query),
+    set: tab => {
+      void router.replace({
+        name: route.name ?? 'listing',
+        params: route.params,
+        query: { ...withoutListingTab(route.query), ...listingTabQuery(tab) },
+      })
+    },
+  })
+
   // L'URL fait foi : au chargement et à chaque navigation, les filtres se
   // relisent depuis la requête ; chaque changement de filtre réécrit l'URL.
-  store.loadFromQuery(route.query)
+  // L'onglet de la fiche (`onglet`, lot 9) n'est pas un filtre : il est mis
+  // de côté pour la comparaison et gardé quand les filtres réécrivent l'URL.
+  store.loadFromQuery(withoutListingTab(route.query))
   watch(
     () => route.query,
     query => {
-      if (JSON.stringify(query) !== JSON.stringify(store.routeQuery)) {
-        store.loadFromQuery(query)
+      const filters = withoutListingTab(query)
+      if (JSON.stringify(filters) !== JSON.stringify(store.routeQuery)) {
+        store.loadFromQuery(filters)
       }
     }
   )
   watch(
     () => store.routeQuery,
     query => {
-      if (JSON.stringify(query) !== JSON.stringify(route.query)) {
+      if (
+        JSON.stringify(query) !== JSON.stringify(withoutListingTab(route.query))
+      ) {
         void router.replace({
           name: route.name ?? 'listings',
           params: route.params,
-          query,
+          query: { ...query, ...listingTabQuery(panelTab.value) },
         })
       }
     }
@@ -81,8 +105,13 @@
   /** Le message de création (« entre dans le critère… »), montré à l'ouverture de la fiche. */
   const notice = ref<string | null>(null)
 
+  /** Une autre fiche s'ouvre sur sa synthèse : l'onglet ne suit pas. */
   function open(id: string): void {
-    void router.push({ name: 'listing', params: { id }, query: route.query })
+    void router.push({
+      name: 'listing',
+      params: { id },
+      query: withoutListingTab(route.query),
+    })
   }
   function onCreated(id: string, changes?: CriteriaMatchChanges | null): void {
     notice.value = ['Annonce créée.', criteriaChangesMessage(changes)]
@@ -91,7 +120,10 @@
     open(id)
   }
   function closePanel(): void {
-    void router.push({ name: 'listings', query: route.query })
+    void router.push({
+      name: 'listings',
+      query: withoutListingTab(route.query),
+    })
   }
   function onNear(near: PointRadius | undefined): void {
     store.setNear(near)
@@ -131,7 +163,7 @@
         </label>
         <ExportMenu :filters="filters" />
         <RouterLink
-          :to="{ name: 'listing-new', query: route.query }"
+          :to="{ name: 'listing-new', query: withoutListingTab(route.query) }"
           class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg"
         >
           + Ajouter
@@ -193,12 +225,20 @@
         >« ≈ » : valeur estimée faute de saisie (taxe foncière = 1 mois de
         loyer)</span
       >
+      <span class="inline-flex items-center gap-1" data-testid="legend-price"
+        ><CostBasisBadge basis="price" /> se compare au prix affiché</span
+      >
+      <span class="inline-flex items-center gap-1" data-testid="legend-all-in"
+        ><CostBasisBadge basis="all_in" /> coût tout compris : prix + notaire +
+        travaux + mobilier</span
+      >
     </p>
 
     <ListingPanel
       v-if="openedId"
       :id="openedId"
       :key="openedId"
+      v-model:tab="panelTab"
       :notice="notice"
       @close="
         () => {

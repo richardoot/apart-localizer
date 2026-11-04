@@ -9,8 +9,9 @@ visites avec photos privées, journal d'activité, « ce qui a changé depuis ma
 notifications (cloche, web push, e-mail en option), partage d'une annonce depuis le téléphone,
 alertes e-mail transférées en brouillons à valider, export CSV et JSON ; et l'ouverture de
 l'espace à d'autres personnes, invitées par e-mail, avec rôles et retrait. Les lots 0 à 6 de la
-feuille de route sont livrés, le lot 7 rend l'environnement local démarrable en une commande et
-le lot 8 ajoute les invitations.
+feuille de route sont livrés, le lot 7 rend l'environnement local démarrable en une commande, le
+lot 8 ajoute les invitations et le lot 9 rend la fiche lisible : deux bases de calcul (« sur le
+prix », « tout compris »), onglets, synthèse en trois questions.
 
 Documentation :
 
@@ -172,40 +173,54 @@ http://localhost:3000/mcp` ([développement local](docs/developpement-local.md#t
   bandeau des doublons probables (« ouvrir l'existante » / « créer quand même ») ; onglet
   « Saisie manuelle » inchangé. Demande `ANTHROPIC_API_KEY` côté API ([docs/ia.md](docs/ia.md)) ;
   sans clé, l'analyse répond 503 et la saisie manuelle reste.
-- **Fiche** (`/annonces/:id`) : panneau latéral (plein écran sur mobile) avec aperçu en direct des
-  indicateurs calculé dans le navigateur par `packages/domain`, section **« À partir de quel
-  prix ? »** (prix maximal par critère avec le critère liant, décote nécessaire et sa classe
-  colorée, rang parmi les annonces actives, offre suggérée au millier inférieur avec sa marge,
-  arguments de négociation, détail des frais de notaire), **tableau de sensibilité** à deux axes
-  au choix (prix, loyer, taux, apport, durée) coloré par verdict avec la cellule courante
-  repérée, contrôles de louabilité, formulaire complet (bien, charges, travaux avec postes,
-  phase 2, hypothèses surchargées), changement de statut avec garde-fou, avis des deux membres,
-  tâches (dont « IA · champ manquant »), bloc **« Contexte »** (arrêt de tram le plus proche,
+- **Fiche** (`/annonces/:id`) : panneau latéral élargi (plein écran sur mobile), en cinq
+  onglets dont l'actif est dans l'URL (`?onglet=negocier`, lot 9). Chaque valeur porte sa base de
+  calcul : pastille **« sur le prix »** (se compare au prix affiché) ou **« tout compris »**
+  (prix + notaire + travaux + mobilier), et un bouton « ? » donne la définition des indicateurs
+  principaux (glossaire partagé avec le MCP). **Synthèse** : bandeau « Deux bases de calcul »,
+  trois blocs (« Combien négocier ? » : prix affiché, prix cible et son échelle, décote et sa
+  classe, critère liant, offre suggérée ; « Combien ça coûte ? » : du prix au coût tout compris,
+  apport, emprunt, mensualité crédit + assurance ; « Est-ce rentable ? » : loyer retenu et
+  plafond, rendement brut, effort, rendement net avec formule, seuil et ✓/✗ ou « non retenu »,
+  verdict), l'encart **« Et au prix cible ? »** (coût, brut, effort et verdict au prix cible,
+  calculés par `domain`), résumés louabilité, suivi et quartier, et l'encadré « Depuis votre
+  dernière ouverture ». **Négocier** : « À partir de quel prix ? » (par critère : exigence, prix
+  affiché maximal, coût tout compris maximal, décote ; critère liant surligné, critères non
+  retenus grisés ; rang, offre suggérée au millier inférieur avec sa marge, arguments, détail des
+  frais de notaire), **tableau de sensibilité** à deux axes au choix (prix affiché, loyer, taux,
+  apport, durée) expliqué en une phrase, coût tout compris sous chaque prix, ligne du prix cible
+  insérée, verdict par couleur et par symbole (✓ ~ ✗), détail de la case choisie sous la grille
+  (coût, mensualité, rendements, effort), et la **frise des prix et des offres** (nouveau prix
+  constaté, nouvelle offre avec canal et date, réponse du vendeur et contre-proposition, statut
+  proposé après une réponse, jamais appliqué d'office). **Financer et louer** : contrôles de
+  louabilité, le bloc **« Étude »** (lot 5) en cinq onglets — **Phase 1** (coût d'occupation
+  contre le loyer actuel, part de capital remboursé, coût réel, date de bascule), **Scénarios**
+  (éditeur « et si » recalculé en direct par `domain`, base et scénario côte à côte,
+  enregistrement pour l'annonce ou l'espace, réapplication), **Projection** (TRI et VAN avant et
+  après impôt, enrichissement net, graphique SVG des cash-flows et de la position, comparaison
+  des régimes, tableau annuel, revente ; horizon, régime et TMI de l'aperçu ; « estimation, pas
+  un conseil fiscal »), **Loyer de marché** (comparables saisis, médiane et quartiles au m²,
+  position du loyer visé et du plafond, « Retenir » écrit le loyer de marché de la phase 2) et
+  **Conformité** (checklist datée et sourcée) — puis le formulaire complet (bien, charges,
+  travaux avec postes, phase 2, hypothèses surchargées, pastilles de provenance, champs modifiés
+  par l'autre membre ou par Claude mis en évidence) ; « Modifier la fiche » l'ouvre, avec
+  l'aperçu en direct calculé dans le navigateur par `packages/domain`, que la synthèse montre
+  aussi pendant la saisie. **Quartier** : bloc **« Contexte »** (arrêt de tram le plus proche,
   DPE vérifié auprès de l'ADEME avec les candidats à retenir et la validité, plafond
   d'encadrement et son état, ventes DVF comparables datées avec la médiane au m², carte
-  miniature, relance du géocodage), **frise des prix et des offres** (nouveau prix
-  constaté, nouvelle offre avec canal et date, réponse du vendeur et contre-proposition, statut
-  proposé après une réponse, jamais appliqué d'office), pastilles de provenance par champ.
-  L'ouverture marque l'annonce « vue » pour le membre ; le badge « nouvelle » s'éteint pour lui
-  seul. Le bloc **« Étude »** (lot 5) a cinq onglets : **Phase 1** (coût d'occupation contre le
-  loyer actuel, part de capital remboursé, coût réel, date de bascule), **Scénarios** (éditeur
-  « et si » recalculé en direct par `domain`, base et scénario côte à côte, enregistrement pour
-  l'annonce ou l'espace, réapplication), **Projection** (TRI et VAN avant et après impôt,
-  enrichissement net, graphique SVG des cash-flows et de la position, comparaison des régimes,
-  tableau annuel, revente ; horizon, régime et TMI de l'aperçu ; « estimation, pas un conseil
-  fiscal »), **Loyer de marché** (comparables saisis, médiane et quartiles au m², position du
-  loyer visé et du plafond, « Retenir » écrit le loyer de marché de la phase 2) et
-  **Conformité** (checklist datée et sourcée, risques Géorisques à l'adresse). Trois onglets en
-  tête de fiche (lot 6) : **Fiche** (tout ce qui précède, avec l'encadré « Depuis votre dernière
-  ouverture » et les champs modifiés par l'autre membre ou par Claude mis en évidence),
-  **Visites** (faites ou planifiées, participants, compte rendu, points positifs et négatifs,
-  note, tâche « Préparer la visite », statut « Visité » proposé sans être forcé, photos réduites
-  sur l'appareil, envoyées dans un stockage privé, vignettes par URL signées, supprimables par
-  leur auteur) et **Journal** (qui, quoi, quand, par quel canal, champs avant et après).
+  miniature, relance du géocodage) et risques Géorisques à l'adresse. **Suivi** (avec le nombre de
+  tâches ouvertes) : avis des deux membres, tâches (dont « IA · champ manquant »), **visites**
+  (faites ou planifiées, participants, compte rendu, points positifs et négatifs, note, tâche
+  « Préparer la visite », statut « Visité » proposé sans être forcé, photos réduites sur
+  l'appareil, envoyées dans un stockage privé, vignettes par URL signées, supprimables par leur
+  auteur) et **journal** (qui, quoi, quand, par quel canal, champs avant et après). Le
+  changement de statut avec garde-fou reste en tête de fiche. L'ouverture marque l'annonce
+  « vue » pour le membre ; le badge « nouvelle » s'éteint pour lui seul.
 - **Comparer** (`/comparer?ids=…`) : depuis le tableau, cocher deux à six annonces puis
   « Comparer » : indicateurs, prix cibles, décotes et verdicts côte à côte, la meilleure par
   indicateur marquée ★. Le tableau comparatif porte aussi les colonnes triables « Prix cible »,
-  « Décote » et « Classement ».
+  « Décote » et « Classement » ; ses en-têtes chiffrés, comme les lignes de la comparaison et les
+  cartes, sont marqués de leur base de calcul (« sur le prix » ou « tout compris »).
 - **Activité** (`/activite`) : journal de l'espace, filtres par membre, canal (web, MCP,
   import, système) et type d'événement, paginé.
 - **Espace** (`/espace`) : nom de l'espace, membres (rôle, connecté ou non), anciens membres,

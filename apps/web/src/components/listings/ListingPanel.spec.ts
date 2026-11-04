@@ -1,9 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
-import { DEFAULT_ASSUMPTIONS } from '@apart/contracts'
+import { DEFAULT_ASSUMPTIONS, DEFAULT_REGULATORY_RULES } from '@apart/contracts'
 import { DEFAULT_ASSUMPTIONS as A } from '@apart/contracts'
-import { financialsFromListing, sensitivityGrid } from '@apart/domain'
+import {
+  complianceReport,
+  financialsFromListing,
+  sensitivityGrid,
+} from '@apart/domain'
 import {
   MEMBERS,
   fakeEvaluated,
@@ -24,6 +28,7 @@ const apiMock = vi.hoisted(() => ({
     sensitivity: vi.fn(),
     context: vi.fn(),
   },
+  study: { compliance: vi.fn() },
   opinions: { upsertMine: vi.fn() },
   tasks: { create: vi.fn(), update: vi.fn(), remove: vi.fn() },
   offers: { create: vi.fn(), update: vi.fn() },
@@ -42,12 +47,15 @@ import ListingPanel from './ListingPanel.vue'
 
 const item = fakeEvaluated({}, { isNewForMe: true })
 
-function mountPanel() {
+// Un test en échec ne laisse pas sa fiche dans le document pour les suivants.
+enableAutoUnmount(afterEach)
+
+function mountPanel(props: Record<string, unknown> = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return mount(ListingPanel, {
-    props: { id: item.listing.id },
+    props: { id: item.listing.id, ...props },
     attachTo: document.body,
     global: {
       plugins: [[VueQueryPlugin, { queryClient: client }]],
@@ -55,10 +63,45 @@ function mountPanel() {
   })
 }
 
+const text = (): string => document.body.textContent ?? ''
+const query = (selector: string): HTMLElement | null =>
+  document.body.querySelector<HTMLElement>(selector)
+
+async function openTab(id: string): Promise<void> {
+  query(`[data-testid="tab-${id}"]`)?.click()
+  await flushPromises()
+}
+
 describe('ListingPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     apiMock.listings.context.mockResolvedValue(fakeContext())
+    apiMock.study.compliance.mockResolvedValue(
+      complianceReport(
+        {
+          dpeClass: 'D',
+          dpeDate: '2023-01-01',
+          constructionYear: 1975,
+          leaseType: 'unfurnished',
+          inseeCode: '33522',
+          commune: 'Talence',
+          surface: 45,
+          rentControlled: false,
+          targetRent: 750,
+          rentCap: null,
+          heatingType: null,
+          coOwnershipAllowsRental: 'unknown',
+          decencyCompliant: 'unknown',
+          rentalPermitRequired: 'unknown',
+        },
+        DEFAULT_REGULATORY_RULES,
+        null,
+        {
+          rentalStartDate: '2028-01-01',
+          at: new Date('2026-11-03T10:00:00Z'),
+        }
+      )
+    )
     apiMock.workspace.mockResolvedValue({
       workspace: {
         id: MEMBERS[0]?.workspaceId,
@@ -79,7 +122,14 @@ describe('ListingPanel', () => {
     apiMock.listings.get.mockResolvedValue(item)
     apiMock.listings.targetPrice.mockResolvedValue(fakeTargetPriceReport(item))
     apiMock.listings.sensitivity.mockImplementation(
-      (_id: string, request: { rowAxis: 'price'; colAxis: 'rent' }) =>
+      (
+        _id: string,
+        request: {
+          rowAxis: 'price'
+          colAxis: 'rent'
+          includeTargetPrice: boolean
+        }
+      ) =>
         Promise.resolve(
           sensitivityGrid(financialsFromListing(item.listing), A, request)
         )
@@ -111,44 +161,143 @@ describe('ListingPanel', () => {
     })
   })
 
-  it("affiche la fiche, le badge « nouvelle », et marque l'annonce vue à l'ouverture", async () => {
+  it("ouvre sur la synthèse : deux bases, trois blocs, « Et au prix cible ? », et marque l'annonce vue", async () => {
     const wrapper = mountPanel()
     await flushPromises()
     expect(apiMock.listings.get).toHaveBeenCalledWith(item.listing.id)
-    expect(document.body.textContent).toContain('T2 fictif')
+    expect(text()).toContain('T2 fictif')
     expect(apiMock.listings.markSeen).toHaveBeenCalledTimes(1)
     expect(apiMock.listings.markSeen).toHaveBeenCalledWith(item.listing.id)
-    expect(document.body.textContent).toContain('Compatibilité location')
-    expect(document.body.textContent).toContain('À faire pour cette annonce')
-    expect(document.body.textContent).toContain('Nos avis')
-    // Lot 3 : prix cible (rapport serveur), sensibilité, historique des offres.
     expect(apiMock.listings.targetPrice).toHaveBeenCalledWith(item.listing.id)
+    // Lot 9 : les onglets, la synthèse par défaut.
+    const tabs = [...document.body.querySelectorAll('[role="tab"]')]
+    expect(tabs.map(t => t.getAttribute('data-testid'))).toEqual([
+      'tab-synthese',
+      'tab-negocier',
+      'tab-financer',
+      'tab-quartier',
+      'tab-suivi',
+    ])
+    expect(
+      query('[data-testid="tab-synthese"]')?.getAttribute('aria-selected')
+    ).toBe('true')
+    expect(query('[role="tabpanel"]')?.getAttribute('aria-labelledby')).toBe(
+      'listing-tab-synthese'
+    )
+    expect(query('[data-testid="open-tasks-count"]')?.textContent).toContain(
+      '1 tâche'
+    )
+    expect(query('[data-testid="cost-bases"]')?.textContent).toContain(
+      'Deux bases de calcul'
+    )
+    for (const id of ['block-price', 'block-cost', 'block-yield', 'at-target'])
+      expect(query(`[data-testid="${id}"]`), id).not.toBeNull()
+    expect(query('[data-testid="block-price"]')?.textContent).toContain(
+      'sur le prix'
+    )
+    expect(query('[data-testid="block-cost"]')?.textContent).toContain(
+      'tout compris'
+    )
+    expect(query('[data-testid="at-target-verdict"]')?.textContent).toContain(
+      'entre dans la cible'
+    )
+    expect(text()).toContain('Louabilité (phase 2)')
+    // Rien d'autre n'est demandé tant que les onglets restent fermés.
+    expect(apiMock.listings.sensitivity).not.toHaveBeenCalled()
+    expect(apiMock.listings.context).not.toHaveBeenCalled()
+    expect(apiMock.visits.list).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('Négocier : prix cible par critère, sensibilité avec la ligne du prix cible, historique', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    await openTab('negocier')
     expect(apiMock.listings.sensitivity).toHaveBeenCalledWith(item.listing.id, {
       rowAxis: 'price',
       colAxis: 'rent',
+      includeTargetPrice: true,
     })
-    expect(document.body.textContent).toContain('À partir de quel prix ?')
-    expect(
-      document.body.querySelector('[data-testid="rank"]')?.textContent
-    ).toContain('sur 3')
-    expect(
-      document.body.querySelector('[data-testid="sensitivity-grid"]')
-    ).not.toBeNull()
-    expect(document.body.textContent).toContain(
-      'Historique des prix et des offres'
-    )
-    // Lot 4 : le bloc « Contexte » (tram, DPE, encadrement, DVF).
+    expect(text()).toContain('À partir de quel prix ?')
+    expect(query('[data-testid="rank"]')?.textContent).toContain('sur 3')
+    expect(query('[data-testid="target-criteria"]')).not.toBeNull()
+    expect(query('[data-testid="sensitivity-grid"]')).not.toBeNull()
+    expect(query('tr[data-target="true"]')?.textContent).toContain('prix cible')
+    expect(text()).toContain('Historique des prix et des offres')
+    wrapper.unmount()
+  })
+
+  it('Quartier : contexte, carte et risques à l’adresse', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    await openTab('quartier')
     expect(apiMock.listings.context).toHaveBeenCalledWith(item.listing.id)
-    expect(document.body.textContent).toContain('Contexte (données ouvertes)')
-    expect(document.body.textContent).toContain('Arrêt fictif')
-    // Lot 5 : l'étude en onglets, phase 1 ouverte.
-    expect(document.body.textContent).toContain("Coût d'occupation")
+    expect(text()).toContain('Contexte (données ouvertes)')
+    expect(text()).toContain('Arrêt fictif')
+    expect(text()).toContain('Risques à l’adresse')
+    expect(apiMock.study.compliance).toHaveBeenCalledWith(item.listing.id)
+    wrapper.unmount()
+  })
+
+  it('Financer et louer : louabilité, étude et saisie', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    await openTab('financer')
+    expect(text()).toContain('Compatibilité location')
+    expect(text()).toContain("Coût d'occupation")
+    expect(text()).toContain('Fiche et saisie')
+    wrapper.unmount()
+  })
+
+  it('l’onglet est un v-model : il se lit dans la prop et se signale au changement', async () => {
+    const wrapper = mountPanel({ tab: 'negocier' })
+    await flushPromises()
+    expect(
+      query('[data-testid="tab-negocier"]')?.getAttribute('aria-selected')
+    ).toBe('true')
+    expect(text()).toContain('À partir de quel prix ?')
+    await openTab('suivi')
+    expect(wrapper.emitted('update:tab')).toEqual([['suivi']])
+    wrapper.unmount()
+  })
+
+  it('« Voir le détail par critère » mène à l’onglet Négocier', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    query('[data-testid="go-negotiate"]')?.click()
+    await flushPromises()
+    expect(
+      query('[data-testid="tab-negocier"]')?.getAttribute('aria-selected')
+    ).toBe('true')
+    expect(text()).toContain('À partir de quel prix ?')
+    wrapper.unmount()
+  })
+
+  it('« Modifier la fiche » ouvre la saisie ; la synthèse montre alors l’aperçu en direct', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    query('[data-testid="edit-listing"]')?.click()
+    await flushPromises()
+    expect(
+      query('[data-testid="tab-financer"]')?.getAttribute('aria-selected')
+    ).toBe('true')
+    expect(query('details')?.hasAttribute('open')).toBe(true)
+    const price = query('#f-price') as HTMLInputElement
+    price.value = '150000'
+    price.dispatchEvent(new Event('input'))
+    await flushPromises()
+    await openTab('synthese')
+    expect(query('[data-testid="live-badge"]')).not.toBeNull()
+    expect(query('[data-testid="summary-listed-price"]')?.textContent).toMatch(
+      /150\s000 €/
+    )
     wrapper.unmount()
   })
 
   it('enregistre une offre puis propose le statut suggéré sans le forcer', async () => {
     const wrapper = mountPanel()
     await flushPromises()
+    await openTab('negocier')
     const amount = document.body.querySelector<HTMLInputElement>(
       'input[aria-label="Montant de l\'offre"]'
     )
@@ -205,6 +354,7 @@ describe('ListingPanel', () => {
     apiMock.listings.update.mockResolvedValue(item)
     const wrapper = mountPanel()
     await flushPromises()
+    await openTab('financer')
     const study = wrapper.findComponent({ name: 'StudySection' })
     study.vm.$emit('retainMarketRent', 765)
     await flushPromises()
@@ -212,7 +362,7 @@ describe('ListingPanel', () => {
       rentalPlan: { ...item.listing.rentalPlan, marketRent: 765 },
       expectedUpdatedAt: item.listing.updatedAt,
     })
-    expect(document.body.textContent).toContain('Loyer de marché retenu')
+    expect(text()).toContain('Loyer de marché retenu')
     wrapper.unmount()
   })
 
@@ -225,12 +375,13 @@ describe('ListingPanel', () => {
     apiMock.listings.markSeen.mockResolvedValueOnce(withoutPlan)
     const wrapper = mountPanel()
     await flushPromises()
+    await openTab('financer')
     wrapper
       .findComponent({ name: 'StudySection' })
       .vm.$emit('retainMarketRent', 700)
     await flushPromises()
     expect(apiMock.listings.update).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('Ajoutez d’abord la phase 2')
+    expect(text()).toContain('Ajoutez d’abord la phase 2')
     wrapper.unmount()
   })
 
@@ -249,22 +400,12 @@ describe('ListingPanel', () => {
     }
     apiMock.listings.get.mockResolvedValue(matched)
     apiMock.listings.markSeen.mockResolvedValue(matched)
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    })
-    const wrapper = mount(ListingPanel, {
-      props: {
-        id: item.listing.id,
-        notice: 'Annonce créée. Entre dans le critère « Talence fictif ».',
-      },
-      attachTo: document.body,
-      global: { plugins: [[VueQueryPlugin, { queryClient: client }]] },
+    const wrapper = mountPanel({
+      notice: 'Annonce créée. Entre dans le critère « Talence fictif ».',
     })
     await flushPromises()
-    expect(document.body.textContent).toContain('◎ Talence fictif')
-    expect(document.body.textContent).toContain(
-      'Entre dans le critère « Talence fictif »'
-    )
+    expect(text()).toContain('◎ Talence fictif')
+    expect(text()).toContain('Entre dans le critère « Talence fictif »')
     wrapper.unmount()
   })
 
@@ -310,13 +451,14 @@ describe('ListingPanel', () => {
     })
     await flushPromises()
     expect(apiMock.listings.markSeen).toHaveBeenCalledTimes(1)
-    const box = document.body.querySelector('[data-testid="listing-changes"]')
+    const box = query('[data-testid="listing-changes"]')
     expect(box?.textContent).toContain('Chloé')
     expect(box?.textContent).toContain('a enregistré un nouveau prix')
     expect(box?.textContent).toContain('210 000 €')
-    expect(
-      document.body.querySelector('[data-testid="changed-count"]')?.textContent
-    ).toContain('3 champ(s) modifié(s)')
+    expect(query('[data-testid="changed-count"]')?.textContent).toContain(
+      '3 champ(s) modifié(s)'
+    )
+    await openTab('financer')
     const changed = [...document.body.querySelectorAll('[data-changed="true"]')]
     expect(
       changed.map(el => el.querySelector('label')?.getAttribute('for'))
@@ -324,24 +466,19 @@ describe('ListingPanel', () => {
     wrapper.unmount()
   })
 
-  it('ouvre les onglets Visites et Journal', async () => {
+  it('Suivi : avis, tâches, visites et journal ensemble', async () => {
     const wrapper = mountPanel()
     await flushPromises()
-    ;(
-      document.body.querySelector('[data-testid="tab-visits"]') as HTMLElement
-    ).click()
-    await flushPromises()
+    await openTab('suivi')
+    expect(text()).toContain('Nos avis')
+    expect(text()).toContain('À faire pour cette annonce')
     expect(apiMock.visits.list).toHaveBeenCalledWith(item.listing.id)
-    expect(document.body.textContent).toContain("Aucune visite pour l'instant.")
-    ;(
-      document.body.querySelector('[data-testid="tab-journal"]') as HTMLElement
-    ).click()
-    await flushPromises()
+    expect(text()).toContain("Aucune visite pour l'instant.")
     expect(apiMock.activity.forListing).toHaveBeenCalledWith(item.listing.id, {
       page: 1,
       limit: 30,
     })
-    expect(document.body.textContent).toContain('Rien dans le journal.')
+    expect(text()).toContain('Rien dans le journal.')
     wrapper.unmount()
   })
 })

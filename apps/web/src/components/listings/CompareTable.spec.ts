@@ -71,4 +71,24 @@ describe('CompareTable', () => {
     await wrapper.findAll('thead button')[1]?.trigger('click')
     expect(wrapper.emitted('open')).toEqual([[dear.listing.id]])
   })
+
+  it('lot 9 : « Coût tout compris » et la base de calcul de chaque indicateur', () => {
+    const wrapper = mount(CompareTable, { props: { result } })
+    const basis = (row: string) =>
+      wrapper
+        .get(`[data-row="${row}"] th [data-basis]`)
+        .attributes('data-basis')
+    expect(wrapper.get('[data-row="totalCost"] th').text()).toContain(
+      'Coût tout compris'
+    )
+    expect(basis('totalCost')).toBe('all_in')
+    expect(basis('grossYield')).toBe('all_in')
+    expect(basis('monthlyPayment')).toBe('all_in')
+    expect(basis('price')).toBe('price')
+    expect(basis('targetPrice')).toBe('price')
+    expect(basis('discount')).toBe('price')
+    expect(wrapper.find('[data-row="dpe"] th [data-basis]').exists()).toBe(
+      false
+    )
+  })
 })

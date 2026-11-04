@@ -175,7 +175,7 @@ export function negotiationBrief(
   if (listing.renovationTotal > 0) {
     args.push({
       kind: 'renovation',
-      text: `Travaux estimés à ${formatEuros(listing.renovationTotal)} : à déduire du prix, ils sont déjà comptés dans le coût total.`,
+      text: `Travaux estimés à ${formatEuros(listing.renovationTotal)} : à déduire du prix, ils sont déjà comptés dans le coût tout compris.`,
     })
   }
   if (

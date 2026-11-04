@@ -33,11 +33,18 @@ Taxe foncière (€), Loyer visé (€/mois), Loyer retenu (€/mois), Prix au m
 mensuel (€), Verdict, Location, Prix cible (€), Décote nécessaire (%), Note moyenne (/5), Tâches
 ouvertes, Visites, Dernière offre (€), Ajoutée le, Modifiée le, Identifiant.
 
+La colonne « Coût total (€) » garde son nom depuis le lot 9, pour les tableurs qui la lisent :
+c'est le **coût tout compris** de l'interface (prix affiché + frais de notaire + travaux +
+mobilier, ADR 0019).
+
 ## JSON, version 1
 
 Validé à l'écriture par `ExportDocumentSchema` (`packages/contracts/src/export.ts`) ; les nombres
 non finis (rendement d'une annonce sans coût) valent `null`. Une modification incompatible du
-format change `version`.
+format change `version`. Le lot 9 n'ajoute que des champs, la version reste 1 :
+`indicators.metrics.furnitureValue`, et dans `indicators.targetPrice` le coût tout compris
+maximal de chaque critère (`criteria[].maxTotalCost`) et l'annonce évaluée au prix cible
+(`atTarget`).
 
 ```text
 {

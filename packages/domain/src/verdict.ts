@@ -17,6 +17,15 @@ export interface VerdictResult {
   nearMisses: VerdictNearMiss[]
 }
 
+/**
+ * Tolérance d'arrondi des seuils (lot 9) : un rendement à 10⁻⁹ près du seuil,
+ * un effort à un millionième d'euro près du maximum comptent comme atteints.
+ * Au prix cible, le critère liant est exactement à son seuil ; sans cette
+ * tolérance, l'erreur d'arrondi des flottants (0,05499999999999999) le
+ * ferait passer « de peu ».
+ */
+export const VERDICT_TOLERANCE = { yield: 1e-9, effort: 1e-6 } as const
+
 /** Classes DPE qui mettent le bien hors cible (calendrier d'interdiction). */
 export const FAILING_DPE_CLASSES: readonly DpeClass[] = ['E', 'F', 'G']
 
@@ -25,20 +34,22 @@ export const FAILING_DPE_CLASSES: readonly DpeClass[] = ['E', 'F', 'G']
  * - brut sous le seuil moins la marge → échec ; dans la marge → « de peu » ;
  * - effort au-delà du maximum plus la marge → échec ; dans la marge → « de peu » ;
  * - DPE E, F ou G → échec ; DPE inconnu → « de peu ».
- * Hors cible dès un échec, à creuser dès un « de peu », sinon cible.
+ * Hors cible dès un échec, à creuser dès un « de peu », sinon cible. Les
+ * seuils s'apprécient à l'arrondi près (`VERDICT_TOLERANCE`).
  */
 export function verdict(input: VerdictInput, a: Assumptions): VerdictResult {
   const failures: VerdictFailure[] = []
   const nearMisses: VerdictNearMiss[] = []
+  const tol = VERDICT_TOLERANCE
 
-  if (!(input.grossYield >= a.grossYieldThreshold)) {
+  if (!(input.grossYield >= a.grossYieldThreshold - tol.yield)) {
     if (input.grossYield >= a.grossYieldThreshold - a.grossYieldMargin) {
       nearMisses.push('gross_yield')
     } else {
       failures.push('gross_yield')
     }
   }
-  if (!(-input.effort <= a.maxMonthlyEffort)) {
+  if (!(-input.effort <= a.maxMonthlyEffort + tol.effort)) {
     if (-input.effort <= a.maxMonthlyEffort + a.effortMargin) {
       nearMisses.push('effort')
     } else {

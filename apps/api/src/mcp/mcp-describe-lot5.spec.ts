@@ -70,7 +70,7 @@ describe('réponses MCP du lot 5', () => {
       )
     )
     expect(text).toContain('Scénario « Prix négocié » sur T2')
-    expect(text).toMatch(/Coût total : .* → .*\(mieux\)/)
+    expect(text).toMatch(/Coût tout compris : .* → .*\(mieux\)/)
     expect(text).toContain('pas un conseil fiscal')
     const same = describeScenario(compareScenario(INPUT, A, {}, { at: AT }))
     expect(same).toContain('Aucun indicateur ne change.')

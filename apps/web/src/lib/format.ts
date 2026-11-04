@@ -5,6 +5,34 @@
  */
 export { formatEuros, formatPercent } from '@apart/domain'
 
+/**
+ * Un taux précis : `4,09 %`, `5,5 %`, `3,65 %` (une à deux décimales), `—`
+ * s'il n'est pas un nombre fini. Pour la fiche, où 4,09 % et 4,1 % ne disent
+ * pas la même distance au seuil.
+ */
+export function formatRate(fraction: number): string {
+  return Number.isFinite(fraction)
+    ? `${(fraction * 100).toLocaleString('fr-FR', {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 2,
+      })} %`
+    : '—'
+}
+
+/** Une part de 0 à 1 en longueur CSS (`73.78%`), bornée à l'intervalle. */
+export function formatCssPercent(share: number): string {
+  const bounded = Number.isFinite(share) ? Math.min(1, Math.max(0, share)) : 0
+  return `${Math.round(bounded * 10_000) / 100}%`
+}
+
+/** Un effort signé : `−362 €/mois`, `+15 €/mois`, `0 €/mois`. */
+export function formatSignedEurosPerMonth(value: number): string {
+  if (!Number.isFinite(value)) return '—'
+  const rounded = Math.round(value)
+  if (rounded === 0) return '0 €/mois'
+  return `${rounded < 0 ? '−' : '+'}${Math.abs(rounded).toLocaleString('fr-FR')} €/mois`
+}
+
 /** `1 234 €/mois`, `—` si la valeur n'est pas un nombre fini. */
 export function formatEurosPerMonth(value: number): string {
   return Number.isFinite(value)

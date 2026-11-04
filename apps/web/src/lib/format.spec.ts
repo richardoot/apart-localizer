@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatCssPercent,
   formatDate,
   formatDistance,
   formatEuros,
   formatEurosPerM2,
   formatEurosPerMonth,
+  formatRate,
   formatRelativeDays,
+  formatSignedEurosPerMonth,
   formatSurface,
   fractionToPercentInput,
   parseNumberInput,
@@ -51,5 +54,20 @@ describe('formats fr-FR', () => {
     expect(percentToFraction('')).toBeNull()
     expect(fractionToPercentInput(0.0365)).toBe('3.65')
     expect(fractionToPercentInput(null)).toBe('')
+  })
+
+  it('lot 9 : taux précis, effort signé, part en longueur CSS', () => {
+    expect(formatRate(0.040909)).toBe('4,09 %')
+    expect(formatRate(0.055)).toBe('5,5 %')
+    expect(formatRate(0.0365)).toBe('3,65 %')
+    expect(formatRate(Number.NaN)).toBe('—')
+    expect(nbsp(formatSignedEurosPerMonth(-1362.4))).toBe('−1 362 €/mois')
+    expect(formatSignedEurosPerMonth(15.2)).toBe('+15 €/mois')
+    expect(formatSignedEurosPerMonth(0.3)).toBe('0 €/mois')
+    expect(formatSignedEurosPerMonth(Number.NaN)).toBe('—')
+    expect(formatCssPercent(0.737843)).toBe('73.78%')
+    expect(formatCssPercent(1.2)).toBe('100%')
+    expect(formatCssPercent(-0.1)).toBe('0%')
+    expect(formatCssPercent(Number.NaN)).toBe('0%')
   })
 })

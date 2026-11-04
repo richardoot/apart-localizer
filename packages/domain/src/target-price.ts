@@ -2,18 +2,19 @@ import type {
   Assumptions,
   DiscountClass,
   ListingFinancials,
+  PriceOutcome,
   TargetCriterion,
   TargetPrice,
   TargetPriceCriterion,
 } from '@apart/contracts'
-import { netOperating, totalCost } from './compute.js'
+import { compute, netOperating, totalCost } from './compute.js'
 import { monthlyFactor } from './loan.js'
 
 /** Précision de la recherche numérique du prix : un demi-centime. */
 export const PRICE_SEARCH_TOLERANCE = 0.005
 
 /**
- * Prix correspondant à un coût total donné.
+ * Prix correspondant à un coût tout compris donné.
  *
  * En mode taux, l'inverse en forme fermée de `cout = P + n × (P − H) + T + M`,
  * soit `P = (cout − T − M + n × H) / (1 + n)`. En mode barème, les frais ne
@@ -138,6 +139,31 @@ export function classifyDiscount(
   return 'out_of_reach'
 }
 
+/**
+ * L'annonce évaluée à un autre prix affiché (lot 9, « Et au prix cible ? ») :
+ * `compute` avec ce seul prix changé. Le loyer, les charges et les
+ * hypothèses restent ceux de l'annonce.
+ */
+export function outcomeAtPrice(
+  input: ListingFinancials,
+  a: Assumptions,
+  price: number
+): PriceOutcome {
+  const m = compute({ ...input, price }, a)
+  return {
+    price,
+    totalCost: m.totalCost,
+    loanAmount: m.loanAmount,
+    monthlyPayment: m.monthlyPayment,
+    grossYield: m.grossYield,
+    netYield: m.netYield,
+    effort: m.effort,
+    verdict: m.verdict,
+    failures: m.failures,
+    nearMisses: m.nearMisses,
+  }
+}
+
 const CRITERIA: readonly TargetCriterion[] = [
   'gross_yield',
   'net_yield',
@@ -148,7 +174,9 @@ const CRITERIA: readonly TargetCriterion[] = [
 
 /**
  * Prix cible : minimum des prix maximaux des critères actifs, critère liant,
- * décote nécessaire par rapport au prix affiché et son classement.
+ * décote nécessaire par rapport au prix affiché et son classement. Chaque
+ * critère rend aussi le coût tout compris qu'entraîne son prix maximal, et
+ * l'annonce est évaluée au prix cible (`atTarget`, lot 9).
  */
 export function targetPrice(
   input: ListingFinancials,
@@ -167,12 +195,17 @@ export function targetPrice(
       ? (input.price - maxPrice) / input.price
       : null
 
-  const criteria: TargetPriceCriterion[] = CRITERIA.map(criterion => ({
-    criterion,
-    maxPrice: maxPrices[criterion],
-    active: a.targetCriteria.includes(criterion),
-    discount: discountFor(maxPrices[criterion]),
-  }))
+  const criteria: TargetPriceCriterion[] = CRITERIA.map(criterion => {
+    const maxPrice = maxPrices[criterion]
+    return {
+      criterion,
+      maxPrice,
+      active: a.targetCriteria.includes(criterion),
+      discount: discountFor(maxPrice),
+      maxTotalCost:
+        maxPrice === null ? null : totalCost({ ...input, price: maxPrice }, a),
+    }
+  })
 
   let target: number | null = null
   let binding: TargetCriterion | null = null
@@ -192,5 +225,6 @@ export function targetPrice(
     bindingCriterion: binding,
     discount,
     discountClass: discount === null ? null : classifyDiscount(discount, a),
+    atTarget: target === null ? null : outcomeAtPrice(input, a, target),
   }
 }

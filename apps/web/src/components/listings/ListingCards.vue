@@ -8,6 +8,7 @@
     formatPercent,
     formatSurface,
   } from '@/lib/format'
+  import CostBasisBadge from './CostBasisBadge.vue'
   import DpeBadge from './DpeBadge.vue'
   import CriteriaBadges from './CriteriaBadges.vue'
   import NewBadge from './NewBadge.vue'
@@ -56,7 +57,11 @@
       </header>
       <dl class="grid grid-cols-3 gap-2 text-sm">
         <div>
-          <dt class="text-[11px] text-muted uppercase">Prix</dt>
+          <dt
+            class="inline-flex items-center gap-1 text-[11px] text-muted uppercase"
+          >
+            Prix <CostBasisBadge basis="price" compact />
+          </dt>
           <dd class="font-mono text-xs">
             {{ formatEuros(item.listing.price) }}
           </dd>
@@ -80,13 +85,21 @@
           </dd>
         </div>
         <div>
-          <dt class="text-[11px] text-muted uppercase">Brut</dt>
+          <dt
+            class="inline-flex items-center gap-1 text-[11px] text-muted uppercase"
+          >
+            Brut <CostBasisBadge basis="all_in" compact />
+          </dt>
           <dd class="font-mono text-xs">
             {{ formatPercent(item.evaluation.metrics.grossYield) }}
           </dd>
         </div>
         <div>
-          <dt class="text-[11px] text-muted uppercase">Effort</dt>
+          <dt
+            class="inline-flex items-center gap-1 text-[11px] text-muted uppercase"
+          >
+            Effort <CostBasisBadge basis="all_in" compact />
+          </dt>
           <dd class="font-mono text-xs">
             {{ formatEurosPerMonth(item.evaluation.metrics.effort) }}
           </dd>

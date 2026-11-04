@@ -13,8 +13,12 @@ import {
   maxPriceForGrossYield,
   maxPriceForNetYield,
   maxPriceForRule220,
+  monthlyFactor,
+  netOperating,
   remainingPrincipal,
+  sensitivityGrid,
   targetPrice,
+  totalCost,
 } from '../src/index.js'
 import { ARTIFACT_ASSUMPTIONS, DOC_EXAMPLE, financials } from './helpers.js'
 
@@ -196,7 +200,7 @@ describe('propriétés du prix cible', () => {
         if (pb === null || pb <= 0) return
         const m = compute({ ...f, price: pb }, a)
         expect(close(m.grossYield, a.grossYieldThreshold, 1e-8)).toBe(true)
-        // Au centime : le coût total reconstruit est 12 L / s_b.
+        // Au centime : le coût tout compris reconstruit est 12 L / s_b.
         expect(
           withinCent(m.totalCost, (12 * m.rent) / a.grossYieldThreshold)
         ).toBe(true)
@@ -426,5 +430,131 @@ describe('exemple de référence', () => {
     )
     expect(cheaper.grossYield).toBeGreaterThan(base.grossYield)
     expect(cheaper.effort).toBeGreaterThan(base.effort)
+  })
+})
+
+describe('propriétés du lot 9 : coût tout compris par critère, évaluation au prix cible', () => {
+  it('le coût maximal de chaque critère est le coût tout compris à son prix maximal (deux modes)', () => {
+    fc.assert(
+      fc.property(arbFinancials, arbAnyAssumptions, (f, a) => {
+        const t = targetPrice(f, a)
+        for (const c of t.criteria) {
+          if (c.maxPrice === null) expect(c.maxTotalCost).toBeNull()
+          else
+            expect(c.maxTotalCost).toBe(
+              totalCost({ ...f, price: c.maxPrice }, a)
+            )
+        }
+      })
+    )
+  })
+
+  it('coût tout compris au prix cible = coût maximal du critère liant', () => {
+    fc.assert(
+      fc.property(arbFinancials, arbAnyAssumptions, (f, a) => {
+        const t = targetPrice(f, a)
+        if (t.targetPrice === null) {
+          expect(t.atTarget).toBeNull()
+          return
+        }
+        const binding = t.criteria.find(c => c.criterion === t.bindingCriterion)
+        expect(t.atTarget?.price).toBe(t.targetPrice)
+        expect(t.atTarget?.totalCost).toBe(binding?.maxTotalCost)
+        const m = compute({ ...f, price: t.targetPrice }, a)
+        expect(t.atTarget?.grossYield).toBe(m.grossYield)
+        expect(t.atTarget?.effort).toBe(m.effort)
+        expect(t.atTarget?.verdict).toBe(m.verdict)
+      })
+    )
+  })
+
+  it('mode taux : les coûts maximaux sont ceux du modèle § 5, au centime', () => {
+    fc.assert(
+      fc.property(arbFinancials, arbAssumptions, (f, a) => {
+        const t = targetPrice(f, a)
+        const by = Object.fromEntries(t.criteria.map(c => [c.criterion, c]))
+        const { rent, netOperating: net } = netOperating(f, a)
+        const gross = by.gross_yield?.maxTotalCost ?? null
+        if (gross !== null && (by.gross_yield?.maxPrice ?? 0) > f.buyerFees)
+          expect(withinCent(gross, (12 * rent) / a.grossYieldThreshold)).toBe(
+            true
+          )
+        const rule = by.rent_x220?.maxTotalCost ?? null
+        if (rule !== null && (by.rent_x220?.maxPrice ?? 0) > f.buyerFees)
+          expect(withinCent(rule, 220 * rent)).toBe(true)
+        const effort = by.effort?.maxTotalCost ?? null
+        const k = monthlyFactor(
+          a.interestRate,
+          a.durationYears,
+          a.insuranceRate
+        )
+        if (effort !== null && (by.effort?.maxPrice ?? 0) > f.buyerFees)
+          expect(
+            withinCent(
+              effort,
+              a.downPayment + (net / 12 + a.maxMonthlyEffort) / k
+            )
+          ).toBe(true)
+      })
+    )
+  })
+
+  it('au prix cible, brut et effort retenus ne sont ni en échec ni « de peu » ; DPE A à D et deux prix : cible', () => {
+    fc.assert(
+      fc.property(arbFinancials, arbAnyAssumptions, (f, a) => {
+        const t = targetPrice(f, a)
+        if (t.atTarget === null) return
+        const by = Object.fromEntries(
+          t.criteria.map(c => [c.criterion, c.maxPrice])
+        )
+        const outcome = t.atTarget
+        if (by.gross_yield !== null) {
+          expect(outcome.failures).not.toContain('gross_yield')
+          expect(outcome.nearMisses).not.toContain('gross_yield')
+        }
+        if (by.effort !== null) {
+          expect(outcome.failures).not.toContain('effort')
+          expect(outcome.nearMisses).not.toContain('effort')
+        }
+        if (
+          by.gross_yield !== null &&
+          by.effort !== null &&
+          f.dpeClass !== null &&
+          ['A', 'B', 'C', 'D'].includes(f.dpeClass)
+        )
+          expect(outcome.verdict).toBe('target')
+      })
+    )
+  })
+
+  it('sensibilité : la ligne du prix cible est insérée ou repérée, et son coût est celui de l’évaluation au prix cible', () => {
+    fc.assert(
+      fc.property(arbFinancials, arbAnyAssumptions, (f, a) => {
+        const t = targetPrice(f, a)
+        const grid = sensitivityGrid(f, a, {
+          rowAxis: 'price',
+          colAxis: 'rent',
+          includeTargetPrice: true,
+        })
+        const targets = grid.rows.filter(r => r.isTarget)
+        if (t.targetPrice === null) {
+          expect(targets).toHaveLength(0)
+          expect(grid.rows).toHaveLength(4)
+          return
+        }
+        expect(targets).toHaveLength(1)
+        const row = targets[0]
+        expect(Math.abs((row?.value ?? 0) - t.targetPrice)).toBeLessThan(0.5)
+        // Les pas restent croissants, et chaque ligne garde le même coût.
+        const steps = grid.rows.map(r => r.step)
+        expect([...steps].sort((x, y) => x - y)).toEqual(steps)
+        grid.rows.forEach((r, i) => {
+          for (const cell of grid.cells[i] ?? [])
+            expect(cell.totalCost).toBe(r.totalCost)
+        })
+        if (grid.rows.length === 5)
+          expect(row?.totalCost).toBeCloseTo(t.atTarget?.totalCost ?? 0, 6)
+      })
+    )
   })
 })

@@ -35,6 +35,7 @@ vi.mock('@/lib/api', async () => {
   return { ...actual, api: apiMock }
 })
 
+import CompliancePanel from './CompliancePanel.vue'
 import StudySection from './StudySection.vue'
 import ProjectionChart from './ProjectionChart.vue'
 
@@ -325,6 +326,27 @@ describe('StudySection (lot 5)', () => {
     expect(ban.find('a').attributes('href')).toMatch(/service-public/)
     expect(panel.text()).toContain('Performance énergétique')
     expect(wrapper.get('[data-testid="georisques"]').text()).toBe('')
+    wrapper.unmount()
+  })
+
+  it('lot 9 : les seuls risques à l’adresse (onglet Quartier), sans verdict ni checklist', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const wrapper = mount(CompliancePanel, {
+      props: { listingId: item.listing.id, risksOnly: true },
+      global: { plugins: [[VueQueryPlugin, { queryClient: client }]] },
+    })
+    await flushPromises()
+    const panel = wrapper.get('[data-testid="compliance"]')
+    expect(panel.text()).not.toContain('Incompatible')
+    expect(panel.text()).not.toContain('Performance énergétique')
+    expect(panel.find('[data-key="dpe_ban"]').exists()).toBe(false)
+    expect(
+      panel.find('[aria-label="Risques (Géorisques)"]').exists() ||
+        panel.find('[data-testid="no-risks"]').exists()
+    ).toBe(true)
+    expect(panel.find('[data-testid="georisques"]').exists()).toBe(true)
     wrapper.unmount()
   })
 

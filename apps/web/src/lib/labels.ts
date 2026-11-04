@@ -23,6 +23,7 @@ import type {
   RentalVerdict,
   Verdict,
 } from '@apart/contracts'
+import type { ProfitabilityStatus } from '@apart/domain'
 
 export {
   COMPLIANCE_CATEGORY_LABELS,
@@ -38,6 +39,83 @@ export {
   SENSITIVITY_AXIS_LABELS,
   TARGET_CRITERION_LABELS,
   VERDICT_LABELS,
+}
+
+/**
+ * Les deux bases de calcul de la fiche (lot 9) : une valeur se compare au
+ * prix affiché (« sur le prix ») ou porte sur le coût tout compris.
+ */
+export type CostBasis = 'price' | 'all_in'
+
+export const COST_BASIS_LABELS: Record<CostBasis, string> = {
+  price: 'sur le prix',
+  all_in: 'tout compris',
+}
+
+export const COST_BASIS_HINTS: Record<CostBasis, string> = {
+  price: 'se compare au prix affiché',
+  all_in: 'prix + notaire + travaux + mobilier',
+}
+
+/** Symbole d'un verdict : il n'est jamais dit par la seule couleur. */
+export const VERDICT_SYMBOLS: Record<Verdict, string> = {
+  target: '✓',
+  to_dig: '~',
+  off_target: '✗',
+}
+
+/** Critères du verdict en échec, en clair. */
+export const VERDICT_FAILURE_LABELS: Record<
+  'gross_yield' | 'effort' | 'dpe',
+  string
+> = {
+  gross_yield: 'rendement brut',
+  effort: 'effort',
+  dpe: 'DPE E, F ou G',
+}
+
+/** Critères du verdict manqués de peu, en clair. */
+export const VERDICT_NEAR_MISS_LABELS: Record<
+  'gross_yield' | 'effort' | 'dpe_unknown',
+  string
+> = {
+  gross_yield: 'rendement brut',
+  effort: 'effort',
+  dpe_unknown: 'DPE inconnu',
+}
+
+/** État d'un contrôle de rentabilité (`profitabilityChecks` de `domain`). */
+export const PROFITABILITY_STATUS_SYMBOLS: Record<ProfitabilityStatus, string> =
+  {
+    ok: '✓',
+    near: '~',
+    fail: '✗',
+    not_retained: '',
+  }
+
+export const PROFITABILITY_STATUS_LABELS: Record<ProfitabilityStatus, string> =
+  {
+    ok: 'seuil atteint',
+    near: 'manqué de peu',
+    fail: 'en échec',
+    not_retained: 'non retenu',
+  }
+
+/** Fond de la ligne d'un contrôle de rentabilité. */
+export const PROFITABILITY_STATUS_CLASSES: Record<ProfitabilityStatus, string> =
+  {
+    ok: 'bg-good-soft',
+    near: 'bg-warn-soft',
+    fail: 'bg-bad-soft',
+    not_retained: 'bg-surface-2',
+  }
+
+/** Encre de la valeur d'un contrôle de rentabilité. */
+export const PROFITABILITY_STATUS_TEXT: Record<ProfitabilityStatus, string> = {
+  ok: 'text-good',
+  near: 'text-warn',
+  fail: 'text-bad',
+  not_retained: 'text-fg',
 }
 
 /** Classes Tailwind d'une classe de décote (≤ 0, ≤ 5 %, ≤ 10 %, au-delà). */

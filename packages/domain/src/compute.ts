@@ -50,7 +50,7 @@ export function notaryFees(input: ListingFinancials, a: Assumptions): number {
   return notaryFeesDetail(input, a).total
 }
 
-/** Coût total : prix + notaire + travaux + mobilier. */
+/** Coût tout compris : prix affiché + notaire + travaux + mobilier. */
 export function totalCost(input: ListingFinancials, a: Assumptions): number {
   return (
     input.price +
@@ -144,6 +144,7 @@ export function compute(
     notaryFees: fees,
     notaryFeesDetail: feesDetail,
     renovationTotal: input.renovationTotal,
+    furnitureValue: input.furnitureValue,
     totalCost: cost,
     loanAmount,
     monthlyFactor: k,

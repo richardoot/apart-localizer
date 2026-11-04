@@ -108,7 +108,7 @@ export const AssumptionsSchema = z.object({
     .number()
     .min(0)
     .describe(
-      'Apport personnel en euros, déduit du coût total pour obtenir le capital emprunté'
+      'Apport personnel en euros, déduit du coût tout compris pour obtenir le capital emprunté'
     ),
   interestRate: fraction('Taux nominal annuel du crédit'),
   durationYears: z

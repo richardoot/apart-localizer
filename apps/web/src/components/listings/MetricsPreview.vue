@@ -6,6 +6,7 @@
     formatEurosPerMonth,
     formatPercent,
   } from '@/lib/format'
+  import CostBasisBadge from './CostBasisBadge.vue'
   import RentalPill from './RentalPill.vue'
   import VerdictPill from './VerdictPill.vue'
 
@@ -27,8 +28,9 @@
         <RentalPill :verdict="evaluation.rental.verdict" />
         <span
           v-if="evaluation.targetPrice.targetPrice !== null"
-          class="text-xs text-muted"
+          class="inline-flex flex-wrap items-center gap-1 text-xs text-muted"
         >
+          <CostBasisBadge basis="price" compact />
           Prix cible {{ formatEuros(evaluation.targetPrice.targetPrice) }}
           <template v-if="evaluation.targetPrice.discount !== null">
             (décote {{ formatPercent(evaluation.targetPrice.discount) }})
@@ -40,7 +42,9 @@
         :class="compact ? '' : 'sm:grid-cols-3'"
       >
         <div class="flex justify-between gap-2">
-          <dt class="text-muted">Coût total</dt>
+          <dt class="inline-flex items-center gap-1 text-muted">
+            Coût tout compris <CostBasisBadge basis="all_in" compact />
+          </dt>
           <dd data-testid="total-cost">
             {{ formatEuros(evaluation.metrics.totalCost) }}
           </dd>

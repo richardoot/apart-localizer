@@ -138,7 +138,12 @@ export const SCENARIO_DELTAS: readonly {
   unit: ScenarioDelta['unit']
   higherIsBetter: boolean
 }[] = [
-  { key: 'totalCost', label: 'Coût total', unit: 'eur', higherIsBetter: false },
+  {
+    key: 'totalCost',
+    label: 'Coût tout compris',
+    unit: 'eur',
+    higherIsBetter: false,
+  },
   {
     key: 'loanAmount',
     label: 'Capital emprunté',

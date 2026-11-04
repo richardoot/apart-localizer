@@ -3,14 +3,16 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
-État au 4 novembre 2026 : **les lots 0 à 8 sont livrés** côté code, tests et documentation ; les
+État au 4 novembre 2026 : **les lots 0 à 9 sont livrés** côté code, tests et documentation ; les
 lots 0 à 7 sont déployés (Vercel et Supabase cloud), le lot 8 (invitations) attend son
-déploiement (migration additive `20261104120000_lot8_invitations`). Restent les actions
+déploiement (migration additive `20261104120000_lot8_invitations`) et le lot 9 (lisibilité de la
+fiche, sans migration) le sien. Restent les actions
 d'exploitation (Supabase cloud, Vercel, clés et connecteur :
 [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard » dans chaque lot, et
 les critères « Fini quand » qui demandent le déploiement ou un usage réel (lot 1 : déploiement et
 mobile de Chloé ; lot 2 : dix essais d'extraction ; lot 6 : push et partage sur les vrais
-téléphones ; lot 8 : une vraie troisième adresse Google), à constater après la mise en ligne.
+téléphones ; lot 8 : une vraie troisième adresse Google ; lot 9 : une lecture de fiche par
+Richard et Chloé, sur ordinateur et sur téléphone), à constater après la mise en ligne.
 
 ## Lot 0 : socle
 
@@ -194,3 +196,47 @@ dans l'espace partagé avec les annonces, avis et tâches ; une invitation expir
 laisse dans son propre espace ; un membre retiré n'accède plus à rien, et son historique reste
 lisible. Testé en e2e (rattachement, expiration, annulation, retrait, dernier propriétaire).
 (Vérifié en tests automatisés ; à confirmer avec une vraie adresse Google après le déploiement.)
+
+## Lot 9 : lisibilité de la fiche annonce
+
+Statut : livré (à déployer, sans migration).
+
+- Constat : la fiche empilait tout et mêlait deux bases de calcul sans le dire (« Coût total » à
+  côté de « Prix cible » ; dans la sensibilité, des lignes en prix affiché et des cases calculées
+  sur le coût, détail au survol seulement). Maquette validée : synthèse, onglet « Négocier »,
+  synthèse mobile. ADR 0019.
+- Livré : deux familles de valeurs marquées partout par une pastille (`CostBasisBadge`) : « sur
+  le prix » (bordée, étiquette) et « tout compris » (pleine, +), en version compacte dans le
+  tableau, les cartes et la comparaison ; bandeau « Deux bases de calcul » en tête de la
+  synthèse et dans la légende de la liste ; « Coût total » devient « Coût tout compris » dans le
+  web, le glossaire, `contracts`, les scénarios et le texte du MCP (la colonne CSV garde son nom,
+  `docs/export.md`). Fiche en onglets (`ListingTabs`, `role="tablist"`, flèches, Début, Fin ;
+  pastilles de 44 px qui défilent sur mobile) : **Synthèse** (les trois blocs « Combien
+  négocier ? », « Combien ça coûte ? », « Est-ce rentable ? », l'encart « Et au prix cible ? »,
+  résumés louabilité, suivi, quartier), **Négocier** (prix cible par critère avec prix affiché et
+  coût tout compris maximaux, offre suggérée et brief, sensibilité, historique des prix et des
+  offres), **Financer et louer** (louabilité, étude, saisie de la fiche, de la phase 2 et des
+  hypothèses de l'annonce, avec l'aperçu en direct), **Quartier** (contexte, carte, DVF,
+  risques Géorisques), **Suivi** (avis, tâches, visites, journal, nombre de tâches ouvertes sur
+  l'onglet). L'onglet est dans l'URL (`?onglet=`) ; le panneau s'élargit (760 puis 1 160 px).
+  « Modifier la fiche » ouvre la saisie ; la synthèse passe alors en aperçu en direct. Bouton
+  « ? » à côté des indicateurs principaux (`DefinitionButton`, popover accessible) : la phrase
+  courte du glossaire de `contracts`, le même que `apart://glossaire`. Sensibilité : phrase
+  d'explication, axe « Prix affiché », coût tout compris sous chaque prix, ligne du prix cible
+  insérée et libellée, verdicts par symbole (✓ ~ ✗) autant que par couleur, détail de la case
+  choisie (coût, mensualité, rendements, effort) sous la grille, défilement dans sa boîte.
+  `domain` : `maxTotalCost` par critère et `atTarget` (`outcomeAtPrice`) dans `targetPrice`,
+  coût par pas et `includeTargetPrice` dans `sensitivityGrid` (`priceStepsWithTarget`),
+  `furnitureValue` dans `compute`, lecture de la fiche (`profitabilityChecks`,
+  `monthlyPaymentSplit`, `priceGauge`), tolérance d'arrondi du verdict (`VERDICT_TOLERANCE`) ;
+  champs ajoutés aux schémas, aucun renommé ; aucun outil MCP nouveau.
+- Plus tard : la même lecture en deux bases dans le tableau de bord et la page « Comparer »
+  (encart « au prix cible » côte à côte) ; navigation au clavier entre les cases de la
+  sensibilité ; la ligne du prix cible dans `get_target_price` par défaut si le MCP en tire
+  profit ; une fiche en pleine page si le panneau élargi gêne sur portable.
+
+Fini quand : à la première lecture d'une fiche, on sait pour chaque valeur si elle porte sur le
+prix affiché ou sur le coût tout compris ; on voit au prix cible le coût, le rendement brut,
+l'effort et le verdict ; la sensibilité se lit sans survol, sur ordinateur comme au toucher ; un
+lien vers une fiche rouvre le même onglet. (Vérifié en tests automatisés et sur captures d'un banc
+d'essai ; à confirmer par Richard et Chloé sur la vraie fiche après le déploiement.)

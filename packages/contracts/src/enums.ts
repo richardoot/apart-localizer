@@ -239,12 +239,12 @@ export type NotaryMode = z.infer<typeof NotaryModeSchema>
 export const SensitivityAxisSchema = z
   .enum(['price', 'rent', 'rate', 'downPayment', 'duration'])
   .describe(
-    "Axe d'un tableau de sensibilité : prix d'achat, loyer, taux du crédit, apport, durée"
+    "Axe d'un tableau de sensibilité : prix affiché, loyer, taux du crédit, apport, durée"
   )
 export type SensitivityAxis = z.infer<typeof SensitivityAxisSchema>
 
 export const SENSITIVITY_AXIS_LABELS: Record<SensitivityAxis, string> = {
-  price: "Prix d'achat",
+  price: 'Prix affiché',
   rent: 'Loyer',
   rate: 'Taux du crédit',
   downPayment: 'Apport',

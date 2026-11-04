@@ -1,24 +1,38 @@
 /**
- * Glossaire des indicateurs, servi par la ressource MCP `apart://glossaire`
- * et réutilisable par l'interface. Les définitions suivent le modèle de
- * calcul (docs/product/modele-de-calcul.md).
+ * Glossaire des indicateurs, une seule source pour la ressource MCP
+ * `apart://glossaire` et pour l'interface (bouton « ? » de la fiche, lot 9).
+ * Les définitions suivent le modèle de calcul (docs/product/modele-de-calcul.md).
  */
 export interface GlossaryEntry {
   key: string
   term: string
   definition: string
+  /** La définition en une phrase, montrée par le bouton « ? » de la fiche ; à défaut, `definition`. */
+  short?: string
 }
 
 export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
   {
-    key: 'total_cost',
-    term: 'Coût total',
+    key: 'cost_basis',
+    term: 'Deux bases de calcul',
     definition:
-      'Prix affiché + frais de notaire + travaux + mobilier. Base de tous les rendements.',
+      'Une valeur « sur le prix » se compare au prix affiché (prix cible, décote, offre suggérée, prix maximal par critère). Une valeur « tout compris » porte sur le coût tout compris : prix affiché + frais de notaire + travaux + mobilier (rendements, effort, mensualité, coût maximal par critère).',
+    short:
+      '« Sur le prix » se compare au prix affiché ; « tout compris » porte sur le prix affiché + notaire + travaux + mobilier.',
+  },
+  {
+    key: 'total_cost',
+    term: 'Coût tout compris',
+    definition:
+      'Prix affiché + frais de notaire + travaux + mobilier. Base de tous les rendements, de l’effort et du capital emprunté.',
+    short:
+      'Ce que coûte vraiment l’achat : prix affiché + frais de notaire + travaux + mobilier.',
   },
   {
     key: 'notary_fees',
     term: 'Frais de notaire',
+    short:
+      'Droits et frais payés au notaire à l’achat, estimés par un taux forfaitaire ou par le barème détaillé.',
     definition:
       'Mode « taux » : taux forfaitaire (7,5 % par défaut) appliqué au net vendeur (prix moins honoraires acquéreur). Mode « barème » : droits de mutation (droit départemental, taxe communale, frais d’assiette) + émoluments proportionnels par tranches avec TVA + contribution de sécurité immobilière + débours estimés.',
   },
@@ -26,61 +40,80 @@ export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
     key: 'monthly_payment',
     term: 'Mensualité',
     definition:
-      'Capital emprunté (coût total − apport) × facteur mensuel k (crédit + assurance). k = r / (1 − (1 + r)^−N) + a / 12.',
+      'Capital emprunté (coût tout compris − apport) × facteur mensuel k (crédit + assurance). k = r / (1 − (1 + r)^−N) + a / 12.',
+    short:
+      'Ce que la banque prélève chaque mois, crédit et assurance compris, sur le capital emprunté (coût tout compris − apport).',
   },
   {
     key: 'gross_yield',
     term: 'Rendement brut',
     definition:
-      '12 × loyer retenu / coût total. Le loyer retenu est le loyer visé, borné par le plafond d’encadrement quand la commune est encadrée.',
+      '12 × loyer retenu / coût tout compris. Le loyer retenu est le loyer visé, borné par le plafond d’encadrement quand la commune est encadrée.',
+    short:
+      'Les loyers d’une année rapportés au coût tout compris, avant toute charge.',
   },
   {
     key: 'net_yield',
     term: 'Rendement net',
     definition:
-      'Résultat net d’exploitation / coût total. Le résultat net = loyers encaissés après vacance − taxe foncière − charges non récupérables − frais fixes annuels. Une taxe foncière absente est estimée à un mois de loyer (≈).',
+      'Résultat net d’exploitation / coût tout compris. Le résultat net = loyers encaissés après vacance − taxe foncière − charges non récupérables − frais fixes annuels. Une taxe foncière absente est estimée à un mois de loyer (≈).',
+    short:
+      'Ce que le bien rapporte par an après vacance, taxe foncière, charges et frais, rapporté au coût tout compris.',
   },
   {
     key: 'effort',
     term: 'Effort mensuel',
     definition:
       'Résultat net d’exploitation / 12 − mensualité. Négatif = somme à sortir chaque mois une fois le bien loué.',
+    short:
+      'Ce qui reste chaque mois une fois le bien loué : revenu net moins mensualité ; négatif, c’est ce qu’il faut sortir de sa poche.',
   },
   {
     key: 'rule_220',
     term: 'Repère 220 × loyer',
     definition:
-      'Coût total au-delà duquel le rendement brut passe sous environ 5,45 %. Repère rapide, pas un critère de verdict par défaut.',
+      'Coût tout compris au-delà duquel le rendement brut passe sous environ 5,45 %. Repère rapide, pas un critère de verdict par défaut.',
+    short:
+      'Un coût tout compris au-delà de 220 fois le loyer mensuel donne un rendement brut sous 5,45 % environ.',
   },
   {
     key: 'verdict',
     term: 'Verdict',
     definition:
       'Cible : brut ≥ seuil, effort ≤ maximum, DPE A à D. À creuser : un critère manque de peu (marges paramétrables : 0,7 point de brut, 80 €/mois d’effort) ou DPE inconnu. Hors cible : un critère en échec ou DPE E, F ou G.',
+    short:
+      'Cible si le rendement brut, l’effort et le DPE passent leurs seuils, à creuser si l’un manque de peu, hors cible sinon.',
   },
   {
     key: 'target_price',
     term: 'Prix cible',
     definition:
-      'Prix maximal pour que le bien satisfasse chaque critère actif (rendement brut, rendement net, effort, repère 220 × loyer), puis le minimum de ces prix. À ce prix, le critère liant est tout juste satisfait : rdtBrut(P_b) = s_b.',
+      'Prix affiché maximal pour que le bien satisfasse chaque critère actif (rendement brut, rendement net, effort, repère 220 × loyer, marché), puis le minimum de ces prix. À ce prix, le critère liant est tout juste satisfait : rdtBrut(P_b) = s_b. Les frais de notaire, les travaux et le mobilier s’y ajoutent pour donner le coût tout compris.',
+    short:
+      'Le prix affiché le plus haut auquel le bien satisfait tous les critères retenus.',
   },
   {
     key: 'binding_criterion',
     term: 'Critère liant',
     definition:
       'Le critère qui donne le prix cible, c’est-à-dire le plus contraignant. C’est lui qu’il faudra négocier.',
+    short: 'Le critère le plus exigeant : c’est lui qui fixe le prix cible.',
   },
   {
     key: 'discount',
     term: 'Décote nécessaire',
     definition:
       '(prix affiché − prix cible) / prix affiché. Classes : ≤ 0 dans la cible au prix affiché ; ≤ 5 % négociable ; ≤ 10 % tendu ; au-delà hors de portée (seuils paramétrables dans les hypothèses).',
+    short:
+      'De combien il faut faire baisser le prix affiché pour atteindre le prix cible, en pourcentage du prix affiché.',
   },
   {
     key: 'suggested_offer',
     term: 'Offre suggérée',
     definition:
       'Prix cible arrondi au millier inférieur, jamais au-dessus du prix affiché. La marge entre l’offre et le prix cible est la place laissée à la négociation.',
+    short:
+      'Le prix cible arrondi au millier inférieur : le prix à proposer au vendeur.',
   },
   {
     key: 'rental_verdict',
@@ -155,3 +188,8 @@ export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
       'Règles datées et sourcées (interdictions de location selon le DPE, encadrement et sa date de fin, permis de louer, diagnostics du bail, décence, meublé) évaluées à la date de mise en location prévue, et risques Géorisques à l’adresse : ok, attention, bloquant ou à vérifier.',
   },
 ]
+
+/** L'entrée du glossaire d'une clé (`total_cost`, `gross_yield`…), si elle existe. */
+export function glossaryEntry(key: string): GlossaryEntry | undefined {
+  return INDICATOR_GLOSSARY.find(entry => entry.key === key)
+}

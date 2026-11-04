@@ -19,6 +19,8 @@
     TARGET_CRITERION_LABELS,
     VERDICT_LABELS,
   } from '@/lib/labels'
+  import type { CostBasis } from '@/lib/labels'
+  import CostBasisBadge from './CostBasisBadge.vue'
 
   const props = defineProps<{ result: CompareResult }>()
   const emit = defineEmits<{ open: [id: string] }>()
@@ -28,6 +30,8 @@
     label: string
     /** L'indicateur dont le rang 1 met la cellule en avant. */
     best?: keyof CompareRanks
+    /** Base de calcul de la valeur (lot 9) : sur le prix ou tout compris. */
+    basis?: CostBasis
     value: (item: CompareItem) => string
   }
 
@@ -45,7 +49,12 @@
           .filter(Boolean)
           .join(' · ') || '—',
     },
-    { key: 'price', label: 'Prix', value: i => formatEuros(i.listing.price) },
+    {
+      key: 'price',
+      label: 'Prix',
+      basis: 'price',
+      value: i => formatEuros(i.listing.price),
+    },
     {
       key: 'surface',
       label: 'Surface',
@@ -55,6 +64,7 @@
       key: 'pricePerM2',
       label: 'Prix au m²',
       best: 'pricePerM2',
+      basis: 'price',
       value: i => formatEurosPerM2(i.evaluation.metrics.pricePerM2),
     },
     { key: 'dpe', label: 'DPE', value: i => i.listing.dpeClass ?? '—' },
@@ -65,24 +75,28 @@
     },
     {
       key: 'totalCost',
-      label: 'Coût total',
+      label: 'Coût tout compris',
+      basis: 'all_in',
       value: i => formatEuros(i.evaluation.metrics.totalCost),
     },
     {
       key: 'monthlyPayment',
       label: 'Mensualité',
+      basis: 'all_in',
       value: i => formatEurosPerMonth(i.evaluation.metrics.monthlyPayment),
     },
     {
       key: 'grossYield',
       label: 'Rendement brut',
       best: 'grossYield',
+      basis: 'all_in',
       value: i => formatPercent(i.evaluation.metrics.grossYield),
     },
     {
       key: 'netYield',
       label: 'Rendement net',
       best: 'netYield',
+      basis: 'all_in',
       value: i =>
         `${i.evaluation.metrics.propertyTaxEstimated ? '≈ ' : ''}${formatPercent(i.evaluation.metrics.netYield)}`,
     },
@@ -90,6 +104,7 @@
       key: 'effort',
       label: 'Effort mensuel',
       best: 'effort',
+      basis: 'all_in',
       value: i => formatEurosPerMonth(i.evaluation.metrics.effort),
     },
     {
@@ -106,6 +121,7 @@
     {
       key: 'targetPrice',
       label: 'Prix cible',
+      basis: 'price',
       value: i =>
         i.evaluation.targetPrice.targetPrice === null
           ? '—'
@@ -119,6 +135,7 @@
       key: 'discount',
       label: 'Décote nécessaire',
       best: 'discount',
+      basis: 'price',
       value: i =>
         i.evaluation.targetPrice.discount === null ||
         !i.evaluation.targetPrice.discountClass
@@ -176,7 +193,10 @@
           :data-row="row.key"
         >
           <th scope="row" class="px-3 py-2 text-left font-medium text-muted">
-            {{ row.label }}
+            <span class="inline-flex items-center gap-1.5"
+              >{{ row.label }}
+              <CostBasisBadge v-if="row.basis" :basis="row.basis" compact
+            /></span>
           </th>
           <td
             v-for="item in result.items"

@@ -135,6 +135,12 @@ describe('MetricsPreview', () => {
     expect(wrapper.get('[data-testid="total-cost"]').text()).toMatch(
       /220\s?000 €/
     )
+    // Lot 9 : « Coût tout compris », marqué de sa base de calcul.
+    expect(wrapper.text()).toContain('Coût tout compris')
+    expect(wrapper.text()).not.toContain('Coût total')
+    expect(
+      wrapper.findAll('[data-basis]').map(b => b.attributes('data-basis'))
+    ).toEqual(['price', 'all_in'])
     expect(wrapper.get('[data-testid="gross-yield"]').text()).toBe('4,1 %')
     expect(wrapper.get('[data-testid="effort"]').text()).toMatch(/-362 €\/mois/)
     expect(wrapper.text()).toContain('≈')

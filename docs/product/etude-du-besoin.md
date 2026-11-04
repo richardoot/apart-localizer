@@ -7,7 +7,8 @@ rentabilité ainsi que le prix à partir duquel il devient intéressant.
 Document rédigé le 2 novembre 2026 à partir de l'artefact Claude « Comparateur d'annonces
 locatives » utilisé aujourd'hui, et de la structure du projet `bankin-analyzer`. Mis à jour le
 3 novembre 2026 : choix NestJS + Prisma + PostGIS confirmé, critères de recherche géographiques
-ajoutés (§ 3.9).
+ajoutés (§ 3.9) ; le 4 novembre 2026 : deux bases de calcul de la fiche, « sur le prix » et
+« tout compris » (P5, lot 9).
 
 Documents liés : [modèle de calcul](modele-de-calcul.md), [choix techniques](tech-stack.md),
 [feuille de route](roadmap.md), [décisions](../decisions/).
@@ -114,7 +115,10 @@ les documents à demander. Pendant la visite : photos, notes, avis à chaud.
 
 **P5. Décider d'une offre.** La fiche donne le prix cible selon chaque critère (rendement, effort,
 marché), la décote nécessaire par rapport au prix affiché, l'ancienneté de l'annonce et ses
-baisses de prix. L'offre et sa réponse sont historisées.
+baisses de prix. L'offre et sa réponse sont historisées. Chaque valeur dit sur quelle base elle
+porte : le prix affiché (prix cible, décote, offre) ou le coût tout compris, prix + notaire +
+travaux + mobilier (rendements, effort, mensualité) ; la synthèse répond à « combien négocier ? »,
+« combien ça coûte ? », « est-ce rentable ? » et « et au prix cible ? » (lot 9).
 
 **P6. Vérifier la louabilité (phase 2).** Pour l'année de mise en location choisie : DPE et
 calendrier d'interdiction, plafond d'encadrement, loyer de marché, copropriété, décence, permis de

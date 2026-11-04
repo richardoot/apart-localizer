@@ -8,7 +8,8 @@ import type {
   SensitivityGridCell,
   SensitivityStep,
 } from '@apart/contracts'
-import { compute } from './compute.js'
+import { compute, totalCost } from './compute.js'
+import { targetPrice } from './target-price.js'
 
 export const PRICE_FACTORS: readonly number[] = [0.85, 0.9, 0.95, 1]
 export const RATE_DELTAS: readonly number[] = [-0.005, 0, 0.005]
@@ -88,6 +89,37 @@ export interface SensitivityGridRequest {
   colAxis: SensitivityAxis
   rowSteps?: readonly number[] | undefined
   colSteps?: readonly number[] | undefined
+  /** Ajoute sur l'axe du prix affiché le pas du prix cible (lot 9). */
+  includeTargetPrice?: boolean | undefined
+}
+
+/** Écart en euros sous lequel un pas existant est déjà « le prix cible ». */
+export const TARGET_STEP_TOLERANCE = 0.5
+
+/**
+ * Les pas de l'axe du prix affiché avec celui du prix cible (lot 9) : le
+ * multiplicateur `prixCible / prix` inséré avant le premier pas plus grand,
+ * sauf si un pas tombe déjà à moins de 0,50 € du prix cible (il est alors
+ * repéré tel quel). Sans prix cible ou sans prix, les pas sont inchangés.
+ */
+export function priceStepsWithTarget(
+  steps: readonly number[],
+  input: ListingFinancials,
+  a: Assumptions
+): { steps: number[]; targetStep: number | null } {
+  const target = targetPrice(input, a).targetPrice
+  if (target === null || !(input.price > 0)) {
+    return { steps: [...steps], targetStep: null }
+  }
+  const existing = steps.find(
+    step => Math.abs(input.price * step - target) < TARGET_STEP_TOLERANCE
+  )
+  if (existing !== undefined) return { steps: [...steps], targetStep: existing }
+  const factor = target / input.price
+  const at = steps.findIndex(step => step > factor)
+  const next = [...steps]
+  next.splice(at === -1 ? next.length : at, 0, factor)
+  return { steps: next, targetStep: factor }
 }
 
 interface Scenario {
@@ -134,8 +166,11 @@ export function applyAxisStep(
 
 /**
  * Tableau de sensibilité à deux entrées (lot N3) : deux axes au choix, une
- * cellule par couple de pas avec le brut, le net, l'effort, la mensualité et
- * le verdict. La cellule des pas neutres est repérée (`isCurrent`).
+ * cellule par couple de pas avec le coût tout compris, le brut, le net,
+ * l'effort, la mensualité et le verdict. La cellule des pas neutres est
+ * repérée (`isCurrent`). Sur l'axe du prix affiché, chaque pas porte le coût
+ * tout compris qu'il entraîne et, avec `includeTargetPrice`, le pas du prix
+ * cible est ajouté et repéré (`isTarget`, lot 9).
  */
 export function sensitivityGrid(
   input: ListingFinancials,
@@ -146,14 +181,24 @@ export function sensitivityGrid(
   if (rowAxis === colAxis) {
     throw new RangeError('Les deux axes du tableau doivent être différents')
   }
-  const steps = (axis: SensitivityAxis, given?: readonly number[]) =>
-    (given && given.length > 0 ? given : DEFAULT_AXIS_STEPS[axis]).map(
-      (step): SensitivityStep => ({
+  const steps = (axis: SensitivityAxis, given?: readonly number[]) => {
+    const base = given && given.length > 0 ? given : DEFAULT_AXIS_STEPS[axis]
+    const withTarget =
+      axis === 'price' && request.includeTargetPrice
+        ? priceStepsWithTarget(base, input, a)
+        : { steps: [...base], targetStep: null }
+    return withTarget.steps.map((step): SensitivityStep => {
+      const scenario = applyAxisStep(axis, step, input, a)
+      return {
         step,
-        value: applyAxisStep(axis, step, input, a).value,
+        value: scenario.value,
         isCurrent: step === NEUTRAL_STEP[axis],
-      })
-    )
+        isTarget: step === withTarget.targetStep,
+        totalCost:
+          axis === 'price' ? totalCost(scenario.input, scenario.a) : null,
+      }
+    })
+  }
   const rows = steps(rowAxis, request.rowSteps)
   const cols = steps(colAxis, request.colSteps)
   const cells: SensitivityGridCell[][] = rows.map(row =>

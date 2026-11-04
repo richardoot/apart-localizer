@@ -17,7 +17,11 @@
    * l'adresse. Calculée par le serveur (table de référence datée, données
    * ouvertes) ; chaque point porte sa date et sa source.
    */
-  const props = defineProps<{ listingId: string }>()
+  const props = defineProps<{
+    listingId: string
+    /** Lot 9 : les seuls risques Géorisques (onglet Quartier), sans la checklist. */
+    risksOnly?: boolean
+  }>()
   const {
     data: report,
     isPending,
@@ -27,6 +31,7 @@
   const groups = computed(() => {
     const byCategory = new Map<ComplianceCategory, ComplianceItem[]>()
     for (const item of report.value?.items ?? []) {
+      if (props.risksOnly && item.category !== 'risks') continue
       byCategory.set(item.category, [
         ...(byCategory.get(item.category) ?? []),
         item,
@@ -41,7 +46,7 @@
     <p v-if="isPending" class="text-muted">Évaluation de la conformité…</p>
     <p v-else-if="error" role="alert" class="text-bad">{{ error.message }}</p>
     <template v-else-if="report">
-      <header class="flex flex-wrap items-center gap-2">
+      <header v-if="!risksOnly" class="flex flex-wrap items-center gap-2">
         <RentalPill :verdict="report.verdict" />
         <span>
           pour une mise en location le
@@ -113,7 +118,14 @@
         </template>
         <template v-else>{{ report.georisques?.message }}</template>
       </p>
-      <p class="text-xs text-muted">
+      <p
+        v-if="risksOnly && groups.length === 0"
+        class="text-muted"
+        data-testid="no-risks"
+      >
+        Aucun risque relevé pour l’instant.
+      </p>
+      <p v-if="!risksOnly" class="text-xs text-muted">
         {{ report.rules.label }} (version {{ report.rules.version }}).
         {{ report.disclaimer }}
       </p>

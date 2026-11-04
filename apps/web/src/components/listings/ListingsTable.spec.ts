@@ -31,6 +31,29 @@ describe('ListingsTable', () => {
     expect(wrapper.text()).toContain('€/m²')
   })
 
+  it('lot 9 : « Coût tout compris », et chaque en-tête chiffré marqué de sa base de calcul', () => {
+    const wrapper = mount(ListingsTable, { props: { items: [cheap, dear] } })
+    const header = (start: string) =>
+      wrapper.findAll('thead button').find(b => b.text().startsWith(start))
+    expect(wrapper.text()).not.toContain('Coût total')
+    expect(
+      header('Coût tout compris')?.find('[data-basis]').attributes('data-basis')
+    ).toBe('all_in')
+    for (const [start, basis] of [
+      ['Prix cible', 'price'],
+      ['Décote', 'price'],
+      ['€/m²', 'price'],
+      ['Brut', 'all_in'],
+      ['Net', 'all_in'],
+      ['Effort/mois', 'all_in'],
+    ] as const)
+      expect(
+        header(start)?.find('[data-basis]').attributes('data-basis'),
+        start
+      ).toBe(basis)
+    expect(header('Verdict')?.find('[data-basis]').exists()).toBe(false)
+  })
+
   it('trie au clic sur un en-tête : décroissant d’abord sur un nombre, puis croissant', async () => {
     const wrapper = mount(ListingsTable, { props: { items: [cheap, dear] } })
     const ids = (): string[] =>

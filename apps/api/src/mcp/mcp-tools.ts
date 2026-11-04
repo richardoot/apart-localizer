@@ -201,7 +201,7 @@ export function describeEvaluation(evaluation: ListingEvaluation): string {
   const m = evaluation.metrics
   const target = evaluation.targetPrice.targetPrice
   return [
-    `coût total ${formatEuros(m.totalCost)}`,
+    `coût tout compris ${formatEuros(m.totalCost)}`,
     `mensualité ${formatEuros(m.monthlyPayment)}`,
     `brut ${formatPercent(m.grossYield)}`,
     `net ${formatPercent(m.netYield)}`,
@@ -1622,7 +1622,7 @@ export function registerResources(server: McpServer): void {
     {
       title: 'Glossaire des indicateurs',
       description:
-        'Définitions : coût total, frais de notaire, mensualité, rendements brut et net, effort, repère 220 × loyer, verdict, prix cible, critère liant, décote et ses classes, offre suggérée, louabilité, provenance, coût d’occupation, scénario, régimes fiscaux, cash-flow net d’impôt, TRI, VAN, enrichissement net, plus-value, loyer de marché, checklist réglementaire.',
+        'Définitions : deux bases de calcul (sur le prix, tout compris), coût tout compris, frais de notaire, mensualité, rendements brut et net, effort, repère 220 × loyer, verdict, prix cible, critère liant, décote et ses classes, offre suggérée, louabilité, provenance, coût d’occupation, scénario, régimes fiscaux, cash-flow net d’impôt, TRI, VAN, enrichissement net, plus-value, loyer de marché, checklist réglementaire.',
       mimeType: 'text/markdown',
     },
     uri => ({
@@ -1674,7 +1674,7 @@ export function analyzeListingPrompt(args: {
     "2. Présente la fiche rendue au membre en français : prix, surface, pièces, étage, DPE, charges, taxe foncière, adresse et commune, travaux évoqués ; pour chaque valeur, sa confiance et l'extrait justificatif (listing.fieldSources) ; la liste des champs indispensables manquants ou douteux ; les doublons probables avec leur motif.",
     "3. S'il y a un doublon probable, demande au membre s'il s'agit de la même annonce (dans ce cas n'enregistre rien et propose update_listing ou get_listing sur l'existante) ou s'il veut créer quand même (ignoreDuplicates: true).",
     "4. Attends la confirmation explicite du membre avant d'écrire. Applique ses corrections dans la fiche et marque chaque champ corrigé avec la provenance « user » dans fieldSources.",
-    "5. Après confirmation seulement, appelle create_listing avec « listing » = la fiche rendue par extract_listing (corrections comprises, fieldSources conservé, sourceText conservé) et « provenance: ai ». Rapporte l'identifiant, les indicateurs (coût total, mensualité, rendement brut, effort, verdict), le verdict de louabilité et les tâches créées pour les champs manquants.",
+    "5. Après confirmation seulement, appelle create_listing avec « listing » = la fiche rendue par extract_listing (corrections comprises, fieldSources conservé, sourceText conservé) et « provenance: ai ». Rapporte l'identifiant, les indicateurs (coût tout compris, mensualité, rendement brut, effort, verdict), le verdict de louabilité et les tâches créées pour les champs manquants.",
     '',
     args.notes ? `Consignes du membre : ${args.notes}\n` : null,
     '<annonce_source>',

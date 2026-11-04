@@ -20,6 +20,8 @@
     formatSurface,
   } from '@/lib/format'
   import { DISCOUNT_CLASS_CLASSES, DISCOUNT_CLASS_LABELS } from '@/lib/labels'
+  import type { CostBasis } from '@/lib/labels'
+  import CostBasisBadge from './CostBasisBadge.vue'
   import DpeBadge from './DpeBadge.vue'
   import CriteriaBadges from './CriteriaBadges.vue'
   import NewBadge from './NewBadge.vue'
@@ -64,6 +66,13 @@
     value == null || Number.isNaN(value) ? Number.NEGATIVE_INFINITY : value
 
   const estimated = (flag: boolean): string => (flag ? '≈ ' : '')
+
+  /** Un en-tête marqué de sa base de calcul (lot 9) : sur le prix ou tout compris. */
+  const withBasis = (label: string, basis: CostBasis) => () =>
+    h('span', { class: 'inline-flex items-center gap-1' }, [
+      label,
+      h(CostBasisBadge, { basis, compact: true }),
+    ])
 
   const averageRating = (item: EvaluatedListing): number => {
     const rated = item.opinions.filter(o => o.rating > 0)
@@ -130,7 +139,7 @@
     }),
     helper.accessor(row => row.listing.price, {
       id: 'price',
-      header: 'Prix',
+      header: withBasis('Prix', 'price'),
       cell: ctx => formatEuros(ctx.getValue()),
       sortFn: 'basic',
     }),
@@ -142,7 +151,7 @@
     }),
     helper.accessor(row => num(row.evaluation.metrics.pricePerM2), {
       id: 'pricePerM2',
-      header: '€/m²',
+      header: withBasis('€/m²', 'price'),
       cell: ctx =>
         formatEurosPerM2(ctx.row.original.evaluation.metrics.pricePerM2),
       sortFn: 'basic',
@@ -161,7 +170,7 @@
     }),
     helper.accessor(row => row.evaluation.metrics.totalCost, {
       id: 'totalCost',
-      header: 'Coût total',
+      header: withBasis('Coût tout compris', 'all_in'),
       cell: ctx => formatEuros(ctx.getValue()),
       sortFn: 'basic',
     }),
@@ -182,27 +191,27 @@
     }),
     helper.accessor(row => num(row.evaluation.metrics.grossYield), {
       id: 'grossYield',
-      header: 'Brut',
+      header: withBasis('Brut', 'all_in'),
       cell: ctx =>
         formatPercent(ctx.row.original.evaluation.metrics.grossYield),
       sortFn: 'basic',
     }),
     helper.accessor(row => num(row.evaluation.metrics.netYield), {
       id: 'netYield',
-      header: 'Net',
+      header: withBasis('Net', 'all_in'),
       cell: ctx =>
         `${estimated(ctx.row.original.evaluation.metrics.propertyTaxEstimated)}${formatPercent(ctx.row.original.evaluation.metrics.netYield)}`,
       sortFn: 'basic',
     }),
     helper.accessor(row => row.evaluation.metrics.effort, {
       id: 'effort',
-      header: 'Effort/mois',
+      header: withBasis('Effort/mois', 'all_in'),
       cell: ctx => formatEurosPerMonth(ctx.getValue()),
       sortFn: 'basic',
     }),
     helper.accessor(row => num(row.evaluation.targetPrice.targetPrice), {
       id: 'targetPrice',
-      header: 'Prix cible',
+      header: withBasis('Prix cible', 'price'),
       cell: ctx => {
         const t = ctx.row.original.evaluation.targetPrice
         return t.targetPrice === null ? '—' : formatEuros(t.targetPrice)
@@ -217,7 +226,7 @@
           : -row.evaluation.targetPrice.discount,
       {
         id: 'discount',
-        header: 'Décote',
+        header: withBasis('Décote', 'price'),
         cell: ctx => {
           const t = ctx.row.original.evaluation.targetPrice
           if (t.discount === null || !t.discountClass) return '—'

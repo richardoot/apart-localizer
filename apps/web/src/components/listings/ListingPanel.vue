@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue'
+  import { computed, nextTick, ref, watch } from 'vue'
   import { useQuery } from '@tanstack/vue-query'
   import type {
     ListingStatus,
@@ -7,6 +7,7 @@
     OfferUpdate,
     SensitivityAxis,
   } from '@apart/contracts'
+  import { mergeAssumptions } from '@apart/domain'
   import SidePanel from '@/components/ui/SidePanel.vue'
   import {
     useListing,
@@ -25,11 +26,15 @@
     formToPatch,
     validateForm,
   } from '@/lib/listing-form'
+  import { DEFAULT_LISTING_TAB } from '@/lib/listing-tabs'
+  import type { ListingTab } from '@/lib/listing-tabs'
   import ContextSection from './ContextSection.vue'
   import CriteriaBadges from './CriteriaBadges.vue'
   import DpeBadge from './DpeBadge.vue'
   import HistorySection from './HistorySection.vue'
   import ListingForm from './ListingForm.vue'
+  import ListingSynthesis from './ListingSynthesis.vue'
+  import ListingTabs from './ListingTabs.vue'
   import MetricsPreview from './MetricsPreview.vue'
   import NewBadge from './NewBadge.vue'
   import OpinionsSection from './OpinionsSection.vue'
@@ -39,6 +44,8 @@
   import StatusChanger from './StatusChanger.vue'
   import TargetPriceSection from './TargetPriceSection.vue'
   import TasksSection from './TasksSection.vue'
+  import VerdictPill from './VerdictPill.vue'
+  import CompliancePanel from '@/components/study/CompliancePanel.vue'
   import StudySection from '@/components/study/StudySection.vue'
   import JournalSection from '@/components/activity/JournalSection.vue'
   import ListingChanges from '@/components/activity/ListingChanges.vue'
@@ -50,6 +57,11 @@
     notice?: string | null
   }>()
   const emit = defineEmits<{ close: [] }>()
+  /**
+   * L'onglet ouvert (lot 9). La page des annonces le lie à l'URL
+   * (`?onglet=`) ; sans liaison, il vit dans le composant.
+   */
+  const tab = defineModel<ListingTab>('tab', { default: DEFAULT_LISTING_TAB })
 
   const id = computed(() => props.id)
   const { data: item, isPending, error } = useListing(id)
@@ -63,9 +75,6 @@
   const message = ref<string | null>(props.notice ?? null)
   const failure = ref<string | null>(null)
   const seenFor = ref<string | null>(null)
-
-  type Tab = 'listing' | 'visits' | 'journal'
-  const tab = ref<Tab>('listing')
 
   // « Ce qui a changé » depuis la dernière ouverture : lu avant de marquer la
   // fiche vue, gardé le temps de l'ouverture (puis oublié). Clé hors de
@@ -113,6 +122,18 @@
   const shownEvaluation = computed(() =>
     editing.value ? preview.value.evaluation : (item.value?.evaluation ?? null)
   )
+  /**
+   * Les hypothèses de l'annonce (espace surchargé par l'annonce), comme le
+   * serveur les applique ; pendant l'édition, celles du formulaire.
+   */
+  const shownAssumptions = computed(() => {
+    if (editing.value) return preview.value.assumptions
+    if (!assumptions.value) return null
+    return mergeAssumptions(
+      assumptions.value,
+      item.value?.listing.assumptionsOverride ?? null
+    )
+  })
 
   // « À partir de quel prix ? » : le rapport du serveur (rang, historique) ;
   // pendant l'édition, l'aperçu calculé dans le navigateur par `domain`.
@@ -133,14 +154,33 @@
     () => shownEvaluation.value?.metrics.notaryFeesDetail ?? null
   )
 
-  // Tableau de sensibilité : axes au choix, recalculé côté serveur.
+  // Tableau de sensibilité : axes au choix, recalculé côté serveur, avec la
+  // ligne du prix cible ; demandé seulement à l'ouverture de l'onglet Négocier.
   const rowAxis = ref<SensitivityAxis>('price')
   const colAxis = ref<SensitivityAxis>('rent')
   const sensitivityRequest = computed(() => ({
     rowAxis: rowAxis.value,
     colAxis: colAxis.value,
+    includeTargetPrice: true,
   }))
-  const sensitivity = useSensitivity(id, sensitivityRequest)
+  const sensitivity = useSensitivity(
+    computed(() => (tab.value === 'negocier' ? props.id : null)),
+    sensitivityRequest
+  )
+
+  const openTasks = computed(
+    () => item.value?.tasks.filter(t => !t.done).length ?? 0
+  )
+
+  /** « Modifier la fiche » : l'onglet Financer et louer, formulaire ouvert. */
+  const formBox = ref<HTMLDetailsElement | null>(null)
+  function startEditing(): void {
+    editing.value = true
+    tab.value = 'financer'
+    void nextTick(() => {
+      formBox.value?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+    })
+  }
 
   /** Le statut proposé par la dernière offre écrite, jusqu'à ce qu'il soit appliqué ou que la fiche change. */
   const suggestedStatus = ref<ListingStatus | null>(null)
@@ -282,7 +322,11 @@
 </script>
 
 <template>
-  <SidePanel :title="item?.listing.title ?? 'Annonce'" @close="emit('close')">
+  <SidePanel
+    :title="item?.listing.title ?? 'Annonce'"
+    wide
+    @close="emit('close')"
+  >
     <p v-if="isPending" class="text-sm text-muted">Chargement de l'annonce…</p>
     <p
       v-else-if="error"
@@ -291,12 +335,16 @@
     >
       {{ error.message }}
     </p>
-    <div v-else-if="item" class="grid gap-6">
+    <div v-else-if="item" class="grid gap-5">
       <header class="grid gap-2">
         <div class="flex flex-wrap items-center gap-2">
           <StatusBadge :status="item.listing.status" />
           <NewBadge :is-new="item.isNewForMe" />
           <DpeBadge :dpe="item.listing.dpeClass" />
+          <VerdictPill
+            v-if="shownEvaluation"
+            :verdict="shownEvaluation.metrics.verdict"
+          />
           <CriteriaBadges :matches="item.criteriaMatches" />
           <span class="text-xs text-muted">
             {{
@@ -327,11 +375,32 @@
             >voir l'annonce</a
           >
         </p>
-        <StatusChanger
-          :status="item.listing.status"
-          :busy="busy"
-          @change="changeStatus"
-        />
+        <div class="flex flex-wrap items-center gap-2">
+          <StatusChanger
+            :status="item.listing.status"
+            :busy="busy"
+            @change="changeStatus"
+          />
+          <button
+            v-if="!editing"
+            type="button"
+            class="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line px-3 py-1 text-sm hover:bg-surface-2"
+            data-testid="edit-listing"
+            @click="startEditing"
+          >
+            Modifier la fiche
+            <span
+              v-if="changedFields.length"
+              class="rounded-full bg-accent px-2 py-0.5 text-xs text-accent-fg"
+              data-testid="changed-count"
+              >{{ changedFields.length }} champ(s) modifié(s)</span
+            >
+          </button>
+          <span v-else class="text-xs text-muted" data-testid="editing-notice"
+            >Modification en cours : la synthèse montre l’aperçu en
+            direct.</span
+          >
+        </div>
         <p
           v-if="
             item.listing.status === 'discarded' && item.listing.discardReason
@@ -342,208 +411,222 @@
         </p>
       </header>
 
-      <div
-        class="flex gap-1 rounded-lg bg-surface-2 p-1 text-sm"
-        role="tablist"
-        aria-label="Sections de la fiche"
-      >
-        <button
-          v-for="choice in [
-            { id: 'listing', label: 'Fiche' },
-            { id: 'visits', label: 'Visites' },
-            { id: 'journal', label: 'Journal' },
-          ] as const"
-          :key="choice.id"
-          type="button"
-          role="tab"
-          :aria-selected="tab === choice.id"
-          class="flex-1 rounded-md px-3 py-1.5"
-          :class="
-            tab === choice.id ? 'bg-surface font-medium shadow' : 'text-muted'
-          "
-          :data-testid="`tab-${choice.id}`"
-          @click="tab = choice.id"
-        >
-          {{ choice.label }}
-        </button>
-      </div>
+      <ListingTabs v-model="tab" :open-tasks="openTasks" />
 
       <p
-        v-if="failure && tab !== 'listing'"
+        v-if="failure"
         role="alert"
         class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
       >
         {{ failure }}
       </p>
-      <VisitsSection
-        v-if="tab === 'visits'"
-        :listing-id="item.listing.id"
-        :members="members"
-        :me-id="me?.id ?? null"
-        @set-status="status => changeStatus({ status, reason: null })"
-      />
-      <JournalSection
-        v-else-if="tab === 'journal'"
-        :listing-id="item.listing.id"
-      />
-      <template v-else>
-        <ListingChanges v-if="changes" :changes="changes" />
-        <MetricsPreview :evaluation="shownEvaluation" />
-        <TargetPriceSection
-          :price="shownEvaluation?.metrics.price ?? item.listing.price"
-          :target-price="shownTargetPrice"
-          :negotiation="shownNegotiation"
-          :rank="editing ? null : (targetReport?.rank ?? null)"
-          :notary-fees="shownNotaryFees"
-          :live="editing"
-        />
-        <SensitivityTable
-          v-model:row-axis="rowAxis"
-          v-model:col-axis="colAxis"
-          :grid="sensitivity.data.value ?? null"
-          :loading="sensitivity.isFetching.value"
-        />
-        <RentalChecksList
-          v-if="shownEvaluation"
-          :rental="shownEvaluation.rental"
-        />
-        <StudySection
-          :item="item"
-          :assumptions="assumptions"
-          :busy="busy"
-          @retain-market-rent="retainMarketRent"
-        />
-        <ContextSection
-          :listing-id="item.listing.id"
-          :updated-at="item.listing.updatedAt"
-        />
+      <p v-else-if="message" class="text-sm text-good" aria-live="polite">
+        {{ message }}
+      </p>
 
-        <p
-          v-if="failure"
-          role="alert"
-          class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-        >
-          {{ failure }}
-        </p>
-        <p v-else-if="message" class="text-sm text-good" aria-live="polite">
-          {{ message }}
-        </p>
+      <div
+        :id="`listing-panel-${tab}`"
+        role="tabpanel"
+        :aria-labelledby="`listing-tab-${tab}`"
+        tabindex="0"
+        class="grid gap-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+        :data-panel="tab"
+      >
+        <template v-if="tab === 'synthese'">
+          <ListingChanges v-if="changes" :changes="changes" />
+          <ListingSynthesis
+            :item="item"
+            :evaluation="shownEvaluation"
+            :target-price="shownTargetPrice"
+            :negotiation="shownNegotiation"
+            :assumptions="shownAssumptions"
+            :live="editing"
+            @go="next => (tab = next)"
+          />
+        </template>
 
-        <details class="rounded-xl border border-line" :open="editing">
-          <summary
-            class="cursor-pointer px-4 py-3 font-display text-base font-semibold"
-            @click="editing = true"
+        <template v-else-if="tab === 'negocier'">
+          <TargetPriceSection
+            :price="shownEvaluation?.metrics.price ?? item.listing.price"
+            :target-price="shownTargetPrice"
+            :negotiation="shownNegotiation"
+            :rank="editing ? null : (targetReport?.rank ?? null)"
+            :notary-fees="shownNotaryFees"
+            :assumptions="shownAssumptions"
+            :rent="shownEvaluation?.metrics.rent ?? 0"
+            :live="editing"
+          />
+          <SensitivityTable
+            v-model:row-axis="rowAxis"
+            v-model:col-axis="colAxis"
+            :grid="sensitivity.data.value ?? null"
+            :loading="sensitivity.isFetching.value"
+          />
+          <HistorySection
+            :events="item.priceEvents"
+            :offers="item.offers"
+            :current-price="item.listing.price"
+            :suggested-status="suggestedStatus"
+            :busy="busy"
+            @record="
+              newPrice =>
+                run(
+                  mutations.recordPriceChange.mutateAsync({
+                    id: item!.listing.id,
+                    input: {
+                      newPrice,
+                      expectedPrice: item!.listing.price,
+                      source: 'listing',
+                    },
+                  })
+                )
+            "
+            @add-offer="addOffer"
+            @update-offer="updateOffer"
+            @set-status="status => changeStatus({ status, reason: null })"
+          />
+        </template>
+
+        <template v-else-if="tab === 'financer'">
+          <RentalChecksList
+            v-if="shownEvaluation"
+            :rental="shownEvaluation.rental"
+          />
+          <StudySection
+            :item="item"
+            :assumptions="assumptions"
+            :busy="busy"
+            @retain-market-rent="retainMarketRent"
+          />
+          <details
+            ref="formBox"
+            class="rounded-xl border border-line"
+            :open="editing"
           >
-            Fiche et saisie
-            <span
-              v-if="changedFields.length"
-              class="ml-2 rounded-full bg-accent px-2 py-0.5 text-xs font-normal text-accent-fg"
-              data-testid="changed-count"
-              >{{ changedFields.length }} champ(s) modifié(s)</span
+            <summary
+              class="cursor-pointer px-4 py-3 font-display text-base font-semibold"
+              @click="editing = true"
             >
-          </summary>
-          <div class="grid gap-4 px-4 pb-4">
-            <ListingForm
-              v-model="form"
-              :errors="errors"
-              :field-sources="item.listing.fieldSources"
-              :changed="changedFields"
-              hide-status
-            />
-            <div class="flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                class="rounded-lg border border-line px-3 py-1.5 text-sm"
-                @click="cancel"
+              Fiche et saisie : bien, travaux, phase 2, hypothèses de l’annonce
+              <span
+                v-if="changedFields.length"
+                class="ml-2 text-xs font-normal text-muted"
+                >{{ changedFields.length }} champ(s) modifié(s) mis en
+                évidence</span
               >
-                Annuler
-              </button>
-              <button
-                type="button"
-                class="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-accent-fg disabled:opacity-60"
-                :disabled="busy"
-                @click="save"
+            </summary>
+            <div class="grid gap-4 px-4 pb-4">
+              <div
+                v-if="editing"
+                class="sticky top-0 z-10 -mx-1 bg-surface px-1 py-1"
               >
-                {{
-                  mutations.update.isPending.value
-                    ? 'Enregistrement…'
-                    : 'Enregistrer'
-                }}
-              </button>
+                <MetricsPreview :evaluation="shownEvaluation" compact />
+              </div>
+              <ListingForm
+                v-model="form"
+                :errors="errors"
+                :field-sources="item.listing.fieldSources"
+                :changed="changedFields"
+                hide-status
+              />
+              <div class="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  class="rounded-lg border border-line px-3 py-1.5 text-sm"
+                  @click="cancel"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  class="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-accent-fg disabled:opacity-60"
+                  :disabled="busy"
+                  @click="save"
+                >
+                  {{
+                    mutations.update.isPending.value
+                      ? 'Enregistrement…'
+                      : 'Enregistrer'
+                  }}
+                </button>
+              </div>
             </div>
-          </div>
-        </details>
+          </details>
+        </template>
 
-        <OpinionsSection
-          :opinions="item.opinions"
-          :members="members"
-          :me-id="me?.id ?? null"
-          :saving="mutations.upsertOpinion.isPending.value"
-          @save="
-            input =>
-              run(
-                mutations.upsertOpinion.mutateAsync({
-                  id: item!.listing.id,
-                  input,
-                })
-              )
-          "
-        />
+        <template v-else-if="tab === 'quartier'">
+          <ContextSection
+            :listing-id="item.listing.id"
+            :updated-at="item.listing.updatedAt"
+          />
+          <section
+            class="grid gap-3 rounded-xl border border-line p-4"
+            aria-labelledby="risks-title"
+          >
+            <h3 id="risks-title" class="font-display text-base font-semibold">
+              Risques à l’adresse
+            </h3>
+            <CompliancePanel :listing-id="item.listing.id" risks-only />
+          </section>
+        </template>
 
-        <TasksSection
-          :tasks="item.tasks"
-          :members="members"
-          @add="
-            label =>
-              run(
-                mutations.addTask.mutateAsync({ id: item!.listing.id, label })
-              )
-          "
-          @toggle="
-            (taskId, done) =>
-              run(
-                mutations.updateTask.mutateAsync({
-                  id: item!.listing.id,
-                  taskId,
-                  update: { done },
-                })
-              )
-          "
-          @remove="
-            taskId =>
-              run(
-                mutations.removeTask.mutateAsync({
-                  id: item!.listing.id,
-                  taskId,
-                })
-              )
-          "
-        />
-
-        <HistorySection
-          :events="item.priceEvents"
-          :offers="item.offers"
-          :current-price="item.listing.price"
-          :suggested-status="suggestedStatus"
-          :busy="busy"
-          @record="
-            newPrice =>
-              run(
-                mutations.recordPriceChange.mutateAsync({
-                  id: item!.listing.id,
-                  input: {
-                    newPrice,
-                    expectedPrice: item!.listing.price,
-                    source: 'listing',
-                  },
-                })
-              )
-          "
-          @add-offer="addOffer"
-          @update-offer="updateOffer"
-          @set-status="status => changeStatus({ status, reason: null })"
-        />
-      </template>
+        <template v-else>
+          <OpinionsSection
+            :opinions="item.opinions"
+            :members="members"
+            :me-id="me?.id ?? null"
+            :saving="mutations.upsertOpinion.isPending.value"
+            @save="
+              input =>
+                run(
+                  mutations.upsertOpinion.mutateAsync({
+                    id: item!.listing.id,
+                    input,
+                  })
+                )
+            "
+          />
+          <TasksSection
+            :tasks="item.tasks"
+            :members="members"
+            @add="
+              label =>
+                run(
+                  mutations.addTask.mutateAsync({
+                    id: item!.listing.id,
+                    label,
+                  })
+                )
+            "
+            @toggle="
+              (taskId, done) =>
+                run(
+                  mutations.updateTask.mutateAsync({
+                    id: item!.listing.id,
+                    taskId,
+                    update: { done },
+                  })
+                )
+            "
+            @remove="
+              taskId =>
+                run(
+                  mutations.removeTask.mutateAsync({
+                    id: item!.listing.id,
+                    taskId,
+                  })
+                )
+            "
+          />
+          <VisitsSection
+            :listing-id="item.listing.id"
+            :members="members"
+            :me-id="me?.id ?? null"
+            @set-status="status => changeStatus({ status, reason: null })"
+          />
+          <JournalSection :listing-id="item.listing.id" />
+        </template>
+      </div>
     </div>
   </SidePanel>
 </template>

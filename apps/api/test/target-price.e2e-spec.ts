@@ -90,6 +90,22 @@ describe('Prix cible et négociation (e2e)', () => {
       )
       expect(by.net_yield?.maxPrice).toBeNull()
       expect(Math.round((by.gross_yield?.discount ?? 0) * 100)).toBe(26)
+      // Lot 9 : le coût tout compris de chaque critère, et l'annonce au prix cible.
+      const costs = Object.fromEntries(
+        (
+          t.criteria as Array<{
+            criterion: string
+            maxTotalCost: number | null
+          }>
+        ).map(c => [c.criterion, c.maxTotalCost])
+      )
+      expect(Math.round(costs.gross_yield ?? 0)).toBe(163_636)
+      expect(Math.round(costs.rent_x220 ?? 0)).toBe(165_000)
+      expect(costs.net_yield).toBeNull()
+      expect(t.atTarget.price).toBe(t.targetPrice)
+      expect(Math.round(t.atTarget.totalCost)).toBe(163_636)
+      expect(Math.round(t.atTarget.effort)).toBe(-70)
+      expect(t.atTarget.verdict).toBe('target')
       expect(res.body.rank).toEqual({ position: 1, total: 1 })
       expect(res.body.negotiation.suggestedOffer).toBe(147_000)
       expect(res.body.negotiation.marginToTarget).toBeGreaterThan(500)
@@ -177,6 +193,26 @@ describe('Prix cible et négociation (e2e)', () => {
       expect(res.body.cells[0][2].grossYield).toBeGreaterThan(
         current.grossYield
       )
+    })
+
+    it('lot 9 : coût tout compris par ligne de prix et ligne du prix cible sur demande', async () => {
+      const plain = await post(`/listings/${id}/sensitivity`, {}).expect(200)
+      expect(
+        plain.body.rows.map((r: { totalCost: number }) => r.totalCost)
+      ).toEqual([187_750, 198_500, 209_250, 220_000])
+      expect(
+        plain.body.rows.some((r: { isTarget: boolean }) => r.isTarget)
+      ).toBe(false)
+      const res = await post(`/listings/${id}/sensitivity`, {
+        includeTargetPrice: true,
+      }).expect(200)
+      expect(res.body.rows).toHaveLength(5)
+      const target = res.body.rows[0]
+      expect(target.isTarget).toBe(true)
+      expect(Math.round(target.value / 100) * 100).toBe(147_600)
+      expect(Math.round(target.totalCost)).toBe(163_636)
+      expect(res.body.cells[0][1].verdict).toBe('target')
+      expect(res.body.current).toEqual({ row: 4, col: 1 })
     })
 
     it('axes choisis, pas personnalisés, scénario d’hypothèses', async () => {

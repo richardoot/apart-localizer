@@ -7,7 +7,11 @@
     DialogTitle,
   } from 'reka-ui'
 
-  defineProps<{ title: string }>()
+  defineProps<{
+    title: string
+    /** Lot 9 : la fiche annonce s'élargit (trois colonnes sur grand écran). */
+    wide?: boolean
+  }>()
   const emit = defineEmits<{ close: [] }>()
 </script>
 
@@ -16,7 +20,12 @@
     <DialogPortal>
       <DialogOverlay class="fixed inset-0 z-20 bg-black/30" />
       <DialogContent
-        class="fixed inset-y-0 right-0 z-30 flex w-full flex-col bg-surface shadow-panel outline-none sm:w-[min(640px,100%)]"
+        class="fixed inset-y-0 right-0 z-30 flex w-full flex-col bg-surface shadow-panel outline-none"
+        :class="
+          wide
+            ? 'sm:w-[min(760px,100%)] lg:w-[min(1160px,100%)]'
+            : 'sm:w-[min(640px,100%)]'
+        "
         :aria-describedby="undefined"
       >
         <header

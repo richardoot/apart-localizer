@@ -139,7 +139,7 @@ export const NotaryFeesBreakdownSchema = z.object({
     ),
   total: z
     .number()
-    .describe('Frais de notaire retenus dans le coût total, en euros'),
+    .describe('Frais de notaire retenus dans le coût tout compris, en euros'),
   estimated: z
     .boolean()
     .describe(
@@ -164,9 +164,15 @@ export const ListingMetricsSchema = z.object({
   notaryFees: z.number().describe('Frais de notaire en euros'),
   notaryFeesDetail: NotaryFeesBreakdownSchema,
   renovationTotal: z.number().describe('Travaux en euros'),
+  furnitureValue: z
+    .number()
+    .default(0)
+    .describe('Mobilier en euros, compté dans le coût tout compris (lot 9)'),
   totalCost: z
     .number()
-    .describe('Coût total : prix + notaire + travaux + mobilier, en euros'),
+    .describe(
+      'Coût tout compris : prix affiché + notaire + travaux + mobilier, en euros'
+    ),
   loanAmount: z
     .number()
     .describe('Capital emprunté en euros : max(0, coût − apport)'),
@@ -195,10 +201,10 @@ export const ListingMetricsSchema = z.object({
     .number()
     .describe("Résultat net d'exploitation annuel en euros (avant crédit)"),
   grossYield: metricNumber.describe(
-    'Rendement brut : 12 × loyer / coût total (fraction) ; NaN si coût nul'
+    'Rendement brut : 12 × loyer / coût tout compris (fraction) ; NaN si coût nul'
   ),
   netYield: metricNumber.describe(
-    "Rendement net : net d'exploitation / coût total (fraction) ; NaN si coût nul"
+    "Rendement net : net d'exploitation / coût tout compris (fraction) ; NaN si coût nul"
   ),
   effort: z
     .number()
@@ -265,7 +271,7 @@ export const TargetPriceCriterionSchema = z.object({
     .number()
     .nullable()
     .describe(
-      'Prix maximal en euros pour satisfaire le critère ; null si non calculable'
+      'Prix affiché maximal en euros pour satisfaire le critère ; null si non calculable'
     ),
   active: z.boolean().describe('Critère retenu dans le minimum'),
   discount: z
@@ -274,8 +280,49 @@ export const TargetPriceCriterionSchema = z.object({
     .describe(
       'Décote nécessaire pour ce seul critère : (prix affiché − prix maximal) / prix affiché, fraction ; négatif = marge ; null si non calculable'
     ),
+  maxTotalCost: z
+    .number()
+    .nullable()
+    .default(null)
+    .describe(
+      'Coût tout compris (prix + notaire + travaux + mobilier) au prix maximal du critère, en euros ; null si non calculable (lot 9)'
+    ),
 })
 export type TargetPriceCriterion = z.infer<typeof TargetPriceCriterionSchema>
+
+/**
+ * L'annonce évaluée à un autre prix affiché (lot 9, « Et au prix cible ? ») :
+ * mêmes formules que `compute`, seul le prix change.
+ */
+export const PriceOutcomeSchema = z.object({
+  price: z.number().describe('Prix affiché retenu en euros'),
+  totalCost: z
+    .number()
+    .describe(
+      'Coût tout compris à ce prix (prix + notaire + travaux + mobilier), en euros'
+    ),
+  loanAmount: z.number().describe('Capital emprunté à ce prix, en euros'),
+  monthlyPayment: z
+    .number()
+    .describe('Mensualité crédit + assurance à ce prix, en euros'),
+  grossYield: metricNumber.describe(
+    'Rendement brut à ce prix : 12 × loyer / coût tout compris (fraction)'
+  ),
+  netYield: metricNumber.describe(
+    "Rendement net à ce prix : net d'exploitation / coût tout compris (fraction)"
+  ),
+  effort: z
+    .number()
+    .describe('Effort mensuel à ce prix en euros ; négatif = à sortir'),
+  verdict: VerdictSchema,
+  failures: z
+    .array(z.enum(['gross_yield', 'effort', 'dpe']))
+    .describe('Critères du verdict en échec à ce prix'),
+  nearMisses: z
+    .array(z.enum(['gross_yield', 'effort', 'dpe_unknown']))
+    .describe('Critères du verdict « de peu » à ce prix'),
+})
+export type PriceOutcome = z.infer<typeof PriceOutcomeSchema>
 
 export const TargetPriceSchema = z.object({
   criteria: z.array(TargetPriceCriterionSchema),
@@ -293,6 +340,11 @@ export const TargetPriceSchema = z.object({
       'Décote nécessaire : (prix affiché − prix cible) / prix affiché, fraction'
     ),
   discountClass: DiscountClassSchema.nullable(),
+  atTarget: PriceOutcomeSchema.nullable()
+    .default(null)
+    .describe(
+      "L'annonce évaluée au prix cible : coût tout compris, mensualité, rendements, effort et verdict ; null sans prix cible (lot 9)"
+    ),
 })
 export type TargetPrice = z.infer<typeof TargetPriceSchema>
 
@@ -318,18 +370,24 @@ export type Sensitivity = z.infer<typeof SensitivitySchema>
 
 /**
  * Tableau de sensibilité à deux entrées (lot 3) : deux axes au choix parmi
- * prix d'achat, loyer, taux, apport et durée. Les pas sont des multiplicateurs
+ * prix affiché, loyer, taux, apport et durée. Les pas sont des multiplicateurs
  * pour le prix et le loyer (0,85 = −15 %), des écarts absolus pour le taux
  * (en fraction : −0,005 = −0,5 point), l'apport (euros) et la durée (années).
  */
 export const SensitivityRequestSchema = z
   .object({
     rowAxis: SensitivityAxisSchema.default('price').describe(
-      'Axe des lignes (défaut : prix d’achat)'
+      'Axe des lignes (défaut : prix affiché)'
     ),
     colAxis: SensitivityAxisSchema.default('rent').describe(
       'Axe des colonnes (défaut : loyer)'
     ),
+    includeTargetPrice: z
+      .boolean()
+      .default(false)
+      .describe(
+        'Vrai : sur l’axe du prix affiché, ajoute un pas au prix cible (repéré `isTarget`) s’il est calculable et absent de la grille (lot 9)'
+      ),
     rowSteps: z
       .array(z.number())
       .min(1)
@@ -367,21 +425,40 @@ export const SensitivityStepSchema = z.object({
   isCurrent: z
     .boolean()
     .describe('Vrai pour le pas neutre (multiplicateur 1, écart 0)'),
+  isTarget: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Vrai pour le pas du prix cible (axe du prix affiché, `includeTargetPrice`) (lot 9)'
+    ),
+  totalCost: z
+    .number()
+    .nullable()
+    .default(null)
+    .describe(
+      'Axe du prix affiché : coût tout compris (prix + notaire + travaux + mobilier) de ce pas, le même pour toute la ligne ; null pour les autres axes (lot 9)'
+    ),
 })
 export type SensitivityStep = z.infer<typeof SensitivityStepSchema>
 
 export const SensitivityGridCellSchema = z.object({
-  price: z.number().describe("Prix d'achat retenu en euros"),
+  price: z.number().describe('Prix affiché retenu en euros'),
   targetRent: z.number().describe('Loyer visé retenu en euros par mois'),
   rent: z.number().describe('Loyer retenu après plafond, euros par mois'),
   interestRate: z.number().describe('Taux retenu, fraction'),
   downPayment: z.number().describe('Apport retenu en euros'),
   durationYears: z.number().int().describe('Durée retenue en années'),
-  totalCost: z.number(),
-  monthlyPayment: z.number(),
-  grossYield: metricNumber,
-  netYield: metricNumber,
-  effort: z.number(),
+  totalCost: z.number().describe('Coût tout compris de la cellule, en euros'),
+  monthlyPayment: z
+    .number()
+    .describe('Mensualité crédit + assurance de la cellule, en euros'),
+  grossYield: metricNumber.describe(
+    'Rendement brut de la cellule, sur le coût tout compris (fraction)'
+  ),
+  netYield: metricNumber.describe(
+    'Rendement net de la cellule, sur le coût tout compris (fraction)'
+  ),
+  effort: z.number().describe('Effort mensuel de la cellule, en euros'),
   verdict: VerdictSchema,
   isCurrent: z
     .boolean()

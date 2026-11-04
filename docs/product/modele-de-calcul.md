@@ -38,15 +38,24 @@ Toute valeur estimée est marquée `estimated` dans la provenance et affichée �
 
 ## 2. Coût et financement
 
+Deux bases de calcul (lot 9) : une valeur **sur le prix** se compare au prix affiché `P` (prix
+cible, décote, offre suggérée, prix maximal par critère, prix au m²) ; une valeur **tout compris**
+porte sur le coût tout compris `cout` = prix affiché + notaire + travaux + mobilier (rendements,
+effort, emprunt, mensualité, coût maximal par critère). L'interface marque chaque valeur de l'une
+ou l'autre pastille ; « coût total » s'appelle désormais « coût tout compris ».
+
 ```
 notaire   = n × (P − H)                      base = net vendeur quand les honoraires sont à charge acquéreur
-cout      = P + notaire + T + M
+cout      = P + notaire + T + M              coût tout compris
 emprunt   = max(0, cout − A)
 r         = t / 12 ;  N = 12 × d
 k         = r / (1 − (1 + r)^−N) + a / 12    facteur mensuel crédit + assurance (si r = 0 : 1/N + a/12)
 mens      = emprunt × k
 pm2       = P / S
 ```
+
+La mensualité se lit en deux parts (`monthlyPaymentSplit`) : assurance = `emprunt × a / 12`,
+crédit = `mens − assurance` (exemple § 8 : 916 € de crédit + 15 € d'assurance).
 
 ### Frais de notaire : taux ou barème (lot 3, besoin E5)
 
@@ -101,7 +110,15 @@ coutMax   = 220 × L                        repère : coût au-delà duquel le b
 | DPE | E, F ou G | inconnu |
 
 `Hors cible` dès un échec, `À creuser` dès un « de peu », sinon `Cible`. Les marges (0,7 point,
-80 €) deviennent des paramètres des hypothèses.
+80 €) deviennent des paramètres des hypothèses. Un seuil atteint à l'arrondi près compte comme
+atteint (lot 9, `VERDICT_TOLERANCE` : 10⁻⁹ pour le rendement, un millionième d'euro pour
+l'effort) : au prix cible, le critère liant est exactement à son seuil et ne doit pas passer
+« de peu » par l'erreur des flottants.
+
+Lecture de la fiche (lot 9, `profitabilityChecks`) : rendement brut et effort sont toujours
+retenus (ils font le verdict) et reprennent ses échecs et « de peu » ; le rendement net n'est
+retenu que si `s_n` est fixé et que le critère compte pour le prix cible, il est alors atteint ou
+en échec ; sinon « non retenu ».
 
 Score de tri : `2000 (cible) | 1000 (à creuser) | 0` + `rdtBrut × 1000`.
 
@@ -178,9 +195,9 @@ reste disponible ; le rapport du lot 5 lui préfère la moyenne exacte sur la ph
 Question : « à partir de quel prix ce bien entre-t-il dans la cible ? ». `netExpl` ne dépend pas
 du prix (la taxe foncière estimée dépend du loyer, pas du prix), et `cout` est affine en `P`.
 Chaque critère donne donc un prix maximal en forme fermée. On note `c⁻¹(x) = (x − T − M) / (1 + n)`
-le prix correspondant à un coût total `x` (avec honoraires acquéreur : `(x − T − M + n × H) / (1 + n)`).
+le prix correspondant à un coût tout compris `x` (avec honoraires acquéreur : `(x − T − M + n × H) / (1 + n)`).
 
-| Critère | Coût total maximal | Prix maximal |
+| Critère | Coût tout compris maximal | Prix affiché maximal |
 | --- | --- | --- |
 | Rendement brut ≥ `s_b` | `12 × L / s_b` | `P_b = c⁻¹(12 × L / s_b)` |
 | Rendement net ≥ `s_n` | `netExpl / s_n` | `P_n = c⁻¹(netExpl / s_n)` |
@@ -208,7 +225,17 @@ Classement de la décote, seuils paramétrables : `≤ 0` dans la cible au prix 
 `≤ 5 %` négociable ; `≤ 10 %` tendu ; au-delà hors de portée.
 
 Chaque critère rend aussi sa propre décote `(P − P_critère) / P`, négative quand le prix affiché
-est déjà sous le prix maximal du critère.
+est déjà sous le prix maximal du critère, et (lot 9) le coût tout compris qu'entraîne son prix
+maximal, `maxTotalCost = cout(P_critère)` : la colonne « coût tout compris maximal » du tableau
+ci-dessus, recalculée au prix trouvé (donc exacte aussi en mode barème et pour le critère
+« marché »).
+
+**Au prix cible** (lot 9, `atTarget`, `outcomeAtPrice`) : l'annonce est évaluée par `compute` avec
+`P = prixCible`, tout le reste inchangé ; on en lit le coût tout compris, l'emprunt, la
+mensualité, les rendements, l'effort et le verdict (encart « Et au prix cible ? » de la fiche).
+Propriétés testées : `atTarget.cout = maxTotalCost` du critère liant ; au prix cible, brut et
+effort calculables ne sont ni en échec ni « de peu » ; avec un DPE de A à D et les deux critères
+calculables, le verdict est « Cible ».
 
 Propriétés testées (fast-check, dans les deux modes de frais de notaire) : `rdtBrut(P_b) = s_b`
 (au centime de coût en mode taux, à 1 € près en mode barème), `effort(P_e) = −E`,
@@ -245,7 +272,7 @@ offres enregistrées (montant, date, canal, réponse, contre-proposition) **prop
 
 ## 6. Sensibilité (lot N3)
 
-Tableau à deux entrées (`sensitivityGrid`) : deux axes au choix parmi le prix d'achat, le loyer,
+Tableau à deux entrées (`sensitivityGrid`) : deux axes au choix parmi le prix affiché, le loyer,
 le taux, l'apport et la durée, avec des pas par défaut :
 
 - prix : `P × {0,85 ; 0,90 ; 0,95 ; 1,00}` et loyer : `L × {0,90 ; 1,00 ; 1,10}`
@@ -254,7 +281,11 @@ le taux, l'apport et la durée, avec des pas par défaut :
   et apport ≥ 0, durée entière de 1 à 40 ans).
 
 Chaque cellule rend le coût, la mensualité, `rdtBrut`, `rdtNet`, `effort` et `verdict` ; la
-cellule des pas neutres (valeurs actuelles) est repérée. Les pas sont modifiables (neuf au plus
+cellule des pas neutres (valeurs actuelles) est repérée. Lot 9 : sur l'axe du prix affiché,
+chaque pas porte le coût tout compris qu'il entraîne (le même pour toute la ligne, `totalCost`) ;
+avec `includeTargetPrice`, le pas `prixCible / P` est inséré avant le premier pas plus grand (ou
+un pas existant à moins de 0,50 € du prix cible est repéré), marqué `isTarget`. Les rendements et
+l'effort de chaque case sont calculés sur le coût tout compris. Les pas sont modifiables (neuf au plus
 par axe). La grille à trois entrées de l'artefact (prix × taux × loyer, `sensitivity`) est
 conservée. Le MCP expose la grille à deux entrées par `get_target_price` (`sensitivity`).
 
@@ -404,6 +435,8 @@ et charges non renseignées, commune non encadrée.
 | P_220 | ≈ 148 800 € |
 | prixCible (brut, effort) | ≈ 147 600 €, critère liant : rendement brut |
 | décote | ≈ 26 %, hors de portée |
+| coût tout compris maximal | brut ≈ 163 636 €, effort ≈ 179 013 €, 220 × loyer = 165 000 € |
+| au prix cible | coût ≈ 163 636 €, emprunt ≈ 123 636 €, mensualité ≈ 639 €, brut 5,5 %, effort ≈ −70 €/mois, Cible |
 
 En mode barème (mêmes hypothèses, `notaryMode: scale`, barème Gironde par défaut) : notaire
 ≈ 16 031 € (droits 12 637 €, émoluments 1 995 € HT et 399 € de TVA, CSI 200 €, débours 800 €),
@@ -432,7 +465,7 @@ vide en micro-foncier :
 | enrichissement net après impôt | ≈ − 42 445 € en micro-foncier, ≈ − 13 879 € au réel |
 | en meublé | micro-BIC ≈ − 3,1 % après impôt ; LMNP réel ≈ − 0,2 % (amortissements : aucun impôt sur les loyers) |
 
-Scénario « prix négocié à 150 000 € » : verdict « Hors cible » → « À creuser », coût total
+Scénario « prix négocié à 150 000 € » : verdict « Hors cible » → « À creuser », coût tout compris
 166 250 €, effort ≈ − 109 €/mois, TRI après impôt ≈ − 1,5 %.
 
 ## 9. Scénarios « et si » (lot 5, besoin E4)
