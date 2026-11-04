@@ -15,8 +15,12 @@ le dépôt.
 3. Relever dans « Project Settings → API » : l'URL du projet (`https://<ref>.supabase.co`), la
    clé `anon` (web) et la clé `service_role` (API seulement).
 4. Relever dans « Project Settings → Database » les deux chaînes de connexion : le **pooler** en
-   mode transaction (port 6543, pour `DATABASE_URL` de l'API serverless) et la connexion
-   **directe** (port 5432, pour `DIRECT_URL`, utilisée par `prisma migrate deploy`).
+   mode transaction (port 6543, pour `DATABASE_URL` de l'API serverless) et le **pooler en mode
+   session** (même hôte `aws-0-<région>.pooler.supabase.com`, utilisateur `postgres.<ref>`, port
+   5432), pour `DIRECT_URL`, utilisée par `prisma migrate deploy`. La connexion directe
+   `db.<ref>.supabase.co` n'a qu'une adresse IPv6 sans l'option IPv4 payante : ni le build Vercel
+   ni un poste en IPv4 ne la joignent, alors que le mode session accepte DDL et verrous
+   consultatifs. Un mot de passe avec des caractères spéciaux s'écrit encodé (`@` → `%40`).
 5. **Google OAuth** : dans Google Cloud Console, créer un identifiant OAuth 2.0 de type
    application web avec, en URI de redirection autorisée, l'URL de rappel que Supabase affiche
    dans « Authentication → Providers → Google » (`https://<ref>.supabase.co/auth/v1/callback`).
@@ -75,7 +79,7 @@ En local, `supabase/config.toml` active Storage et déclare ce bucket : après l
 
 ## 2. Migration Prisma en production
 
-Les migrations s'appliquent avec la connexion directe, jamais le pooler.
+Les migrations s'appliquent par `DIRECT_URL` (pooler en mode session, § 1), jamais par le pooler en mode transaction.
 
 ```bash
 cd apps/api
