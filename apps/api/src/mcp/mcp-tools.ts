@@ -40,6 +40,8 @@ import {
   McpAddVisitInputSchema,
   McpListVisitsInputSchema,
   McpWhatsNewInputSchema,
+  McpListMembersInputSchema,
+  MEMBER_ROLE_LABELS,
   VISIT_STATUS_LABELS,
   WHATS_NEW_KIND_LABELS,
   COMPLIANCE_CATEGORY_LABELS,
@@ -76,6 +78,7 @@ import type {
   ScenarioDelta,
   Visit,
   WhatsNewReport,
+  WorkspaceMe,
 } from '@apart/contracts'
 import { formatEuros, formatPercent, mergeAssumptions } from '@apart/domain'
 import type { Member } from '../generated/prisma'
@@ -128,7 +131,7 @@ const CHANNEL = 'mcp' as const
  * (extraction et doublons), lot 3 (prix cible, offres, prix, comparaison,
  * hypothèses), lot 4 (critères de recherche, contexte de marché), lot 5
  * (scénarios, projection, conformité, comparables de loyer), lot 6
- * (visites, « ce qui a changé »).
+ * (visites, « ce qui a changé »), lot 8 (membres, en lecture seule).
  */
 export const MCP_TOOL_NAMES = [
   'list_listings',
@@ -159,6 +162,7 @@ export const MCP_TOOL_NAMES = [
   'add_visit',
   'list_visits',
   'whats_new',
+  'list_members',
 ] as const
 
 /** Les prompts du connecteur. */
@@ -566,6 +570,60 @@ export function describeVisits(
         .filter(Boolean)
         .join(' · ')
     })
+    .join('\n')
+}
+
+/** Les membres de l'espace pour le MCP : identifiant court, nom, rôle ; sans e-mail. */
+export function membersPayload(me: WorkspaceMe): {
+  workspace: { id: string; name: string }
+  members: {
+    id: string
+    handle: string
+    displayName: string
+    role: string
+    connected: boolean
+    you: boolean
+  }[]
+  formerMembers: { id: string; handle: string; displayName: string }[]
+  pendingInvitations: number
+} {
+  const active = me.workspace.members.filter(m => m.status === 'active')
+  return {
+    workspace: { id: me.workspace.id, name: me.workspace.name },
+    members: active.map(m => ({
+      id: m.id,
+      handle: m.handle,
+      displayName: m.displayName,
+      role: m.role,
+      connected: m.authUserId !== null,
+      you: m.id === me.me.id,
+    })),
+    formerMembers: me.workspace.members
+      .filter(m => m.status === 'removed')
+      .map(m => ({ id: m.id, handle: m.handle, displayName: m.displayName })),
+    pendingInvitations: me.workspace.invitations.filter(
+      i => i.state === 'pending'
+    ).length,
+  }
+}
+
+/** Une ligne par membre actif, puis les anciens membres et les invitations en attente. */
+export function describeMembers(me: WorkspaceMe): string {
+  const data = membersPayload(me)
+  return [
+    `Espace « ${data.workspace.name} » : ${data.members.length} membre(s).`,
+    ...data.members.map(
+      m =>
+        `- ${m.displayName} (« ${m.handle} », ${MEMBER_ROLE_LABELS[m.role as keyof typeof MEMBER_ROLE_LABELS].toLowerCase()}${m.connected ? '' : ', pas encore connecté'})${m.you ? ' — vous' : ''}`
+    ),
+    data.formerMembers.length
+      ? `Anciens membres (historique conservé) : ${data.formerMembers.map(m => m.displayName).join(', ')}.`
+      : null,
+    data.pendingInvitations
+      ? `Invitations en attente : ${data.pendingInvitations} (gérées dans l'application, page Espace).`
+      : null,
+  ]
+    .filter(Boolean)
     .join('\n')
 }
 
@@ -1491,7 +1549,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       answer(async () => {
         const [visits, members] = await Promise.all([
           ctx.visits.list(ctx.member, listingId, { photos: false }),
-          ctx.workspace.members(ctx.member.workspaceId),
+          ctx.workspace.roster(ctx.member.workspaceId),
         ])
         const names = new Map(members.map(m => [m.id, m.displayName]))
         return dataResult(describeVisits(visits, names), { visits })
@@ -1512,6 +1570,23 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       answer(async () => {
         const report = await ctx.whatsNew.report(ctx.member, query)
         return dataResult(describeWhatsNew(report), report)
+      })
+  )
+
+  server.registerTool(
+    'list_members',
+    {
+      title: "Lister les membres de l'espace",
+      description:
+        "Les membres de l'espace : nom, identifiant court (pour assigneeHandle d'add_task et participantHandles d'add_visit), rôle (propriétaire ou membre), connecté ou non ; puis les anciens membres (leur historique reste à leur nom) et le nombre d'invitations en attente. " +
+        "Lecture seule : inviter, annuler une invitation, changer un rôle ou retirer un membre ne se fait que dans l'application (page Espace), jamais par le connecteur. Aucune adresse e-mail n'est rendue.",
+      inputSchema: McpListMembersInputSchema,
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async () =>
+      answer(async () => {
+        const me = await ctx.workspace.me(ctx.member)
+        return dataResult(describeMembers(me), membersPayload(me))
       })
   )
 }

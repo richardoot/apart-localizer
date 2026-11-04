@@ -5,6 +5,11 @@ import {
   createEmailSender,
 } from './email-sender'
 import { PushDeliveryError, createPushSender, vapidConfig } from './push-sender'
+import {
+  NotificationDispatcher,
+  appLink,
+} from './notification-dispatcher.service'
+import type { EmailSender } from './email-sender'
 
 const VAPID = {
   publicKey: 'BPublicKey0123456789abcdef',
@@ -115,5 +120,44 @@ describe('e-mail', () => {
       })
     ).rejects.toThrow('422')
     expect(fetchImpl.mock.calls[1]?.[1].headers.authorization).toBeUndefined()
+  })
+})
+
+describe('e-mail hors file (invitation, lot 8)', () => {
+  const message = { to: 'lea@exemple.invalid', subject: 's', text: 't' }
+  const dispatcher = (email: EmailSender) =>
+    new NotificationDispatcher(null as never, null, email)
+
+  it('rend « disabled » sans envoi, « sent » envoyé, « failed » refusé, sans jamais échouer', async () => {
+    expect(
+      await dispatcher(new DisabledEmailSender()).sendDirect(message)
+    ).toBe('disabled')
+    const send = vi.fn().mockResolvedValue(undefined)
+    expect(await dispatcher({ enabled: true, send }).sendDirect(message)).toBe(
+      'sent'
+    )
+    expect(send).toHaveBeenCalledWith(message)
+    expect(
+      await dispatcher({
+        enabled: true,
+        send: () => Promise.reject(new Error('500')),
+      }).sendDirect(message)
+    ).toBe('failed')
+    expect(
+      await dispatcher({
+        enabled: true,
+        send: () => Promise.reject('texte'),
+      }).sendDirect(message)
+    ).toBe('failed')
+  })
+
+  it("construit le lien de l'application depuis FRONTEND_URL", () => {
+    const previous = process.env.FRONTEND_URL
+    process.env.FRONTEND_URL =
+      'https://apart.exemple.invalid/, http://localhost:5173'
+    expect(appLink('/login')).toBe('https://apart.exemple.invalid/login')
+    expect(appLink(null)).toBe('https://apart.exemple.invalid/')
+    if (previous === undefined) delete process.env.FRONTEND_URL
+    else process.env.FRONTEND_URL = previous
   })
 })

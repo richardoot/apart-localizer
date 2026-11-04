@@ -409,3 +409,12 @@ export type McpListVisitsInput = z.infer<typeof McpListVisitsInputSchema>
 /** `whats_new` : ce qui a changé pour le membre depuis sa dernière visite. */
 export const McpWhatsNewInputSchema = WhatsNewQuerySchema
 export type McpWhatsNewInput = z.infer<typeof McpWhatsNewInputSchema>
+
+/**
+ * `list_members` (lot 8) : les membres de l'espace et leur identifiant
+ * court, pour `add_task` (`assigneeHandle`) et `add_visit`
+ * (`participantHandles`). Lecture seule : inviter, annuler et retirer ne se
+ * font que dans l'application.
+ */
+export const McpListMembersInputSchema = z.object({})
+export type McpListMembersInput = z.infer<typeof McpListMembersInputSchema>

@@ -186,8 +186,13 @@ export class TasksService {
     member: Member,
     assigneeId: string
   ): Promise<void> {
+    // Un membre actif seulement : ni une invitation en attente, ni un ancien membre.
     const assignee = await this.prisma.member.findFirst({
-      where: { id: assigneeId, workspaceId: member.workspaceId },
+      where: {
+        id: assigneeId,
+        workspaceId: member.workspaceId,
+        status: 'active',
+      },
       select: { id: true },
     })
     if (!assignee) {

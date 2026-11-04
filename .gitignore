@@ -167,3 +167,6 @@ supabase/.env
 # Fichiers open data téléchargés (DVF, TBM, encadrement, zones) : volumineux et
 # reproductibles par les scripts d'import ; jamais commités.
 data/opendata/
+
+# Worktrees des sous-agents Claude Code
+.claude/worktrees/

@@ -21,9 +21,8 @@ const visit: Visit = {
 }
 
 describe('MCP lot 6', () => {
-  it('déclare vingt-huit outils, dont les trois du lot', () => {
-    expect(MCP_TOOL_NAMES).toHaveLength(28)
-    expect(MCP_TOOL_NAMES.slice(-3)).toEqual([
+  it('déclare les trois outils du lot 6', () => {
+    expect(MCP_TOOL_NAMES.slice(-4, -1)).toEqual([
       'add_visit',
       'list_visits',
       'whats_new',

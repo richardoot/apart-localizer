@@ -59,7 +59,8 @@ async function main(): Promise<void> {
     }
     const members = await client.query<MemberRow>(
       `SELECT m.id, m.handle, m.email, m.auth_user_id AS "authUserId",
-              w.name AS "workspaceName", m.created_at AS "createdAt"
+              w.name AS "workspaceName", m.created_at AS "createdAt",
+              m.status::text AS status
        FROM app.members m JOIN app.workspaces w ON w.id = m.workspace_id`
     )
     const users = await client.query<AuthUserRow>(
@@ -113,6 +114,11 @@ async function main(): Promise<void> {
       )
     }
     for (const conflict of plan.conflicts) console.log(`  ! ${conflict}`)
+    if (plan.skipped.length > 0) {
+      console.log(
+        `  · ${plan.skipped.length} invitation(s) ou ancien(s) membre(s) ignoré(s) : une invitation se rattache à la connexion (e-mail vérifié), un ancien membre jamais.`
+      )
+    }
   } finally {
     await client.end()
   }

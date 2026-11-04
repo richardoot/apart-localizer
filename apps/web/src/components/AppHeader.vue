@@ -15,6 +15,7 @@
     { to: '/criteres', label: 'Critères' },
     { to: '/hypotheses', label: 'Hypothèses' },
     { to: '/activite', label: 'Activité' },
+    { to: '/espace', label: 'Espace' },
   ]
 
   // « Ce qui a changé » : une visite au chargement, puis au retour sur l'onglet.

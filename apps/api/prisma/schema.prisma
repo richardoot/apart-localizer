@@ -27,6 +27,17 @@ enum MemberRole {
   @@schema("app")
 }
 
+/// Cycle de vie d'une ligne de membre (lot 8, ADR 0018).
+enum MemberStatus {
+  active
+  invited
+  canceled
+  declined
+  removed
+
+  @@schema("app")
+}
+
 enum ListingSource {
   seloger
   leboncoin
@@ -189,6 +200,7 @@ enum NotificationType {
   criteria_matched
   offer_response
   drafts_received
+  member_joined
 
   @@schema("app")
 }
@@ -266,17 +278,34 @@ model Workspace {
 
 /// Un membre peut être créé avant sa première connexion (import des avis de
 /// Richard et Chloé) : `authUserId` est alors null et le rattachement se fait
-/// par e-mail à la première connexion.
+/// par e-mail à la première connexion. Lot 8 : une invitation est une ligne
+/// `invited` (sans compte, `invitedAt` renseigné) ; un membre retiré garde sa
+/// ligne (`removed`, identité détachée) pour que son historique reste à son
+/// nom. Invariant : `authUserId` renseigné ⇒ `status = active`.
 model Member {
-  id          String     @id @default(uuid())
-  workspaceId String     @map("workspace_id")
+  id          String       @id @default(uuid())
+  workspaceId String       @map("workspace_id")
   handle      String
-  displayName String     @map("display_name")
+  displayName String       @map("display_name")
   email       String?
-  authUserId  String?    @unique @map("auth_user_id")
-  role        MemberRole @default(member)
-  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  authUserId  String?      @unique @map("auth_user_id")
+  role        MemberRole   @default(member)
+  status      MemberStatus @default(active)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  /// Invitation : envoi, auteur, échéance. Null pour un membre pré-créé
+  /// (import) ou créé à sa première connexion.
+  invitedAt           DateTime? @map("invited_at") @db.Timestamptz(6)
+  invitedById         String?   @map("invited_by_id")
+  invitationExpiresAt DateTime? @map("invitation_expires_at") @db.Timestamptz(6)
+  /// Annulation (par un propriétaire) ou refus (par la personne).
+  invitationClosedAt  DateTime? @map("invitation_closed_at") @db.Timestamptz(6)
+  /// Première connexion dans l'espace (invitation acceptée, membre pré-créé rattaché).
+  joinedAt            DateTime? @map("joined_at") @db.Timestamptz(6)
+  /// Retrait par un propriétaire, ou départ (auteur = le membre lui-même).
+  removedAt           DateTime? @map("removed_at") @db.Timestamptz(6)
+  removedById         String?   @map("removed_by_id")
 
   /// Dernière activité dans l'application (visite en cours ou passée).
   lastVisitAt             DateTime? @map("last_visit_at") @db.Timestamptz(6)
@@ -304,9 +333,14 @@ model Member {
   notifications     Notification[]
   pushSubscriptions PushSubscription[]
   decidedDrafts     ListingDraft[]     @relation("DraftDecider")
+  invitedBy         Member?            @relation("MemberInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+  invitees          Member[]           @relation("MemberInviter")
+  removedBy         Member?            @relation("MemberRemover", fields: [removedById], references: [id], onDelete: SetNull)
+  removals          Member[]           @relation("MemberRemover")
 
   @@unique([workspaceId, handle])
   @@index([workspaceId])
+  @@index([workspaceId, status])
   @@index([email])
   @@map("members")
   @@schema("app")

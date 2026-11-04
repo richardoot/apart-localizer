@@ -158,6 +158,21 @@ export const MemberRoleSchema = z
   .describe("Rôle dans l'espace de travail")
 export type MemberRole = z.infer<typeof MemberRoleSchema>
 
+/**
+ * Cycle de vie d'une ligne de membre (lot 8). `active` : membre de l'espace,
+ * relié à son compte ou pré-créé en attente de sa première connexion ;
+ * `invited` : invitation en attente (expirée si sa date d'échéance est
+ * passée) ; `canceled` : invitation annulée par un propriétaire ; `declined` :
+ * invitation refusée par la personne ; `removed` : retiré par un propriétaire
+ * ou parti, son historique reste attribué à son nom.
+ */
+export const MemberStatusSchema = z
+  .enum(['active', 'invited', 'canceled', 'declined', 'removed'])
+  .describe(
+    'État du membre : actif, invité (en attente), invitation annulée, invitation refusée, retiré'
+  )
+export type MemberStatus = z.infer<typeof MemberStatusSchema>
+
 export const FeesPayerSchema = z
   .enum(['buyer', 'seller'])
   .describe(

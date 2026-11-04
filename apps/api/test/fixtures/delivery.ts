@@ -106,16 +106,20 @@ export class FakePushSender implements PushSender {
 
 export class FakeEmailSender implements EmailSender {
   enabled = false
+  /** When set, the relay refuses every message (as an HTTP 5xx would). */
+  failing = false
   readonly sent: EmailMessage[] = []
 
   send(message: EmailMessage): Promise<void> {
     if (!this.enabled) return Promise.reject(new Error('désactivé'))
+    if (this.failing) return Promise.reject(new Error('relais en panne'))
     this.sent.push(message)
     return Promise.resolve()
   }
 
   reset(): void {
     this.enabled = false
+    this.failing = false
     this.sent.length = 0
   }
 }

@@ -7,8 +7,10 @@ fiscalité estimée, projection jusqu'à la revente avec TRI, loyer de marché p
 checklist réglementaire datée avec les risques Géorisques ; et le confort du quotidien à deux :
 visites avec photos privées, journal d'activité, « ce qui a changé depuis ma dernière visite »,
 notifications (cloche, web push, e-mail en option), partage d'une annonce depuis le téléphone,
-alertes e-mail transférées en brouillons à valider, export CSV et JSON. Les lots 0 à 6 de la
-feuille de route sont livrés, et le lot 7 rend l'environnement local démarrable en une commande.
+alertes e-mail transférées en brouillons à valider, export CSV et JSON ; et l'ouverture de
+l'espace à d'autres personnes, invitées par e-mail, avec rôles et retrait. Les lots 0 à 6 de la
+feuille de route sont livrés, le lot 7 rend l'environnement local démarrable en une commande et
+le lot 8 ajoute les invitations.
 
 Documentation :
 
@@ -206,9 +208,16 @@ http://localhost:3000/mcp` ([développement local](docs/developpement-local.md#t
   « Décote » et « Classement ».
 - **Activité** (`/activite`) : journal de l'espace, filtres par membre, canal (web, MCP,
   import, système) et type d'événement, paginé.
+- **Espace** (`/espace`) : nom de l'espace, membres (rôle, connecté ou non), anciens membres,
+  invitations en attente, expirées ou refusées ; un propriétaire invite par e-mail (e-mail envoyé
+  si l'envoi est configuré, sinon lien à transmettre), annule, renouvelle, nomme un autre
+  propriétaire, retire un membre (son historique reste à son nom) ; chacun peut partir, sauf le
+  dernier propriétaire. Une personne déjà inscrite qui reçoit une invitation voit en haut de
+  chaque page un bandeau « Rejoindre / Refuser » (ADR 0018).
 - **Notifications** (`/notifications` et la cloche de l'en-tête) : notifications lues et non
   lues (nouvelle annonce de l'autre membre ou de Claude, statut, tâche assignée, entrée dans un
-  critère, réponse à une offre, annonces reçues par e-mail), préférences par type et par canal
+  critère, réponse à une offre, annonces reçues par e-mail, arrivée d'un membre invité pour les
+  propriétaires), préférences par type et par canal
   (application, push, e-mail), abonnement web push de l'appareil, adresse du webhook d'alertes
   e-mail.
 - **Export** : bouton « Exporter » de la liste, CSV (« ; », UTF-8, colonnes en français) ou JSON

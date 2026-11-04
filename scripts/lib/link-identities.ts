@@ -16,7 +16,10 @@
  *  - l'e-mail se compare sans la casse (comme le garde) ;
  *  - une identité déjà prise par un autre membre n'est pas volée : le
  *    conflit est signalé, avec sa correction ;
- *  - deux membres du même e-mail : le plus ancien l'emporte (comme le garde).
+ *  - deux membres du même e-mail : le plus ancien l'emporte (comme le garde) ;
+ *  - seuls les membres actifs comptent (lot 8, ADR 0018) : une invitation en
+ *    attente se rattache par l'application (e-mail vérifié, échéance), un
+ *    ancien membre retiré ne retrouve jamais l'accès par ce script.
  */
 
 export interface MemberRow {
@@ -26,6 +29,8 @@ export interface MemberRow {
   authUserId: string | null
   workspaceName: string
   createdAt: Date
+  /** `members.status` (lot 8) ; absent = actif (base d'avant la migration). */
+  status?: string
 }
 
 export interface AuthUserRow {
@@ -51,6 +56,8 @@ export interface IdentityPlan {
   withoutEmail: string[]
   /** L'identité de cet e-mail appartient déjà à un autre membre. */
   conflicts: string[]
+  /** Invitations, invitations annulées ou refusées, anciens membres : jamais rattachés ici. */
+  skipped: string[]
 }
 
 const labelOf = (m: MemberRow) =>
@@ -75,12 +82,17 @@ export function planIdentityLinks(
     orphans: [],
     withoutEmail: [],
     conflicts: [],
+    skipped: [],
   }
   const ordered = [...members].sort(
     (a, b) =>
       a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id)
   )
   for (const m of ordered) {
+    if ((m.status ?? 'active') !== 'active') {
+      plan.skipped.push(labelOf(m))
+      continue
+    }
     if (m.authUserId && authIds.has(m.authUserId)) {
       plan.linked.push(labelOf(m))
       continue

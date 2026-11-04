@@ -20,7 +20,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { toSearchCriteriaDto } from '../search-criteria/search-criteria.mapper'
 import { toRentComparableDto, toScenarioDto } from '../study/study.mapper'
 import { VisitsService } from '../visits/visits.service'
-import { MEMBER_ORDER } from '../workspace/workspace.service'
+import { MEMBER_ORDER } from '../workspace/member-order'
 import type { Member } from '../generated/prisma'
 import { LISTING_CSV_COLUMNS, listingCsvRow, toCsv } from './csv'
 
@@ -121,7 +121,14 @@ export class ExportService {
       await Promise.all([
         this.prisma.workspace.findUniqueOrThrow({
           where: { id: member.workspaceId },
-          include: { members: { orderBy: MEMBER_ORDER } },
+          // Membres actifs et anciens (auteurs d'avis, de tâches, de visites) ;
+          // pas les invitations.
+          include: {
+            members: {
+              where: { status: { in: ['active', 'removed'] } },
+              orderBy: MEMBER_ORDER,
+            },
+          },
         }),
         this.assumptions.current(member.workspaceId),
         this.assumptions.history(member.workspaceId),

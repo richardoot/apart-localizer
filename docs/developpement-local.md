@@ -157,6 +157,23 @@ hors du dépôt. Un nouveau fichier part du `.env.example` correspondant.
 Le formulaire e-mail n'apparaît que si `VITE_AUTH_PASSWORD=1` : jamais en production, où Google
 reste le seul moyen ([déploiement](deploiement.md)).
 
+### Tester les invitations en local (lot 8)
+
+1. Connecté en `demo@apart.local` (propriétaire), page « Espace » : inviter une adresse fictive,
+   par exemple `invitee@apart.local`. Sans `EMAIL_HTTP_URL`, la page affiche le lien à
+   transmettre (`http://localhost:5173/login`).
+2. Dans une fenêtre privée, « Créer un compte local » avec cette adresse : le compte est
+   confirmé d'office en local, donc tenu pour vérifié (ADR 0018), et arrive dans l'espace Démo à
+   sa première requête.
+3. Personne déjà inscrite : inviter `demo2@apart.local` depuis un autre espace (un compte local
+   à vous, propriétaire de son « Mon espace ») ; Sacha voit le bandeau « Rejoindre / Refuser ».
+4. Retrait : depuis Camille, « Retirer » Sacha ; sa requête suivante tombe dans un nouvel espace
+   vide, ses avis restent à son nom dans l'espace Démo. `pnpm seed:demo` remet l'espace Démo
+   d'aplomb.
+
+`link:identities` ne rattache que les membres actifs : une invitation passe toujours par la
+connexion, un ancien membre ne retrouve jamais l'accès par ce script.
+
 ### Vos vraies annonces en local
 
 Les membres importés (Richard et Chloé) sont rattachés à un compte par leur e-mail (ADR 0004).

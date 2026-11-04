@@ -86,8 +86,16 @@ function checkCase(c: GoldenCase, assumptions: Assumptions): void {
 }
 
 function describeGolden(name: string, golden: GoldenFile | null): void {
-  describe.skipIf(golden === null)(name, () => {
-    const file = golden as GoldenFile
+  // Sans le fichier (jeu privé absent : CI, clone frais, worktree), la suite
+  // est sautée ; son corps ne doit pas lire `golden` pendant la collecte.
+  if (golden === null) {
+    describe.skip(name, () => {
+      it('fichier absent : rien à reproduire', () => undefined)
+    })
+    return
+  }
+  describe(name, () => {
+    const file = golden
     it('a des cas', () => {
       expect(file.cases.length).toBeGreaterThan(0)
     })

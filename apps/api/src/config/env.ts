@@ -88,6 +88,16 @@ export const EnvSchema = z.object({
   EMAIL_FROM: z.string().min(3).optional(),
   // E-mails d'alerte entrants : secret HMAC du webhook (32 caractères au moins).
   INBOUND_EMAIL_SECRET: z.string().min(32).optional(),
+  // Lot 8 : durée de validité d'une invitation, en jours (défaut 14).
+  INVITATION_TTL_DAYS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(90)
+    .optional()
+    .describe(
+      "Durée de validité d'une invitation à rejoindre l'espace, en jours"
+    ),
 })
 export type Env = z.infer<typeof EnvSchema>
 

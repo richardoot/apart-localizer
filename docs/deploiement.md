@@ -50,6 +50,12 @@ le dépôt.
    formulaire e-mail n'existe qu'en local, `VITE_AUTH_PASSWORD`, ADR 0016). Ne jamais poser
    `VITE_AUTH_PASSWORD` sur le projet Vercel du web.
 
+   **Adresses vérifiées (lot 8)** : une invitation (ou un membre importé) ne se rattache qu'à un
+   compte dont l'adresse est vérifiée : `email_confirmed_at` renseigné par GoTrue, et Google ne
+   disant pas `email_verified: false` (ADR 0018). Si le fournisseur « Email » devait un jour être
+   ouvert, garder « Confirm email » activé : sans confirmation, GoTrue tiendrait pour vérifiée
+   n'importe quelle adresse saisie, et quiconque l'écrirait prendrait l'invitation.
+
 ### Stockage des photos de visite (lot 6)
 
 9. **Storage** : dans « Storage → New bucket », créer le bucket `visit-photos` (ou le nom donné à
@@ -99,6 +105,11 @@ pnpm import:artifact -- --database-url '<connexion directe>' --richard-email <e-
 
 Les e-mails doivent être ceux des comptes Google : le rattachement se fait à la première connexion
 (ADR 0004).
+
+Lot 8 (`20261104120000_lot8_invitations`) : migration purement additive (statut des membres,
+dates d'invitation, d'arrivée et de retrait, notification `member_joined`) ; les membres existants
+deviennent `active` sans changer de rôle (Richard propriétaire, Chloé membre). Une troisième
+personne s'invite ensuite depuis la page « Espace » du web (ADR 0018).
 
 ### Données ouvertes (lot 4)
 
@@ -159,6 +170,7 @@ Un déploiement bloqué ne se relance pas, il faut un nouveau commit. Variables 
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`         | web push (§ 7) ; vides = push désactivé, la cloche reste                                                               |
 | `EMAIL_HTTP_URL`, `EMAIL_FROM`, `EMAIL_HTTP_TOKEN`               | facultatif, e-mail de notification (§ 8) ; vides = inerte                                                              |
 | `INBOUND_EMAIL_SECRET`                                           | secret HMAC du webhook d'alertes e-mail (§ 9), 32 caractères au moins ; vide = webhook désactivé (503)                 |
+| `INVITATION_TTL_DAYS`                                            | facultatif, défaut 14 (1 à 90) : durée de validité d'une invitation à rejoindre l'espace (lot 8)                       |
 
 Après le premier déploiement : `GET https://<api>.vercel.app/health` doit répondre `200` avec
 `checks.postgis.status: "ok"`, et `GET /.well-known/oauth-protected-resource` doit annoncer
@@ -237,6 +249,11 @@ l'activer, renseigner `EMAIL_HTTP_URL` (un point d'envoi HTTP qui accepte un POS
 fournisseur) et, s'il en faut un, `EMAIL_HTTP_TOKEN` (envoyé en `Authorization: Bearer`). Ce
 corps convient tel quel à certaines API d'envoi transactionnel ; sinon, un petit relais le
 traduit. Aucun fournisseur n'est imposé ; choisir et ajouter un SDK serait un nouvel ADR.
+
+Le même envoi porte les **e-mails d'invitation** (lot 8) : sujet « Richard vous invite dans
+« … » (apart-localizer) », lien vers `<FRONTEND_URL>/login` (première origine de
+`FRONTEND_URL`), adresse invitée et échéance. Sans envoi configuré, ou s'il échoue, la page
+« Espace » affiche ce lien pour que le propriétaire le transmette lui-même.
 
 ## 9. Alertes e-mail entrantes (lot 6)
 
@@ -319,5 +336,11 @@ partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « C
 - [ ] Si souhaité : `INBOUND_EMAIL_SECRET` posé, service d'e-mails entrants branché et une alerte
       transférée devenue brouillon à valider.
 - [ ] Si souhaité : envoi d'e-mails configuré (`EMAIL_HTTP_URL`, `EMAIL_FROM`).
+- [ ] Lot 8 : migration `20261104120000_lot8_invitations` appliquée ; page « Espace » : Richard
+      propriétaire, Chloé membre ; une invitation envoyée à une troisième adresse, la personne
+      connectée avec Google arrive dans l'espace partagé ; une invitation annulée la laisse dans
+      son propre espace ; un membre de test retiré n'accède plus à rien (web et connecteur).
+- [ ] Fournisseur « Email » fermé (ou « Confirm email » activé) : seules les adresses vérifiées
+      rejoignent un espace.
 - [ ] Export CSV ouvert dans Excel ou LibreOffice (accents et colonnes justes), export JSON
       gardé comme sauvegarde.

@@ -9,9 +9,15 @@ import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { SupabaseService } from '../supabase.service'
 import { WorkspaceService } from '../../workspace/workspace.service'
 import type { Member } from '../../generated/prisma'
+import { identityOf } from '../identity'
+import type { AuthIdentity } from '../identity'
+
+export { displayNameOf } from '../identity'
 
 export interface AuthenticatedRequest extends Request {
   supabaseUser: SupabaseUser
+  /** Identifiant, adresse (vérifiée ou non) et nom de l'identité. */
+  identity: AuthIdentity
   /** The workspace member this identity stands for. */
   member: Member
 }
@@ -22,6 +28,8 @@ export interface AuthenticatedRequest extends Request {
  * The member is resolved (or created, see WorkspaceService.resolveMember)
  * once per request and attached to it; controllers read it through
  * `@CurrentMember()`. Every route except `/health` sits behind this guard.
+ * Since the member is resolved on every request, a member removed from a
+ * workspace (identity detached) loses access on the very next request.
  */
 @Injectable()
 export class SupabaseGuard implements CanActivate {
@@ -39,13 +47,11 @@ export class SupabaseGuard implements CanActivate {
     }
 
     const supabaseUser = await this.supabaseService.getUser(token)
-    const member = await this.workspaceService.resolveMember(
-      supabaseUser.id,
-      supabaseUser.email ?? null,
-      displayNameOf(supabaseUser)
-    )
+    const identity = identityOf(supabaseUser)
+    const member = await this.workspaceService.resolveMember(identity, 'web')
 
     request.supabaseUser = supabaseUser
+    request.identity = identity
     request.member = member
     return true
   }
@@ -54,14 +60,4 @@ export class SupabaseGuard implements CanActivate {
     const [type, token] = request.headers.authorization?.split(' ') ?? []
     return type === 'Bearer' ? token : undefined
   }
-}
-
-/** The name Google (or the e-mail) gives this person, for a member created on first sight. */
-export function displayNameOf(user: SupabaseUser): string {
-  const meta = user.user_metadata as Record<string, unknown> | undefined
-  const candidates = [meta?.full_name, meta?.name, user.email?.split('@')[0]]
-  const found = candidates.find(
-    (value): value is string => typeof value === 'string' && value.trim() !== ''
-  )
-  return found?.trim() ?? 'Membre'
 }

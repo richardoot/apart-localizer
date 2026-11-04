@@ -2,6 +2,7 @@ import {
   ACTIVITY_CHANNEL_LABELS,
   LEASE_TYPE_LABELS,
   LISTING_STATUS_LABELS,
+  MEMBER_ROLE_LABELS,
   OFFER_CHANNEL_LABELS,
   OFFER_RESPONSE_LABELS,
   RENOVATION_LEVEL_LABELS,
@@ -81,6 +82,7 @@ const HIDDEN_FIELDS = new Set([
   'offerId',
   'visitId',
   'photoId',
+  'memberId',
   'impact',
   'expectedUpdatedAt',
   'expectedPrice',
@@ -99,6 +101,7 @@ const ENUM_LABELS: Record<string, Record<string, string>> = {
   leaseType: LEASE_TYPE_LABELS,
   level: RENOVATION_LEVEL_LABELS,
   feesPayer: { buyer: 'acquéreur', seller: 'vendeur' },
+  role: MEMBER_ROLE_LABELS,
   rentControl: { auto: 'automatique', yes: 'oui', no: 'non' },
   demand: { strong: 'forte', medium: 'moyenne', weak: 'faible' },
   coOwnershipAllowsRental: TRI_STATE,
@@ -283,6 +286,11 @@ function num(record: unknown, key: string): number | null {
 }
 function quoted(value: string | null): string {
   return value ? ` « ${truncate(value, 80)} »` : ''
+}
+/** « (lea@exemple.fr) » quand l'e-mail est connu. */
+function emailOf(record: unknown): string {
+  const email = text(record, 'email')
+  return email ? ` (${email})` : ''
 }
 function criteriaNames(record: unknown): string {
   const list =
@@ -482,6 +490,44 @@ export function describeActivity(
       return describe('a validé une annonce reçue par e-mail')
     case 'draft.dismissed':
       return describe('a écarté une annonce reçue par e-mail')
+    case 'member.invited': {
+      const expires = text(after, 'expiresAt')
+      const renewed = isRecord(after) && after.renewed === true
+      return describe(
+        `a invité${quoted(text(after, 'displayName'))}${emailOf(after)}${renewed ? ' (invitation renouvelée)' : ''}${expires ? `, invitation valable jusqu'au ${formatActivityDate(expires)}` : ''}`
+      )
+    }
+    case 'member.invitation_canceled':
+      return describe(
+        `a annulé l'invitation de${quoted(text(before, 'displayName'))}${emailOf(before)}`
+      )
+    case 'member.invitation_declined':
+      return describe("a refusé l'invitation à rejoindre l'espace")
+    case 'member.joined':
+      return describe(
+        text(after, 'via') === 'invitation'
+          ? "a rejoint l'espace (invitation acceptée)"
+          : "a rejoint l'espace (première connexion)"
+      )
+    case 'member.left': {
+      const canceled = num(after, 'canceledInvitations') ?? 0
+      return describe(
+        `a quitté l'espace${canceled > 0 ? ` ; ${canceled} invitation(s) en attente annulée(s)` : ''}`
+      )
+    }
+    case 'member.removed':
+      return describe(
+        `a retiré${quoted(text(before, 'displayName'))} de l'espace`
+      )
+    case 'member.role_changed':
+      return describe(
+        `a changé le rôle de${quoted(text(before, 'displayName'))}`,
+        [change('role', text(before, 'role'), text(after, 'role'))]
+      )
+    case 'workspace.renamed':
+      return describe("a renommé l'espace", [
+        change('name', text(before, 'name'), text(after, 'name')),
+      ])
     default:
       return describe(action, activityChanges(before, after, members))
   }

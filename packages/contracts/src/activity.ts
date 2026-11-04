@@ -30,10 +30,11 @@ export const ActivityKindSchema = z
     'assumptions',
     'study',
     'draft',
+    'member',
     'other',
   ])
   .describe(
-    "Sorte d'événement : annonce, statut, prix, tâche, avis, offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon reçu, autre"
+    "Sorte d'événement : annonce, statut, prix, tâche, avis, offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon reçu, membres de l'espace (invitations, arrivées, retraits, rôles), autre"
   )
 export type ActivityKind = z.infer<typeof ActivityKindSchema>
 
@@ -50,6 +51,7 @@ export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
   assumptions: 'Hypothèses',
   study: 'Étude',
   draft: 'Brouillon reçu',
+  member: 'Membres',
   other: 'Autre',
 }
 
@@ -73,6 +75,7 @@ export const ACTIVITY_KIND_RULES: Record<
   assumptions: { prefixes: ['assumptions'] },
   study: { prefixes: ['scenario', 'rent_comparable'] },
   draft: { prefixes: ['draft'] },
+  member: { prefixes: ['member', 'workspace'] },
 }
 
 /** La sorte d'une action (`listing.status_changed` → `status`). */
@@ -179,6 +182,9 @@ export const LISTING_FIELD_LABELS: Record<string, string> = {
   durationMonths: 'Durée (mois)',
   items: 'Postes',
   name: 'Nom',
+  displayName: 'Nom affiché',
+  email: 'E-mail',
+  role: 'Rôle',
   filters: 'Filtres',
   perimeterType: 'Périmètre',
 }

@@ -29,7 +29,10 @@ export const MEMBERS: Member[] = [
     email: 'richard@e2e.invalid',
     authUserId: 'sb-richard',
     role: 'owner',
+    status: 'active',
     createdAt: now,
+    joinedAt: now,
+    removedAt: null,
   },
   {
     id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -39,7 +42,10 @@ export const MEMBERS: Member[] = [
     email: 'chloe@e2e.invalid',
     authUserId: null,
     role: 'member',
+    status: 'active',
     createdAt: now,
+    joinedAt: null,
+    removedAt: null,
   },
 ]
 

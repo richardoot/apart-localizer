@@ -42,6 +42,39 @@ describe('planIdentityLinks (ADR 0004)', () => {
     expect(plan.link[0]).toMatchObject({ authUserId: 'u1', replaces: 'ancien' })
   })
 
+  it('ne rattache ni une invitation en attente, ni un ancien membre (lot 8)', () => {
+    const plan = planIdentityLinks(
+      [
+        member({
+          id: 'm1',
+          handle: 'lea',
+          email: 'lea@exemple.fr',
+          status: 'invited',
+        }),
+        member({
+          id: 'm2',
+          handle: 'paul',
+          email: 'paul@exemple.fr',
+          status: 'removed',
+        }),
+        member({
+          id: 'm3',
+          handle: 'chloe',
+          email: 'chloe@exemple.fr',
+          status: 'active',
+        }),
+      ],
+      [
+        { id: 'u1', email: 'lea@exemple.fr' },
+        { id: 'u2', email: 'paul@exemple.fr' },
+        { id: 'u3', email: 'chloe@exemple.fr' },
+      ]
+    )
+    expect(plan.link.map(l => l.memberId)).toEqual(['m3'])
+    expect(plan.skipped).toHaveLength(2)
+    expect(plan.skipped[0]).toContain('lea@exemple.fr')
+  })
+
   it('ne déplace jamais un membre déjà relié à un compte existant', () => {
     const plan = planIdentityLinks(
       [

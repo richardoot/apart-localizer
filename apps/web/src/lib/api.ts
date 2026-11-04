@@ -83,7 +83,14 @@ import type {
   Task,
   TaskInput,
   TaskUpdate,
+  Invitation,
+  InvitationInput,
+  InvitationWriteResult,
+  Member,
+  MemberRole,
+  ReceivedInvitation,
   WorkspaceMe,
+  WorkspaceUpdate,
 } from '@apart/contracts'
 import { supabase } from './supabase'
 
@@ -221,6 +228,41 @@ export function queryString(params: Record<string, string>): string {
  */
 export const api = {
   workspace: () => apiFetch<WorkspaceMe>('/workspace'),
+
+  /** Lot 8 : membres, invitations, rôles (REST seulement, jamais par le MCP). */
+  members: {
+    rename: (update: WorkspaceUpdate) =>
+      apiFetch<WorkspaceMe>('/workspace', { method: 'PATCH', json: update }),
+    invite: (input: InvitationInput) =>
+      apiFetch<InvitationWriteResult>('/workspace/invitations', {
+        method: 'POST',
+        json: input,
+      }),
+    cancel: (invitationId: string) =>
+      apiFetch<Invitation>(`/workspace/invitations/${invitationId}/cancel`, {
+        method: 'POST',
+      }),
+    changeRole: (memberId: string, role: MemberRole) =>
+      apiFetch<Member>(`/workspace/members/${memberId}`, {
+        method: 'PATCH',
+        json: { role },
+      }),
+    remove: (memberId: string) =>
+      apiFetch<Member>(`/workspace/members/${memberId}/remove`, {
+        method: 'POST',
+      }),
+    leave: () => apiFetch<void>('/workspace/leave', { method: 'POST' }),
+    received: () =>
+      apiFetch<ReceivedInvitation[]>('/workspace/invitations/received'),
+    accept: (invitationId: string) =>
+      apiFetch<WorkspaceMe>(`/workspace/invitations/${invitationId}/accept`, {
+        method: 'POST',
+      }),
+    decline: (invitationId: string) =>
+      apiFetch<void>(`/workspace/invitations/${invitationId}/decline`, {
+        method: 'POST',
+      }),
+  },
 
   assumptions: {
     current: () => apiFetch<AssumptionsVersion>('/assumptions'),

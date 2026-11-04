@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { EMAIL_SENDER } from './email-sender'
-import type { EmailSender } from './email-sender'
+import type { EmailMessage, EmailSender } from './email-sender'
 import { PUSH_SENDER, PushDeliveryError } from './push-sender'
 import type { PushSender } from './push-sender'
 
@@ -44,6 +44,27 @@ export class NotificationDispatcher {
 
   get emailEnabled(): boolean {
     return this.email.enabled
+  }
+
+  /**
+   * Un e-mail hors de la file des notifications (invitation, lot 8) : envoyé
+   * tout de suite si l'envoi est configuré, « disabled » sinon, « failed »
+   * si le point d'envoi refuse. N'échoue jamais : l'appelant propose alors
+   * le lien à transmettre soi-même.
+   */
+  async sendDirect(
+    message: EmailMessage
+  ): Promise<'sent' | 'failed' | 'disabled'> {
+    if (!this.email.enabled) return 'disabled'
+    try {
+      await this.email.send(message)
+      return 'sent'
+    } catch (error) {
+      this.logger.warn(
+        `Envoi d'e-mail en échec : ${error instanceof Error ? error.message : 'inconnu'}`
+      )
+      return 'failed'
+    }
   }
 
   /** Une seule tournée à la fois dans ce processus ; les appels concurrents l'attendent. */
@@ -180,7 +201,7 @@ export class NotificationDispatcher {
         await this.email.send({
           to,
           subject: `[apart-localizer] ${notification.title}`,
-          text: `${notification.body}\n\n${linkOf(notification.url)}\n\nRéglez vos notifications dans l'application : ${linkOf('/notifications')}`,
+          text: `${notification.body}\n\n${appLink(notification.url)}\n\nRéglez vos notifications dans l'application : ${appLink('/notifications')}`,
         })
         report.email.sent += 1
       } catch (error) {
@@ -198,7 +219,7 @@ export class NotificationDispatcher {
 }
 
 /** Le lien absolu vers l'application (première origine de FRONTEND_URL). */
-function linkOf(path: string | null): string {
+export function appLink(path: string | null): string {
   const origin = (process.env.FRONTEND_URL ?? 'http://localhost:5173')
     .split(',')[0]
     ?.trim()

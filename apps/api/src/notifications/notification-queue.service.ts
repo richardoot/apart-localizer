@@ -7,7 +7,7 @@ import {
   notificationsForActivity,
 } from '@apart/domain'
 import type { Prisma } from '../generated/prisma'
-import { MEMBER_ORDER } from '../workspace/workspace.service'
+import { MEMBER_ORDER } from '../workspace/member-order'
 
 /** Une ligne du journal, telle qu'elle vient d'être écrite. */
 export interface LoggedActivity {
@@ -34,12 +34,15 @@ export class NotificationQueueService {
     tx: Prisma.TransactionClient
   ): Promise<number> {
     if (!notificationTypeOf(entry)) return 0
+    // Seuls les membres actifs sont prévenus : ni les invitations en
+    // attente, ni les anciens membres (lot 8).
     const members = await tx.member.findMany({
-      where: { workspaceId: entry.workspaceId },
+      where: { workspaceId: entry.workspaceId, status: 'active' },
       select: {
         id: true,
         displayName: true,
         email: true,
+        role: true,
         notificationPreferences: true,
       },
       orderBy: MEMBER_ORDER,
@@ -55,7 +58,19 @@ export class NotificationQueueService {
       listingTitle: listing?.title ?? null,
     })
     const byId = new Map(members.map(m => [m.id, m]))
-    const actorName = activityActorName(entry, byId)
+    // L'auteur peut ne plus être actif (refus d'une invitation) : son nom
+    // vient de toutes les lignes de l'espace.
+    const actor =
+      entry.actorMemberId && !byId.has(entry.actorMemberId)
+        ? await tx.member.findUnique({
+            where: { id: entry.actorMemberId },
+            select: { id: true, displayName: true },
+          })
+        : null
+    const actorName = activityActorName(
+      entry,
+      actor ? new Map([...byId, [actor.id, actor]]) : byId
+    )
     const rows: Prisma.NotificationCreateManyInput[] = []
     for (const draft of drafts) {
       const recipient = byId.get(draft.recipientId)

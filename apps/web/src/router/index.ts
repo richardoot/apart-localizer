@@ -79,6 +79,13 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Activité', requiresAuth: true },
   },
   {
+    // Lot 8 : membres, invitations, rôles.
+    path: '/espace',
+    name: 'workspace',
+    component: () => import('@/views/WorkspacePage.vue'),
+    meta: { title: 'Espace', requiresAuth: true },
+  },
+  {
     path: '/notifications',
     name: 'notifications',
     component: () => import('@/views/NotificationsPage.vue'),

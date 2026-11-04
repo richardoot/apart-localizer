@@ -1,5 +1,9 @@
 import { LISTING_STATUS_LABELS, OFFER_RESPONSE_LABELS } from '@apart/contracts'
-import type { ActivityActor, NotificationType } from '@apart/contracts'
+import type {
+  ActivityActor,
+  MemberRole,
+  NotificationType,
+} from '@apart/contracts'
 import { activityActorName } from './activity.js'
 import type { ActivityRecord } from './activity.js'
 import { formatEuros } from './format.js'
@@ -11,7 +15,10 @@ import { formatEuros } from './format.js'
  *    entrée dans un critère) par Claude au MCP : le membre ne l'a pas vue à
  *    l'écran ;
  *  - une tâche assignée ne notifie que le membre assigné ;
- *  - une écriture du système (alerte e-mail reçue) notifie tous les membres.
+ *  - une écriture du système (alerte e-mail reçue) notifie tous les membres ;
+ *  - l'arrivée d'un membre invité (invitation acceptée) ne notifie que les
+ *    propriétaires (lot 8) ; la première connexion d'un membre pré-créé
+ *    (import) est journalisée sans notification.
  * Les préférences par type et par canal s'appliquent ensuite, côté API.
  */
 
@@ -29,7 +36,10 @@ export interface NotificationDraft {
 }
 
 export interface NotificationContext {
-  members: readonly Pick<ActivityActor, 'id' | 'displayName'>[]
+  /** Les membres actifs de l'espace ; le rôle sert aux notifications des propriétaires. */
+  members: readonly (Pick<ActivityActor, 'id' | 'displayName'> & {
+    role?: MemberRole
+  })[]
   listingTitle: string | null
 }
 
@@ -75,6 +85,8 @@ export function notificationTypeOf(
       return Number(field(event.after, 'created') ?? 0) > 0
         ? 'drafts_received'
         : null
+    case 'member.joined':
+      return str(event.after, 'via') === 'invitation' ? 'member_joined' : null
     default:
       return null
   }
@@ -84,8 +96,14 @@ export function notificationTypeOf(
 export function notificationRecipients(
   event: NotificationEvent,
   type: NotificationType,
-  memberIds: readonly string[]
+  memberIds: readonly string[],
+  ownerIds: readonly string[] = []
 ): string[] {
+  if (type === 'member_joined') {
+    return ownerIds.filter(
+      id => id !== event.actorMemberId && memberIds.includes(id)
+    )
+  }
   if (type === 'task_assigned') {
     const assignee = str(event.after, 'assigneeId')
     return assignee &&
@@ -161,17 +179,34 @@ export function notificationsForActivity(
       body = `À valider${subject ? ` : « ${subject.slice(0, 120)} »` : ''}.`
       break
     }
+    case 'member_joined': {
+      const name =
+        (event.actorMemberId
+          ? names.get(event.actorMemberId)?.displayName
+          : null) ??
+        str(event.after, 'displayName') ??
+        'Un membre'
+      heading = `${name} a rejoint l'espace`
+      body = `${name} a accepté l'invitation et voit désormais les annonces, avis et tâches de l'espace.`
+      break
+    }
   }
   return notificationRecipients(
     event,
     type,
-    context.members.map(m => m.id)
+    context.members.map(m => m.id),
+    context.members.filter(m => m.role === 'owner').map(m => m.id)
   ).map(recipientId => ({
     recipientId,
     type,
     title: heading,
     body,
-    url: type === 'drafts_received' ? '/?brouillons=1' : url,
+    url:
+      type === 'drafts_received'
+        ? '/?brouillons=1'
+        : type === 'member_joined'
+          ? '/espace'
+          : url,
     listingId: event.listingId,
   }))
 }

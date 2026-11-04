@@ -22,9 +22,9 @@
  *    an HTTP status per endpoint);
  *  - the e-mail sender (`ctx.email`, disabled unless a spec enables it).
  *
- * Everything else runs for real: SupabaseGuard (token extraction, member
- * resolution), the Zod validation pipe, the exception filter, the services,
- * the SQL and PostGIS.
+ * Everything else runs for real: SupabaseGuard (token extraction, verified
+ * e-mail, member resolution and invitation claims), the Zod validation pipe,
+ * the exception filter, the services, the SQL and PostGIS.
  */
 import { Test } from '@nestjs/testing'
 import type { TestingModule } from '@nestjs/testing'
@@ -61,6 +61,12 @@ export interface E2eIdentity {
   supabaseId: string
   email: string
   name: string
+  /**
+   * Whether the provider verified the address (lot 8). Read on every
+   * request, so a spec may flip it. True: `email_confirmed_at` is set and
+   * the Google identity says `email_verified: true`; false: neither.
+   */
+  emailVerified: boolean
 }
 
 /**
@@ -71,7 +77,7 @@ export interface E2eIdentity {
  */
 export function e2eIdentity(
   label: string,
-  options: { scope?: string } = {}
+  options: { scope?: string; email?: string; emailVerified?: boolean } = {}
 ): E2eIdentity {
   const supabaseId = `e2e-supabase-${label}`
   const token =
@@ -81,8 +87,9 @@ export function e2eIdentity(
   return {
     token,
     supabaseId,
-    email: `${label}@e2e.invalid`,
+    email: options.email ?? `${label}@e2e.invalid`,
     name: label.charAt(0).toUpperCase() + label.slice(1),
+    emailVerified: options.emailVerified ?? true,
   }
 }
 
@@ -193,14 +200,27 @@ export async function createE2eApp(
           // Same failure the real service raises on a bad token.
           throw new UnauthorizedException('Jeton invalide ou expiré')
         }
+        // Shaped like GoTrue's user for a Google sign-in (auth/identity.ts).
         return Promise.resolve({
           id: identity.supabaseId,
           email: identity.email,
+          email_confirmed_at: identity.emailVerified
+            ? '2026-11-01T00:00:00Z'
+            : undefined,
           aud: 'authenticated',
           role: 'authenticated',
           created_at: new Date().toISOString(),
-          app_metadata: {},
+          app_metadata: { provider: 'google' },
           user_metadata: { full_name: identity.name },
+          identities: [
+            {
+              provider: 'google',
+              identity_data: {
+                email: identity.email,
+                email_verified: identity.emailVerified,
+              },
+            },
+          ],
         })
       },
     })

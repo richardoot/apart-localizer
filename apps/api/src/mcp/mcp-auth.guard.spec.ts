@@ -45,7 +45,8 @@ describe('McpAuthGuard', () => {
     )
     supabase.getUser.mockResolvedValue({
       id: 'sb-1',
-      email: 'r@e.invalid',
+      email: 'R@e.invalid',
+      email_confirmed_at: '2026-11-04T10:00:00Z',
       user_metadata: { full_name: 'Richard' },
     })
     workspace.resolveMember.mockResolvedValue(member)
@@ -75,11 +76,16 @@ describe('McpAuthGuard', () => {
     const { context: ctx, request } = context('Bearer opaque-token')
     expect(await guard.canActivate(ctx)).toBe(true)
     expect(workspace.resolveMember).toHaveBeenCalledWith(
-      'sb-1',
-      'r@e.invalid',
-      'Richard'
+      {
+        id: 'sb-1',
+        email: 'r@e.invalid',
+        emailVerified: true,
+        displayName: 'Richard',
+      },
+      'mcp'
     )
     expect(request.member).toBe(member)
+    expect(request.identity).toMatchObject({ emailVerified: true })
     expect(request.mcpScopes).toEqual(['listings:read', 'listings:write'])
   })
 

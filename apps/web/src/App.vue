@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { useRoute } from 'vue-router'
   import AppHeader from '@/components/AppHeader.vue'
+  import InvitationBanner from '@/components/workspace/InvitationBanner.vue'
   import { useAuthStore } from '@/stores/auth'
 
   const auth = useAuthStore()
@@ -17,6 +18,7 @@
     </a>
     <AppHeader v-if="auth.isAuthenticated && !route.meta.bare" />
     <main id="main" tabindex="-1" class="focus:outline-none">
+      <InvitationBanner v-if="auth.isAuthenticated && !route.meta.bare" />
       <RouterView />
     </main>
   </div>

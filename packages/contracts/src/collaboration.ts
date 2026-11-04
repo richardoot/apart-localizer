@@ -4,10 +4,12 @@ import {
   FieldSourceSchema,
   ListingStatusSchema,
   MemberRoleSchema,
+  MemberStatusSchema,
   OfferChannelSchema,
   OfferResponseSchema,
   TaskOriginSchema,
 } from './enums.js'
+import { InvitationSchema } from './members.js'
 
 /** Membre d'un espace de travail. */
 export const MemberSchema = z.object({
@@ -30,7 +32,20 @@ export const MemberSchema = z.object({
       "Identifiant Supabase Auth ; null tant que le membre ne s'est pas connecté"
     ),
   role: MemberRoleSchema,
+  status: MemberStatusSchema,
   createdAt: z.string().datetime(),
+  joinedAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .describe(
+      "Première connexion dans l'espace (invitation acceptée, membre pré-créé rattaché) ; null si inconnue"
+    ),
+  removedAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .describe('Date du retrait ou du départ ; null pour un membre actif'),
 })
 export type Member = z.infer<typeof MemberSchema>
 
@@ -38,7 +53,14 @@ export const WorkspaceSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).max(120),
   createdAt: z.string().datetime(),
-  members: z.array(MemberSchema),
+  members: z
+    .array(MemberSchema)
+    .describe(
+      'Membres actifs puis anciens membres (retirés ou partis, pour leur historique)'
+    ),
+  invitations: z
+    .array(InvitationSchema)
+    .describe('Invitations en attente, expirées ou refusées (lot 8)'),
 })
 export type Workspace = z.infer<typeof WorkspaceSchema>
 

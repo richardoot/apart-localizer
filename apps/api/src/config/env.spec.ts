@@ -53,6 +53,19 @@ describe('validateEnv', () => {
     ).toThrow('STORAGE_SIGNED_URL_TTL_SECONDS')
   })
 
+  it('lot 8 : durée des invitations entre 1 et 90 jours, facultative', () => {
+    expect(validateEnv(valid).INVITATION_TTL_DAYS).toBeUndefined()
+    expect(
+      validateEnv({ ...valid, INVITATION_TTL_DAYS: '7' }).INVITATION_TTL_DAYS
+    ).toBe(7)
+    expect(() => validateEnv({ ...valid, INVITATION_TTL_DAYS: '0' })).toThrow(
+      'INVITATION_TTL_DAYS'
+    )
+    expect(() => validateEnv({ ...valid, INVITATION_TTL_DAYS: '120' })).toThrow(
+      'INVITATION_TTL_DAYS'
+    )
+  })
+
   it('names the variable that is wrong', () => {
     expect(() => validateEnv({ ...valid, DATABASE_URL: 'nope' })).toThrow(
       /DATABASE_URL/

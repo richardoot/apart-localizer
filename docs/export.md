@@ -13,7 +13,9 @@
 | filtres   | ceux de `GET /listings`               | `status`, `commune`, `dpe`, `verdict`, `priceMin`… `criteriaId`, `lng`/`lat`/`radius` (sans `status` : annonces actives) |
 
 L'export ne contient que l'espace du membre connecté. Aucune photo n'en sort (elles restent dans
-le stockage privé), aucune adresse e-mail ni identifiant de connexion de membre.
+le stockage privé), aucune adresse e-mail ni identifiant de connexion de membre. `members`
+liste les membres actifs et les anciens membres (auteurs d'avis, de tâches, de visites), jamais
+les invitations (lot 8).
 
 ## CSV
 

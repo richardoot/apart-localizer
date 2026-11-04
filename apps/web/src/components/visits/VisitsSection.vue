@@ -23,6 +23,10 @@
 
   const nameOf = (id: string | null): string =>
     props.members.find(m => m.id === id)?.displayName ?? 'Un membre'
+  // Une nouvelle visite ne compte que des membres actifs (pas les anciens).
+  const activeMembers = computed(() =>
+    props.members.filter(m => m.status === 'active')
+  )
 
   function report(error: unknown): void {
     failure.value =
@@ -188,7 +192,7 @@
           Participants
         </legend>
         <label
-          v-for="member in members"
+          v-for="member in activeMembers"
           :key="member.id"
           class="flex items-center gap-1.5"
         >

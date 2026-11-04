@@ -3,12 +3,14 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
-État au 4 novembre 2026 : **les lots 0 à 7 sont livrés** côté code, tests et documentation, et
-déployés (Vercel et Supabase cloud) ; le lot 8 (invitations) est à faire. Restent les actions d'exploitation (Supabase cloud, Vercel, clés et
-connecteur : [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard »
-dans chaque lot, et les critères « Fini quand » qui demandent le déploiement ou un usage réel
-(lot 1 : déploiement et mobile de Chloé ; lot 2 : dix essais d'extraction ; lot 6 : push et
-partage sur les vrais téléphones), à constater après la mise en ligne.
+État au 4 novembre 2026 : **les lots 0 à 8 sont livrés** côté code, tests et documentation ; les
+lots 0 à 7 sont déployés (Vercel et Supabase cloud), le lot 8 (invitations) attend son
+déploiement (migration additive `20261104120000_lot8_invitations`). Restent les actions
+d'exploitation (Supabase cloud, Vercel, clés et connecteur :
+[docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard » dans chaque lot, et
+les critères « Fini quand » qui demandent le déploiement ou un usage réel (lot 1 : déploiement et
+mobile de Chloé ; lot 2 : dix essais d'extraction ; lot 6 : push et partage sur les vrais
+téléphones ; lot 8 : une vraie troisième adresse Google), à constater après la mise en ligne.
 
 ## Lot 0 : socle
 
@@ -141,7 +143,7 @@ utilisable en local, MCP compris, et `pnpm verify` passe avant chaque push.
 
 ## Lot 8 : invitations par e-mail
 
-Statut : à faire.
+Statut : livré (à déployer).
 
 - Besoins K5, K6. Prolonge l'ADR 0004 (membres pré-créés, rattachement par e-mail), qui
   renvoyait l'invitation à un lot ultérieur.
@@ -162,7 +164,33 @@ Statut : à faire.
 - Chaque écriture au journal d'activité ; invitations et retraits uniquement par l'interface et
   le REST, aucun outil MCP (lecture seule des membres possible).
 
+- Livré : une invitation est une ligne de membre en attente (`members.status`, dates
+  d'invitation, d'échéance, d'arrivée et de retrait ; migration purement additive, les membres
+  existants restent `active` avec leur rôle) ; page « Espace » (`/espace`) : renommer l'espace,
+  membres actifs et anciens membres, invitations en attente, expirées ou refusées (annuler,
+  renouveler), inviter (e-mail et nom affiché ; refus propres : adresse invalide, déjà membre,
+  invitation en attente, dix invitations en attente au plus, `member` qui invite), lien à
+  transmettre quand l'e-mail n'est pas configuré ou échoue, nommer propriétaire ou rendre
+  membre, retirer, quitter l'espace ; rattachement à la première connexion seulement si
+  l'adresse est vérifiée (`email_confirmed_at`, et Google ne disant pas `email_verified: false` ;
+  `user_metadata` n'est pas lu), invitation ni expirée (14 jours, `INVITATION_TTL_DAYS`) ni
+  annulée ; membres importés (sans invitation) toujours rattachés, avec la même exigence
+  d'adresse vérifiée ; bandeau « Rejoindre / Refuser » pour une personne déjà inscrite, l'espace
+  quitté restant intact (orphelin s'il n'a plus de membre actif, ses invitations alors
+  annulées ; refus au seul propriétaire d'un espace qui a d'autres membres) ; retrait sans
+  suppression (accès coupé à la requête suivante, web, REST et jetons MCP ; avis, tâches,
+  visites et journal gardés à son nom ; réinvité, il retrouve sa ligne) ; journal
+  (`member.invited`, `member.joined`, `member.invitation_canceled`,
+  `member.invitation_declined`, `member.removed`, `member.left`, `member.role_changed`,
+  `workspace.renamed`, sorte « Membres ») ; notification `member_joined` aux propriétaires ;
+  e-mail d'invitation par l'envoi HTTP de l'ADR 0015 ; `list_members` en lecture seule dans le
+  MCP (29 outils), aucune écriture sur les membres. ADR 0018.
+- Plus tard : changer le nom affiché d'un membre, transférer un espace orphelin depuis
+  l'interface, un fournisseur d'e-mails choisi par ADR, limiter les renvois d'une invitation à
+  la même adresse.
+
 Fini quand : Richard invite une troisième adresse ; la personne se connecte avec Google et arrive
 dans l'espace partagé avec les annonces, avis et tâches ; une invitation expirée ou annulée la
 laisse dans son propre espace ; un membre retiré n'accède plus à rien, et son historique reste
 lisible. Testé en e2e (rattachement, expiration, annulation, retrait, dernier propriétaire).
+(Vérifié en tests automatisés ; à confirmer avec une vraie adresse Google après le déploiement.)

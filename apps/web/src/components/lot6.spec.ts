@@ -529,6 +529,7 @@ describe('pages Activité et Notifications', () => {
           'criteria_matched',
           'offer_response',
           'drafts_received',
+          'member_joined',
         ].map(t => [t, { in_app: true, push: true, email: false }])
       ),
       push: { enabled: false, publicKey: null, subscriptions: 0 },

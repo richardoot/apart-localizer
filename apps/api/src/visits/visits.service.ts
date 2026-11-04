@@ -701,8 +701,14 @@ export class VisitsService {
     ids: readonly string[]
   ): Promise<void> {
     if (ids.length === 0) return
+    // Membres actifs ou anciens membres (une visite passée peut les compter) ;
+    // jamais une invitation en attente.
     const found = await this.prisma.member.count({
-      where: { id: { in: [...ids] }, workspaceId: member.workspaceId },
+      where: {
+        id: { in: [...ids] },
+        workspaceId: member.workspaceId,
+        status: { in: ['active', 'removed'] },
+      },
     })
     if (found !== new Set(ids).size) {
       throw new BadRequestException(

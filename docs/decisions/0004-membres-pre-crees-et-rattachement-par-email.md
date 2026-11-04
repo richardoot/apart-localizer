@@ -1,6 +1,7 @@
 # 0004. Membres pré-créés, rattachement par e-mail, espace automatique
 
-Statut : acceptée, 3 novembre 2026.
+Statut : acceptée, 3 novembre 2026. Prolongée par l'ADR 0018 (invitations, e-mail vérifié,
+retrait).
 
 ## Contexte
 
