@@ -13,8 +13,12 @@ import { createLogger, logFormat } from './common/logging'
 import { requestLogger } from './common/request-log'
 import { corsOrigins } from './config/env'
 
-/** Taille maximale d'un corps JSON (captures en base64 comprises). */
-export const JSON_BODY_LIMIT = '25mb'
+/**
+ * Taille maximale d'un corps JSON (captures en base64 comprises). Non exportée :
+ * le lanceur NestJS de Vercel refuse un `dist/main.js` qui a des exports sans
+ * export par défaut (« Invalid export found in module », main.spec.ts).
+ */
+const JSON_BODY_LIMIT = '25mb'
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
