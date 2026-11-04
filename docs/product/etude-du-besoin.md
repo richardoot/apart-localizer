@@ -208,6 +208,8 @@ Détail des formules dans [modele-de-calcul.md](modele-de-calcul.md).
 | K2 | Avis par membre : note sur 5, texte, date ; moyenne affichée | M |
 | K3 | Tâches partagées par annonce, checklist par défaut, assignation à un membre | M |
 | K4 | Vue « ce qui a changé depuis ma dernière visite » | S |
+| K5 | Invitation d'un nouveau membre par e-mail dans un espace existant (rattachement à sa première connexion Google, expiration, annulation) | L |
+| K6 | Rôles propriétaire et membre ; retrait d'un membre, historique conservé | L |
 
 ### 3.7 MCP
 

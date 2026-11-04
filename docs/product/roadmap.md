@@ -3,8 +3,8 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
-État au 3 novembre 2026 : **les lots 0 à 6 sont livrés** côté code, tests et documentation
-(branche `build/lots-0-6`). Restent les actions d'exploitation (Supabase cloud, Vercel, clés et
+État au 4 novembre 2026 : **les lots 0 à 7 sont livrés** côté code, tests et documentation, et
+déployés (Vercel et Supabase cloud) ; le lot 8 (invitations) est à faire. Restent les actions d'exploitation (Supabase cloud, Vercel, clés et
 connecteur : [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard »
 dans chaque lot, et les critères « Fini quand » qui demandent le déploiement ou un usage réel
 (lot 1 : déploiement et mobile de Chloé ; lot 2 : dix essais d'extraction ; lot 6 : push et
@@ -126,3 +126,43 @@ Fini quand : Chloé reçoit sur son téléphone la notification d'une annonce aj
 l'ouvre, voit ce qui a changé, ajoute la visite et ses photos ; une annonce partagée depuis
 l'application Leboncoin arrive pré-remplie ; l'export s'ouvre dans un tableur. (Vérifié en tests
 automatisés ; à confirmer sur les vrais téléphones après le déploiement.)
+
+## Lot 7 : environnement local
+
+Statut : livré.
+
+- Pile locale en une commande (`pnpm stack:up`, jeux de données `none`, `demo` ou `artifact`),
+  jeu de démo fictif, connexion par e-mail et mot de passe réservée au local, page de
+  consentement OAuth `/oauth/consent` pour le MCP, `pnpm verify` qui rejoue la CI et hook
+  pre-push. Voir [docs/developpement-local.md](../developpement-local.md), ADR 0016 et 0017.
+
+Fini quand : `pnpm install && pnpm stack:up --dataset demo && pnpm dev` donne une application
+utilisable en local, MCP compris, et `pnpm verify` passe avant chaque push.
+
+## Lot 8 : invitations par e-mail
+
+Statut : à faire.
+
+- Besoins K5, K6. Prolonge l'ADR 0004 (membres pré-créés, rattachement par e-mail), qui
+  renvoyait l'invitation à un lot ultérieur.
+- Rôles `owner` et `member` ; seul un propriétaire invite, annule une invitation ou retire un
+  membre, et un espace garde toujours au moins un propriétaire.
+- Inviter depuis la page de l'espace : e-mail et nom affiché ; crée un membre en attente (sans
+  compte rattaché), daté, qui expire (14 jours par défaut) ; liste des invitations en attente,
+  annulation. À la première connexion Google, le mécanisme actuel rattache l'identité au membre
+  dont l'e-mail correspond, à condition que Google l'ait vérifié (`email_verified`) et que
+  l'invitation ne soit ni expirée ni annulée.
+- Personne déjà connectée (elle a son propre « Mon espace ») : un bandeau propose de rejoindre
+  l'espace qui l'invite ou de refuser ; règle pour l'espace personnel quitté (vide ou non) à
+  fixer par ADR.
+- Retrait d'un membre : l'accès est coupé dès la requête suivante (web, REST et jetons MCP) ; ses
+  avis, tâches, visites et le journal restent attribués à son nom.
+- E-mail d'invitation envoyé par l'envoi HTTP existant s'il est configuré (ADR 0015), sinon le
+  propriétaire transmet lui-même le lien de l'application ; notification dans l'application.
+- Chaque écriture au journal d'activité ; invitations et retraits uniquement par l'interface et
+  le REST, aucun outil MCP (lecture seule des membres possible).
+
+Fini quand : Richard invite une troisième adresse ; la personne se connecte avec Google et arrive
+dans l'espace partagé avec les annonces, avis et tâches ; une invitation expirée ou annulée la
+laisse dans son propre espace ; un membre retiré n'accède plus à rien, et son historique reste
+lisible. Testé en e2e (rattachement, expiration, annulation, retrait, dernier propriétaire).
