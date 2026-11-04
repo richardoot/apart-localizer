@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+  import '@/lib/maplibre-worker'
   import * as maplibregl from 'maplibre-gl'
   import type { Map as MapLibreMap } from 'maplibre-gl'
   import type { ListingContext } from '@apart/contracts'

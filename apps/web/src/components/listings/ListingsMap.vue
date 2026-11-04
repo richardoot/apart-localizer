@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+  import '@/lib/maplibre-worker'
   import * as maplibregl from 'maplibre-gl'
   import type { GeoJSONSource, Map as MapLibreMap, Marker } from 'maplibre-gl'
   import type { EvaluatedListing, PointRadius } from '@apart/contracts'

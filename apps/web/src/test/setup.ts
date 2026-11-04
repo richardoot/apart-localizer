@@ -272,6 +272,7 @@ vi.mock('terra-draw-maplibre-gl-adapter', () => ({
 }))
 
 vi.mock('maplibre-gl', () => ({
+  setWorkerUrl: vi.fn(),
   Map: MockMap,
   Marker: MockMarker,
   Popup: MockPopup,

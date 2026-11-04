@@ -19,6 +19,7 @@ export default [
       'eslint.config.js',
       'vite.config.ts',
       'vitest.config.ts',
+      'scripts/*.mjs',
       'public/**',
       'dev-dist/**',
     ],
