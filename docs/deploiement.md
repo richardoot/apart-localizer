@@ -130,7 +130,10 @@ commandes d'installation et de build et le dossier de sortie (`dist`). Le build 
 les paquets partagés (`pnpm -w build:packages`), puis lance `build:vercel`, qui applique les
 migrations et vérifie que l'application se charge sans `require(esm)`, comme dans le runtime
 Vercel : `contracts` et `domain` sont publiés en ESM et en CommonJS (`dist/index.cjs`) pour
-cela. Variables d'environnement (Production, et Preview si besoin) :
+cela. Sur le plan Hobby, Vercel bloque le déploiement d'un dépôt **privé** quand l'adresse de l'auteur
+du commit n'est liée à aucun compte GitHub (« couldn't find a Git account for the commit
+author ») : le dépôt est public, sinon il faut committer avec une adresse liée au compte GitHub.
+Un déploiement bloqué ne se relance pas, il faut un nouveau commit. Variables d'environnement (Production, et Preview si besoin) :
 
 | Variable                                                         | Valeur                                                                                                                 |
 | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
