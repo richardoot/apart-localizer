@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { fakeContext } from '@/test/criteria-fixtures'
 import { mapLibreMock } from '@/test/setup'
+import { IGN_TOPONYMS_STYLE_URL } from '@/lib/base-maps'
 import ContextMap from './ContextMap.vue'
 
 const features = (id: string) =>
@@ -67,6 +68,28 @@ describe('ContextMap (MapLibre mocké)', () => {
     await wrapper.setProps({ context: fakeContext({ point: null }) })
     await nextTick()
     expect(map?.removed).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('le fond choisi s’applique à la carte du quartier, points gardés', async () => {
+    const wrapper = mount(ContextMap, {
+      props: { context: fakeContext() },
+      attachTo: document.body,
+    })
+    await nextTick()
+    const map = mapLibreMock.maps[0]
+    map?.emit('load')
+    const switcher = wrapper.get('[data-testid="base-map-switcher"]')
+    expect(
+      switcher.get('[data-base-map="osm"]').attributes('aria-checked')
+    ).toBe('true')
+    await switcher.get('[data-base-map="ign-photo"]').trigger('click')
+    expect(map?.styleCalls[0]?.style).toBe(IGN_TOPONYMS_STYLE_URL)
+    expect(features('context-listing')).toHaveLength(1)
+    expect(features('context-comparables')).toHaveLength(1)
+    expect(
+      switcher.get('[data-base-map="ign-photo"]').attributes('aria-checked')
+    ).toBe('true')
     wrapper.unmount()
   })
 })

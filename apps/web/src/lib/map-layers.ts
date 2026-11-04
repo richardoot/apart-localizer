@@ -1,6 +1,7 @@
 import type { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl'
 import { TRANSIT_MODE_LABELS } from '@apart/contracts'
 import type { TransitMode } from '@apart/contracts'
+import { OVERLAY_METADATA_KEY } from './base-maps'
 import {
   formatDate,
   formatEuros,
@@ -26,11 +27,57 @@ export interface LayerStyle {
   id: string
   type: 'fill' | 'line' | 'circle'
   paint: Record<string, unknown>
+  layout?: Record<string, unknown>
+}
+
+/**
+ * Le liseré clair sous un contour : il le détache d'un fond sombre (photo
+ * aérienne) sans gêner sur un plan clair.
+ */
+export const HALO_COLOR = '#ffffff'
+
+/** Un périmètre : remplissage léger, liseré clair, contour de la couleur voulue. */
+export function perimeterLayers(
+  prefix: string,
+  color: string,
+  options: { dashed?: boolean; selectable?: boolean } = {}
+): LayerStyle[] {
+  const selected = (on: number, off: number): unknown =>
+    options.selectable ? ['case', ['get', 'selected'], on, off] : on
+  return [
+    {
+      id: `${prefix}-fill`,
+      type: 'fill',
+      paint: { 'fill-color': color, 'fill-opacity': selected(0.14, 0.05) },
+    },
+    {
+      id: `${prefix}-halo`,
+      type: 'line',
+      layout: { 'line-join': 'round' },
+      paint: {
+        'line-color': HALO_COLOR,
+        'line-opacity': 0.85,
+        'line-width': selected(5, 3.5),
+      },
+    },
+    {
+      id: `${prefix}-line`,
+      type: 'line',
+      layout: { 'line-join': 'round' },
+      paint: {
+        'line-color': color,
+        'line-width': selected(3, 1.5),
+        ...(options.dashed ? { 'line-dasharray': [2, 1] } : {}),
+      },
+    },
+  ]
 }
 
 /**
  * Pose ou met à jour une source GeoJSON et ses couches : une source par
- * couche de contexte, des données vides quand la couche est éteinte.
+ * couche de contexte, des données vides quand la couche est éteinte. Les
+ * couches sont marquées comme couches de l'application (`metadata`) : un
+ * changement de fond les recopie avec leurs données (lib/base-maps.ts).
  */
 export function upsertGeoJsonLayer(
   map: MapLibreMap,
@@ -53,53 +100,49 @@ export function upsertGeoJsonLayer(
       type: layer.type,
       source: sourceId,
       paint: layer.paint,
+      ...(layer.layout ? { layout: layer.layout } : {}),
+      metadata: { [OVERLAY_METADATA_KEY]: true },
     } as Parameters<MapLibreMap['addLayer']>[0])
   }
 }
 
-export const CRITERIA_LAYERS: readonly LayerStyle[] = [
-  {
-    id: 'criteria-fill',
-    type: 'fill',
-    paint: {
-      'fill-color': '#0e6b63',
-      'fill-opacity': ['case', ['get', 'selected'], 0.14, 0.05],
-    },
-  },
-  {
-    id: 'criteria-line',
-    type: 'line',
-    paint: {
-      'line-color': '#0e6b63',
-      'line-width': ['case', ['get', 'selected'], 3, 1.5],
-      'line-dasharray': [2, 1],
-    },
-  },
+export const CRITERIA_LAYERS: readonly LayerStyle[] = perimeterLayers(
+  'criteria',
+  '#0e6b63',
+  { dashed: true, selectable: true }
+)
+
+/** La couleur d'un secteur selon sa zone (1 à 4). */
+const RENT_ZONE_COLOR_BY_ZONE = [
+  'match',
+  ['get', 'zone'],
+  1,
+  RENT_ZONE_COLORS[1],
+  2,
+  RENT_ZONE_COLORS[2],
+  3,
+  RENT_ZONE_COLORS[3],
+  RENT_ZONE_COLORS[4],
 ]
 
+/**
+ * Les secteurs de l'encadrement : remplissage léger et contour de la couleur
+ * de la zone, assez épais pour se lire sur la photo aérienne.
+ */
 export const RENT_ZONE_LAYERS: readonly LayerStyle[] = [
   {
     id: 'rent-zones-fill',
     type: 'fill',
-    paint: {
-      'fill-color': [
-        'match',
-        ['get', 'zone'],
-        1,
-        RENT_ZONE_COLORS[1],
-        2,
-        RENT_ZONE_COLORS[2],
-        3,
-        RENT_ZONE_COLORS[3],
-        RENT_ZONE_COLORS[4],
-      ],
-      'fill-opacity': 0.18,
-    },
+    paint: { 'fill-color': RENT_ZONE_COLOR_BY_ZONE, 'fill-opacity': 0.18 },
   },
   {
     id: 'rent-zones-line',
     type: 'line',
-    paint: { 'line-color': '#78350f', 'line-width': 0.5 },
+    paint: {
+      'line-color': RENT_ZONE_COLOR_BY_ZONE,
+      'line-width': 1.25,
+      'line-opacity': 0.9,
+    },
   },
 ]
 
@@ -114,8 +157,8 @@ export const pointLayer = (
     paint: {
       'circle-color': color,
       'circle-radius': radius,
-      'circle-stroke-color': '#ffffff',
-      'circle-stroke-width': 1,
+      'circle-stroke-color': HALO_COLOR,
+      'circle-stroke-width': 1.5,
     },
   },
 ]

@@ -2,12 +2,16 @@ import { createZodDto } from 'nestjs-zod'
 import { z } from 'zod'
 import {
   BboxQuerySchema,
+  GeocodeLookupSchema,
+  GeocodeQuerySchema,
   LayerFeatureCollectionSchema,
   TransitModeSchema,
 } from '@apart/contracts'
 
 export class LayerDto extends createZodDto(LayerFeatureCollectionSchema) {}
 export class BboxQueryDto extends createZodDto(BboxQuerySchema) {}
+export class GeocodeQueryDto extends createZodDto(GeocodeQuerySchema) {}
+export class GeocodeLookupDto extends createZodDto(GeocodeLookupSchema) {}
 export class TransitLayerQueryDto extends createZodDto(
   z.object({ mode: TransitModeSchema.optional() })
 ) {}

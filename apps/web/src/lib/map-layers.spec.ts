@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import { MockMap } from '@/test/setup'
+import { OVERLAY_METADATA_KEY } from './base-maps'
 import {
   CRITERIA_LAYERS,
   EMPTY_COLLECTION,
+  HALO_COLOR,
   RENT_ZONE_COLORS,
   RENT_ZONE_LAYERS,
   layerFeaturePopupHtml,
+  perimeterLayers,
   pointLayer,
   upsertGeoJsonLayer,
 } from './map-layers'
@@ -41,7 +44,10 @@ describe('upsertGeoJsonLayer (MapLibre mocké)', () => {
         paint: expect.objectContaining({
           'circle-color': '#000',
           'circle-radius': 3,
+          'circle-stroke-color': HALO_COLOR,
         }),
+        // Marquée : un changement de fond la recopie (lib/base-maps.ts).
+        metadata: { [OVERLAY_METADATA_KEY]: true },
       }),
     ])
     upsertGeoJsonLayer(
@@ -55,7 +61,9 @@ describe('upsertGeoJsonLayer (MapLibre mocké)', () => {
   })
 
   it('les styles des périmètres et des zones : remplissage et contour', () => {
-    expect(CRITERIA_LAYERS.map(l => l.type)).toEqual(['fill', 'line'])
+    // Remplissage, liseré clair (lisible sur la photo aérienne), contour.
+    expect(CRITERIA_LAYERS.map(l => l.type)).toEqual(['fill', 'line', 'line'])
+    expect(CRITERIA_LAYERS[1]?.paint['line-color']).toBe(HALO_COLOR)
     expect(RENT_ZONE_LAYERS.map(l => l.type)).toEqual(['fill', 'line'])
     expect(Object.keys(RENT_ZONE_COLORS)).toEqual(['1', '2', '3', '4'])
     const map = new MockMap({})
@@ -69,6 +77,37 @@ describe('upsertGeoJsonLayer (MapLibre mocké)', () => {
       'rent-zones-fill',
       'rent-zones-line',
     ])
+  })
+})
+
+describe('perimeterLayers', () => {
+  it('un périmètre simple : contour plein ; sélectionnable : épaisseur selon `selected`', () => {
+    const plain = perimeterLayers('radius', '#0e6b63')
+    expect(plain.map(l => l.id)).toEqual([
+      'radius-fill',
+      'radius-halo',
+      'radius-line',
+    ])
+    expect(plain[2]?.paint['line-width']).toBe(3)
+    expect(plain[2]?.paint['line-dasharray']).toBeUndefined()
+    expect(plain[1]?.layout).toEqual({ 'line-join': 'round' })
+    const selectable = perimeterLayers('c', '#000', {
+      dashed: true,
+      selectable: true,
+    })
+    expect(selectable[2]?.paint['line-width']).toEqual([
+      'case',
+      ['get', 'selected'],
+      3,
+      1.5,
+    ])
+    expect(selectable[2]?.paint['line-dasharray']).toEqual([2, 1])
+    const map = new MockMap({})
+    upsertGeoJsonLayer(map as unknown as MapLibreMap, 'c', null, selectable)
+    expect(
+      (map.layers[1] as { layout: Record<string, string> }).layout
+    ).toEqual({ 'line-join': 'round' })
+    expect((map.layers[0] as { layout?: unknown }).layout).toBeUndefined()
   })
 })
 

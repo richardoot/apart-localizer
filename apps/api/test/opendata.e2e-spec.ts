@@ -5,7 +5,15 @@
  * le plafond et l'arrêt le plus proche ; les comparables DVF sont datés.
  * Aucune valeur réelle : zones, loyers et ventes sont inventés.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import request from 'supertest'
 import type {
   ListingContext,
@@ -617,5 +625,71 @@ describe('Données ouvertes (e2e)', () => {
     ])
     expect(zones).toEqual({ upserted: 1, pruned: 1 })
     expect(await geo.rentControlZoneCount('bordeaux')).toBe(1)
+  })
+
+  it('recherche d’adresse pour recentrer la carte : trouvé, introuvable, en panne', async () => {
+    ctx.geocoding.fetchImpl = vi.fn(geocoderAt(INSIDE_WEST, 'street'))
+    const found = await request(ctx.server)
+      .get('/opendata/geocode')
+      .query({ q: '  rue Fictive, Bordeaux ' })
+      .set(ctx.auth(richard))
+      .expect(200)
+    expect(found.body).toEqual({
+      query: 'rue Fictive, Bordeaux',
+      status: 'found',
+      result: {
+        point: { type: 'Point', coordinates: INSIDE_WEST },
+        label: 'Rue Fictive 33000 Bordeaux',
+        precision: 'street',
+        commune: 'Bordeaux',
+      },
+    })
+    // La même recherche est servie par le cache : le géocodeur n'est pas
+    // rappelé, et une lecture n'écrit rien au journal (la première requête a
+    // pu y rattacher le membre).
+    const activityBefore = await ctx.prisma.activityLog.count()
+    await request(ctx.server)
+      .get('/opendata/geocode?q=rue%20Fictive%2C%20Bordeaux')
+      .set(ctx.auth(richard))
+      .expect(200)
+    expect(ctx.geocoding.fetchImpl).toHaveBeenCalledTimes(1)
+    expect(await ctx.prisma.activityLog.count()).toBe(activityBefore)
+    expect(
+      await ctx.prisma.referenceData.count({ where: { kind: 'geocode' } })
+    ).toBe(1)
+
+    ctx.geocoding.fetchImpl = () =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ features: [] }),
+      })
+    const missing = await request(ctx.server)
+      .get('/opendata/geocode?q=Nulle%20part')
+      .set(ctx.auth(richard))
+      .expect(200)
+    expect(missing.body).toEqual({
+      query: 'Nulle part',
+      status: 'not_found',
+      result: null,
+    })
+
+    ctx.geocoding.fetchImpl = () =>
+      Promise.resolve({
+        ok: false,
+        status: 503,
+        json: () => Promise.resolve({}),
+      })
+    const down = await request(ctx.server)
+      .get('/opendata/geocode?q=Place%20Fictive')
+      .set(ctx.auth(richard))
+      .expect(200)
+    expect(down.body.status).toBe('unavailable')
+
+    await request(ctx.server)
+      .get('/opendata/geocode?q=ab')
+      .set(ctx.auth(richard))
+      .expect(400)
+    await request(ctx.server).get('/opendata/geocode?q=Talence').expect(401)
   })
 })

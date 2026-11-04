@@ -1,10 +1,17 @@
 import { config } from '@vue/test-utils'
-import { vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { beforeEach, vi } from 'vitest'
 
 config.global.stubs = {
   RouterLink: true,
   RouterView: true,
 }
+
+// Les cartes lisent le fond choisi dans un store : une Pinia neuve par test,
+// remplacée par celle qu'un spec installe lui-même.
+beforeEach(() => {
+  setActivePinia(createPinia())
+})
 
 // The real client needs environment variables and a network: every spec
 // works with this stub, overriding the methods it cares about.
@@ -39,7 +46,7 @@ vi.mock('@/lib/supabase', () => ({
 /**
  * MapLibre never loads a tile in tests: the whole library is replaced by a
  * recorder. Specs read `mapLibreMock` to assert on what the component asked
- * the map to do (markers, sources, listeners).
+ * the map to do (markers, sources, listeners, style changes, camera).
  */
 export const mapLibreMock = {
   maps: [] as MockMap[],
@@ -52,16 +59,106 @@ export const mapLibreMock = {
   },
 }
 
+type MockSource = {
+  spec: Record<string, unknown>
+  data: unknown
+  setData: (d: unknown) => void
+}
+
+/** Le style qu'un fond « charge » dans les tests : une source et une couche à lui. */
+export function mockBaseStyle(url: string): {
+  version: 8
+  sources: Record<string, Record<string, unknown>>
+  layers: Array<Record<string, unknown>>
+} {
+  return {
+    version: 8,
+    sources: { base: { type: 'vector', url } },
+    layers: [{ id: 'base-background', type: 'background', paint: {} }],
+  }
+}
+
 export class MockMap {
   listeners = new Map<string, Array<(event: unknown) => void>>()
-  sources = new Map<string, { data: unknown; setData: (d: unknown) => void }>()
+  sources = new Map<string, MockSource>()
   layers: unknown[] = []
   controls: unknown[] = []
   removed = false
+  /** Les `setStyle` demandés (fond changé). */
+  styleCalls: Array<{ style: unknown; options: Record<string, unknown> }> = []
+  /** Les cadrages et déplacements demandés. */
+  camera: Array<{ kind: 'fitBounds' | 'easeTo' | 'flyTo'; args: unknown[] }> =
+    []
+  zoom: number
   constructor(public readonly options: Record<string, unknown>) {
     mapLibreMock.maps.push(this)
+    if (Array.isArray(options.center))
+      this.center = options.center as [number, number]
+    this.zoom =
+      typeof options.zoom === 'number' ? options.zoom : options.bounds ? 14 : 0
   }
   center: [number, number] = [-0.59, 44.82]
+  getZoom(): number {
+    return this.zoom
+  }
+  fitBounds(bounds: unknown, options?: unknown): this {
+    this.camera.push({ kind: 'fitBounds', args: [bounds, options] })
+    this.zoom = 15
+    return this
+  }
+  easeTo(options: { center?: [number, number]; zoom?: number }): this {
+    this.camera.push({ kind: 'easeTo', args: [options] })
+    if (options.center) this.center = options.center
+    if (options.zoom !== undefined) this.zoom = options.zoom
+    return this
+  }
+  flyTo(options: { center?: [number, number]; zoom?: number }): this {
+    this.camera.push({ kind: 'flyTo', args: [options] })
+    if (options.center) this.center = options.center
+    if (options.zoom !== undefined) this.zoom = options.zoom
+    return this
+  }
+  /** Le style courant, sources GeoJSON avec leurs données, comme `serialize()`. */
+  getStyle(): {
+    version: 8
+    sources: Record<string, Record<string, unknown>>
+    layers: unknown[]
+  } {
+    const sources: Record<string, Record<string, unknown>> = {}
+    for (const [id, source] of this.sources) {
+      sources[id] =
+        source.spec.type === 'geojson'
+          ? { ...source.spec, data: source.data }
+          : source.spec
+    }
+    return { version: 8, sources, layers: [...this.layers] }
+  }
+  /**
+   * Un changement de fond comme MapLibre le fait : le style du fond passe
+   * par `transformStyle` (style précédent, style suivant), puis remplace
+   * sources et couches ; `style.load` est émis.
+   */
+  setStyle(style: unknown, options: Record<string, unknown> = {}): this {
+    this.styleCalls.push({ style, options })
+    const next = mockBaseStyle(String(style))
+    const transform = options.transformStyle as
+      | ((
+          previous: unknown,
+          next: unknown
+        ) => {
+          sources: Record<string, Record<string, unknown>>
+          layers: unknown[]
+        })
+      | undefined
+    const result = transform ? transform(this.getStyle(), next) : next
+    this.sources = new Map()
+    for (const [id, spec] of Object.entries(result.sources))
+      this.addSource(id, spec)
+    this.layers = [...result.layers]
+    this.emit('style.load')
+    this.emit('styledata')
+    return this
+  }
   on(
     type: string,
     layerOrListener: string | ((event: unknown) => void),
@@ -109,8 +206,9 @@ export class MockMap {
   getSource(id: string): unknown {
     return this.sources.get(id)
   }
-  addSource(id: string, spec: { data: unknown }): void {
-    const source = {
+  addSource(id: string, spec: Record<string, unknown>): void {
+    const source: MockSource = {
+      spec,
       data: spec.data,
       setData: (data: unknown) => {
         source.data = data
@@ -118,8 +216,14 @@ export class MockMap {
     }
     this.sources.set(id, source)
   }
+  removeSource(id: string): void {
+    this.sources.delete(id)
+  }
   addLayer(layer: unknown): void {
     this.layers.push(layer)
+  }
+  removeLayer(id: string): void {
+    this.layers = this.layers.filter(l => (l as { id: string }).id !== id)
   }
   remove(): void {
     this.removed = true
@@ -204,14 +308,21 @@ export class MockTerraDraw {
   cleared = 0
   features = new Map<string, unknown>()
   listeners = new Map<string, Array<(...args: unknown[]) => void>>()
-  constructor(public readonly options: { modes: unknown[] }) {
+  constructor(
+    public readonly options: {
+      modes: unknown[]
+      adapter?: { register?: () => void; unregister?: () => void }
+    }
+  ) {
     terraDrawMock.instances.push(this)
   }
   start(): void {
     this.started = true
+    this.options.adapter?.register?.()
   }
   stop(): void {
     this.stopped = true
+    this.options.adapter?.unregister?.()
   }
   setMode(mode: string): void {
     this.mode = mode
@@ -265,9 +376,29 @@ vi.mock('terra-draw', () => ({
   },
 }))
 
+/**
+ * L'adaptateur pose, comme le vrai, une source et une couche préfixées
+ * (`prefixId`, « td » par défaut) quand terra-draw démarre.
+ */
 vi.mock('terra-draw-maplibre-gl-adapter', () => ({
   TerraDrawMapLibreGLAdapter: class {
-    constructor(public readonly options: unknown) {}
+    constructor(
+      public readonly options: { map?: MockMap; prefixId?: string }
+    ) {}
+    private get id(): string {
+      return `${this.options.prefixId ?? 'td'}-polygon`
+    }
+    register(): void {
+      this.options.map?.addSource(this.id, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      })
+      this.options.map?.addLayer({ id: this.id, type: 'fill', source: this.id })
+    }
+    unregister(): void {
+      this.options.map?.removeLayer(this.id)
+      this.options.map?.removeSource(this.id)
+    }
   },
 }))
 

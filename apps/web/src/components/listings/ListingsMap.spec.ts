@@ -3,6 +3,8 @@ import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { fakeEvaluated } from '@/test/fixtures'
 import { mapLibreMock } from '@/test/setup'
+import { IGN_PLAN_STYLE_URL, OVERLAY_METADATA_KEY } from '@/lib/base-maps'
+import { useBaseMapStore } from '@/stores/base-map'
 import ListingsMap from './ListingsMap.vue'
 
 const placed = fakeEvaluated(
@@ -84,7 +86,8 @@ describe('ListingsMap (MapLibre mocké)', () => {
     const radiusLayers = (map?.layers ?? []).filter(
       layer => (layer as { source: string }).source === 'near-radius'
     )
-    expect(radiusLayers).toHaveLength(2)
+    // Remplissage, liseré clair (lisible sur la photo aérienne), contour.
+    expect(radiusLayers).toHaveLength(3)
     await wrapper.setProps({ near: undefined })
     expect((source?.data as { features: unknown[] }).features).toHaveLength(0)
 
@@ -213,6 +216,87 @@ describe('ListingsMap (MapLibre mocké)', () => {
     if (map) map.rendered = []
     map?.emit('click', { lngLat: { lng: -0.58, lat: 44.84 }, point: [1, 1] })
     expect(wrapper.emitted('update:near')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('changer de fond réaffiche couches de contexte et rayon, marqueurs gardés', async () => {
+    const stops = {
+      type: 'FeatureCollection' as const,
+      features: [
+        {
+          type: 'Feature' as const,
+          geometry: {
+            type: 'Point' as const,
+            coordinates: [-0.58, 44.84] as [number, number],
+          },
+          properties: { name: 'Arrêt fictif', lines: 'A', mode: 'tram' },
+        },
+      ],
+    }
+    const toggles = {
+      criteria: true,
+      tram: true,
+      bus: false,
+      dvf: false,
+      rentZones: false,
+    }
+    const wrapper = mount(ListingsMap, {
+      props: {
+        items: [placed],
+        near: { longitude: -0.59, latitude: 44.8, radiusMeters: 500 },
+        colorBy: 'verdict',
+        layers: {
+          criteria: null,
+          tram: stops,
+          bus: null,
+          dvf: null,
+          rentZones: null,
+        },
+        toggles,
+      },
+      attachTo: document.body,
+    })
+    await nextTick()
+    const map = mapLibreMock.maps[0]
+    map?.emit('load')
+    // Chaque couche posée est marquée comme couche de l'application.
+    for (const layer of map?.layers ?? [])
+      expect((layer as { metadata: Record<string, boolean> }).metadata).toEqual(
+        { [OVERLAY_METADATA_KEY]: true }
+      )
+    const overlayIds = (map?.layers ?? []).map(l => (l as { id: string }).id)
+
+    await wrapper
+      .get('[data-testid="base-map-switcher"] [data-base-map="ign-plan"]')
+      .trigger('click')
+    expect(map?.styleCalls.map(c => c.style)).toEqual([IGN_PLAN_STYLE_URL])
+    const ids = (map?.layers ?? []).map(l => (l as { id: string }).id)
+    expect(ids[0]).toBe('base-background')
+    expect(ids.slice(1)).toEqual(overlayIds)
+    expect(
+      (map?.sources.get('tram-stops')?.data as { features: unknown[] }).features
+    ).toHaveLength(1)
+    expect(
+      (map?.sources.get('near-radius')?.data as { features: unknown[] })
+        .features
+    ).toHaveLength(1)
+    // Les marqueurs sont du DOM : ils restent, rien n'est recréé.
+    expect(mapLibreMock.markers).toHaveLength(1)
+    expect(mapLibreMock.markers[0]?.removed).toBe(false)
+    // Après le changement, éteindre une couche agit sur la source recopiée.
+    await wrapper.setProps({ toggles: { ...toggles, tram: false } })
+    expect(
+      (map?.sources.get('tram-stops')?.data as { features: unknown[] }).features
+    ).toHaveLength(0)
+    // Une seconde carte ouverte ensuite part du même fond.
+    expect(useBaseMapStore().current).toBe('ign-plan')
+    const other = mount(ListingsMap, {
+      props: { items: [], near: undefined, colorBy: 'verdict' },
+      attachTo: document.body,
+    })
+    await nextTick()
+    expect(mapLibreMock.maps[1]?.options.style).toBe(IGN_PLAN_STYLE_URL)
+    other.unmount()
     wrapper.unmount()
   })
 })

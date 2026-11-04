@@ -4,6 +4,7 @@ import { VueQueryPlugin } from '@tanstack/vue-query'
 import App from './App.vue'
 import router from './router'
 import { useAuthStore } from './stores/auth'
+import { useBaseMapStore } from './stores/base-map'
 import { useThemeStore } from './stores/theme'
 import { createQueryClient } from './lib/query'
 import { installSentry, setSentryUser } from './lib/sentry'
@@ -24,9 +25,14 @@ app.use(router)
 useThemeStore().initialize()
 
 const auth = useAuthStore()
+const baseMap = useBaseMapStore()
 watch(
   () => auth.user?.id,
-  id => setSentryUser(id),
+  id => {
+    setSentryUser(id)
+    // Le fond de carte de cette personne sur cet appareil (lot 10).
+    baseMap.load(id)
+  },
   { immediate: true }
 )
 

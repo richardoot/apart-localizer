@@ -31,6 +31,31 @@ export function perimeterPolygon(perimeter: Perimeter): Polygon {
   return perimeter.polygon
 }
 
+/**
+ * L'emprise [[ouest, sud], [est, nord]] d'un périmètre affiché, pour y
+ * cadrer la carte (`fitBounds`). Cadrage d'affichage seulement.
+ */
+export function perimeterBounds(
+  perimeter: Perimeter
+): [[number, number], [number, number]] | null {
+  const positions = perimeterPolygon(perimeter).coordinates.flat()
+  if (!positions.length) return null
+  let west = Infinity
+  let south = Infinity
+  let east = -Infinity
+  let north = -Infinity
+  for (const [lng, lat] of positions) {
+    west = Math.min(west, lng)
+    east = Math.max(east, lng)
+    south = Math.min(south, lat)
+    north = Math.max(north, lat)
+  }
+  return [
+    [west, south],
+    [east, north],
+  ]
+}
+
 /** Les périmètres des critères en couche, le critère choisi repéré. */
 export function criteriaFeatures(
   criteria: readonly SearchCriteriaSummary[],

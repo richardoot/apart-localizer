@@ -81,6 +81,7 @@ describe('api (lot 4)', () => {
     await api.opendata.dvf([-0.7, 44.75, -0.5, 44.9])
     await api.opendata.transitStops('tram')
     await api.listings.verifyDpe('id-1', { number: 'X' })
+    await api.opendata.geocode(' 1 cours de l’Intendance & co ')
     const calls = fetchMock.mock.calls.map(
       ([url, init]) =>
         `${(init as RequestInit).method ?? 'GET'} ${String(url).replace(/^https?:\/\/[^/]+/, '')}`
@@ -91,6 +92,7 @@ describe('api (lot 4)', () => {
       'GET /opendata/layers/dvf?bbox=-0.70000,44.75000,-0.50000,44.90000',
       'GET /opendata/layers/transit-stops?mode=tram',
       'POST /listings/id-1/dpe/verify',
+      'GET /opendata/geocode?q=1%20cours%20de%20l%E2%80%99Intendance%20%26%20co',
     ])
   })
 })

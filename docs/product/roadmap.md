@@ -3,16 +3,18 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
-État au 4 novembre 2026 : **les lots 0 à 9 sont livrés** côté code, tests et documentation ; les
+État au 4 novembre 2026 : **les lots 0 à 10 sont livrés** côté code, tests et documentation ; les
 lots 0 à 7 sont déployés (Vercel et Supabase cloud), le lot 8 (invitations) attend son
-déploiement (migration additive `20261104120000_lot8_invitations`) et le lot 9 (lisibilité de la
-fiche, sans migration) le sien. Restent les actions
+déploiement (migration additive `20261104120000_lot8_invitations`), le lot 9 (lisibilité de la
+fiche, sans migration) le sien, et le lot 10 (fonds de carte, sans migration ni variable
+nouvelle) aussi. Restent les actions
 d'exploitation (Supabase cloud, Vercel, clés et connecteur :
 [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard » dans chaque lot, et
 les critères « Fini quand » qui demandent le déploiement ou un usage réel (lot 1 : déploiement et
 mobile de Chloé ; lot 2 : dix essais d'extraction ; lot 6 : push et partage sur les vrais
 téléphones ; lot 8 : une vraie troisième adresse Google ; lot 9 : une lecture de fiche par
-Richard et Chloé, sur ordinateur et sur téléphone), à constater après la mise en ligne.
+Richard et Chloé, sur ordinateur et sur téléphone ; lot 10 : un périmètre dessiné par Richard
+sur la photo aérienne, sur le site déployé), à constater après la mise en ligne.
 
 ## Lot 0 : socle
 
@@ -240,3 +242,36 @@ prix affiché ou sur le coût tout compris ; on voit au prix cible le coût, le 
 l'effort et le verdict ; la sensibilité se lit sans survol, sur ordinateur comme au toucher ; un
 lien vers une fiche rouvre le même onglet. (Vérifié en tests automatisés et sur captures d'un banc
 d'essai ; à confirmer par Richard et Chloé sur la vraie fiche après le déploiement.)
+
+## Lot 10 : fonds de carte
+
+Statut : livré (à déployer, sans migration ni variable nouvelle).
+
+- Besoins G1 (précisé) et G8. Constat : au zoom de départ, le fond OpenFreeMap « Liberty » ne
+  montre que les grands axes ; rues fines et bâtiments n'apparaissent qu'en zoomant beaucoup,
+  ce qui gêne pour dessiner un périmètre. ADR 0020.
+- Livré : trois fonds sans clé, communs aux trois cartes (annonces, périmètre du critère,
+  quartier de la fiche) : **Plan OSM** (Liberty, toujours remplacé par `VITE_MAP_STYLE_URL`),
+  **Plan IGN** (style vectoriel `PLAN.IGN` de la Géoplateforme : noms de rues, bâtiments) et
+  **Photo aérienne** (orthophotos IGN en WMTS sous les voies et les noms de rues du Plan IGN) ;
+  attributions « © IGN » et OpenFreeMap / OpenStreetMap ; URL, licence (Licence Ouverte) et
+  niveaux de zoom vérifiés sur la Géoplateforme (docs/open-data.md). Sélecteur posé sur chaque
+  carte (`BaseMapSwitcher`, groupe radio, flèches, 44 px sur mobile, jetons du thème) ; choix
+  retenu par personne et par appareil (store `baseMap`, `localStorage` protégé). Changer de fond
+  passe par `setStyle` avec un `transformStyle` qui recopie les couches de l'application
+  (contexte, rayon, périmètres, dessin terra-draw) avec leurs données : rien n'est redessiné,
+  terra-draw n'est pas relancé, un tracé commencé se termine sur le nouveau fond. Contours
+  doublés d'un liseré blanc, zones d'encadrement bordées de leur couleur, pour rester lisibles
+  sur la photo. Carte du critère : ouverte cadrée sur le périmètre existant, ou sur le centre de
+  Bordeaux au niveau 15 quand on dessine ; entrer en dessin depuis la vue de la métropole
+  rapproche la carte ; une isochrone calculée est cadrée ; recherche d'adresse « Centrer » par
+  `GET /opendata/geocode` (géocodeur IGN de l'API, en cache, rien d'enregistré). CSP inchangée.
+- Plus tard : un fond sombre si l'IGN en publie un ; le cadastre (parcelles) en couche ;
+  l'autocomplétion d'adresse ; la même recherche d'adresse sur la carte des annonces (le filtre
+  par point et rayon se pose aujourd'hui au clic).
+
+Fini quand : on dessine un périmètre en voyant les rues et les bâtiments, sur le plan ou sur la
+photo aérienne ; le choix du fond est retenu d'une visite à l'autre sur le même appareil ; les
+couches de contexte, le rayon, le périmètre et le dessin en cours restent affichés après un
+changement de fond. (Vérifié en tests automatisés et sur captures Chromium d'un banc d'essai,
+tuiles réelles ; à confirmer par Richard sur le site déployé, sur ordinateur et sur téléphone.)

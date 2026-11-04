@@ -6,10 +6,13 @@ import { SupabaseGuard } from '../auth/guards/supabase.guard'
 import { GeoService } from '../geo/geo.service'
 import {
   BboxQueryDto,
+  GeocodeLookupDto,
+  GeocodeQueryDto,
   LayerDto,
   OpenDataStatusDto,
   TransitLayerQueryDto,
 } from './dto/opendata.dto'
+import { GeocodingService } from './geocoding.service'
 import {
   RENT_CONTROL_TERRITORY,
   RentControlService,
@@ -21,8 +24,9 @@ const METROPOLE_BBOX: [number, number, number, number] = [
 ]
 
 /**
- * Couches de carte (arrêts TBM, zonage de l'encadrement, ventes DVF) et état
- * des imports. Lecture seule ; le SQL est dans le module geo.
+ * Couches de carte (arrêts TBM, zonage de l'encadrement, ventes DVF), état
+ * des imports et recherche d'adresse pour recentrer une carte. Lecture
+ * seule ; le SQL est dans le module geo, le géocodeur dans GeocodingService.
  */
 @ApiTags('opendata')
 @ApiBearerAuth()
@@ -31,8 +35,36 @@ const METROPOLE_BBOX: [number, number, number, number] = [
 export class OpendataController {
   constructor(
     private readonly geo: GeoService,
-    private readonly rentControl: RentControlService
+    private readonly rentControl: RentControlService,
+    private readonly geocoding: GeocodingService
   ) {}
+
+  @Get('geocode')
+  @ApiOperation({
+    summary:
+      'Localise une adresse ou une commune (Géoplateforme IGN, réponse mise en cache) pour recentrer une carte ; rien n’est enregistré',
+  })
+  @ZodResponse({ status: 200, type: GeocodeLookupDto })
+  async geocode(@Query() query: GeocodeQueryDto): Promise<GeocodeLookupDto> {
+    try {
+      const found = await this.geocoding.geocode(query.q, 'address')
+      return found
+        ? {
+            query: query.q,
+            status: 'found',
+            result: {
+              point: found.point,
+              label: found.label,
+              precision: found.precision,
+              commune: found.city,
+            },
+          }
+        : { query: query.q, status: 'not_found', result: null }
+    } catch {
+      // Panne ou délai du géocodeur : la carte reste où elle est.
+      return { query: query.q, status: 'unavailable', result: null }
+    }
+  }
 
   @Get('layers/transit-stops')
   @ApiOperation({

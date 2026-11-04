@@ -284,13 +284,14 @@ interface, avec un cache en base et un marquage de la date de récupération.
 
 | # | Besoin | Prio |
 | --- | --- | --- |
-| G1 | Carte des annonces (fond OpenStreetMap ou IGN) avec les mêmes filtres que le tableau, couleur par verdict, ouverture de la fiche au clic | M |
+| G1 | Carte des annonces (fond plan OpenStreetMap, plan IGN ou photo aérienne IGN, voir G8) avec les mêmes filtres que le tableau, couleur par verdict, ouverture de la fiche au clic | M |
 | G2 | Filtre par point et rayon : adresse saisie ou clic sur la carte, rayon en mètres | M |
 | G3 | Critères de recherche enregistrés et partagés dans l'espace : nom, communes, prix, surface, pièces, DPE, verdict, périmètre | S |
 | G4 | Périmètre dessiné sur la carte (polygone), modifiable | S |
 | G5 | Périmètre par isochrone : « n minutes à pied, à vélo ou en voiture depuis un point », calculé par un service externe et figé en polygone ; « en transport » attend un service qui le propose (ADR 0010) | L |
 | G6 | Alerte : une nouvelle annonce qui entre dans un critère est marquée et comptée dans la synthèse ; une annonce ajoutée par le MCP est confrontée aux critères à la création | S |
 | G7 | Couches de contexte sur la carte : arrêts de tram et bus, ventes DVF récentes, zone d'encadrement | L |
+| G8 | Voir les rues et les bâtiments, surtout pour dessiner un périmètre : choix du fond (plan OpenStreetMap, plan IGN, photo aérienne IGN avec les noms de rues) commun aux cartes et retenu par appareil, couches et dessin conservés au changement de fond, carte de dessin cadrée de près et recentrée sur une adresse (lot 10, ADR 0020) | S |
 
 Le filtrage géographique se fait en base (PostGIS) et jamais dans le navigateur, pour que la
 liste, la carte, le MCP et les alertes donnent le même résultat. Sur mobile, le point et rayon et

@@ -26,6 +26,15 @@ elles sont protégées.
   annonces repérées vivent dans les brouillons.
 - **IA** : seul le texte de l'annonce (ou de l'alerte) part au modèle, jamais de donnée de
   membre (docs/ia.md).
+- **Fonds de carte (lot 10, ADR 0020)** : le fond choisi est retenu dans le `localStorage` du
+  navigateur, sous la clé `apart-localizer-base-map:<identifiant de la personne>` (l'UUID
+  Supabase, déjà présent dans la session stockée par le même navigateur) ; la valeur n'est que
+  le nom du fond. Rien n'est envoyé au serveur. Les tuiles viennent d'OpenFreeMap et de la
+  Géoplateforme IGN : ces serveurs voient l'adresse IP du navigateur et les zones affichées,
+  jamais une donnée de l'application. La recherche d'adresse « Centrer » passe par l'API, qui
+  interroge le géocodeur IGN et met la réponse en cache (`reference_data`, sorte `geocode`,
+  comme les adresses d'annonces) ; le texte cherché n'est ni journalisé (le journal de requêtes
+  omet la chaîne de requête) ni rattaché à une annonce ou à un critère.
 - **Invitations (lot 8, ADR 0018)** : inviter enregistre l'adresse e-mail et le nom affiché de
   la personne dans `app.members` dès l'invitation, avant tout consentement de sa part ; ils sont
   visibles des membres de l'espace (page Espace) et du journal d'activité (« a invité « Léa »

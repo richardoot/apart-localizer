@@ -5,6 +5,7 @@ import {
   criteriaFeatures,
   describePerimeter,
   drawnToPerimeter,
+  perimeterBounds,
   perimeterPolygon,
 } from './perimeter'
 
@@ -18,6 +19,33 @@ describe('périmètres côté carte', () => {
       radiusMeters: 500,
     })
     expect(circle.coordinates[0]).toHaveLength(65)
+  })
+
+  it('l’emprise d’un périmètre, pour y cadrer la carte', () => {
+    expect(perimeterBounds({ type: 'polygon', polygon: SQUARE })).toEqual([
+      [-0.6, 44.8],
+      [-0.58, 44.82],
+    ])
+    const [[west, south], [east, north]] = perimeterBounds({
+      type: 'point_radius',
+      longitude: -0.59,
+      latitude: 44.8,
+      radiusMeters: 1000,
+    }) ?? [
+      [0, 0],
+      [0, 0],
+    ]
+    // Environ 1 km de part et d'autre du centre.
+    expect(north - 44.8).toBeCloseTo(0.009, 3)
+    expect(44.8 - south).toBeCloseTo(0.009, 3)
+    expect(east + 0.59).toBeCloseTo(0.0127, 3)
+    expect(-0.59 - west).toBeCloseTo(0.0127, 3)
+    expect(
+      perimeterBounds({
+        type: 'polygon',
+        polygon: { type: 'Polygon', coordinates: [] },
+      })
+    ).toBeNull()
   })
 
   it('les périmètres des critères en couche, le critère choisi repéré', () => {

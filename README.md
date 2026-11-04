@@ -247,8 +247,10 @@ http://localhost:3000/mcp` ([développement local](docs/developpement-local.md#t
   affichés), avec « Voir l'impact » (annonces dont le verdict changerait) avant d'enregistrer ;
   garde-fou sur la version en vigueur.
 
-Fond de carte : `VITE_MAP_STYLE_URL` dans `apps/web/.env`, par défaut le style libre et sans clé
-d'OpenFreeMap (`https://tiles.openfreemap.org/styles/liberty`).
+Fonds de carte (lot 10) : plan OpenStreetMap, plan IGN et photo aérienne IGN, au choix sur
+chaque carte, sans clé (docs/open-data.md). `VITE_MAP_STYLE_URL` dans `apps/web/.env` remplace
+le plan OpenStreetMap, par défaut le style libre et sans clé d'OpenFreeMap
+(`https://tiles.openfreemap.org/styles/liberty`).
 
 ## Qualité et tests
 

@@ -2,7 +2,7 @@
   import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
   import '@/lib/maplibre-worker'
   import * as maplibregl from 'maplibre-gl'
-  import type { Map as MapLibreMap } from 'maplibre-gl'
+  import type { Map as MapLibreMap, Marker } from 'maplibre-gl'
   import type { GeoJSONStoreFeatures } from 'terra-draw'
   import {
     TerraDraw,
@@ -10,14 +10,30 @@
     TerraDrawPolygonMode,
   } from 'terra-draw'
   import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter'
-  import type { Perimeter, PerimeterInput } from '@apart/contracts'
+  import type {
+    GeocodeLookup,
+    Perimeter,
+    PerimeterInput,
+  } from '@apart/contracts'
+  import { useBaseMap } from '@/composables/useBaseMap'
+  import { TERRA_DRAW_PREFIX } from '@/lib/base-maps'
   import { CRITERIA_LAYERS, upsertGeoJsonLayer } from '@/lib/map-layers'
   import {
+    ADDRESS_ZOOM,
+    COMMUNE_ZOOM,
     DEFAULT_MAP_CENTER,
     DEFAULT_MAP_ZOOM,
-    mapStyleUrl,
+    DRAW_MAP_CENTER,
+    DRAW_MAP_ZOOM,
+    DRAW_MIN_ZOOM,
   } from '@/lib/map-style'
-  import { drawnToPerimeter, perimeterPolygon } from '@/lib/perimeter'
+  import {
+    drawnToPerimeter,
+    perimeterBounds,
+    perimeterPolygon,
+  } from '@/lib/perimeter'
+  import BaseMapSwitcher from '@/components/map/BaseMapSwitcher.vue'
+  import MapAddressSearch from '@/components/map/MapAddressSearch.vue'
 
   /**
    * La carte du critère : affiche le périmètre courant, dessine un polygone
@@ -25,6 +41,12 @@
    * départ d'une isochrone). Le polygone reste modifiable (sommets à faire
    * glisser), y compris celui d'un critère enregistré. Le dessin part en
    * GeoJSON vers l'API ; rien n'est calculé ici.
+   *
+   * Lot 10 : pour voir les rues et les bâtiments, la carte s'ouvre cadrée
+   * sur le périmètre existant, et entrer en dessin depuis une vue trop large
+   * recadre sur le périmètre ou sur le centre de Bordeaux ; une adresse
+   * cherchée recentre la carte ; le fond (plan OSM, plan IGN, photo) se
+   * change sans perdre le dessin en cours (lib/base-maps.ts).
    */
   const props = defineProps<{
     perimeter: Perimeter | null
@@ -38,8 +60,13 @@
   const container = ref<HTMLDivElement | null>(null)
   let map: MapLibreMap | null = null
   let draw: TerraDraw | null = null
+  let addressMarker: Marker | null = null
   const ready = ref(false)
   const SOURCE = 'criteria-editor-perimeter'
+  const FIT_PADDING = 40
+  const FIT_MAX_ZOOM = 16
+
+  const { baseMap, setBaseMap, styleOptions } = useBaseMap(() => map)
 
   function renderPerimeter(): void {
     if (!map || !ready.value) return
@@ -90,13 +117,62 @@
     loadEditablePolygon()
   }
 
+  /** Cadre la carte sur un périmètre ; faux s'il n'y en a pas. */
+  function fitPerimeter(perimeter: Perimeter | null): boolean {
+    const bounds = perimeter ? perimeterBounds(perimeter) : null
+    if (!map || !bounds) return false
+    map.fitBounds(bounds, { padding: FIT_PADDING, maxZoom: FIT_MAX_ZOOM })
+    return true
+  }
+
+  /**
+   * Entrer en dessin (polygone, cercle, point) depuis une vue trop large
+   * pour voir les rues : cadrage sur le périmètre, sinon sur Bordeaux. Une
+   * vue déjà rapprochée par la personne est laissée telle quelle.
+   */
+  function frameForDrawing(): void {
+    if (!map || !props.drawMode) return
+    if (map.getZoom() >= DRAW_MIN_ZOOM) return
+    if (fitPerimeter(props.perimeter)) return
+    map.easeTo({ center: DRAW_MAP_CENTER, zoom: DRAW_MAP_ZOOM })
+  }
+
+  function goTo(result: NonNullable<GeocodeLookup['result']>): void {
+    if (!map) return
+    const center = result.point.coordinates
+    map.flyTo({
+      center,
+      zoom: result.precision === 'commune' ? COMMUNE_ZOOM : ADDRESS_ZOOM,
+    })
+    addressMarker?.remove()
+    const element = document.createElement('div')
+    element.className =
+      'h-3.5 w-3.5 rounded-full border-2 border-white bg-accent shadow ring-2 ring-accent/40'
+    element.setAttribute('role', 'img')
+    element.setAttribute('aria-label', `Adresse trouvée : ${result.label}`)
+    addressMarker = new maplibregl.Marker({ element })
+      .setLngLat(center)
+      .addTo(map)
+  }
+
+  /** La vue d'ouverture : le périmètre existant, sinon Bordeaux si l'on dessine, sinon la métropole. */
+  function initialView():
+    | { bounds: [[number, number], [number, number]] }
+    | { center: [number, number]; zoom: number } {
+    const bounds = props.perimeter ? perimeterBounds(props.perimeter) : null
+    if (bounds) return { bounds }
+    return props.drawMode
+      ? { center: DRAW_MAP_CENTER, zoom: DRAW_MAP_ZOOM }
+      : { center: DEFAULT_MAP_CENTER, zoom: DEFAULT_MAP_ZOOM }
+  }
+
   onMounted(() => {
     if (!container.value) return
     const created = new maplibregl.Map({
       container: container.value,
-      style: mapStyleUrl(import.meta.env),
-      center: DEFAULT_MAP_CENTER,
-      zoom: DEFAULT_MAP_ZOOM,
+      ...styleOptions(),
+      ...initialView(),
+      fitBoundsOptions: { padding: FIT_PADDING, maxZoom: FIT_MAX_ZOOM },
       attributionControl: { compact: true },
     })
     map = created
@@ -105,7 +181,11 @@
       ready.value = true
       renderPerimeter()
       draw = new TerraDraw({
-        adapter: new TerraDrawMapLibreGLAdapter({ map: created }),
+        adapter: new TerraDrawMapLibreGLAdapter({
+          map: created,
+          // Le préfixe désigne ses couches : un changement de fond les recopie.
+          prefixId: TERRA_DRAW_PREFIX,
+        }),
         modes: [
           new TerraDrawPolygonMode({ editable: true }),
           new TerraDrawCircleMode(),
@@ -137,18 +217,41 @@
   })
 
   onBeforeUnmount(() => {
+    addressMarker?.remove()
     draw?.stop()
     map?.remove()
     map = null
     draw = null
   })
 
-  watch(() => props.perimeter, renderPerimeter, { deep: true })
-  watch(() => props.drawMode, applyMode)
+  /** Clé d'une isochrone : un nouveau calcul (départ, mode, durée) recadre la carte. */
+  function isochroneKey(perimeter: Perimeter | null): string | null {
+    if (perimeter?.type !== 'isochrone') return null
+    const p = perimeter.params
+    return `${p.origin.coordinates.join(',')}|${p.mode}|${p.durationMinutes}`
+  }
+
+  watch(
+    () => props.perimeter,
+    (next, previous) => {
+      renderPerimeter()
+      const key = isochroneKey(next)
+      if (key && key !== isochroneKey(previous)) fitPerimeter(next)
+    },
+    { deep: true }
+  )
+  watch(
+    () => props.drawMode,
+    () => {
+      applyMode()
+      frameForDrawing()
+    }
+  )
 </script>
 
 <template>
   <div class="grid gap-1">
+    <MapAddressSearch @found="goTo" />
     <p class="text-xs text-muted" data-testid="draw-hint">
       <template v-if="drawMode === 'polygon'">
         Cliquez pour poser les sommets, puis sur le premier ou le dernier pour
@@ -162,11 +265,18 @@
       </template>
       <template v-else>Le périmètre du critère.</template>
     </p>
-    <div
-      ref="container"
-      class="h-[45vh] min-h-[280px] w-full overflow-hidden rounded-xl border border-line"
-      role="region"
-      aria-label="Carte du périmètre"
-    />
+    <div class="relative">
+      <div
+        ref="container"
+        class="h-[45vh] min-h-[280px] w-full overflow-hidden rounded-xl border border-line"
+        role="region"
+        aria-label="Carte du périmètre"
+      />
+      <BaseMapSwitcher
+        class="absolute top-2 left-2 z-10"
+        :model-value="baseMap"
+        @update:model-value="setBaseMap"
+      />
+    </div>
   </div>
 </template>

@@ -5,6 +5,8 @@ import {
   BboxQuerySchema,
   CriteriaFiltersSchema,
   EvaluatedListingSchema,
+  GeocodeLookupSchema,
+  GeocodeQuerySchema,
   ListingOpenDataContextSchema,
   MarketContextRequestSchema,
   McpCreateSearchCriteriaInputSchema,
@@ -176,6 +178,33 @@ describe('données ouvertes (lot 4)', () => {
     )
     expect(BboxQuerySchema.parse({}).bbox).toBeUndefined()
     expect(BboxQuerySchema.safeParse({ bbox: '1,2,3' }).success).toBe(false)
+  })
+
+  it('recherche d’adresse pour recentrer la carte : texte borné, lieu ou rien', () => {
+    expect(GeocodeQuerySchema.parse({ q: '  Talence  ' }).q).toBe('Talence')
+    expect(GeocodeQuerySchema.safeParse({ q: 'ab' }).success).toBe(false)
+    expect(GeocodeQuerySchema.safeParse({ q: 'x'.repeat(201) }).success).toBe(
+      false
+    )
+    expect(
+      GeocodeLookupSchema.parse({
+        query: 'Talence',
+        status: 'found',
+        result: {
+          point: { type: 'Point', coordinates: [-0.59, 44.81] },
+          label: 'Talence',
+          precision: 'commune',
+          commune: 'Talence',
+        },
+      }).result?.precision
+    ).toBe('commune')
+    expect(
+      GeocodeLookupSchema.safeParse({
+        query: 'Nulle part',
+        status: 'lost',
+        result: null,
+      }).success
+    ).toBe(false)
   })
 
   it("instantané d'une annonce : tout facultatif", () => {

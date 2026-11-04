@@ -182,20 +182,21 @@ Projet `apart-localizer-frontend`, **Root Directory** `apps/web`, framework Vite
 SPA et les en-têtes de sécurité, dont une CSP qui autorise les tuiles et polices en `https:`).
 Variables :
 
-| Variable                 | Valeur                                                                                   |
-| ------------------------ | ---------------------------------------------------------------------------------------- |
-| `VITE_SUPABASE_URL`      | `https://<ref>.supabase.co`                                                              |
-| `VITE_SUPABASE_ANON_KEY` | clé `anon`                                                                               |
-| `VITE_API_URL`           | `https://<api>.vercel.app`                                                               |
-| `VITE_MAP_STYLE_URL`     | facultatif ; défaut OpenFreeMap `https://tiles.openfreemap.org/styles/liberty`, sans clé |
-| `VITE_SENTRY_DSN`        | DSN du projet Sentry « web » (vide = inactif)                                            |
+| Variable                 | Valeur                                                                                                                                                      |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VITE_SUPABASE_URL`      | `https://<ref>.supabase.co`                                                                                                                                 |
+| `VITE_SUPABASE_ANON_KEY` | clé `anon`                                                                                                                                                  |
+| `VITE_API_URL`           | `https://<api>.vercel.app`                                                                                                                                  |
+| `VITE_MAP_STYLE_URL`     | facultatif ; remplace le fond « Plan OSM » (défaut OpenFreeMap `https://tiles.openfreemap.org/styles/liberty`, sans clé) ; les fonds IGN n'en dépendent pas |
+| `VITE_SENTRY_DSN`        | DSN du projet Sentry « web » (vide = inactif)                                                                                                               |
 
 Les variables `VITE_VERCEL_ENV` et `VITE_VERCEL_GIT_COMMIT_SHA` viennent des variables système
 de Vercel si l'option « Automatically expose System Environment Variables » est cochée ; elles
 servent à Sentry (environnement, version).
 
 Vérifier ensuite la connexion Google depuis le web déployé, puis que la liste des annonces et la
-carte s'affichent (la carte charge les tuiles OpenFreeMap sans clé).
+carte s'affichent (la carte charge les tuiles OpenFreeMap sans clé), puis les fonds « Plan IGN » et
+« Photo aérienne » (tuiles `data.geopf.fr`, sans clé, autorisées par la CSP en `https:`).
 
 ## 5. Connecteur MCP dans claude.ai
 

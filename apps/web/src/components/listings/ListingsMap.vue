@@ -2,8 +2,9 @@
   import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
   import '@/lib/maplibre-worker'
   import * as maplibregl from 'maplibre-gl'
-  import type { GeoJSONSource, Map as MapLibreMap, Marker } from 'maplibre-gl'
+  import type { Map as MapLibreMap, Marker } from 'maplibre-gl'
   import type { EvaluatedListing, PointRadius } from '@apart/contracts'
+  import { useBaseMap } from '@/composables/useBaseMap'
   import type {
     MapLayerData,
     MapLayerToggles,
@@ -16,6 +17,7 @@
     RENT_ZONE_COLORS,
     RENT_ZONE_LAYERS,
     layerFeaturePopupHtml,
+    perimeterLayers,
     pointLayer,
     upsertGeoJsonLayer,
   } from '@/lib/map-layers'
@@ -30,8 +32,8 @@
     DEFAULT_MAP_ZOOM,
     DEFAULT_RADIUS_METERS,
     RADIUS_STEPS,
-    mapStyleUrl,
   } from '@/lib/map-style'
+  import BaseMapSwitcher from '@/components/map/BaseMapSwitcher.vue'
 
   const props = withDefaults(
     defineProps<{
@@ -116,6 +118,7 @@
   let map: MapLibreMap | null = null
   let markers: Marker[] = []
   const ready = ref(false)
+  const { baseMap, setBaseMap, styleOptions } = useBaseMap(() => map)
   const radius = ref(props.near?.radiusMeters ?? DEFAULT_RADIUS_METERS)
   const radiusIndex = ref(Math.max(0, RADIUS_STEPS.indexOf(radius.value)))
 
@@ -190,10 +193,10 @@
   }
 
   const RADIUS_SOURCE = 'near-radius'
+  const RADIUS_LAYERS = perimeterLayers(RADIUS_SOURCE, '#0e6b63')
 
   function renderRadius(): void {
     if (!map || !ready.value) return
-    const source = map.getSource(RADIUS_SOURCE) as GeoJSONSource | undefined
     const feature = props.near
       ? {
           type: 'Feature' as const,
@@ -207,27 +210,12 @@
           ),
         }
       : null
-    const data = {
-      type: 'FeatureCollection' as const,
-      features: feature ? [feature] : [],
-    }
-    if (source) {
-      source.setData(data)
-      return
-    }
-    map.addSource(RADIUS_SOURCE, { type: 'geojson', data })
-    map.addLayer({
-      id: `${RADIUS_SOURCE}-fill`,
-      type: 'fill',
-      source: RADIUS_SOURCE,
-      paint: { 'fill-color': '#0e6b63', 'fill-opacity': 0.12 },
-    })
-    map.addLayer({
-      id: `${RADIUS_SOURCE}-line`,
-      type: 'line',
-      source: RADIUS_SOURCE,
-      paint: { 'line-color': '#0e6b63', 'line-width': 2 },
-    })
+    upsertGeoJsonLayer(
+      map,
+      RADIUS_SOURCE,
+      { type: 'FeatureCollection', features: feature ? [feature] : [] },
+      RADIUS_LAYERS
+    )
   }
 
   function setCenter(lng: number, lat: number): void {
@@ -251,7 +239,7 @@
     if (!container.value) return
     const created = new maplibregl.Map({
       container: container.value,
-      style: mapStyleUrl(import.meta.env),
+      ...styleOptions(),
       center: props.near
         ? [props.near.longitude, props.near.latitude]
         : DEFAULT_MAP_CENTER,
@@ -387,11 +375,18 @@
         </span>
       </span>
     </div>
-    <div
-      ref="container"
-      class="h-[60vh] min-h-[360px] w-full overflow-hidden rounded-xl border border-line"
-      role="region"
-      aria-label="Carte des annonces"
-    />
+    <div class="relative">
+      <div
+        ref="container"
+        class="h-[60vh] min-h-[360px] w-full overflow-hidden rounded-xl border border-line"
+        role="region"
+        aria-label="Carte des annonces"
+      />
+      <BaseMapSwitcher
+        class="absolute top-2 left-2 z-10"
+        :model-value="baseMap"
+        @update:model-value="setBaseMap"
+      />
+    </div>
   </div>
 </template>

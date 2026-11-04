@@ -548,3 +548,44 @@ export const BboxQuerySchema = z.object({
     .describe('Emprise ouest,sud,est,nord en degrés'),
 })
 export type BboxQuery = z.infer<typeof BboxQuerySchema>
+
+// ---------------------------------------------------------------------------
+// Recherche d'adresse pour recentrer une carte (lot 10)
+// ---------------------------------------------------------------------------
+
+/** `GET /opendata/geocode?q=` : une adresse ou une commune à localiser. */
+export const GeocodeQuerySchema = z.object({
+  q: z
+    .string()
+    .trim()
+    .min(3)
+    .max(200)
+    .describe('Adresse ou commune à localiser (3 à 200 caractères)'),
+})
+export type GeocodeQuery = z.infer<typeof GeocodeQuerySchema>
+
+export const GeocodeLookupStatusSchema = z
+  .enum(['found', 'not_found', 'unavailable'])
+  .describe(
+    'Résultat de la recherche : lieu trouvé, aucun lieu assez sûr, géocodeur indisponible'
+  )
+export type GeocodeLookupStatus = z.infer<typeof GeocodeLookupStatusSchema>
+
+/**
+ * Le lieu trouvé par le géocodeur de la Géoplateforme, pour recentrer une
+ * carte (avant de dessiner un périmètre). Rien n'est enregistré sur une
+ * annonce ni sur un critère.
+ */
+export const GeocodeLookupSchema = z.object({
+  query: z.string().describe('Texte cherché, sans espaces autour'),
+  status: GeocodeLookupStatusSchema,
+  result: z
+    .object({
+      point: PointSchema,
+      label: z.string().describe('Libellé normalisé du lieu'),
+      precision: LocationPrecisionSchema,
+      commune: z.string().nullable(),
+    })
+    .nullable(),
+})
+export type GeocodeLookup = z.infer<typeof GeocodeLookupSchema>

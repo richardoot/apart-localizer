@@ -4,15 +4,20 @@
   import * as maplibregl from 'maplibre-gl'
   import type { Map as MapLibreMap } from 'maplibre-gl'
   import type { ListingContext } from '@apart/contracts'
+  import { useBaseMap } from '@/composables/useBaseMap'
   import { pointLayer, upsertGeoJsonLayer } from '@/lib/map-layers'
-  import { mapStyleUrl } from '@/lib/map-style'
+  import BaseMapSwitcher from '@/components/map/BaseMapSwitcher.vue'
 
-  /** Carte miniature du contexte : l'annonce, l'arrêt de tram le plus proche, les ventes comparables. */
+  /**
+   * Carte miniature du contexte : l'annonce, l'arrêt de tram le plus proche,
+   * les ventes comparables. Le fond est celui choisi pour toutes les cartes.
+   */
   const props = defineProps<{ context: ListingContext }>()
 
   const container = ref<HTMLDivElement | null>(null)
   let map: MapLibreMap | null = null
   const ready = ref(false)
+  const { baseMap, setBaseMap, styleOptions } = useBaseMap(() => map)
 
   function feature(coordinates: [number, number], kind: string, label: string) {
     return {
@@ -96,7 +101,7 @@
     if (!container.value) return
     const created = new maplibregl.Map({
       container: container.value,
-      style: mapStyleUrl(import.meta.env),
+      ...styleOptions(),
       center: point.coordinates,
       zoom: 14.5,
       attributionControl: { compact: true },
@@ -118,11 +123,17 @@
 </script>
 
 <template>
-  <div
-    v-if="context.point"
-    ref="container"
-    class="h-48 w-full overflow-hidden rounded-lg border border-line"
-    role="region"
-    aria-label="Carte du contexte : annonce, tram, ventes comparables"
-  />
+  <div v-if="context.point" class="relative">
+    <div
+      ref="container"
+      class="h-56 w-full overflow-hidden rounded-lg border border-line sm:h-48"
+      role="region"
+      aria-label="Carte du contexte : annonce, tram, ventes comparables"
+    />
+    <BaseMapSwitcher
+      class="absolute top-2 left-2 z-10"
+      :model-value="baseMap"
+      @update:model-value="setBaseMap"
+    />
+  </div>
 </template>

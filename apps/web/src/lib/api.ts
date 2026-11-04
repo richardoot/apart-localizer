@@ -47,6 +47,7 @@ import type {
   DpeVerifyRequest,
   DuplicateCandidate,
   DuplicateProbe,
+  GeocodeLookup,
   LayerFeatureCollection,
   ListingContext,
   MarketContext,
@@ -402,6 +403,11 @@ export const api = {
         method: 'POST',
         json: request,
       }),
+    /** Lot 10 : une adresse ou une commune, pour recentrer une carte (par l'API, jamais en direct). */
+    geocode: (query: string) =>
+      apiFetch<GeocodeLookup>(
+        `/opendata/geocode?q=${encodeURIComponent(query.trim())}`
+      ),
   },
 
   /** Lot 5 : phase 1, projection, scénarios, loyer de marché, conformité. */
