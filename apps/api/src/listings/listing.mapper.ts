@@ -1,5 +1,6 @@
 import {
   ListingOpenDataContextSchema,
+  ListingPlacementSchema,
   ListingSchema,
   OfferSchema,
   OpinionSchema,
@@ -11,6 +12,7 @@ import type {
   CriteriaMatch,
   FieldProvenanceMap,
   Listing as ListingDto,
+  ListingPlacement,
   Offer as OfferDto,
   Opinion as OpinionDto,
   Point,
@@ -178,6 +180,7 @@ export function toListingDto(row: ListingRow): ListingDto {
       district: row.district,
       point: pointOf(row),
       precision: row.locationPrecision,
+      placement: placementOf(row.locationPlacement),
     },
     status: row.status,
     discardReason: row.discardReason,
@@ -225,6 +228,13 @@ export function toListingDto(row: ListingRow): ListingDto {
     openDataContext: openDataContextOf(row.openDataContext),
   }
   return ListingSchema.parse(dto)
+}
+
+/** Le placement du repère (lot 12) ; absent ou illisible : null. */
+export function placementOf(value: unknown): ListingPlacement | null {
+  if (value === null || value === undefined) return null
+  const parsed = ListingPlacementSchema.safeParse(value)
+  return parsed.success ? parsed.data : null
 }
 
 /** L'instantané open data enregistré ; un JSON d'une version antérieure illisible vaut null. */

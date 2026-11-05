@@ -7,7 +7,9 @@ comparables ; les critères de recherche se dessinent sur la carte ou se calcule
 au lot 5, la checklist réglementaire lit les risques Géorisques à l'adresse ; au lot 10, les
 cartes proposent le plan et la photo aérienne de l'IGN en plus du plan OpenStreetMap ; au lot 11,
 chaque annonce reçoit son quartier, la piste d'athlétisme, les supermarchés avec drive et la salle
-Fitness Park les plus proches, et les cartes en montrent les couches.
+Fitness Park les plus proches, et les cartes en montrent les couches ; au lot 12, une annonce sans
+adresse au numéro est placée au centre du quartier reconnu dans son texte (contours importés,
+lieux-dits OpenStreetMap), et chaque calcul fait depuis un repère approché le dit (« ≈ »).
 Rien n'est inventé : une donnée ambiguë, périmée ou absente rend l'état « à vérifier » avec sa
 raison.
 
@@ -179,6 +181,46 @@ pas importé.
   Fitness Park les plus proches, drive le plus proche de chaque enseigne préférée et toutes
   enseignes (signalé d'abord), à vol d'oiseau, 20 km au plus.
 
+### Placement des annonces (lot 12)
+
+Vérifié le 5 novembre 2026. Code : `packages/domain/src/placement.ts` (lecture du champ
+« quartier », reconnaissance, choix, textes), `apps/api/src/opendata/placement.service.ts`
+(orchestration), `apps/api/src/geo/geo.service.ts` (contours d'une commune, surfaces, points
+intérieurs, recouvrements, table `places`, zone de l'annonce), `scripts/lib/places.ts` et
+`scripts/lib/relocate-listings.ts`. ADR [0022](decisions/0022-placement-des-annonces.md).
+
+| Donnée                   | Fichier local               | Source (URL)                                                                                                                                                                                          | Licence                             | Version et volume                                                                                                                                                                                                                                                                                                                                |
+| ------------------------ | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Lieux-dits OpenStreetMap | `osm/quartiers-places.json` | Overpass `https://overpass-api.de/api/interpreter`, requête `PLACES_QUERY` (`pnpm import:places -- --print-query`) : `nwr["place"~"^(neighbourhood\|quarter\|suburb)$"]["name"]` dans les 28 communes | © contributeurs OpenStreetMap, ODbL | base OSM du 5 novembre 2026 00:36:55 UTC (`osm3s.timestamp_osm_base`) ; 266 objets lus, 230 lieux-dits retenus (92 `suburb`, 52 `quarter`, 86 `neighbourhood`), tous rattachés à une commune ; le fichier présent vient d'une requête plus large (35 limites administratives de niveau 10 sans `place`, 1 objet sans nom), écartées par l'import |
+| Contours des quartiers   | (lot 11)                    | les contours importés par `import:neighbourhoods` (secteurs de vie, quartiers officiels, IRIS)                                                                                                        | (lot 11)                            | 374 contours ; candidats du placement : ceux de la commune de l'annonce                                                                                                                                                                                                                                                                          |
+
+**Règles** (ADR 0022) :
+
+- **Hiérarchie** : adresse au numéro (`exact`) ou à la rue (`street`) par le géocodeur ; sinon le
+  quartier reconnu dans le champ « quartier » parmi les contours de la commune de l'annonce
+  (code INSEE de l'annonce, du géocodeur ou de la liste des 28 communes), repère au point
+  intérieur du contour (`ST_PointOnSurface`), précision `district` ; sinon un lieu-dit de la
+  commune (repère sur le lieu-dit, sans contour) ; sinon le centre de la commune (géocodeur).
+- **Lecture** : parenthèses, mentions de transport et de distance, résidences et nom de la
+  commune seul écartés ; « près de », « face au », « proche », « à côté de » repérés ; découpe aux
+  virgules, barres, points-virgules, tirets espacés et « et ».
+- **Noms reconnus** : secteur de vie et quartier officiel (nom entier et chacun de ses éléments),
+  quartier qui regroupe des secteurs (union de ses secteurs), nom d'IRIS (IRIS numérotés d'un
+  même nom réunis) ; identique, contenu dans le morceau ou contenant le morceau, ce dernier
+  avec un mot distinctif d'au moins quatre lettres (mots courants et nom de la commune exclus).
+- **Choix** : confirmé par un autre morceau d'abord, puis le plus fin, le rapprochement le plus
+  net, la plus petite surface ; « à vérifier » pour un « près de », deux zones distinctes
+  (moins de 5 % de la plus petite en commun) ou un nom ambigu. Rien de reconnu : la commune.
+- **Ce qui prime** : un point saisi ; un repère à l'adresse ne bouge jamais quand seul le
+  quartier change ; le rattrapage ne redescend jamais une précision.
+- **Calculs** : tous partent du repère ; au quartier ou à la commune, les distances (tram,
+  équipements) se lisent « ≈ », le quartier est indicatif, les comparables DVF indicatifs (« à
+  vérifier » au centre de la commune), la zone d'encadrement « probable » si tout le contour
+  tient dans une zone (au moins 1 000 m² en commun pour compter une zone, 5 000 m² hors zonage
+  pour en sortir), « à vérifier » s'il en chevauche plusieurs ; un critère à périmètre n'est
+  « sous réserve » que si le contour n'est pas entier dans le périmètre (ou pour la distance au
+  tram).
+
 ## Imports
 
 Chaque script a `--help`, `--dry-run` (lit, filtre et contrôle sans rien écrire) et
@@ -200,6 +242,9 @@ pnpm import:sports-facilities            # pistes (Data ES + complément OSM) et
 pnpm import:sports-facilities -- --only fitness --download
 pnpm import:supermarkets                 # drives OSM ; --print-query affiche la requête Overpass
 pnpm refresh:surroundings -- --dry-run   # rattrapage du quartier et des équipements des annonces
+# Lot 12, après les quartiers
+pnpm import:places                       # lieux-dits OpenStreetMap ; --download, --print-query
+pnpm relocate:listings -- --dry-run      # repère des annonces à la commune, au quartier ou sans repère
 ```
 
 | Import                     | Ce qui est écrit                                                                                                                                                                                                                                                                                                                                             | Volume et durée en local (3 novembre 2026, base Supabase 54322)                                                                                                                                                                                                                                                                                                                                        |
@@ -212,6 +257,8 @@ pnpm refresh:surroundings -- --dry-run   # rattrapage du quartier et des équipe
 | `import:sports-facilities` | `amenities` genre `athletics_track` (sources `res` et `osm`) et `fitness_park` (`osm`), chaque source remplacée dans une transaction                                                                                                                                                                                                                         | 77 pistes du recensement (26 stades, 50 pistes isolées, 1 piste 2 à 4 couloirs ; 39 aires écartées), 7 pistes OpenStreetMap en complément, 6 Fitness Park ; 0,14 s                                                                                                                                                                                                                                     |
 | `import:supermarkets`      | `amenities` genre `supermarket_drive` (source `osm`), remplacée dans une transaction                                                                                                                                                                                                                                                                         | 25 drives sur 457 commerces alimentaires : 21 signalés (11 points E.Leclerc Drive, 4 Auchan Drive, 3 Chronodrive, 1 Carrefour Drive, 1 Intermarché Drive, 1 épicerie « Le Drive tout nu »), 4 à vérifier (deux Carrefour près d'une voie « Carrefour Drive », un Intermarché `drive_through=yes`, un Super U `branch=Drive`) ; par enseigne : Carrefour 3, Auchan 4, Intermarché 2, autres 16 ; 0,15 s |
 | `refresh:surroundings`     | la clé `surroundings` de `open_data_context` des annonces dont le résultat change, journal `listing.enriched` (canal `system`)                                                                                                                                                                                                                               | idempotent : une seconde passe ne réécrit rien (vérifié en test e2e)                                                                                                                                                                                                                                                                                                                                   |
+| `import:places`            | `places` (point, GiST) : la source `osm` remplacée dans une transaction, chaque lieu-dit rattaché à la commune dont un contour importé le contient                                                                                                                                                                                                           | 5 novembre 2026, base jetable : 230 lieux-dits écrits, aucun hors des contours ; 0,2 s                                                                                                                                                                                                                                                                                                                 |
+| `relocate:listings`        | `location_placement`, point, précision et `location_area` des annonces au centre de la commune, au quartier ou sans repère (jamais à l'adresse ni saisies), instantané de contexte recalculé, journal `listing.relocated` (canal `system`)                                                                                                                   | idempotent : une seconde passe ne change rien (vérifié en test e2e)                                                                                                                                                                                                                                                                                                                                    |
 
 Relancer un import ne crée pas de doublon (vérifié le 3 novembre 2026 : mêmes comptes après une
 seconde exécution des trois imports). La fiche du jeu décrit `id_mutation` comme
@@ -234,6 +281,7 @@ Les commandes acceptent les options avec ou sans le séparateur `--` de pnpm.
 | Équipements sportifs (Data ES)               | quotidien                                                            | trimestriel suffit : `import:sports-facilities --download`, puis `refresh:surroundings`                                                                                                            |
 | OpenStreetMap (drives, Fitness Park, pistes) | en continu                                                           | trimestriel, ou après une correction faite dans OpenStreetMap (un drive manquant) : imports `--download`, puis `refresh:surroundings`                                                              |
 | Quartiers et IRIS                            | rare (secteurs de vie recréés en septembre 2026 ; IRIS chaque année) | relancer `import:neighbourhoods --download` à chaque nouveau découpage ou nouvelle édition IRIS (`--iris-edition`), puis `refresh:surroundings`                                                    |
+| Lieux-dits OpenStreetMap (lot 12)            | en continu                                                           | trimestriel, avec les autres imports OpenStreetMap : `import:places --download`, puis `relocate:listings` (et après un nouvel `import:neighbourhoods`)                                             |
 
 Après un import, les annonces gardent leur instantané (`open_data_context`) jusqu'à la prochaine
 modification ; `POST /listings/:id/geocode` (bouton « Relancer le géocodage » de la fiche) le
@@ -314,3 +362,13 @@ sont toujours calculés à la lecture.
 - Lot 11 : après un import, les annonces gardent leur instantané jusqu'au rattrapage
   (`refresh:surroundings`) ou à leur prochaine modification d'adresse ; le bloc Contexte de la
   fiche et `get_listing` recalculent à la lecture.
+- Lot 12 : le quartier d'une annonce vient du texte de l'annonce, pas d'une adresse : un texte
+  trompeur (« près de » un quartier voisin, nom d'usage absent des jeux ouverts) donne un repère
+  au mauvais endroit ou au centre de la commune ; il se corrige en précisant l'adresse ou le
+  quartier dans la fiche. Les noms d'IRIS de Bordeaux sont ceux de grands ensembles, plus larges
+  qu'un secteur de vie.
+- Lot 12 : une annonce dont le repère (centre du quartier) est hors d'un périmètre n'entre pas
+  dans le critère, même si une partie de son quartier y est ; elle n'y entre « sous réserve »
+  que si son repère y est et son quartier pas entièrement.
+- Lot 12 : le géocodeur IGN en mode « lieu » (index `poi`) n'est pas utilisé : il mêle
+  commerces, arrêts et lieux-dits, et ne se vérifie pas hors ligne.

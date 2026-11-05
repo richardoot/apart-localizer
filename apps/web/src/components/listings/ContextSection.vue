@@ -5,7 +5,12 @@
     RENT_EPOCH_LABELS,
     TRANSIT_MODE_LABELS,
   } from '@apart/contracts'
-  import type { DpeCandidate, OpenDataStatus } from '@apart/contracts'
+  import type {
+    DpeCandidate,
+    ListingLocation,
+    OpenDataStatus,
+  } from '@apart/contracts'
+  import { precisionBadge } from '@apart/domain'
   import {
     useContextMutations,
     useListingContext,
@@ -23,6 +28,7 @@
   import { CHECK_LEVEL_CLASSES } from '@/lib/labels'
   import ContextMap from './ContextMap.vue'
   import DpeBadge from './DpeBadge.vue'
+  import PrecisionBadge from './PrecisionBadge.vue'
   import SurroundingsDetails from './SurroundingsDetails.vue'
 
   /**
@@ -32,7 +38,16 @@
    * d'encadrement, comparables DVF datés et carte miniature. Tout vient du
    * serveur (données ouvertes importées, `domain`) ; rien n'est calculé ici.
    */
-  const props = defineProps<{ listingId: string; updatedAt: string }>()
+  const props = defineProps<{
+    listingId: string
+    updatedAt: string
+    /** Lot 12 : la localisation de l'annonce, pour la pastille et l'explication du repère. */
+    location?: ListingLocation | null
+  }>()
+  const emit = defineEmits<{
+    /** « Préciser l'adresse » : ouvrir le formulaire sur l'adresse. */
+    precise: []
+  }>()
 
   const id = computed(() => props.listingId)
   const { data: context, isPending, error } = useListingContext(id)
@@ -71,6 +86,29 @@
       mutations.verifyDpe.isPending.value ||
       mutations.regeocode.isPending.value
   )
+
+  /**
+   * Lot 12 : le repère tel que le serveur l'a placé (précision, placement du
+   * contexte), avec la commune et le quartier saisis de l'annonce.
+   */
+  const placed = computed(() =>
+    context.value
+      ? {
+          precision: context.value.precision,
+          point: context.value.point,
+          placement: context.value.placement,
+          commune: props.location?.commune ?? null,
+          district: props.location?.district ?? null,
+        }
+      : null
+  )
+  const badge = computed(() =>
+    placed.value ? precisionBadge(placed.value) : null
+  )
+  /** Les raisons du placement, sans répéter l'explication de la pastille. */
+  const placementReasons = computed(
+    () => context.value?.placement?.reasons ?? []
+  )
 </script>
 
 <template>
@@ -102,6 +140,41 @@
         obtenir la desserte, le plafond et le marché.
       </p>
 
+      <div
+        v-if="placed && badge"
+        class="grid gap-1.5 rounded-lg border border-line bg-bg p-3 text-sm"
+        :class="
+          context.approximation.approximate ? 'border-l-4 border-l-warn' : ''
+        "
+        data-testid="placement"
+      >
+        <h4
+          class="flex flex-wrap items-center gap-2 text-xs font-medium text-muted"
+        >
+          Repère de l’annonce
+          <PrecisionBadge :location="placed" />
+        </h4>
+        <p class="text-xs">{{ badge.title }}</p>
+        <ul
+          v-if="placementReasons.length"
+          class="grid gap-0.5 text-xs text-muted"
+          data-testid="placement-reasons"
+        >
+          <li v-for="reason in placementReasons" :key="reason">
+            {{ reason }}
+          </li>
+        </ul>
+        <button
+          v-if="badge.tone !== 'exact'"
+          type="button"
+          class="inline-flex min-h-9 items-center justify-self-start rounded-lg border border-accent px-3 py-1 text-xs font-medium text-accent hover:bg-accent-soft"
+          data-action="precise-address"
+          @click="emit('precise')"
+        >
+          Préciser l’adresse
+        </button>
+      </div>
+
       <div class="grid gap-1 text-sm" data-testid="transit">
         <h4 class="text-xs font-medium text-muted">Desserte TBM</h4>
         <p v-if="context.transit.nearestTram">
@@ -110,7 +183,8 @@
           <template v-if="context.transit.nearestTram.lines.length">
             (ligne {{ context.transit.nearestTram.lines.join(', ') }})
           </template>
-          à {{ formatDistance(context.transit.nearestTram.distanceMeters) }}
+          à {{ context.transit.approximate ? '≈ ' : ''
+          }}{{ formatDistance(context.transit.nearestTram.distanceMeters) }}
         </p>
         <p v-else class="text-muted">Aucun arrêt de tram à moins de 2 km.</p>
         <p
@@ -125,11 +199,22 @@
             TRANSIT_MODE_LABELS[context.transit.nearestStop.mode].toLowerCase()
           }}
           {{ context.transit.nearestStop.lines.join(', ') }}) à
-          {{ formatDistance(context.transit.nearestStop.distanceMeters) }}
+          {{ context.transit.approximate ? '≈ ' : ''
+          }}{{ formatDistance(context.transit.nearestStop.distanceMeters) }}
+        </p>
+        <p
+          v-for="reason in context.transit.reasons"
+          :key="reason"
+          class="text-xs text-muted"
+        >
+          {{ reason }}
         </p>
       </div>
 
-      <SurroundingsDetails :surroundings="context.surroundings" />
+      <SurroundingsDetails
+        :surroundings="context.surroundings"
+        :approximation="context.approximation"
+      />
 
       <div class="grid gap-1 text-sm" data-testid="dpe">
         <h4 class="flex items-center gap-2 text-xs font-medium text-muted">

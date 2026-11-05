@@ -25,6 +25,7 @@ export function useContextMutations() {
     void client.invalidateQueries({ queryKey: contextKeys.detail(id) })
     void client.invalidateQueries({ queryKey: ['listings', 'list'] })
     void client.invalidateQueries({ queryKey: listingKeys.targetPrice(id) })
+    void client.invalidateQueries({ queryKey: listingKeys.areas })
   }
   const searchDpe = useMutation({
     mutationFn: (id: string) => api.listings.searchDpe(id),

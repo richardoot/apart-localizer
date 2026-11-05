@@ -2,14 +2,20 @@ import { Injectable } from '@nestjs/common'
 import { BORDEAUX_INSEE_CODE, RentReferenceTableSchema } from '@apart/contracts'
 import type {
   LeaseType,
+  ListingPlacement,
   LocationPrecision,
   Point,
   RentControl,
   RentControlLookup,
   RentReferenceTable,
 } from '@apart/contracts'
-import { isRentControlled, lookupRentReference } from '@apart/domain'
+import {
+  approximateAreaLabel,
+  isRentControlled,
+  lookupRentReference,
+} from '@apart/domain'
 import { GeoService } from '../geo/geo.service'
+import type { ListingAreaRef } from '../geo/geo.service'
 import { ReferenceCacheService } from './reference-cache.service'
 
 /** Sorte de `ReferenceData` des arrêtés de loyers de référence. */
@@ -18,6 +24,11 @@ export const RENT_REFERENCE_KIND = 'rent_reference'
 export const RENT_CONTROL_TERRITORY = 'bordeaux'
 /** Distance sous laquelle une autre zone rend l'adresse ambiguë, en mètres. */
 export const RENT_ZONE_TOLERANCE_METERS = 10
+/**
+ * Lot 12 : part d'une zone de quartier hors du zonage au-delà de laquelle
+ * elle « sort du zonage » (5 000 m², pas les liserés dus aux écarts de tracé).
+ */
+export const RENT_AREA_OUTSIDE_SQUARE_METERS = 5000
 
 export interface RentControlTarget {
   point: Point | null
@@ -31,6 +42,12 @@ export interface RentControlTarget {
   leaseType: LeaseType | null
   surface: number | null
   rentalYear: number | null
+  /**
+   * Lot 12 : la zone où le bien se trouve (quartier retenu ou commune),
+   * comparée au zonage quand le repère est approché, et son placement.
+   */
+  area?: ListingAreaRef | null
+  placement?: ListingPlacement | null
 }
 
 /**
@@ -73,7 +90,9 @@ export class RentControlService {
                 target.point !== null &&
                 (await this.geo.rentControlZonesNear(target.point, 0)).length >
                   0
-    const [tables, zones] = await Promise.all([
+    const approximate =
+      target.precision === 'district' || target.precision === 'commune'
+    const [tables, zones, inArea] = await Promise.all([
       applicable ? this.tables() : Promise.resolve([]),
       applicable && target.point
         ? this.geo.rentControlZonesNear(
@@ -81,8 +100,26 @@ export class RentControlService {
             RENT_ZONE_TOLERANCE_METERS
           )
         : Promise.resolve([]),
+      applicable && approximate && target.point && target.area
+        ? this.geo.rentControlZonesInArea(target.area, RENT_CONTROL_TERRITORY)
+        : Promise.resolve(null),
     ])
+    const label = approximateAreaLabel({
+      precision: target.precision,
+      point: target.point,
+      placement: target.placement ?? null,
+      commune: target.commune,
+    })
     return lookupRentReference({
+      area:
+        inArea && label
+          ? {
+              label,
+              zones: inArea.zones,
+              outsideZoning:
+                inArea.outsideSquareMeters > RENT_AREA_OUTSIDE_SQUARE_METERS,
+            }
+          : null,
       applicable,
       zones: zones.map(z => ({
         zone: z.zone,

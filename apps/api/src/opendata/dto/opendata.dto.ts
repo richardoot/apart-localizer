@@ -50,6 +50,11 @@ export const OpenDataStatusReportSchema = z.object({
       commune: z.number().int(),
     })
     .describe('Lot 11 : contours de quartiers importés par nature'),
+  places: z
+    .number()
+    .int()
+    .default(0)
+    .describe('Lot 12 : lieux-dits OpenStreetMap importés'),
 })
 export type OpenDataStatusReport = z.infer<typeof OpenDataStatusReportSchema>
 export class OpenDataStatusDto extends createZodDto(

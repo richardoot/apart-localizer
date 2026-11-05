@@ -215,7 +215,7 @@ export const AiListingExtractionSchema = z.object({
   postalCode: text('Code postal à cinq chiffres'),
   commune: text('Commune (« Talence », « Bordeaux »), sans arrondissement'),
   district: text(
-    'Quartier, secteur ou arrêt de tram cité (« Forum », « Saint-Genès », « tram B Peixotto »)'
+    'Quartier ou secteur cité, du plus large au plus fin, séparés par une virgule (« Bordeaux Sud, Victoire », « Saint-Genès ») ; un arrêt de tram seulement s’il n’y a pas de quartier (« tram B Peixotto ») ; il sert à placer le repère quand l’adresse n’a pas de numéro'
   ),
   worksMentioned: bool(
     "Vrai si l'annonce évoque des travaux à prévoir ou un bien à rafraîchir ; faux si elle dit « aucun travaux » ou « rénové »"

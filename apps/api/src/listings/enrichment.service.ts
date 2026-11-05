@@ -8,6 +8,7 @@ import type {
   Listing as ListingDto,
   ListingContext,
   ListingOpenDataContext,
+  ListingPlacement,
   LocationPrecision,
   MarketContext,
   MarketContextReport,
@@ -18,12 +19,14 @@ import type {
 import {
   REFERENCE_RENT_KEY,
   dpeValidity,
+  locationApproximation,
   surroundingsDigest,
 } from '@apart/domain'
 import { ActivityService } from '../activity/activity.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
 import { DpeService } from '../opendata/dpe.service'
 import { GeocodingService } from '../opendata/geocoding.service'
+import { listingAreaRef } from '../opendata/placement.service'
 import { MarketService } from '../opendata/market.service'
 import { RentControlService } from '../opendata/rent-control.service'
 import { SurroundingsService } from '../opendata/surroundings.service'
@@ -116,6 +119,8 @@ export class ListingEnrichmentService {
         leaseType: listing.rentalPlan?.leaseType ?? null,
         surface: listing.surface,
         rentalYear: listing.rentalPlan?.year ?? values.rentalYear,
+        area: listingAreaRef(listing.location),
+        placement: listing.location.placement,
       },
       at
     )
@@ -127,8 +132,23 @@ export class ListingEnrichmentService {
         point: listing.location.point,
         surface: listing.surface,
         price: listing.price,
+        precision: listing.location.precision,
+        approximation: locationApproximation(listing.location),
       },
       at
+    )
+  }
+
+  /** Lot 12 : quartier et équipements, avec les réserves d'un repère approché. */
+  private surroundingsFor(listing: ListingDto, at: Date) {
+    return this.surroundings.at(
+      listing.location.point,
+      listing.location.precision,
+      at,
+      {
+        placement: listing.location.placement,
+        commune: listing.location.commune,
+      }
     )
   }
 
@@ -163,10 +183,10 @@ export class ListingEnrichmentService {
     const listing = await this.load(member, id)
     const point = listing.location.point
     const [transit, rent, market, surroundings] = await Promise.all([
-      this.transit.at(point),
+      this.transit.at(point, locationApproximation(listing.location)),
       this.rentFor(member, listing, now),
       this.marketFor(listing, now),
-      this.surroundings.at(point, listing.location.precision, now),
+      this.surroundingsFor(listing, now),
     ])
     let dpeResult: DpeSearchResult | null = listing.openDataContext?.dpe ?? null
     let dpeApplied: DpeCandidate | null = null
@@ -334,20 +354,19 @@ export class ListingEnrichmentService {
   async context(member: Member, id: string): Promise<ListingContext> {
     const now = new Date()
     const listing = await this.load(member, id)
+    const approximation = locationApproximation(listing.location)
     const [transit, rentControl, market, surroundings] = await Promise.all([
-      this.transit.at(listing.location.point),
+      this.transit.at(listing.location.point, approximation),
       this.rentFor(member, listing, now),
       this.marketFor(listing, now),
-      this.surroundings.at(
-        listing.location.point,
-        listing.location.precision,
-        now
-      ),
+      this.surroundingsFor(listing, now),
     ])
     return {
       listingId: listing.id,
       point: listing.location.point,
       precision: listing.location.precision,
+      placement: listing.location.placement,
+      approximation,
       transit,
       rentControl,
       dpe: {
@@ -464,6 +483,7 @@ export class ListingEnrichmentService {
     let commune: string | null = null
     let inseeCode: string | null = null
     let listing: ListingDto | null = null
+    let placement: ListingPlacement | null = null
     if (request.listingId) {
       listing = await this.load(member, request.listingId)
       point = listing.location.point
@@ -471,6 +491,7 @@ export class ListingEnrichmentService {
       label = listing.location.addressNormalized ?? listing.location.addressRaw
       commune = listing.location.commune
       inseeCode = listing.location.inseeCode
+      placement = listing.location.placement
     } else if (request.address) {
       const located = await this.geocoding.locate({
         addressRaw: request.address,
@@ -481,6 +502,7 @@ export class ListingEnrichmentService {
         label = located.addressNormalized ?? request.address
         commune = located.commune
         inseeCode = located.inseeCode
+        placement = located.placement
       } else {
         label = request.address
       }
@@ -496,6 +518,12 @@ export class ListingEnrichmentService {
           ? 'unfurnished'
           : (listing?.rentalPlan?.leaseType ?? null)
     const values = await this.assumptions.currentValues(member.workspaceId)
+    const approximation = locationApproximation({
+      point,
+      precision,
+      placement,
+      commune,
+    })
     const [market, rentControl, transit] = await Promise.all([
       this.market.context(
         {
@@ -503,6 +531,8 @@ export class ListingEnrichmentService {
           surface,
           price: listing?.price ?? null,
           radiusMeters: request.radiusMeters ?? null,
+          precision,
+          approximation,
         },
         now
       ),
@@ -520,10 +550,18 @@ export class ListingEnrichmentService {
           leaseType,
           surface,
           rentalYear: listing?.rentalPlan?.year ?? values.rentalYear,
+          area: precision
+            ? listingAreaRef({
+                precision,
+                inseeCode,
+                placement,
+              })
+            : null,
+          placement,
         },
         now
       ),
-      this.transit.at(point),
+      this.transit.at(point, approximation),
     ])
     return {
       location: { point, label, precision, commune, inseeCode },

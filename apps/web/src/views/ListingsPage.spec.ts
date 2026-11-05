@@ -10,6 +10,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 vi.mock('@/composables/useListings', () => ({
+  useListingAreas: () => ({ data: ref(null) }),
   useListingList: () => ({
     data: ref({ items: [], total: 0 }),
     isPending: ref(false),

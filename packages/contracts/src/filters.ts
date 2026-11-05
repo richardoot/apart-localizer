@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { DpeClassSchema, ListingStatusSchema, VerdictSchema } from './enums.js'
 import { PointRadiusSchema } from './geojson.js'
+import { LocationPrecisionFilterSchema } from './placement.js'
 
 export const ListingSortSchema = z
   .enum([
@@ -52,6 +53,12 @@ export const ListingFiltersSchema = z.object({
     .array(VerdictSchema)
     .optional()
     .describe('Verdicts financiers retenus'),
+  precision: z
+    .array(LocationPrecisionFilterSchema)
+    .optional()
+    .describe(
+      'Précisions du repère retenues (lot 12) : exact, street, district (au quartier), commune, none (sans repère)'
+    ),
   priceMin: positiveOrNull('Prix affiché minimal en euros'),
   priceMax: positiveOrNull('Prix affiché maximal en euros'),
   surfaceMin: positiveOrNull('Surface minimale en m²'),
@@ -141,6 +148,7 @@ export const ListingListQuerySchema = z.object({
   commune: csv(z.string().max(120)),
   dpe: csv(DpeClassSchema),
   verdict: csv(VerdictSchema),
+  precision: csv(LocationPrecisionFilterSchema),
   priceMin: money,
   priceMax: money,
   surfaceMin: money,
@@ -178,6 +186,7 @@ export function listingFiltersFromQuery(
     ...(query.commune ? { commune: query.commune } : {}),
     ...(query.dpe ? { dpe: query.dpe } : {}),
     ...(query.verdict ? { verdict: query.verdict } : {}),
+    ...(query.precision ? { precision: query.precision } : {}),
     ...(query.priceMin !== undefined ? { priceMin: query.priceMin } : {}),
     ...(query.priceMax !== undefined ? { priceMax: query.priceMax } : {}),
     ...(query.surfaceMin !== undefined ? { surfaceMin: query.surfaceMin } : {}),
@@ -213,6 +222,7 @@ export function listingFiltersToQuery(
   list('commune', filters.commune)
   list('dpe', filters.dpe)
   list('verdict', filters.verdict)
+  list('precision', filters.precision)
   num('priceMin', filters.priceMin)
   num('priceMax', filters.priceMax)
   num('surfaceMin', filters.surfaceMin)

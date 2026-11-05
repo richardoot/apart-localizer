@@ -5,6 +5,7 @@ import { GeorisquesService } from './georisques.service'
 import { IsochroneService } from './isochrone.service'
 import { MarketService } from './market.service'
 import { OpendataController } from './opendata.controller'
+import { PlacementService } from './placement.service'
 import { ReferenceCacheService } from './reference-cache.service'
 import { RentControlService } from './rent-control.service'
 import { SurroundingsService } from './surroundings.service'
@@ -21,6 +22,7 @@ import { TransitService } from './transit.service'
 @Module({
   controllers: [OpendataController],
   providers: [
+    PlacementService,
     GeocodingService,
     ReferenceCacheService,
     IsochroneService,
@@ -32,6 +34,7 @@ import { TransitService } from './transit.service'
     SurroundingsService,
   ],
   exports: [
+    PlacementService,
     GeocodingService,
     ReferenceCacheService,
     IsochroneService,

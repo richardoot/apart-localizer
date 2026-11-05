@@ -7,6 +7,8 @@ import {
 import type {
   AmenityLookup,
   DriveStatus,
+  ListingPlacement,
+  LocationApproximation,
   LocationPrecision,
   NearbyAmenity,
   Neighbourhood,
@@ -19,6 +21,11 @@ import type {
   Surroundings,
   SurroundingsSources,
 } from '@apart/contracts'
+import {
+  approximationReason,
+  areaWording,
+  locationApproximation,
+} from './placement.js'
 
 /**
  * Équipements et quartiers (lot 11) : les règles pures. Enseigne d'un
@@ -188,6 +195,8 @@ export function neighbourhoodLookup(input: {
   precision: LocationPrecision | null
   imported: number
   hits: readonly NeighbourhoodHit[]
+  /** Lot 12 : comment le repère a été placé (quartier reconnu, lieu-dit). */
+  placement?: ListingPlacement | null
 }): NeighbourhoodLookup {
   if (!input.point) {
     return {
@@ -224,9 +233,7 @@ export function neighbourhoodLookup(input: {
   const reasons: string[] = []
   if (input.precision === 'commune' || input.precision === 'district') {
     reasons.push(
-      input.precision === 'commune'
-        ? 'Annonce placée au centre de la commune : quartier indicatif.'
-        : 'Annonce localisée au quartier par le géocodeur : contour indicatif.'
+      approximateNeighbourhoodReason(input.precision, input.placement)
     )
   }
   const sameKind = containing.filter(hit => hit.kind === found.kind)
@@ -248,9 +255,42 @@ export function neighbourhoodLookup(input: {
   return { status: reasons.length ? 'to_verify' : 'ok', value, reasons }
 }
 
+/** Pourquoi le quartier d'un repère approché n'est qu'indicatif (lot 12). */
+function approximateNeighbourhoodReason(
+  precision: 'commune' | 'district',
+  placement: ListingPlacement | null | undefined
+): string {
+  if (precision === 'commune') {
+    return 'Annonce placée au centre de la commune : quartier indicatif.'
+  }
+  const area = placement?.area
+  if (placement?.method === 'neighbourhood_match' && area) {
+    return area.level === 'parent'
+      ? `Annonce placée au centre du quartier « ${area.name} » d’après l’annonce : le secteur indiqué est celui du repère, le bien peut être dans un autre secteur de ${area.name}.`
+      : `Annonce placée au centre ${areaWording(area).of} d’après le texte de l’annonce : quartier indicatif.`
+  }
+  if (placement?.method === 'osm_place' && area) {
+    return `Annonce placée sur le lieu-dit « ${area.name} » (OpenStreetMap) : quartier indicatif.`
+  }
+  return 'Annonce localisée au quartier par le géocodeur : contour indicatif.'
+}
+
 // ---------------------------------------------------------------------------
 // Équipements les plus proches
 // ---------------------------------------------------------------------------
+
+/** Ajoute à un résultat la réserve d'un repère approché (lot 12). */
+function withApproximation<
+  T extends { reasons: string[]; approximate: boolean },
+>(lookup: T, approximation: LocationApproximation | undefined): T {
+  if (!approximation?.approximate) return lookup
+  const reason = approximationReason('amenities', approximation)
+  return {
+    ...lookup,
+    approximate: true,
+    reasons: reason ? [...lookup.reasons, reason] : lookup.reasons,
+  }
+}
 
 const withinKm = (meters: number): string =>
   `${(meters / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km`
@@ -269,12 +309,15 @@ export function amenityLookup(input: {
   noun: string
   /** Le libellé de la source, pour « non importées ». */
   sourceLabel: string
+  /** Lot 12 : la réserve d'un repère approché (distances « ≈ »). */
+  approximation?: LocationApproximation
 }): AmenityLookup {
   const radius = input.radiusMeters ?? AMENITY_SEARCH_METERS
   if (!input.point) {
     return {
       status: 'not_applicable',
       nearest: null,
+      approximate: false,
       reasons: ['Annonce sans point : saisissez une adresse ou une commune.'],
     }
   }
@@ -282,19 +325,27 @@ export function amenityLookup(input: {
     return {
       status: 'unavailable',
       nearest: null,
+      approximate: false,
       reasons: [`${input.sourceLabel} : source non importée, non disponible.`],
     }
   }
   if (!input.nearest) {
-    return {
-      status: 'ok',
-      nearest: null,
-      reasons: [
-        `Aucune ${input.noun} à moins de ${withinKm(radius)} à vol d’oiseau.`,
-      ],
-    }
+    return withApproximation(
+      {
+        status: 'ok',
+        nearest: null,
+        approximate: false,
+        reasons: [
+          `Aucune ${input.noun} à moins de ${withinKm(radius)} à vol d’oiseau.`,
+        ],
+      },
+      input.approximation
+    )
   }
-  return { status: 'ok', nearest: input.nearest, reasons: [] }
+  return withApproximation(
+    { status: 'ok', nearest: input.nearest, approximate: false, reasons: [] },
+    input.approximation
+  )
 }
 
 const byDistance = (a: NearbyAmenity, b: NearbyAmenity): number =>
@@ -327,6 +378,8 @@ export function supermarketsLookup(input: {
   imported: number
   candidates: readonly NearbyAmenity[]
   radiusMeters?: number
+  /** Lot 12 : la réserve d'un repère approché (distances « ≈ »). */
+  approximation?: LocationApproximation
 }): SupermarketsLookup {
   const radius = input.radiusMeters ?? AMENITY_SEARCH_METERS
   const none = { carrefour: null, auchan: null, intermarche: null }
@@ -335,6 +388,7 @@ export function supermarketsLookup(input: {
       status: 'not_applicable',
       preferred: none,
       nearest: null,
+      approximate: false,
       reasons: ['Annonce sans point : saisissez une adresse ou une commune.'],
     }
   }
@@ -343,6 +397,7 @@ export function supermarketsLookup(input: {
       status: 'unavailable',
       preferred: none,
       nearest: null,
+      approximate: false,
       reasons: [
         'Supermarchés avec drive : source non importée, non disponible.',
       ],
@@ -368,7 +423,10 @@ export function supermarketsLookup(input: {
       `Aucun supermarché avec drive à moins de ${withinKm(radius)} à vol d’oiseau.`
     )
   }
-  return { status: 'ok', preferred, nearest, reasons }
+  return withApproximation(
+    { status: 'ok', preferred, nearest, approximate: false, reasons },
+    input.approximation
+  )
 }
 
 /** Ce que le journal garde d'un calcul : quartier, distances, drive le plus proche. */
@@ -397,14 +455,24 @@ export function surroundingsOf(input: {
   supermarketCandidates: readonly NearbyAmenity[]
   computedAt: string
   radiusMeters?: number
+  /** Lot 12 : comment le repère a été placé, pour les réserves. */
+  placement?: ListingPlacement | null
+  commune?: string | null
 }): Surroundings {
   const radiusMeters = input.radiusMeters ?? AMENITY_SEARCH_METERS
+  const approximation = locationApproximation({
+    point: input.point,
+    precision: input.precision,
+    placement: input.placement ?? null,
+    commune: input.commune ?? null,
+  })
   return {
     neighbourhood: neighbourhoodLookup({
       point: input.point,
       precision: input.precision,
       imported: input.sources.neighbourhoods,
       hits: input.neighbourhoodHits,
+      placement: input.placement ?? null,
     }),
     athleticsTrack: amenityLookup({
       point: input.point,
@@ -413,12 +481,14 @@ export function surroundingsOf(input: {
       radiusMeters,
       noun: 'piste d’athlétisme',
       sourceLabel: 'Pistes d’athlétisme',
+      approximation,
     }),
     supermarkets: supermarketsLookup({
       point: input.point,
       imported: input.sources.supermarketDrives,
       candidates: input.supermarketCandidates,
       radiusMeters,
+      approximation,
     }),
     fitnessPark: amenityLookup({
       point: input.point,
@@ -427,6 +497,7 @@ export function surroundingsOf(input: {
       radiusMeters,
       noun: 'salle Fitness Park',
       sourceLabel: 'Salles Fitness Park',
+      approximation,
     }),
     searchRadiusMeters: radiusMeters,
     computedAt: input.computedAt,

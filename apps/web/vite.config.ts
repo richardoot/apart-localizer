@@ -15,8 +15,12 @@ export default defineConfig({
     // Lot 6: share target (a listing shared from the phone opens « Nouvelle
     // annonce ») and Web Push (public/push-handler.js, imported by the
     // generated service worker).
+    // Lot 12: registered by src/lib/pwa.ts (virtual:pwa-register, immediate),
+    // which reloads the page once when a new version takes over; no script
+    // injected into index.html.
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false,
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'apart-localizer',

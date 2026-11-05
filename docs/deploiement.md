@@ -163,6 +163,37 @@ plus rien à la deuxième passe. Une annonce créée ou dont l'adresse change en
 quartier et ses équipements à l'enregistrement. Sans ces imports, la fiche affiche « non
 disponible ».
 
+### Placement des annonces (lot 12)
+
+Migration `20261105180000_lot12_listing_placement` : purement additive (colonnes facultatives
+`listings.location_placement` et `listings.location_area`, NULL pour les annonces existantes ;
+table `places` des lieux-dits OpenStreetMap et son index GiST), aucune donnée réécrite ;
+appliquée par `prisma:deploy` (ou `build:vercel`) comme les autres. Les quartiers du lot 11
+doivent être importés avant. Ensuite, depuis un poste, avec la connexion directe et dans cet
+ordre :
+
+```bash
+# 1. Migration (si build:vercel ne l'a pas déjà appliquée)
+cd apps/api && DIRECT_URL='<connexion directe>' DATABASE_URL='<connexion directe>' pnpm prisma:deploy && cd ../..
+# 2. Lieux-dits OpenStreetMap (fichier data/opendata/osm/quartiers-places.json, ou --download)
+pnpm import:places -- --dry-run
+pnpm import:places -- --database-url '<connexion directe>'
+# 3. Rattrapage du repère des annonces au centre de la commune, au quartier ou sans repère :
+#    d'abord la simulation (« annonce : avant → après (quartier) »), relue, puis en vrai
+pnpm relocate:listings -- --dry-run --database-url '<connexion directe>'
+pnpm relocate:listings -- --database-url '<connexion directe>'
+```
+
+Le rattrapage ne touche jamais une annonce à l'adresse (numéro ou rue) ni un point saisi, ne
+redescend jamais une précision, recalcule l'instantané de contexte (desserte, marché,
+encadrement, quartier et équipements) de chaque annonce replacée et l'écrit au journal
+(`listing.relocated`, canal `system`) ; une deuxième passe ne change rien. Il n'appelle aucun
+service en ligne. Une annonce sans repère dont seule la commune est connue reçoit le point
+intérieur de sa commune (contours importés) ; une annonce sans commune reste à géocoder
+(`geocode:missing`). Sans `import:places`, seuls les contours servent (aucune erreur). Après
+le déploiement du web, la première visite recharge la page une fois pour passer à la nouvelle
+version (service worker, ADR 0022).
+
 ## 3. Projet Vercel : API
 
 Projet `apart-localizer-backend` relié au dépôt GitHub, **Root Directory** `apps/api`, framework
@@ -381,3 +412,9 @@ partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « C
       `GET /opendata/status` vérifié (équipements par genre, contours par nature) ;
       `refresh:surroundings` passé ; onglet Quartier d'une annonce : quartier, piste, drives,
       Fitness Park ; couches de la carte allumées sur les trois fonds.
+- [ ] Lot 12 : migration `20261105180000_lot12_listing_placement` appliquée ; `import:places`
+      fait (`GET /opendata/status` : `places`) ; `relocate:listings` relu en simulation puis
+      passé ; liste : pastilles « Adresse exacte », « Au quartier (…) », « Commune seulement » ;
+      carte : repères pleins, creux et pointillés, contour du quartier au survol ; onglet
+      Quartier : distances « ≈ » et « Préciser l'adresse » ; filtre « Repère » ; après le
+      déploiement du web, la page se recharge une seule fois.

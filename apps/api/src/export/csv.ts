@@ -4,6 +4,7 @@ import {
   VERDICT_LABELS,
 } from '@apart/contracts'
 import type { EvaluatedListing } from '@apart/contracts'
+import { precisionBadge } from '@apart/domain'
 
 /**
  * Le CSV pour un tableur français : séparateur « ; », UTF-8 avec BOM (Excel
@@ -66,6 +67,7 @@ export const LISTING_CSV_COLUMNS = [
   'Commune',
   'Quartier',
   'Adresse',
+  'Repère',
   'Prix (€)',
   "Honoraires d'agence (€)",
   'Surface Carrez (m²)',
@@ -121,6 +123,8 @@ export function listingCsvRow(
     l.location.commune,
     l.location.district,
     l.location.addressNormalized ?? l.location.addressRaw,
+    // Lot 12 : « Adresse exacte », « À la rue », « Au quartier (X) », « Commune seulement ».
+    precisionBadge(l.location).label,
     csvNumber(l.price),
     csvNumber(l.feesAmount),
     csvNumber(l.surface),

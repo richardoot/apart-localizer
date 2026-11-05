@@ -364,6 +364,21 @@ export function describeActivity(
           ),
         ].filter(c => c.before !== c.after)
       )
+    case 'listing.relocated': {
+      const area = text(after, 'area')
+      return describe(
+        area
+          ? `repère replacé au quartier « ${area} »`
+          : 'repère de l’annonce replacé',
+        [
+          change(
+            'precision',
+            text(before, 'precision'),
+            text(after, 'precision')
+          ),
+        ].filter(c => c.before !== c.after)
+      )
+    }
     case 'listing.enriched':
       return describe(
         'données ouvertes mises à jour (tram, plafond, marché, quartier, équipements)'

@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import type { CriteriaMatch } from '@apart/contracts'
+  import { criteriaApproximateNote } from '@apart/domain'
 
   /** Les critères dans lesquels l'annonce est entrée (alertes, besoin G6). */
   defineProps<{ matches: readonly CriteriaMatch[] }>()
@@ -13,7 +14,7 @@
       class="rounded-full border border-accent bg-accent-soft px-2 text-xs"
       :title="
         m.approximate
-          ? `Dans le critère « ${m.name} », sous réserve : localisation imprécise`
+          ? criteriaApproximateNote(m.name)
           : `Dans le critère « ${m.name} »`
       "
       data-testid="criteria-badge"

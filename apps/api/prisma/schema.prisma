@@ -428,6 +428,13 @@ model Listing {
   geom              Unsupported("geography(Point, 4326)")?
   locationPrecision LocationPrecision?                     @map("location_precision")
   locationGeoJson   Json?                                  @map("location_geojson")
+  /// Comment le repère a été placé (lot 12) : méthode, quartier retenu,
+  /// texte reconnu, réserves (JSON validé par ListingPlacementSchema).
+  locationPlacement Json?                                  @map("location_placement")
+  /// La zone où le bien se trouve d'après l'annonce (contour du quartier
+  /// retenu, ou de la commune) quand le repère est approché ; écrite et lue
+  /// uniquement par le module geo.
+  locationArea      Unsupported("geography(MultiPolygon, 4326)")? @map("location_area")
 
   // Bien
   price              Decimal    @db.Decimal(12, 2)
@@ -1075,6 +1082,32 @@ model Neighbourhood {
   @@unique([territory, code])
   @@index([territory, inseeCode])
   @@map("neighbourhoods")
+  @@schema("app")
+}
+
+/// Lieux-dits OpenStreetMap (lot 12) : `place=neighbourhood`, `quarter` ou
+/// `suburb`, un point par objet, rattaché à la commune dont un contour
+/// importé le contient. Repli du placement d'une annonce au quartier quand
+/// aucun contour ne porte le nom cité.
+model Place {
+  id         String                                 @id @default(uuid())
+  /// Source : `osm`.
+  source     String
+  /// Identifiant dans la source (`node/123`, `relation/456`).
+  externalId String                                 @map("external_id")
+  name       String
+  /// Valeur de `place` : neighbourhood, quarter ou suburb.
+  placeType  String                                 @map("place_type")
+  commune    String?
+  inseeCode  String?                                @map("insee_code")
+  latitude   Float
+  longitude  Float
+  geom       Unsupported("geography(Point, 4326)")?
+  importedAt DateTime                               @default(now()) @map("imported_at") @db.Timestamptz(6)
+
+  @@unique([source, externalId])
+  @@index([inseeCode])
+  @@map("places")
   @@schema("app")
 }
 

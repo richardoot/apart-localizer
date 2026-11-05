@@ -20,7 +20,9 @@
     VERDICT_LABELS,
   } from '@/lib/labels'
   import type { CostBasis } from '@/lib/labels'
+  import { precisionBadge } from '@apart/domain'
   import CostBasisBadge from './CostBasisBadge.vue'
+  import PrecisionBadge from './PrecisionBadge.vue'
 
   const props = defineProps<{ result: CompareResult }>()
   const emit = defineEmits<{ open: [id: string] }>()
@@ -48,6 +50,12 @@
         [i.listing.location.commune, i.listing.location.district]
           .filter(Boolean)
           .join(' · ') || '—',
+    },
+    {
+      // Lot 12 : la pastille de précision du repère (adresse, quartier, commune).
+      key: 'precision',
+      label: 'Repère',
+      value: i => precisionBadge(i.listing.location).label,
     },
     {
       key: 'price',
@@ -164,7 +172,9 @@
 </script>
 
 <template>
-  <div class="overflow-x-auto rounded-xl border border-line bg-surface">
+  <div
+    class="relative overflow-x-auto rounded-xl border border-line bg-surface"
+  >
     <table class="w-full text-sm" data-testid="compare-table">
       <thead class="bg-surface-2 text-left text-xs text-muted">
         <tr>
@@ -205,7 +215,11 @@
             :class="isBest(row, item) ? 'font-semibold text-good' : ''"
             :data-best="isBest(row, item) ? 'true' : undefined"
           >
-            {{ row.value(item) }}
+            <PrecisionBadge
+              v-if="row.key === 'precision'"
+              :location="item.listing.location"
+            />
+            <template v-else>{{ row.value(item) }}</template>
             <span v-if="isBest(row, item)" aria-label="meilleure">★</span>
           </td>
         </tr>

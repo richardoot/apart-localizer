@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import type { EvaluatedListing } from '@apart/contracts'
+  import { locationApproximation } from '@apart/domain'
   import {
     formatDistance,
     formatEuros,
@@ -12,6 +13,7 @@
   import DpeBadge from './DpeBadge.vue'
   import CriteriaBadges from './CriteriaBadges.vue'
   import NewBadge from './NewBadge.vue'
+  import PrecisionBadge from './PrecisionBadge.vue'
   import RentalPill from './RentalPill.vue'
   import StatusBadge from './StatusBadge.vue'
   import VerdictPill from './VerdictPill.vue'
@@ -49,9 +51,15 @@
                 .join(' · ') || 'Commune inconnue'
             }}
             <template v-if="item.distanceMeters !== null">
-              · à {{ formatDistance(item.distanceMeters) }}</template
+              · à
+              {{
+                locationApproximation(item.listing.location).approximate
+                  ? '≈ '
+                  : ''
+              }}{{ formatDistance(item.distanceMeters) }}</template
             >
           </p>
+          <PrecisionBadge :location="item.listing.location" />
         </div>
         <VerdictPill :verdict="item.evaluation.metrics.verdict" />
       </header>

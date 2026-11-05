@@ -1,9 +1,15 @@
 <script setup lang="ts">
-  import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
   import '@/lib/maplibre-worker'
   import * as maplibregl from 'maplibre-gl'
   import type { Map as MapLibreMap, Marker } from 'maplibre-gl'
-  import type { EvaluatedListing, PointRadius } from '@apart/contracts'
+  import type {
+    EvaluatedListing,
+    LayerFeatureCollection,
+    PointRadius,
+  } from '@apart/contracts'
+  import { locationApproximation, precisionBadge } from '@apart/domain'
+  import type { PrecisionTone } from '@apart/domain'
   import { useBaseMap } from '@/composables/useBaseMap'
   import type {
     MapLayerData,
@@ -16,6 +22,8 @@
     CRITERIA_LAYERS,
     DRIVE_LAYERS,
     FITNESS_LAYERS,
+    LISTING_AREA_LAYERS,
+    LISTING_AREA_SOURCE,
     NEIGHBOURHOOD_HIT_LAYER,
     NEIGHBOURHOOD_HOVER_LAYERS,
     NEIGHBOURHOOD_HOVER_SOURCE,
@@ -26,6 +34,7 @@
     SURROUNDINGS_ATTRIBUTIONS,
     bindNeighbourhoodHover,
     layerFeaturePopupHtml,
+    listingAreaCollection,
     neighbourhoodPopupHtml,
     perimeterLayers,
     pointLayer,
@@ -53,8 +62,14 @@
       colorBy: 'verdict' | 'status'
       layers?: MapLayerData | null
       toggles?: MapLayerToggles
+      /** Lot 12 : contours des annonces placées au quartier (`GET /listings/areas`). */
+      areas?: LayerFeatureCollection | null
     }>(),
-    { layers: null, toggles: () => ({ ...DEFAULT_LAYER_TOGGLES }) }
+    {
+      layers: null,
+      toggles: () => ({ ...DEFAULT_LAYER_TOGGLES }),
+      areas: null,
+    }
   )
   const emit = defineEmits<{
     open: [id: string]
@@ -152,7 +167,35 @@
       DRIVE_LAYERS,
       SURROUNDINGS_ATTRIBUTIONS.osm
     )
+    renderArea()
   }
+
+  // Lot 12 : le contour du quartier d'un repère au quartier, au survol (ou
+  // au focus) de son repère, et tant que sa fenêtre est ouverte.
+  const hoveredId = ref<string | null>(null)
+  const selectedId = ref<string | null>(null)
+  const shownAreaId = computed(() => hoveredId.value ?? selectedId.value)
+  function renderArea(): void {
+    if (!map || !ready.value) return
+    upsertGeoJsonLayer(
+      map,
+      LISTING_AREA_SOURCE,
+      listingAreaCollection(props.areas, shownAreaId.value),
+      LISTING_AREA_LAYERS
+    )
+  }
+
+  /** Combien de repères de chaque sorte, pour la légende. */
+  const precisionCounts = computed(() => {
+    const counts = { address: 0, district: 0, commune: 0 }
+    for (const item of props.items) {
+      const tone = precisionBadge(item.listing.location).tone
+      if (tone === 'exact' || tone === 'street') counts.address++
+      else if (tone === 'district') counts.district++
+      else if (tone === 'commune') counts.commune++
+    }
+    return counts
+  })
 
   /** Le nom du quartier survolé, près du pointeur (lot 11). */
   const hoverLabel = ref<string | null>(null)
@@ -193,15 +236,55 @@
       : VERDICT_COLORS[item.evaluation.metrics.verdict]
   }
 
+  /**
+   * Lot 12 : la forme du repère dit sa précision. Point plein (cerclé de
+   * blanc) pour une adresse au numéro ou à la rue ; anneau creux plus grand,
+   * de la couleur, liseré de blanc, pour un repère au centre du quartier ;
+   * anneau pâle en pointillé pour le centre de la commune.
+   */
+  const MARKER_SHAPES: Record<PrecisionTone, string> = {
+    exact: 'h-4 w-4 rounded-full border-2 border-white shadow',
+    street: 'h-4 w-4 rounded-full border-2 border-white shadow',
+    district:
+      'h-5 w-5 rounded-full border-[3px] shadow-[0_0_0_2px_rgba(255,255,255,0.9)]',
+    commune:
+      'h-5 w-5 rounded-full border-2 border-dashed opacity-75 shadow-[0_0_0_1px_rgba(255,255,255,0.8)]',
+    none: 'h-4 w-4 rounded-full border-2 border-white shadow',
+  }
+
   function markerElement(item: EvaluatedListing): HTMLElement {
     const el = document.createElement('button')
     el.type = 'button'
-    el.className =
-      'h-4 w-4 rounded-full border-2 border-white shadow cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent'
-    el.style.background = colorOf(item)
-    el.setAttribute('aria-label', item.listing.title)
+    const badge = precisionBadge(item.listing.location)
+    el.className = `${MARKER_SHAPES[badge.tone]} cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent`
+    const color = colorOf(item)
+    if (badge.tone === 'district' || badge.tone === 'commune') {
+      // Creux : la carte se voit au centre ; seul l'anneau porte la couleur.
+      el.style.background = 'transparent'
+      el.style.borderColor = color
+    } else {
+      el.style.background = color
+    }
+    el.dataset.precision = badge.tone
+    el.setAttribute('aria-label', `${item.listing.title} — ${badge.label}`)
+    el.title = badge.label
     el.dataset.id = item.listing.id
     if (item.isNewForMe) el.classList.add('ring-2', 'ring-accent')
+    if (badge.tone === 'district') {
+      const show = () => {
+        hoveredId.value = item.listing.id
+        renderArea()
+      }
+      const hide = () => {
+        if (hoveredId.value !== item.listing.id) return
+        hoveredId.value = null
+        renderArea()
+      }
+      el.addEventListener('mouseenter', show)
+      el.addEventListener('focus', show)
+      el.addEventListener('mouseleave', hide)
+      el.addEventListener('blur', hide)
+    }
     return el
   }
 
@@ -211,12 +294,14 @@
     const m = item.evaluation.metrics
     const distance =
       item.distanceMeters !== null
-        ? ` · à ${formatDistance(item.distanceMeters)}`
+        ? ` · à ${locationApproximation(item.listing.location).approximate ? '≈ ' : ''}${formatDistance(item.distanceMeters)}`
         : ''
+    const badge = precisionBadge(item.listing.location)
     return (
       `<strong>${esc(item.listing.title)}</strong><br>` +
       `${esc(formatEuros(item.listing.price))} · brut ${esc(formatPercent(m.grossYield))} · ${esc(VERDICT_LABELS[m.verdict])}<br>` +
       `<span style="opacity:.7">${esc(LISTING_STATUS_LABELS[item.listing.status])}${esc(distance)}</span><br>` +
+      `<span data-precision="${esc(badge.tone)}" style="opacity:.7">Repère : ${esc(badge.label)}</span><br>` +
       `<button type="button" data-open="${esc(item.listing.id)}" style="margin-top:6px;color:var(--accent);text-decoration:underline">Ouvrir la fiche</button>`
     )
   }
@@ -225,6 +310,10 @@
     if (!map) return
     for (const marker of markers) marker.remove()
     markers = []
+    // Les repères sont recréés, leurs fenêtres fermées : plus de contour montré.
+    hoveredId.value = null
+    selectedId.value = null
+    renderArea()
     for (const item of props.items) {
       const point = item.listing.location.point
       if (!point) continue
@@ -237,6 +326,13 @@
           .getElement()
           ?.querySelector<HTMLButtonElement>('[data-open]')
           ?.addEventListener('click', () => emit('open', item.listing.id))
+        selectedId.value = item.listing.id
+        renderArea()
+      })
+      popup.on('close', () => {
+        if (selectedId.value !== item.listing.id) return
+        selectedId.value = null
+        renderArea()
       })
       const marker = new maplibregl.Marker({ element: markerElement(item) })
         .setLngLat(point.coordinates)
@@ -360,6 +456,7 @@
 
   watch(() => [props.items, props.colorBy], renderMarkers, { deep: false })
   watch(() => [props.layers, props.toggles], renderLayers, { deep: true })
+  watch(() => props.areas, renderArea)
   watch(
     () => props.near,
     near => {
@@ -413,6 +510,33 @@
       <span class="ml-auto text-xs text-muted">
         {{ items.filter(i => i.listing.location.point).length }} annonce(s)
         placée(s)
+      </span>
+    </div>
+    <div
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted"
+      data-testid="precision-legend"
+    >
+      <span>Repères :</span>
+      <span class="flex items-center gap-1">
+        <span
+          class="inline-block h-3 w-3 rounded-full border-2 border-white bg-muted shadow"
+          aria-hidden="true"
+        />
+        à l’adresse ({{ precisionCounts.address }})
+      </span>
+      <span class="flex items-center gap-1">
+        <span
+          class="inline-block h-3.5 w-3.5 rounded-full border-[3px] border-muted"
+          aria-hidden="true"
+        />
+        au quartier ({{ precisionCounts.district }}, contour au survol)
+      </span>
+      <span class="flex items-center gap-1">
+        <span
+          class="inline-block h-3.5 w-3.5 rounded-full border-2 border-dashed border-muted opacity-75"
+          aria-hidden="true"
+        />
+        commune seulement ({{ precisionCounts.commune }})
       </span>
     </div>
     <div

@@ -106,6 +106,7 @@ export function fakeListing(over: Partial<Listing> = {}): Listing {
       district: 'Forum',
       point: { type: 'Point', coordinates: [-0.5906, 44.8083] },
       precision: 'exact',
+      placement: null,
     },
     status: 'to_study',
     discardReason: null,

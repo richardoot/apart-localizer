@@ -280,6 +280,7 @@ dès le départ.
 | D9 | OpenStreetMap (Overpass) | Supermarchés avec drive : le plus proche de chaque enseigne préférée (Carrefour, Auchan, Intermarché, toutes déclinaisons) et le plus proche toutes enseignes ; drive signalé par la donnée ou « à vérifier », jamais supposé ; aucune lecture des sites des enseignes (lot 11, ADR 0021) | L |
 | D10 | OpenStreetMap (Overpass) | Salle Fitness Park la plus proche, chaque club vérifié (marque, nom, exploitant) (lot 11, ADR 0021) | L |
 | D11 | Quartiers de Bordeaux Métropole et de la Ville de Bordeaux, Contours IRIS IGN-INSEE | Quartier de chaque annonce, pour toute la métropole : quartier officiel (secteur de vie à Bordeaux) là où la commune en publie, IRIS ailleurs, commune entière pour une commune non découpée, avec la provenance de chaque contour (lot 11, ADR 0021) | L |
+| D12 | Contours des quartiers (D11) et lieux-dits OpenStreetMap | Placement du repère d'une annonce sans adresse au numéro au centre du quartier cité par l'annonce (secteur, quartier, IRIS, quartier qui regroupe des secteurs, lieu-dit), sinon de la commune ; précision visible partout (« Adresse exacte », « Au quartier (X) », « Commune seulement »), distances « ≈ » depuis un repère approché, filtre de la liste par précision (lot 12, ADR 0022) | S |
 
 Les sources ouvertes changent d'adresse et de format : chaque connecteur est isolé derrière une
 interface, avec un cache en base et un marquage de la date de récupération.

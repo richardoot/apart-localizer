@@ -1,4 +1,11 @@
-import type { FieldProvenanceMap, ListingLocationInput } from '@apart/contracts'
+import type {
+  FieldProvenanceMap,
+  ListingLocationInput,
+  ListingPlacement,
+  Point,
+} from '@apart/contracts'
+import { isAddressPrecision, manualPlacement } from '@apart/domain'
+import type { ListingAreaRef } from '../geo/geo.service'
 import type { LocatedAddress } from '../opendata/geocoding.service'
 
 /** Les clés de provenance que le géocodage renseigne (source `open_data`). */
@@ -19,7 +26,12 @@ export const GEOCODED_KEYS = [
 export function applyLocated(
   location: ListingLocationInput,
   located: LocatedAddress
-): { location: ListingLocationInput; keys: string[] } {
+): {
+  location: ListingLocationInput
+  keys: string[]
+  placement: ListingPlacement
+  area: ListingAreaRef | null
+} {
   const keys: string[] = [...GEOCODED_KEYS]
   const next: ListingLocationInput = {
     ...location,
@@ -33,7 +45,62 @@ export function applyLocated(
     next.commune = located.commune
     keys.push('commune')
   }
-  return { location: next, keys }
+  return {
+    location: next,
+    keys,
+    placement: located.placement,
+    area: located.area,
+  }
+}
+
+const samePoint = (a: Point | null | undefined, b: Point | null): boolean =>
+  !!a &&
+  !!b &&
+  Math.abs(a.coordinates[0] - b.coordinates[0]) < 1e-7 &&
+  Math.abs(a.coordinates[1] - b.coordinates[1]) < 1e-7
+
+/** Le placement d'un point saisi (carte, formulaire, MCP) : il prime sur le géocodage. */
+export function manualLocationPlacement(
+  location: Pick<ListingLocationInput, 'point' | 'precision'>,
+  now: Date = new Date()
+): ListingPlacement | null {
+  return location.point
+    ? manualPlacement(location.precision, now.toISOString())
+    : null
+}
+
+/**
+ * Faut-il replacer le repère après une modification de la localisation
+ * (lot 12) ? Oui si l'adresse ou la commune change, ou si le quartier
+ * change alors que le repère n'est pas à l'adresse (numéro ou rue) ; et le
+ * point renvoyé tel quel par le formulaire (inchangé) ne compte pas comme
+ * une saisie, sauf s'il avait été saisi à la main. Un point nouveau saisi
+ * prime toujours.
+ */
+export function relocationNeeded(
+  before: {
+    location: ListingLocationInput & { placement?: ListingPlacement | null }
+    fieldSources: FieldProvenanceMap
+  },
+  patch: Partial<ListingLocationInput>
+): boolean {
+  const changed = (key: 'addressRaw' | 'commune' | 'district'): boolean =>
+    patch[key] !== undefined &&
+    (patch[key] ?? '').trim().toLowerCase() !==
+      (before.location[key] ?? '').trim().toLowerCase()
+  const address = changed('addressRaw') || changed('commune')
+  const district =
+    changed('district') && !isAddressPrecision(before.location.precision)
+  if (!address && !district) return false
+  if (!patch.point) return true
+  if (!samePoint(patch.point, before.location.point)) return false
+  // Le point renvoyé est l'ancien : replacé, sauf s'il avait été saisi.
+  const manual =
+    before.location.placement?.method === 'manual' ||
+    (!before.location.placement &&
+      before.fieldSources.point !== undefined &&
+      before.fieldSources.point.source !== 'open_data')
+  return !manual
 }
 
 /** Marque les clés géocodées comme données ouvertes dans la carte de provenance. */

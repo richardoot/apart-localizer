@@ -3,13 +3,16 @@
   import {
     ACTIVE_LISTING_STATUSES,
     DpeClassSchema,
+    LOCATION_PRECISION_LABELS,
     ListingSortSchema,
     ListingStatusSchema,
+    LocationPrecisionFilterSchema,
     VerdictSchema,
   } from '@apart/contracts'
   import type {
     DpeClass,
     ListingSort,
+    LocationPrecisionFilter,
     SearchCriteriaSummary,
     Verdict,
   } from '@apart/contracts'
@@ -35,6 +38,7 @@
   const statuses = ListingStatusSchema.options
   const verdicts = VerdictSchema.options
   const dpeClasses = DpeClassSchema.options
+  const precisions = LocationPrecisionFilterSchema.options
   const sorts = ListingSortSchema.options
 
   const selectedStatuses = computed(
@@ -64,6 +68,15 @@
       ? current.filter(d => d !== dpe)
       : [...current, dpe]
     store.patch({ dpe: next.length ? next : undefined })
+  }
+
+  /** Lot 12 : annonces exactement localisées ou génériques (quartier, commune). */
+  function togglePrecision(precision: LocationPrecisionFilter): void {
+    const current = store.filters.precision ?? []
+    const next = current.includes(precision)
+      ? current.filter(p => p !== precision)
+      : [...current, precision]
+    store.patch({ precision: next.length ? next : undefined })
   }
 
   function onCommune(event: Event): void {
@@ -245,6 +258,32 @@
           @click="toggleDpe(dpe)"
         >
           {{ dpe }}
+        </button>
+      </div>
+    </div>
+
+    <div class="grid gap-1 sm:col-span-2 lg:col-span-4">
+      <span class="text-xs font-medium text-muted">Repère</span>
+      <div
+        class="flex flex-wrap gap-1.5"
+        role="group"
+        aria-label="Précision du repère"
+      >
+        <button
+          v-for="precision in precisions"
+          :key="precision"
+          type="button"
+          class="rounded-full border px-2.5 py-0.5 text-xs"
+          :class="
+            store.filters.precision?.includes(precision)
+              ? 'border-accent bg-accent-soft text-fg'
+              : 'border-line text-muted hover:text-fg'
+          "
+          :aria-pressed="store.filters.precision?.includes(precision) ?? false"
+          :data-precision="precision"
+          @click="togglePrecision(precision)"
+        >
+          {{ LOCATION_PRECISION_LABELS[precision] }}
         </button>
       </div>
     </div>

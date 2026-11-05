@@ -12,6 +12,7 @@ import type {
   AmenityKind,
   AmenitySource,
   DriveStatus,
+  LayerFeatureCollection,
   NeighbourhoodKind,
   SupermarketBrandGroup,
   TransitMode,
@@ -240,6 +241,32 @@ export const NEIGHBOURHOOD_CURRENT_LAYERS: readonly LayerStyle[] =
   perimeterLayers('neighbourhood-current', NEIGHBOURHOOD_HOVER_COLOR, {
     dashed: true,
   })
+
+/**
+ * Lot 12 : le contour du quartier d'une annonce placée au quartier, montré
+ * au survol ou à la sélection de son repère (carte des annonces) et sur la
+ * carte du quartier de la fiche. Posé par `upsertGeoJsonLayer` : il suit les
+ * changements de fond (ADR 0020).
+ */
+export const LISTING_AREA_SOURCE = 'listing-area'
+export const LISTING_AREA_COLOR = '#9a5b00'
+export const LISTING_AREA_LAYERS: readonly LayerStyle[] = perimeterLayers(
+  'listing-area',
+  LISTING_AREA_COLOR,
+  { dashed: true }
+)
+
+/** Le contour d'une annonce parmi ceux de `GET /listings/areas`, en collection d'un élément (ou vide). */
+export function listingAreaCollection(
+  areas: LayerFeatureCollection | null | undefined,
+  listingId: string | null
+): LayerFeatureCollection {
+  const feature =
+    listingId && areas
+      ? areas.features.find(f => f.properties.listingId === listingId)
+      : undefined
+  return { type: 'FeatureCollection', features: feature ? [feature] : [] }
+}
 
 /** Au-delà de cette distance, un équipement proche n'entre pas dans le cadrage initial. */
 export const FRAME_MAX_METERS = 3000

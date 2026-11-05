@@ -5,6 +5,7 @@
   import type { Map as MapLibreMap } from 'maplibre-gl'
   import type { ListingContext, NearbyAmenity } from '@apart/contracts'
   import { useBaseMap } from '@/composables/useBaseMap'
+  import { useListingAreas } from '@/composables/useListings'
   import { useMapLayers } from '@/composables/useMapLayers'
   import type {
     MapLayerToggles,
@@ -14,6 +15,9 @@
     ATHLETICS_LAYERS,
     DRIVE_LAYERS,
     FITNESS_LAYERS,
+    LISTING_AREA_COLOR,
+    LISTING_AREA_LAYERS,
+    LISTING_AREA_SOURCE,
     NEIGHBOURHOOD_CURRENT_LAYERS,
     NEIGHBOURHOOD_HIT_LAYER,
     NEIGHBOURHOOD_HOVER_LAYERS,
@@ -23,6 +27,7 @@
     SURROUNDINGS_ATTRIBUTIONS,
     bindNeighbourhoodHover,
     layerFeaturePopupHtml,
+    listingAreaCollection,
     neighbourhoodPopupHtml,
     pointLayer,
     surroundingsFrame,
@@ -59,6 +64,15 @@
   })
   // Ces couches se chargent entières (pas d'emprise) : la vue n'est pas suivie.
   const layers = useMapLayers(toggles, null)
+  // Lot 12 : le contour du quartier retenu d'une annonce placée au quartier.
+  const areas = useListingAreas(
+    computed(() => props.context.precision === 'district')
+  )
+  const retainedArea = computed(() =>
+    props.context.precision === 'district'
+      ? listingAreaCollection(areas.data.value, props.context.listingId)
+      : listingAreaCollection(null, null)
+  )
 
   function onToggle(key: SurroundingsLayerKey, event: Event): void {
     toggles.value = {
@@ -161,6 +175,12 @@
       NEIGHBOURHOOD_HOVER_SOURCE,
       null,
       NEIGHBOURHOOD_HOVER_LAYERS
+    )
+    upsertGeoJsonLayer(
+      map,
+      LISTING_AREA_SOURCE,
+      retainedArea.value,
+      LISTING_AREA_LAYERS
     )
     upsertGeoJsonLayer(
       map,
@@ -316,9 +336,11 @@
   watch(() => props.context.point?.coordinates.join(','), sync, {
     flush: 'post',
   })
-  watch(() => [props.context, toggles.value, layers.value], render, {
-    deep: true,
-  })
+  watch(
+    () => [props.context, toggles.value, layers.value, retainedArea.value],
+    render,
+    { deep: true }
+  )
 </script>
 
 <template>
@@ -344,6 +366,18 @@
         {{ layer.label }}
       </label>
       <SurroundingsLegend :toggles="toggles" />
+      <span
+        v-if="retainedArea.features.length"
+        class="flex items-center gap-1 text-muted"
+        data-testid="retained-area-legend"
+      >
+        <span
+          class="inline-block h-2.5 w-4 rounded-sm border-2 border-dashed"
+          :style="{ borderColor: LISTING_AREA_COLOR }"
+          aria-hidden="true"
+        />
+        quartier retenu (repère en son centre)
+      </span>
     </div>
     <div class="relative">
       <div

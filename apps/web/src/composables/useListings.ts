@@ -25,6 +25,20 @@ export const listingKeys = {
   sensitivity: (id: string, request: SensitivityRequestInput) =>
     ['listings', 'sensitivity', id, request] as const,
   compare: (ids: string[]) => ['listings', 'compare', ids] as const,
+  areas: ['listings', 'areas'] as const,
+}
+
+/**
+ * Lot 12 : les contours des annonces placées au quartier, pour les cartes
+ * (contour au survol ou à la sélection d'un repère au quartier).
+ */
+export function useListingAreas(enabled: MaybeRef<boolean> = true) {
+  return useQuery({
+    queryKey: listingKeys.areas,
+    queryFn: () => api.listings.areas(),
+    enabled: computed(() => unref(enabled)),
+    staleTime: 60_000,
+  })
 }
 
 /** « À partir de quel prix ? » : rapport de prix cible, rang et brief de négociation. */
@@ -103,6 +117,11 @@ export function useListingMutations() {
     void client.invalidateQueries({
       queryKey: ['listings', 'rent-comparables', item.listing.id],
     })
+    // Lot 12 : le repère a pu bouger (adresse, quartier) : contexte et contours.
+    void client.invalidateQueries({
+      queryKey: ['listings', 'context', item.listing.id],
+    })
+    void client.invalidateQueries({ queryKey: listingKeys.areas })
   }
 
   function refresh(listingId: string): void {

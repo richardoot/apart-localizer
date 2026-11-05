@@ -233,9 +233,10 @@ describe('openDataPlan', () => {
       'import-dvf.ts',
     ])
     expect(plan.steps[2]?.args).toEqual(['--year', '2023', '--year', '2024'])
-    // Seules les sources du lot 11, absentes ici, sont sautées.
+    // Seules les sources des lots 11 et 12, absentes ici, sont sautées.
     expect(plan.skipped.map(line => line.split(' :')[0])).toEqual([
       'quartiers',
+      'lieux-dits',
       'équipements sportifs',
       'drives',
     ])
@@ -248,10 +249,10 @@ describe('openDataPlan', () => {
       dvf: [],
     })
     expect(plan.steps).toEqual([])
-    expect(plan.skipped).toHaveLength(6)
+    expect(plan.skipped).toHaveLength(7)
   })
 
-  it('lot 11 : quartiers, équipements, drives, puis rattrapage des annonces', () => {
+  it('lots 11 et 12 : quartiers, lieux-dits, équipements, drives, puis rattrapage des annonces', () => {
     const plan = openDataPlan({
       encadrement: [],
       tbm: [],
@@ -259,12 +260,19 @@ describe('openDataPlan', () => {
       quartiers: ['se_quart_s.geojson', 'se_quartvie_s.geojson'],
       iris: ['bm-contours_iris-2026.geojson'],
       res: ['bm-athletisme.json'],
-      osm: ['athletics-tracks.json', 'fitness-park.json', 'supermarkets.json'],
+      osm: [
+        'athletics-tracks.json',
+        'fitness-park.json',
+        'supermarkets.json',
+        'quartiers-places.json',
+      ],
     })
     expect(plan.steps.map(s => [s.script, s.args])).toEqual([
       ['import-neighbourhoods.ts', []],
+      ['import-places.ts', []],
       ['import-sports-facilities.ts', []],
       ['import-supermarkets.ts', []],
+      ['relocate-listings.ts', []],
       ['refresh-surroundings.ts', []],
     ])
     const partial = openDataPlan({
@@ -279,6 +287,7 @@ describe('openDataPlan', () => {
     expect(partial.steps.map(s => [s.script, s.args])).toEqual([
       ['import-neighbourhoods.ts', ['--no-secteurs']],
       ['import-sports-facilities.ts', ['--only', 'tracks', '--no-osm-tracks']],
+      ['relocate-listings.ts', []],
       ['refresh-surroundings.ts', []],
     ])
     expect(partial.skipped.at(-1)).toContain('drives')

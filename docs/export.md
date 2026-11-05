@@ -26,7 +26,7 @@ ou `@` est précédée d'une apostrophe (injection de formule). Les indicateurs 
 `packages/domain`, calculés à l'export avec les hypothèses en vigueur.
 
 Colonnes, dans l'ordre (`LISTING_CSV_COLUMNS`, `apps/api/src/export/csv.ts`) : Titre, Statut,
-Portail, Lien, Commune, Quartier, Adresse, Prix (€), Honoraires d'agence (€), Surface Carrez (m²),
+Portail, Lien, Commune, Quartier, Adresse, Repère, Prix (€), Honoraires d'agence (€), Surface Carrez (m²),
 Pièces, Chambres, Étage, Ascenseur, Année de construction, DPE, GES, Charges annuelles (€),
 Taxe foncière (€), Loyer visé (€/mois), Loyer retenu (€/mois), Prix au m² (€), Frais de notaire
 (€), Travaux (€), Coût total (€), Mensualité (€), Rendement brut (%), Rendement net (%), Effort
@@ -45,7 +45,12 @@ format change `version`. Le lot 9 n'ajoute que des champs, la version reste 1 :
 `indicators.metrics.furnitureValue`, et dans `indicators.targetPrice` le coût tout compris
 maximal de chaque critère (`criteria[].maxTotalCost`) et l'annonce évaluée au prix cible
 (`atTarget`). Le lot 11 non plus : l'instantané `listing.openDataContext` gagne `surroundings`
-(quartier et équipements les plus proches, `null` tant qu'il n'a pas été calculé).
+(quartier et équipements les plus proches, `null` tant qu'il n'a pas été calculé). Le lot 12
+non plus : `listing.location.placement` (comment le repère a été placé : méthode, zone retenue,
+texte reconnu, réserves ; `null` pour une annonce antérieure au lot 12), les champs
+`approximate` des équipements de `surroundings` (`false` par défaut), et la colonne CSV
+« Repère » (« Adresse exacte », « À la rue », « Au quartier (X) », « Commune seulement »,
+« Non localisée »).
 
 ```text
 {

@@ -298,6 +298,7 @@ describe('équipements les plus proches', () => {
     expect(missing).toEqual({
       status: 'unavailable',
       nearest: null,
+      approximate: false,
       reasons: ['Pistes d’athlétisme : source non importée, non disponible.'],
     })
     const none = amenityLookup({ ...lookup, nearest: null, radiusMeters: 1500 })
@@ -309,6 +310,7 @@ describe('équipements les plus proches', () => {
     expect(amenityLookup({ ...lookup, nearest: track })).toEqual({
       status: 'ok',
       nearest: track,
+      approximate: false,
       reasons: [],
     })
   })

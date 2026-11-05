@@ -422,11 +422,24 @@ describe('TransitService', () => {
       point: { type: 'Point', coordinates: [-0.56, 44.83] },
     })
     expect(geo.nearestTransitStop).toHaveBeenCalledWith(point, 2000, 'tram')
+    expect(ctx.approximate).toBe(false)
     expect(await transit.at(null)).toEqual({
       nearestTram: null,
       nearestStop: null,
+      approximate: false,
+      reasons: [],
     })
     expect(toStop(null)).toBeNull()
     expect(toStop({ ...row, line: null })?.lines).toEqual([])
+    // Lot 12 : un repère au centre du quartier rend la desserte « ≈ ».
+    const approx = await transit.at(point, {
+      approximate: true,
+      origin: 'centre du quartier « Fictif »',
+      note: 'n',
+    })
+    expect(approx.approximate).toBe(true)
+    expect(approx.reasons).toEqual([
+      'Desserte mesurée depuis le centre du quartier « Fictif », repère approché : distances ≈.',
+    ])
   })
 })

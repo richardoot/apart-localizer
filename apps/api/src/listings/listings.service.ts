@@ -20,13 +20,16 @@ import type {
   EvaluatedListing,
   FieldSource,
   HypotheticalListing,
+  LayerFeatureCollection,
   Listing as ListingDto,
   ListingCreateResult,
   ListingFilters,
   ListingInput,
   ListingList,
   ListingLocationInput,
+  ListingPlacement,
   ListingStatusChange,
+  LocationPrecision,
   ListingUpdate,
   ListingUpdateGuards,
   PriceEventInput,
@@ -38,7 +41,11 @@ import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
 import { GeoService } from '../geo/geo.service'
-import type { CriteriaGeoDraft, CriteriaGeoMatch } from '../geo/geo.service'
+import type {
+  CriteriaGeoDraft,
+  CriteriaGeoMatch,
+  ListingAreaRef,
+} from '../geo/geo.service'
 import { GeocodingService } from '../opendata/geocoding.service'
 import { Prisma } from '../generated/prisma'
 import type { Member } from '../generated/prisma'
@@ -65,7 +72,9 @@ import {
 import type { ListingRow } from './listing.mapper'
 import {
   applyLocated,
+  manualLocationPlacement,
   needsGeocoding,
+  relocationNeeded,
   withOpenDataProvenance,
 } from './location'
 import { missingFieldTaskLabels } from './missing-field-tasks'
@@ -152,6 +161,25 @@ export class ListingsService {
       where.commune = { in: filters.commune, mode: 'insensitive' }
     }
     if (filters.dpe?.length) where.dpeClass = { in: filters.dpe }
+    if (filters.precision?.length) {
+      // Lot 12 : par précision du repère ; « none » = sans repère.
+      const precisions = filters.precision.filter(
+        (p): p is LocationPrecision => p !== 'none'
+      )
+      const clauses: Prisma.ListingWhereInput[] = []
+      if (precisions.length) {
+        clauses.push({
+          locationPrecision: { in: precisions },
+          latitude: { not: null },
+        })
+      }
+      if (filters.precision.includes('none')) {
+        clauses.push({
+          OR: [{ latitude: null }, { locationPrecision: null }],
+        })
+      }
+      where.AND = [{ OR: clauses }]
+    }
     if (filters.priceMin !== undefined || filters.priceMax !== undefined) {
       where.price = {
         ...(filters.priceMin !== undefined ? { gte: filters.priceMin } : {}),
@@ -240,6 +268,11 @@ export class ListingsService {
     }
   }
 
+  /** Lot 12 : les contours des annonces de l'espace placées au quartier (carte). */
+  areas(member: Member): Promise<LayerFeatureCollection> {
+    return this.geo.listingAreasGeoJson(member.workspaceId)
+  }
+
   async get(member: Member, id: string): Promise<EvaluatedListing> {
     const row = await this.findRow(member, id)
     const base = await this.assumptions.currentValues(member.workspaceId)
@@ -269,11 +302,22 @@ export class ListingsService {
       provenance
     )
     let location = input.location
-    if (needsGeocoding(location)) {
+    // Lot 12 : un point saisi prime ; sinon adresse, quartier, commune. Un
+    // point déjà géocodé (fiche extraite par l'IA, provenance `open_data`)
+    // n'est pas une saisie : il est replacé pour retrouver son placement et
+    // sa zone (géocodeur en cache), ou gardé tel quel, sans placement.
+    const geocodedPoint =
+      location.point !== null &&
+      input.fieldSources.point?.source === 'open_data'
+    let placement = geocodedPoint ? null : manualLocationPlacement(location)
+    let area: ListingAreaRef | null = null
+    if (needsGeocoding(location) || geocodedPoint) {
       const located = await this.geocoding.locate(location)
       if (located) {
         const applied = applyLocated(location, located)
         location = applied.location
+        placement = applied.placement
+        area = applied.area
         fieldSources = withOpenDataProvenance(fieldSources, applied.keys)
       }
     }
@@ -293,6 +337,7 @@ export class ListingsService {
       const created = await tx.listing.create({
         data: {
           ...scalarData({ ...listing, fieldSources }),
+          locationPlacement: placementJson(placement),
           title: input.title,
           price: new Prisma.Decimal(input.price),
           workspaceId: member.workspaceId,
@@ -339,6 +384,7 @@ export class ListingsService {
             status: input.status,
             provenance,
             geocoded: location.point !== null && input.location.point === null,
+            placement: placementDigest(placement),
             duplicates: duplicates.map(d => d.listingId),
             ignoreDuplicates: options.ignoreDuplicates ?? false,
             missingFieldTasks: missingTaskLabels,
@@ -349,7 +395,12 @@ export class ListingsService {
       return created.id
     })
     if (location.point) {
-      await this.geo.setListingPoint(id, location.point, location.precision)
+      await this.geo.setListingPoint(
+        id,
+        location.point,
+        location.precision,
+        area
+      )
     }
     // Données ouvertes (arrêt, plafond, marché, DPE vérifié), puis alertes.
     await this.enrichment.enrich(member, id, { dpe: true, channel })
@@ -407,15 +458,50 @@ export class ListingsService {
     const locationChanged =
       location !== undefined &&
       ('point' in location || addressChanged(before.location, location))
-    if (location && addressChanged(before.location, location)) {
-      const merged: ListingLocationInput = { ...before.location, ...location }
-      if (needsGeocoding({ ...merged, point: location.point ?? null })) {
-        const located = await this.geocoding.locate(merged)
-        if (located) {
-          const applied = applyLocated(merged, located)
-          location = applied.location
-          fieldSources = withOpenDataProvenance(fieldSources, applied.keys)
-        }
+    // Lot 12 : le placement suit la localisation écrite. Un point nouveau
+    // saisi prime ; une adresse, une commune ou (repère pas à l'adresse) un
+    // quartier changés replacent le repère, même si le formulaire renvoie
+    // l'ancien point.
+    let placement: ListingPlacement | null | undefined
+    let area: ListingAreaRef | null = null
+    /** Le point renvoyé tel quel : ni le point, ni le placement, ni la zone ne bougent. */
+    let pointUnchanged = false
+    const target = location
+      ? { ...before.location, ...location }
+      : before.location
+    const located =
+      location && relocationNeeded(before, location)
+        ? await this.geocoding.locate({
+            addressRaw: target.addressRaw,
+            commune: target.commune,
+            district: target.district,
+            inseeCode: target.inseeCode,
+          })
+        : null
+    if (location && located) {
+      const merged: ListingLocationInput = {
+        ...before.location,
+        ...location,
+      }
+      const applied = applyLocated(merged, located)
+      location = applied.location
+      placement = applied.placement
+      area = applied.area
+      fieldSources = withOpenDataProvenance(fieldSources, applied.keys)
+    } else if (location && 'point' in location) {
+      // Pas replacé (ou géocodeur muet) : le point du patch, tel quel.
+      pointUnchanged =
+        location.point !== null &&
+        location.point !== undefined &&
+        before.location.point !== null &&
+        location.point.coordinates.join(',') ===
+          before.location.point.coordinates.join(',') &&
+        (location.precision ?? null) === before.location.precision
+      if (!pointUnchanged) {
+        placement = manualLocationPlacement({
+          point: location.point ?? null,
+          precision: location.precision ?? null,
+        })
       }
     }
     await this.prisma.$transaction(async tx => {
@@ -425,6 +511,9 @@ export class ListingsService {
         data: {
           ...scalarData({ ...rest, fieldSources }),
           ...(location ? locationData(location) : {}),
+          ...(placement !== undefined
+            ? { locationPlacement: placementJson(placement) }
+            : {}),
           renovation:
             renovation === undefined
               ? undefined
@@ -478,11 +567,12 @@ export class ListingsService {
         tx
       )
     })
-    if (location && 'point' in location) {
+    if (location && 'point' in location && !pointUnchanged) {
       await this.geo.setListingPoint(
         id,
         location.point ?? null,
-        location.precision ?? null
+        location.precision ?? null,
+        area
       )
     }
     if (locationChanged || ENRICHMENT_KEYS.some(key => key in patch)) {
@@ -835,6 +925,7 @@ export class ListingsService {
           where: { id },
           data: {
             ...locationData(applied.location),
+            locationPlacement: placementJson(applied.placement),
             fieldSources: fieldSources as Prisma.InputJsonValue,
           },
         })
@@ -854,12 +945,18 @@ export class ListingsService {
               precision: located.precision,
               addressNormalized: located.addressNormalized,
               banId: located.banId,
+              placement: placementDigest(located.placement),
             },
           },
           tx
         )
       })
-      await this.geo.setListingPoint(id, located.point, located.precision)
+      await this.geo.setListingPoint(
+        id,
+        located.point,
+        located.precision,
+        applied.area
+      )
     }
     await this.enrichment.enrich(member, id, { dpe: true, channel })
     return this.afterWrite(member, id, channel)
@@ -876,6 +973,32 @@ function addressChanged(
     (patch[key] ?? '').trim().toLowerCase() !==
       (before[key] ?? '').trim().toLowerCase()
   return changed('addressRaw') || changed('commune')
+}
+
+/** Le placement en colonne JSON (null : colonne vide). */
+function placementJson(
+  placement: ListingPlacement | null
+): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  return placement
+    ? (placement as unknown as Prisma.InputJsonValue)
+    : Prisma.DbNull
+}
+
+/** Ce que le journal garde d'un placement : méthode, précision, zone retenue. */
+function placementDigest(placement: ListingPlacement | null): {
+  method: string
+  precision: string
+  area: string | null
+  toVerify: boolean
+} | null {
+  return placement
+    ? {
+        method: placement.method,
+        precision: placement.precision,
+        area: placement.area?.name ?? null,
+        toVerify: placement.toVerify,
+      }
+    : null
 }
 
 /** Une annonce enregistrée réduite aux champs d'une annonce hypothétique. */

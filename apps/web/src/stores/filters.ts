@@ -82,6 +82,7 @@ export const useFiltersStore = defineStore('filters', () => {
     if (f.commune?.length) count += 1
     if (f.dpe?.length) count += 1
     if (f.verdict?.length) count += 1
+    if (f.precision?.length) count += 1
     if (f.priceMin !== undefined || f.priceMax !== undefined) count += 1
     if (f.surfaceMin !== undefined || f.surfaceMax !== undefined) count += 1
     if (f.roomsMin !== undefined) count += 1

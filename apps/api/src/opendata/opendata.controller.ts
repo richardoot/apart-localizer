@@ -128,15 +128,23 @@ export class OpendataController {
   })
   @ZodResponse({ status: 200, type: OpenDataStatusDto })
   async status(): Promise<OpenDataStatusDto> {
-    const [zones, tables, transitStops, dvf, amenities, neighbourhoods] =
-      await Promise.all([
-        this.geo.rentControlZoneCount(RENT_CONTROL_TERRITORY),
-        this.rentControl.tables(),
-        this.geo.transitStopCounts(),
-        this.geo.dvfYears(),
-        this.geo.amenityCounts(),
-        this.geo.neighbourhoodCounts(NEIGHBOURHOOD_TERRITORY),
-      ])
+    const [
+      zones,
+      tables,
+      transitStops,
+      dvf,
+      amenities,
+      neighbourhoods,
+      places,
+    ] = await Promise.all([
+      this.geo.rentControlZoneCount(RENT_CONTROL_TERRITORY),
+      this.rentControl.tables(),
+      this.geo.transitStopCounts(),
+      this.geo.dvfYears(),
+      this.geo.amenityCounts(),
+      this.geo.neighbourhoodCounts(NEIGHBOURHOOD_TERRITORY),
+      this.geo.placeCount(),
+    ])
     return {
       rentControl: {
         zones,
@@ -151,6 +159,7 @@ export class OpendataController {
       dvf,
       amenities,
       neighbourhoods,
+      places,
     }
   }
 }

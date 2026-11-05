@@ -599,7 +599,12 @@ describe('ListingSynthesis', () => {
             kind: 'commune',
           },
         },
-        athleticsTrack: { status: 'ok', nearest: null, reasons: [] },
+        athleticsTrack: {
+          status: 'ok',
+          nearest: null,
+          approximate: false,
+          reasons: [],
+        },
       })
     )
     expect(doubtful.get('[data-testid="summary-neighbourhood"]').text()).toBe(

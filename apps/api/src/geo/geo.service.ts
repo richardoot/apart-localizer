@@ -5,6 +5,7 @@ import {
   AmenityKindSchema,
   AmenitySourceSchema,
   DriveStatusSchema,
+  LISTING_AREA_SIMPLIFY_DEGREES,
   NeighbourhoodKindSchema,
   SupermarketBrandGroupSchema,
 } from '@apart/contracts'
@@ -42,28 +43,39 @@ import { Prisma } from '../generated/prisma'
 export class GeoService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Écrit (ou efface, avec `null`) le point d'une annonce et ses colonnes miroir. */
+  /**
+   * Écrit (ou efface, avec `null`) le point d'une annonce et ses colonnes
+   * miroir, et la zone où le bien se trouve quand le repère est approché
+   * (lot 12) : l'union de contours importés, ou la commune entière (ses IRIS
+   * ou son contour de commune). Sans `area`, la zone est effacée : un point
+   * à l'adresse n'en a pas.
+   */
   async setListingPoint(
     listingId: string,
     point: Point | null,
-    precision: LocationPrecision | null
+    precision: LocationPrecision | null,
+    area: ListingAreaRef | null = null,
+    tx?: Pick<Prisma.TransactionClient, '$executeRaw'>
   ): Promise<void> {
+    const client = tx ?? this.prisma
     if (point === null) {
-      await this.prisma.$executeRaw`
+      await client.$executeRaw`
         UPDATE "app"."listings"
         SET "geom" = NULL, "latitude" = NULL, "longitude" = NULL,
-            "location_geojson" = NULL, "location_precision" = NULL
+            "location_geojson" = NULL, "location_precision" = NULL,
+            "location_area" = NULL
         WHERE "id" = ${listingId}`
       return
     }
     const [longitude, latitude] = point.coordinates
-    await this.prisma.$executeRaw`
+    await client.$executeRaw`
       UPDATE "app"."listings"
       SET "geom" = ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography,
           "latitude" = ${latitude},
           "longitude" = ${longitude},
           "location_geojson" = ${JSON.stringify(point)}::jsonb,
-          "location_precision" = ${precision}::"app"."LocationPrecision"
+          "location_precision" = ${precision}::"app"."LocationPrecision",
+          "location_area" = ${areaSql(area)}
       WHERE "id" = ${listingId}`
   }
 
@@ -879,6 +891,222 @@ export class GeoService {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Placement des annonces (lot 12)
+  // -------------------------------------------------------------------------
+
+  /** Les contours d'une commune, sans géométrie : les candidats du placement au quartier. */
+  async neighbourhoodsOfCommune(
+    territory: string,
+    inseeCode: string
+  ): Promise<NeighbourhoodRefRow[]> {
+    const rows = await this.prisma.$queryRaw`
+      SELECT "kind"::text AS "kind", "code", "name", "parent", "commune", "insee_code", "source"
+      FROM "app"."neighbourhoods"
+      WHERE "territory" = ${territory} AND "insee_code" = ${inseeCode} AND "geom" IS NOT NULL
+      ORDER BY "kind", "code"`
+    return NeighbourhoodRefRows.parse(rows)
+  }
+
+  /**
+   * Surface et point intérieur (`ST_PointOnSurface`, toujours dans le
+   * contour, contrairement au centroïde) de zones formées chacune de l'union
+   * de contours, et le recouvrement de chaque paire : surface commune /
+   * surface de la plus petite.
+   */
+  async placementAreaFacts(
+    territory: string,
+    areas: readonly { key: string; codes: readonly string[] }[]
+  ): Promise<{ facts: PlacementAreaFact[]; overlaps: PlacementOverlap[] }> {
+    const pairs = areas.flatMap(a =>
+      a.codes.map(code => ({ key: a.key, code }))
+    )
+    if (pairs.length === 0) return { facts: [], overlaps: [] }
+    const input = JSON.stringify(pairs)
+    const zones = Prisma.sql`
+      zones AS (
+        SELECT i."key", ST_Multi(ST_CollectionExtract(ST_Union(n."geom"::geometry), 3)) AS "g"
+        FROM jsonb_to_recordset(${input}::jsonb) AS i("key" text, "code" text)
+        JOIN "app"."neighbourhoods" n
+          ON n."territory" = ${territory} AND n."code" = i."code" AND n."geom" IS NOT NULL
+        GROUP BY i."key"
+      )`
+    const [facts, overlaps] = await Promise.all([
+      this.prisma.$queryRaw`
+        WITH ${zones}
+        SELECT "key", ST_Area("g"::geography) AS "area_square_meters",
+               ST_X(ST_PointOnSurface("g")) AS "longitude", ST_Y(ST_PointOnSurface("g")) AS "latitude"
+        FROM zones
+        ORDER BY "key"`,
+      this.prisma.$queryRaw`
+        WITH ${zones}
+        SELECT a."key" AS "a", b."key" AS "b",
+               COALESCE(ST_Area(ST_Intersection(a."g", b."g")::geography)
+                 / NULLIF(LEAST(ST_Area(a."g"::geography), ST_Area(b."g"::geography)), 0), 0) AS "ratio"
+        FROM zones a JOIN zones b ON a."key" < b."key"
+        ORDER BY 1, 2`,
+    ])
+    return {
+      facts: PlacementAreaFactRows.parse(facts),
+      overlaps: PlacementOverlapRows.parse(overlaps),
+    }
+  }
+
+  /**
+   * Le point intérieur d'une commune (union de ses IRIS ou son contour de
+   * commune entière), pour une annonce sans repère dont seule la commune est
+   * connue, sans géocodeur (rattrapage hors ligne).
+   */
+  async communeInteriorPoint(
+    territory: string,
+    inseeCode: string
+  ): Promise<Point | null> {
+    const rows = await this.prisma.$queryRaw`
+      SELECT ST_X(p) AS "longitude", ST_Y(p) AS "latitude"
+      FROM (
+        SELECT ST_PointOnSurface(ST_Union("geom"::geometry)) AS p
+        FROM "app"."neighbourhoods"
+        WHERE "territory" = ${territory} AND "insee_code" = ${inseeCode}
+          AND "kind" IN ('iris', 'commune') AND "geom" IS NOT NULL
+      ) s
+      WHERE p IS NOT NULL`
+    const row = CoordinateRows.parse(rows)[0]
+    return row
+      ? { type: 'Point', coordinates: [row.longitude, row.latitude] }
+      : null
+  }
+
+  /**
+   * Remplace les lieux-dits d'une source, dans une transaction ; chacun est
+   * rattaché à la commune dont un contour importé (IRIS, quartier ou commune
+   * entière) contient son point. Un import vide ne supprime rien.
+   */
+  async replacePlaces(
+    source: string,
+    territory: string,
+    rows: readonly PlaceRow[],
+    options: { batchSize?: number } = {}
+  ): Promise<{ written: number; removed: number; withoutCommune: number }> {
+    if (rows.length === 0) return { written: 0, removed: 0, withoutCommune: 0 }
+    const size = options.batchSize ?? 500
+    return this.prisma.$transaction(
+      async tx => {
+        const removed = await tx.$executeRaw`
+          DELETE FROM "app"."places" WHERE "source" = ${source}`
+        let written = 0
+        for (let i = 0; i < rows.length; i += size) {
+          const values = rows.slice(i, i + size).map(
+            row => Prisma.sql`(gen_random_uuid()::text, ${source}, ${row.externalId}, ${row.name}, ${row.placeType},
+              ${row.latitude}::double precision, ${row.longitude}::double precision,
+              ST_SetSRID(ST_MakePoint(${row.longitude}::double precision, ${row.latitude}::double precision), 4326)::geography, now())`
+          )
+          written += await tx.$executeRaw`
+            INSERT INTO "app"."places" ("id", "source", "external_id", "name", "place_type", "latitude", "longitude", "geom", "imported_at")
+            VALUES ${Prisma.join(values)}
+            ON CONFLICT ("source", "external_id") DO NOTHING`
+        }
+        await tx.$executeRaw`
+          UPDATE "app"."places" p
+          SET "insee_code" = n."insee_code", "commune" = n."commune"
+          FROM (
+            SELECT DISTINCT ON (pl."id") pl."id", nb."insee_code", nb."commune"
+            FROM "app"."places" pl
+            JOIN "app"."neighbourhoods" nb
+              ON nb."territory" = ${territory} AND nb."geom" IS NOT NULL AND ST_Intersects(nb."geom", pl."geom")
+            WHERE pl."source" = ${source}
+            ORDER BY pl."id", nb."kind"
+          ) n
+          WHERE p."id" = n."id"`
+        const orphan = CountRows.parse(
+          await tx.$queryRaw`
+            SELECT COUNT(*)::int AS "count" FROM "app"."places"
+            WHERE "source" = ${source} AND "insee_code" IS NULL`
+        )[0]
+        return { written, removed, withoutCommune: orphan?.count ?? 0 }
+      },
+      { timeout: 120_000, maxWait: 10_000 }
+    )
+  }
+
+  /** Les lieux-dits d'une commune. */
+  async placesOfCommune(inseeCode: string): Promise<PlaceHitRow[]> {
+    const rows = await this.prisma.$queryRaw`
+      SELECT "source", "external_id", "name", "place_type", "commune", "insee_code", "longitude", "latitude"
+      FROM "app"."places"
+      WHERE "insee_code" = ${inseeCode}
+      ORDER BY "name", "external_id"`
+    return PlaceHitRows.parse(rows)
+  }
+
+  /** Nombre de lieux-dits importés (santé des imports). */
+  async placeCount(): Promise<number> {
+    const rows = await this.prisma.$queryRaw`
+      SELECT COUNT(*)::int AS "count" FROM "app"."places"`
+    return CountRows.parse(rows)[0]?.count ?? 0
+  }
+
+  /**
+   * Les contours des annonces de l'espace placées au quartier (carte :
+   * contour montré au survol ou à la sélection), simplifiés à 5 m environ.
+   */
+  async listingAreasGeoJson(
+    workspaceId: string
+  ): Promise<LayerFeatureCollection> {
+    const rows = await this.prisma.$queryRaw`
+      SELECT "id", "location_placement"->'area'->>'name' AS "name",
+             "location_placement"->'area'->>'level' AS "level",
+             ST_AsGeoJSON(ST_SimplifyPreserveTopology("location_area"::geometry, ${LISTING_AREA_SIMPLIFY_DEGREES}::double precision), 6) AS "geometry"
+      FROM "app"."listings"
+      WHERE "workspace_id" = ${workspaceId}
+        AND "location_precision" = 'district'
+        AND "location_area" IS NOT NULL
+      ORDER BY "id"`
+    return {
+      type: 'FeatureCollection',
+      features: ListingAreaRows.parse(rows).map(row => ({
+        type: 'Feature',
+        id: row.id,
+        geometry: JSON.parse(
+          row.geometry
+        ) as LayerFeatureCollection['features'][number]['geometry'],
+        properties: { listingId: row.id, name: row.name, level: row.level },
+      })),
+    }
+  }
+
+  /**
+   * Les zones d'encadrement que recoupe une zone d'annonce (union de
+   * contours, ou commune entière), avec au moins `minSquareMeters` en
+   * commun (pas les liserés dus aux écarts de tracé), et la surface de la
+   * zone hors du zonage. Null si la zone est vide (contours non importés).
+   */
+  async rentControlZonesInArea(
+    area: ListingAreaRef,
+    zoningTerritory: string,
+    minSquareMeters = 1000
+  ): Promise<{ zones: number[]; outsideSquareMeters: number } | null> {
+    const rows = await this.prisma.$queryRaw`
+      WITH a AS (SELECT ${areaSql(area)} AS "g")
+      SELECT
+        COALESCE((
+          SELECT array_agg(DISTINCT z."zone" ORDER BY z."zone")
+          FROM "app"."rent_control_zones" z
+          WHERE z."territory" = ${zoningTerritory} AND z."geom" IS NOT NULL
+            AND ST_Intersects(z."geom", a."g")
+            AND ST_Area(ST_Intersection(z."geom"::geometry, a."g"::geometry)::geography) >= ${minSquareMeters}
+        ), ARRAY[]::int[]) AS "zones",
+        COALESCE(ST_Area(ST_Difference(a."g"::geometry, (
+          SELECT ST_Union(z."geom"::geometry) FROM "app"."rent_control_zones" z
+          WHERE z."territory" = ${zoningTerritory} AND ST_Intersects(z."geom", a."g")
+        ))::geography), ST_Area(a."g")) AS "outside_square_meters"
+      FROM a
+      WHERE a."g" IS NOT NULL`
+    const row = RentZonesInAreaRows.parse(rows)[0]
+    return row
+      ? { zones: row.zones, outsideSquareMeters: row.outside_square_meters }
+      : null
+  }
+
   /** Distance en mètres entre deux points, calculée par PostGIS (pour les tests et le MCP). */
   async distanceMeters(a: Point, b: Point): Promise<number> {
     const rows = await this.prisma.$queryRaw`
@@ -1151,8 +1379,115 @@ const CRITERIA_GEO_PREDICATE = Prisma.sql`(
   )
 )`
 
-/** Une annonce localisée au quartier ou à la commune n'est incluse que sous réserve. */
+/**
+ * Une annonce au repère approché (quartier ou commune) n'est incluse que
+ * sous réserve, sauf si toute sa zone (contour du quartier retenu, ou de la
+ * commune) est dans le périmètre (lot 12) : la distance au tram, elle, part
+ * toujours d'un repère approché.
+ */
 const APPROXIMATE = Prisma.sql`(
-  (c."perimeter_type" IS NOT NULL OR (c."filters"->>'maxTramDistanceMeters') IS NOT NULL)
-  AND COALESCE(l."location_precision"::text IN ('district', 'commune'), false)
+  COALESCE(l."location_precision"::text IN ('district', 'commune'), false)
+  AND (
+    (c."filters"->>'maxTramDistanceMeters') IS NOT NULL
+    OR (c."perimeter_type" IS NOT NULL AND NOT COALESCE(
+      CASE
+        WHEN l."location_area" IS NULL THEN false
+        WHEN c."perimeter_type" = 'point_radius' THEN ST_CoveredBy(
+          l."location_area"::geometry,
+          ST_Buffer(ST_SetSRID(ST_MakePoint(c."center_longitude", c."center_latitude"), 4326)::geography, c."radius_meters")::geometry)
+        WHEN c."perimeter" IS NOT NULL THEN ST_CoveredBy(l."location_area"::geometry, c."perimeter"::geometry)
+        ELSE false
+      END, false))
+  )
 )`
+
+/** La zone d'une annonce à écrire : l'union de contours importés, ou une commune entière. */
+export type ListingAreaRef =
+  | { kind: 'codes'; territory: string; codes: readonly string[] }
+  | { kind: 'commune'; territory: string; inseeCode: string }
+
+/** Le SQL de la zone : une union de contours de `neighbourhoods`, ou NULL. */
+function areaSql(area: ListingAreaRef | null): Prisma.Sql {
+  if (!area) return Prisma.sql`NULL`
+  const filter =
+    area.kind === 'codes'
+      ? area.codes.length
+        ? Prisma.sql`n."code" IN (${Prisma.join([...area.codes])})`
+        : Prisma.sql`false`
+      : Prisma.sql`n."insee_code" = ${area.inseeCode} AND n."kind" IN ('iris', 'commune')`
+  return Prisma.sql`(
+    SELECT ST_Multi(ST_CollectionExtract(ST_Union(n."geom"::geometry), 3))::geography
+    FROM "app"."neighbourhoods" n
+    WHERE n."territory" = ${area.territory} AND n."geom" IS NOT NULL AND ${filter})`
+}
+
+const NeighbourhoodRefRows = z.array(
+  z.object({
+    kind: NeighbourhoodKindSchema,
+    code: z.string(),
+    name: z.string(),
+    parent: z.string().nullable(),
+    commune: z.string(),
+    insee_code: z.string(),
+    source: z.string(),
+  })
+)
+export type NeighbourhoodRefRow = z.infer<typeof NeighbourhoodRefRows>[number]
+
+const PlacementAreaFactRows = z.array(
+  z.object({
+    key: z.string(),
+    area_square_meters: z.number(),
+    longitude: z.number(),
+    latitude: z.number(),
+  })
+)
+export type PlacementAreaFact = z.infer<typeof PlacementAreaFactRows>[number]
+
+const PlacementOverlapRows = z.array(
+  z.object({ a: z.string(), b: z.string(), ratio: z.number() })
+)
+export type PlacementOverlap = z.infer<typeof PlacementOverlapRows>[number]
+
+const CoordinateRows = z.array(
+  z.object({ longitude: z.number(), latitude: z.number() })
+)
+
+/** Un lieu-dit à importer. */
+export interface PlaceRow {
+  externalId: string
+  name: string
+  placeType: string
+  longitude: number
+  latitude: number
+}
+
+const PlaceHitRows = z.array(
+  z.object({
+    source: z.string(),
+    external_id: z.string(),
+    name: z.string(),
+    place_type: z.string(),
+    commune: z.string().nullable(),
+    insee_code: z.string().nullable(),
+    longitude: z.number(),
+    latitude: z.number(),
+  })
+)
+export type PlaceHitRow = z.infer<typeof PlaceHitRows>[number]
+
+const ListingAreaRows = z.array(
+  z.object({
+    id: z.string(),
+    name: z.string().nullable(),
+    level: z.string().nullable(),
+    geometry: z.string(),
+  })
+)
+
+const RentZonesInAreaRows = z.array(
+  z.object({
+    zones: z.array(z.number()),
+    outside_square_meters: z.number(),
+  })
+)

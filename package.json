@@ -36,7 +36,9 @@
     "import:sports-facilities": "pnpm --filter @apart/scripts import:sports-facilities",
     "import:supermarkets": "pnpm --filter @apart/scripts import:supermarkets",
     "import:neighbourhoods": "pnpm --filter @apart/scripts import:neighbourhoods",
-    "refresh:surroundings": "pnpm --filter @apart/scripts refresh:surroundings"
+    "refresh:surroundings": "pnpm --filter @apart/scripts refresh:surroundings",
+    "import:places": "pnpm --filter @apart/scripts import:places",
+    "relocate:listings": "pnpm --filter @apart/scripts relocate:listings"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

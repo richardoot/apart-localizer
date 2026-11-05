@@ -11,6 +11,7 @@ import type {
   PrismaClient,
 } from '../../apps/api/src/generated/prisma/index.js'
 import type { GeoService } from '../../apps/api/src/geo/geo.service.js'
+import { placementOf } from '../../apps/api/src/listings/listing.mapper.js'
 import { SurroundingsService } from '../../apps/api/src/opendata/surroundings.service.js'
 
 /**
@@ -58,6 +59,8 @@ export async function refreshSurroundings(
       latitude: true,
       longitude: true,
       locationPrecision: true,
+      locationPlacement: true,
+      commune: true,
       openDataContext: true,
     },
     orderBy: { createdAt: 'asc' },
@@ -77,7 +80,8 @@ export async function refreshSurroundings(
     const surroundings = await service.at(
       point,
       (row.locationPrecision ?? null) as LocationPrecision | null,
-      at
+      at,
+      { placement: placementOf(row.locationPlacement), commune: row.commune }
     )
     const parsed = ListingOpenDataContextSchema.safeParse(
       row.openDataContext ?? {}

@@ -31,6 +31,7 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     longitude: -0.59,
     locationPrecision: 'commune',
     locationGeoJson: null,
+    locationPlacement: null,
     price: new Prisma.Decimal('200000'),
     feesAmount: null,
     feesPercent: null,

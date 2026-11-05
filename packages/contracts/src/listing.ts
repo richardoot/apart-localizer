@@ -7,6 +7,7 @@ import {
   LocationPrecisionSchema,
 } from './enums.js'
 import { PointSchema } from './geojson.js'
+import { ListingPlacementSchema } from './placement.js'
 import { RenovationInputSchema, RenovationSchema } from './renovation.js'
 import { RentalPlanInputSchema, RentalPlanSchema } from './rental-plan.js'
 import { FieldProvenanceMapSchema } from './sourced.js'
@@ -36,15 +37,33 @@ export const ListingLocationInputSchema = z.object({
   banId: nullableText(64, 'Identifiant Base Adresse Nationale'),
   commune: nullableText(120, 'Commune'),
   inseeCode: nullableText(5, 'Code INSEE de la commune'),
-  district: nullableText(200, 'Quartier ou arrêt de tram le plus proche'),
+  district: nullableText(
+    200,
+    'Quartier ou secteur cité par l’annonce, du plus large au plus fin (« Bordeaux Sud, Victoire ») ; sans adresse au numéro, il place le repère au centre du quartier reconnu. Arrêt de tram ou résidence en complément seulement'
+  ),
   point: PointSchema.nullable()
     .default(null)
     .describe('Point géographique WGS 84 ; null si non géocodé'),
   precision: LocationPrecisionSchema.nullable()
     .default(null)
-    .describe('Précision du point ; null si non géocodé'),
+    .describe(
+      'Précision du point : exact (au numéro), street (à la rue), district (au centre du quartier), commune (au centre de la commune) ; null si non géocodé'
+    ),
 })
 export type ListingLocationInput = z.infer<typeof ListingLocationInputSchema>
+
+/**
+ * Localisation enregistrée : la saisie, plus la façon dont le repère a été
+ * placé (lot 12), calculée par le serveur et jamais saisie.
+ */
+export const ListingLocationSchema = ListingLocationInputSchema.extend({
+  placement: ListingPlacementSchema.nullable()
+    .default(null)
+    .describe(
+      'Comment le repère a été placé (adresse, quartier reconnu, lieu-dit, commune, point saisi) ; null pour une annonce antérieure au lot 12'
+    ),
+})
+export type ListingLocation = z.infer<typeof ListingLocationSchema>
 
 /** Caractéristiques du bien, toutes facultatives : une annonce n'en donne jamais la totalité. */
 export const ListingPropertyInputSchema = z.object({
@@ -299,6 +318,7 @@ export const ListingSchema = ListingInputSchema.omit({
 }).extend({
   id: z.string().uuid(),
   workspaceId: z.string().uuid(),
+  location: ListingLocationSchema,
   renovation: RenovationSchema.nullable(),
   rentalPlan: RentalPlanSchema.nullable(),
   discardedAt: z.string().datetime().nullable(),

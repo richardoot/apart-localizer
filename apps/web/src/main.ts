@@ -8,6 +8,7 @@ import { useBaseMapStore } from './stores/base-map'
 import { useThemeStore } from './stores/theme'
 import { createQueryClient } from './lib/query'
 import { installSentry, setSentryUser } from './lib/sentry'
+import { installServiceWorker, sessionStorageOrNull } from './lib/pwa'
 // Imported early to validate the environment at startup.
 import './lib/supabase'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -39,3 +40,17 @@ watch(
 auth.initialize().then(() => {
   app.mount('#app')
 })
+
+// Le service worker (PWA) : la nouvelle version, une fois active, recharge
+// la page une fois (lib/pwa.ts). Pas en développement (devOptions désactivé).
+if (import.meta.env.PROD) {
+  void import('virtual:pwa-register').then(({ registerSW }) =>
+    installServiceWorker({
+      register: registerSW,
+      storage: sessionStorageOrNull(),
+      reload: () => window.location.reload(),
+      now: () => Date.now(),
+      setInterval: (callback, ms) => window.setInterval(callback, ms),
+    })
+  )
+}

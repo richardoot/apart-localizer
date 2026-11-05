@@ -1,0 +1,60 @@
+{
+  "version": 0.6,
+  "generator": "Fixture fictive (lot 12)",
+  "osm3s": {
+    "timestamp_osm_base": "2030-01-01T00:00:00Z",
+    "copyright": "Données inventées pour les tests."
+  },
+  "elements": [
+    {
+      "type": "node",
+      "id": 1,
+      "lat": 44.84,
+      "lon": -0.58,
+      "tags": { "name": "Le Moulinet", "place": "neighbourhood" }
+    },
+    {
+      "type": "node",
+      "id": 1,
+      "lat": 44.84,
+      "lon": -0.58,
+      "tags": { "name": "Le Moulinet", "place": "neighbourhood" }
+    },
+    {
+      "type": "way",
+      "id": 2,
+      "center": { "lat": 44.85, "lon": -0.57 },
+      "tags": { "name": "Cité des Tilleuls", "place": "quarter" }
+    },
+    {
+      "type": "relation",
+      "id": 3,
+      "center": { "lat": 44.86, "lon": -0.56 },
+      "tags": { "name": "Faubourg Fictif", "place": "suburb" }
+    },
+    {
+      "type": "relation",
+      "id": 4,
+      "center": { "lat": 44.86, "lon": -0.56 },
+      "tags": {
+        "name": "Limite fictive",
+        "boundary": "administrative",
+        "admin_level": "10"
+      }
+    },
+    {
+      "type": "node",
+      "id": 5,
+      "lat": 44.87,
+      "lon": -0.55,
+      "tags": { "place": "neighbourhood" }
+    },
+    {
+      "type": "node",
+      "id": 6,
+      "lat": 44.87,
+      "lon": -0.55,
+      "tags": { "name": "Hameau perdu", "place": "hamlet" }
+    }
+  ]
+}

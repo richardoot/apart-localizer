@@ -69,13 +69,14 @@ describe('useListingContext', () => {
       expectedUpdatedAt: '2026-11-03T10:00:00.000Z',
     })
     expect(apiMock.listings.regeocode).toHaveBeenCalledWith(ID)
-    // Quatre écritures, quatre clés rafraîchies à chaque fois.
-    expect(invalidate).toHaveBeenCalledTimes(16)
-    expect(
-      invalidate.mock.calls.map(
-        ([f]) => (f as { queryKey?: readonly unknown[] })?.queryKey
-      )
-    ).toContainEqual(contextKeys.detail(ID))
+    // Quatre écritures, cinq clés rafraîchies à chaque fois (lot 12 : les
+    // contours des annonces au quartier, le repère ayant pu bouger).
+    expect(invalidate).toHaveBeenCalledTimes(20)
+    const keys = invalidate.mock.calls.map(
+      ([f]) => (f as { queryKey?: readonly unknown[] })?.queryKey
+    )
+    expect(keys).toContainEqual(contextKeys.detail(ID))
+    expect(keys).toContainEqual(['listings', 'areas'])
     unmount()
   })
 })

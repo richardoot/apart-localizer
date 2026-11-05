@@ -141,8 +141,11 @@ hors du dépôt. Un nouveau fichier part du `.env.example` correspondant.
   fichiers sont dans `data/opendata/` ([open-data.md](open-data.md)) ; une source absente est
   sautée. Lot 11 : aussi les quartiers (`quartiers/`, `iris/`), les pistes et Fitness Park
   (`res/`, `osm/`) et les drives (`osm/supermarkets.json`), puis le rattrapage du quartier et des
-  équipements des annonces (`refresh:surroundings`). Sans ces fichiers, l'onglet Quartier affiche
-  « non disponible » ; `--download` sur chaque import les lit en ligne à la place. Le plan des imports est testé ; les imports eux-mêmes n'ont pas été relancés pour ce lot
+  équipements des annonces (`refresh:surroundings`). Lot 12 : après les quartiers, les lieux-dits
+  OpenStreetMap (`osm/quartiers-places.json`, `import:places`), puis le rattrapage du repère des
+  annonces au centre de la commune, au quartier ou sans repère (`relocate:listings`, avant
+  `refresh:surroundings`). Sans ces fichiers, l'onglet Quartier affiche « non disponible » ;
+  `--download` sur chaque import les lit en ligne à la place. Le plan des imports est testé ; les imports eux-mêmes n'ont pas été relancés pour ce lot
   (les données ouvertes étaient déjà en base).
 
 ## Se connecter en local

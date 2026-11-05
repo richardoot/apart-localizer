@@ -3,13 +3,12 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
-État au 5 novembre 2026 : **les lots 0 à 11 sont livrés** côté code, tests et documentation ; les
-lots 0 à 7 sont déployés (Vercel et Supabase cloud), le lot 8 (invitations) attend son
-déploiement (migration additive `20261104120000_lot8_invitations`), le lot 9 (lisibilité de la
-fiche, sans migration) le sien, le lot 10 (fonds de carte, sans migration ni variable
-nouvelle) aussi, et le lot 11 (équipements et quartiers) le sien : migration additive
-`20261105120000_lot11_amenities_neighbourhoods`, trois imports puis le rattrapage du contexte
-des annonces ([docs/deploiement.md](../deploiement.md) § 2). Restent les actions
+État au 5 novembre 2026 : **les lots 0 à 13 sont livrés** côté code, tests et documentation ; les
+lots 0 à 11 sont déployés (Vercel et Supabase cloud, imports et rattrapage du lot 11 faits en
+production). Le lot 12 (placement des annonces) attend son déploiement : migration additive
+`20261105180000_lot12_listing_placement`, `import:places` puis `relocate:listings`, en simulation
+d'abord ([docs/deploiement.md](../deploiement.md) § 2) ; le lot 13 (page Hypothèses, sans
+migration ni variable nouvelle) le sien. Restent les actions
 d'exploitation (Supabase cloud, Vercel, clés et connecteur :
 [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard » dans chaque lot, et
 les critères « Fini quand » qui demandent le déploiement ou un usage réel (lot 1 : déploiement et
@@ -17,8 +16,9 @@ mobile de Chloé ; lot 2 : dix essais d'extraction ; lot 6 : push et partage sur
 téléphones ; lot 8 : une vraie troisième adresse Google ; lot 9 : une lecture de fiche par
 Richard et Chloé, sur ordinateur et sur téléphone ; lot 10 : un périmètre dessiné par Richard
 sur la photo aérienne, sur le site déployé ; lot 11 : les imports faits sur la base de
-production et l'onglet Quartier des annonces réelles relu par Richard), à constater après la
-mise en ligne.
+production et l'onglet Quartier des annonces réelles relu par Richard ; lot 12 : le
+rattrapage relu en simulation puis passé sur la production, et les quartiers retenus relus par
+Richard), à constater après la mise en ligne.
 
 ## Lot 0 : socle
 
@@ -331,6 +331,53 @@ disponible » ; les quatre couches s'allument sur la carte des annonces et la ca
 lisibles sur les trois fonds ; les imports et le rattrapage tournent sur la production sans
 rien casser. (Vérifié en tests automatisés, sur une base jetable avec les vraies données et sur
 captures Chromium d'un banc d'essai ; à confirmer par Richard sur le site déployé.)
+
+## Lot 12 : placement des annonces
+
+Statut : livré (à déployer : migration additive `20261105180000_lot12_listing_placement`,
+`import:places`, puis `relocate:listings` en simulation et en vrai,
+[docs/deploiement.md](../deploiement.md) § 2).
+
+- Besoin D12. Demande de Richard : une annonce dont l'adresse n'est pas exacte doit être placée
+  au centre de son quartier quand il est connu, au centre de la commune sinon, à l'adresse quand
+  elle l'est ; tous les calculs partent du repère le plus précis ; on distingue les annonces
+  exactement localisées des génériques. En production, 25 annonces sur 29 n'avaient pour repère
+  que le centre de leur commune. ADR 0022.
+- Livré :
+  - **Hiérarchie** : adresse au numéro ou à la rue ; sinon quartier reconnu dans le champ
+    « quartier » parmi les contours de la commune (secteur de vie, quartier officiel, IRIS,
+    quartier qui regroupe des secteurs), repère au point intérieur du contour ; sinon lieu-dit
+    OpenStreetMap ; sinon centre de la commune. Le plus précis cohérent l'emporte ; « près de »,
+    noms incompatibles ou ambigus rendent « à vérifier » ; rien d'inventé. Un point saisi prime,
+    un repère à l'adresse ne redescend jamais.
+  - **Modèle** : `listings.location_placement` (méthode, zone retenue, texte reconnu, réserves),
+    `listings.location_area` (contour retenu ou commune), table `places` (lieux-dits) ; script
+    `import:places` ; rattrapage `relocate:listings` (`--dry-run`, idempotent, journal
+    `listing.relocated`), enchaîné par `stack:up --opendata`.
+  - **Calculs** : tous depuis le repère, avec la réserve d'un repère approché, textes dans
+    `domain` : distances « ≈ » (tram, équipements, comparables), quartier indicatif, zone
+    d'encadrement probable ou « à vérifier » selon le contour, critère à périmètre « sous
+    réserve » seulement si le contour n'y est pas entier.
+  - **Interface** : pastille de précision (liste, cartes, fiche, comparaison, export CSV),
+    explication et « Préciser l'adresse » dans l'onglet Quartier ; carte : repère plein, creux
+    ou pointillé, légende, contour du quartier au survol et à la sélection (suit le changement
+    de fond), contour retenu sur la carte du quartier ; filtre « Repère » dans l'URL.
+  - **MCP** : précision et placement dans `list_listings` et `get_listing`, filtre `precision`,
+    consignes d'adresse et de quartier dans `create_listing` et `update_listing`.
+  - **PWA** : après un déploiement, la page se recharge une fois quand la nouvelle version prend
+    la main, sans boucle.
+- Plus tard : inclure « sous réserve » dans un critère une annonce dont le repère est hors du
+  périmètre mais dont le quartier le recoupe ; d'autres sources de noms d'usage ; une
+  suggestion d'adresse depuis la photo ou le plan de l'annonce (lu par Claude, jamais par le
+  serveur).
+
+Fini quand : chaque annonce dit d'où vient son repère (pastille et explication) ; une annonce
+dont le texte cite un quartier connu est placée en son centre, les autres au centre de la
+commune, jamais ailleurs ; distances, quartier, encadrement et critères portent leur réserve ;
+la carte distingue les trois sortes de repères et montre le contour du quartier ; le rattrapage
+tourne sur la production sans toucher une annonce à l'adresse. (Vérifié en tests automatisés,
+sur une base jetable avec les vraies données ouvertes et en évaluation locale des formes de
+quartier relevées en production ; à confirmer par Richard sur le site déployé.)
 
 ## Lot 13 : lisibilité de la page Hypothèses
 

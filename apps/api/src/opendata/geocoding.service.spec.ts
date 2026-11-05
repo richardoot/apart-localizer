@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { GEOCODE_CACHE_KIND, GeocodingService } from './geocoding.service'
+import type { PlacementService } from './placement.service'
 import type { PrismaService } from '../prisma/prisma.service'
 
 const feature = (type: string, label: string) => ({
@@ -100,10 +101,13 @@ describe('GeocodingService', () => {
       })
     )
     const { geocoding } = service(fetchMock)
-    const located = await geocoding.locate({
-      addressRaw: 'rue du Forum',
-      commune: 'Talence',
-    })
+    const located = await geocoding.locate(
+      {
+        addressRaw: 'rue du Forum',
+        commune: 'Talence',
+      },
+      { at: new Date('2026-11-05T10:00:00.000Z') }
+    )
     expect(located).toEqual({
       point: { type: 'Point', coordinates: [-0.5906, 44.8083] },
       precision: 'street',
@@ -112,8 +116,119 @@ describe('GeocodingService', () => {
       commune: 'Talence',
       inseeCode: '33522',
       score: 0.9,
+      placement: {
+        method: 'address',
+        precision: 'street',
+        matchedText: null,
+        area: null,
+        toVerify: false,
+        reasons: [
+          'Adresse trouvée à la rue, sans numéro : Rue du Forum 33400 Talence.',
+        ],
+        computedAt: '2026-11-05T10:00:00.000Z',
+      },
+      area: null,
     })
     expect(fetchMock.mock.calls[0]?.[0]).toContain('rue+du+Forum%2C+Talence')
+  })
+
+  it('locate (lot 12) : sans numéro, le quartier reconnu avant la commune, sans réseau', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ features: [] }),
+      })
+    )
+    const { prisma } = fakePrisma()
+    const placement = {
+      locateDistrict: vi.fn(() =>
+        Promise.resolve({
+          located: {
+            point: {
+              type: 'Point' as const,
+              coordinates: [-0.6, 44.8] as [number, number],
+            },
+            placement: {
+              method: 'neighbourhood_match' as const,
+              precision: 'district' as const,
+              matchedText: 'Forum',
+              area: null,
+              toVerify: false,
+              reasons: [],
+              computedAt: '2026-11-05T10:00:00.000Z',
+            },
+            area: null,
+            commune: 'Talence',
+            inseeCode: '33522',
+          },
+          reasons: [],
+          inseeCode: '33522',
+        })
+      ),
+    }
+    const geocoding = new GeocodingService(
+      prisma,
+      placement as unknown as PlacementService
+    )
+    geocoding.fetchImpl = fetchMock
+    const located = await geocoding.locate({
+      addressRaw: null,
+      commune: 'Talence',
+      district: 'Forum',
+    })
+    expect(located?.precision).toBe('district')
+    expect(located?.placement.method).toBe('neighbourhood_match')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(placement.locateDistrict).toHaveBeenCalledWith(
+      { district: 'Forum', commune: 'Talence', inseeCode: null },
+      expect.any(Date)
+    )
+  })
+
+  it('locate (lot 12) : rien de reconnu, la commune garde les noms non reconnus ; une panne du quartier ne bloque pas', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(feature('municipality', 'Talence')),
+      })
+    )
+    const { prisma } = fakePrisma()
+    const placement = {
+      locateDistrict: vi
+        .fn()
+        .mockResolvedValueOnce({
+          located: null,
+          reasons: ['« Inventé » : aucun quartier ni lieu-dit de ce nom.'],
+          inseeCode: '33522',
+        })
+        .mockRejectedValueOnce(new Error('base indisponible')),
+    }
+    const geocoding = new GeocodingService(
+      prisma,
+      placement as unknown as PlacementService
+    )
+    geocoding.fetchImpl = fetchMock
+    const located = await geocoding.locate({
+      commune: 'Talence',
+      district: 'Inventé',
+    })
+    expect(located?.precision).toBe('commune')
+    expect(located?.placement.reasons).toEqual([
+      'Aucun quartier reconnu dans « Inventé » : repère au centre de la commune.',
+      '« Inventé » : aucun quartier ni lieu-dit de ce nom.',
+    ])
+    expect(located?.area).toEqual({
+      kind: 'commune',
+      territory: 'bordeaux_metropole',
+      inseeCode: '33522',
+    })
+    const again = await geocoding.locate({
+      commune: 'Talence',
+      district: 'Inventé',
+    })
+    expect(again?.precision).toBe('commune')
   })
 
   it('locate : repli sur le centroïde de la commune quand l’adresse est muette', async () => {

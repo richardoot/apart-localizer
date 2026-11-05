@@ -12,7 +12,7 @@
   import ListingsTable from '@/components/listings/ListingsTable.vue'
   import ExportMenu from '@/components/listings/ExportMenu.vue'
   import ViewSwitch from '@/components/listings/ViewSwitch.vue'
-  import { useListingList } from '@/composables/useListings'
+  import { useListingAreas, useListingList } from '@/composables/useListings'
   import {
     DEFAULT_LAYER_TOGGLES,
     useMapLayers,
@@ -75,6 +75,8 @@
 
   const filters = computed(() => store.apiFilters())
   const { data, isPending, isFetching, error } = useListingList(filters)
+  // Lot 12 : contours des annonces au quartier, chargés pour la carte seulement.
+  const listingAreas = useListingAreas(computed(() => store.view === 'map'))
   const items = computed(() => data.value?.items ?? [])
   const communes = computed(() => {
     const set = new Set<string>()
@@ -202,6 +204,7 @@
         :near="store.filters.near"
         :color-by="colorBy"
         :layers="mapLayers"
+        :areas="listingAreas.data.value ?? null"
         @open="open"
         @update:near="onNear"
         @bounds="value => (bbox = value)"
@@ -223,7 +226,7 @@
       >
       <span
         >« ≈ » : valeur estimée faute de saisie (taxe foncière = 1 mois de
-        loyer)</span
+        loyer), ou distance depuis le centre du quartier ou de la commune</span
       >
       <span class="inline-flex items-center gap-1" data-testid="legend-price"
         ><CostBasisBadge basis="price" /> se compare au prix affiché</span

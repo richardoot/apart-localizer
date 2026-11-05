@@ -111,6 +111,7 @@ export function fakeSurroundings(
           sourceUrl: null,
         },
       }),
+      approximate: false,
       reasons: [],
     },
     supermarkets: {
@@ -146,11 +147,13 @@ export function fakeSurroundings(
         }),
       },
       nearest: fakeAmenity(),
+      approximate: false,
       reasons: ['Aucun drive Auchan à moins de 20 km à vol d’oiseau.'],
     },
     fitnessPark: {
       status: 'unavailable',
       nearest: null,
+      approximate: false,
       reasons: ['Salles Fitness Park : source non importée, non disponible.'],
     },
     searchRadiusMeters: 20_000,
@@ -167,6 +170,8 @@ export function fakeContext(
     listingId: '11111111-1111-4111-8111-111111111111',
     point: { type: 'Point', coordinates: [-0.58, 44.84] },
     precision: 'exact',
+    placement: null,
+    approximation: { approximate: false, origin: null, note: null },
     transit: {
       nearestTram: {
         name: 'Arrêt fictif',
@@ -182,6 +187,8 @@ export function fakeContext(
         distanceMeters: 80,
         point: { type: 'Point', coordinates: [-0.5801, 44.8401] },
       },
+      approximate: false,
+      reasons: [],
     },
     rentControl: {
       status: 'ok',

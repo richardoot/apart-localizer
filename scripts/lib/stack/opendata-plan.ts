@@ -96,6 +96,21 @@ export function openDataPlan(files: OpenDataFiles): OpenDataPlan {
       `quartiers : il faut quartiers/se_quart_s.geojson et iris/${IRIS_FILE} dans data/opendata/`
     )
   }
+  // Lot 12 : lieux-dits OpenStreetMap, rattachés aux communes des contours.
+  const neighbourhoodsImported = steps.some(
+    s => s.script === 'import-neighbourhoods.ts'
+  )
+  if (osm.has(PLACES_FILE) && neighbourhoodsImported) {
+    steps.push({
+      label: 'lieux-dits',
+      script: 'import-places.ts',
+      args: [],
+    })
+  } else {
+    skipped.push(
+      `lieux-dits : il faut osm/${PLACES_FILE} et les quartiers dans data/opendata/`
+    )
+  }
   const tracks = res.has('bm-athletisme.json')
   const fitness = osm.has('fitness-park.json')
   if (tracks || fitness) {
@@ -128,6 +143,13 @@ export function openDataPlan(files: OpenDataFiles): OpenDataPlan {
   } else {
     skipped.push('drives : il faut osm/supermarkets.json dans data/opendata/')
   }
+  if (neighbourhoodsImported) {
+    steps.push({
+      label: 'repère des annonces au quartier',
+      script: 'relocate-listings.ts',
+      args: [],
+    })
+  }
   if (steps.length > lot11) {
     steps.push({
       label: 'quartier et équipements des annonces',
@@ -140,3 +162,5 @@ export function openDataPlan(files: OpenDataFiles): OpenDataPlan {
 
 /** Le fichier des Contours IRIS attendu par `import-neighbourhoods` (édition 2026). */
 export const IRIS_FILE = 'bm-contours_iris-2026.geojson'
+/** Le fichier des lieux-dits OpenStreetMap attendu par `import-places` (lot 12). */
+export const PLACES_FILE = 'quartiers-places.json'

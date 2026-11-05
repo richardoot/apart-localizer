@@ -60,7 +60,12 @@ describe('ContextMap (MapLibre mocké)', () => {
     )
     await wrapper.setProps({
       context: fakeContext({
-        transit: { nearestTram: null, nearestStop: null },
+        transit: {
+          nearestTram: null,
+          nearestStop: null,
+          approximate: false,
+          reasons: [],
+        },
       }),
     })
     expect(features('context-tram')).toHaveLength(0)
@@ -256,11 +261,17 @@ describe('ContextMap (MapLibre mocké)', () => {
 
   it('sans équipement proche ni quartier : seulement l’annonce', async () => {
     const empty = fakeSurroundings({
-      athleticsTrack: { status: 'unavailable', nearest: null, reasons: [] },
+      athleticsTrack: {
+        status: 'unavailable',
+        nearest: null,
+        approximate: false,
+        reasons: [],
+      },
       supermarkets: {
         status: 'unavailable',
         preferred: { carrefour: null, auchan: null, intermarche: null },
         nearest: null,
+        approximate: false,
         reasons: [],
       },
     })

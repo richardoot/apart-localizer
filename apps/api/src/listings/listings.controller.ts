@@ -21,6 +21,7 @@ import {
 import { SupabaseGuard } from '../auth/guards/supabase.guard'
 import { CurrentMember } from '../auth/decorators/current-member.decorator'
 import type { Member } from '../generated/prisma'
+import { LayerDto } from '../opendata/dto/opendata.dto'
 import { DuplicatesService } from './duplicates.service'
 import { ListingEnrichmentService } from './enrichment.service'
 import { ExtractionService } from './extraction.service'
@@ -150,6 +151,16 @@ export class ListingsController {
     @Body() body: CompareRequestDto
   ): Promise<CompareResultDto> {
     return this.targetPrice.compare(member, body.listingIds)
+  }
+
+  @Get('areas')
+  @ApiOperation({
+    summary:
+      'Lot 12 : contours des annonces placées au quartier (GeoJSON, simplifiés à 5 m), pour la carte : `properties.listingId`, `name`, `level`',
+  })
+  @ZodResponse({ status: 200, type: LayerDto })
+  areas(@CurrentMember() member: Member): Promise<LayerDto> {
+    return this.listings.areas(member)
   }
 
   @Get(':id')

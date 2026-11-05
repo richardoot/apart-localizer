@@ -8,6 +8,10 @@ import {
   TransitModeSchema,
 } from './enums.js'
 import { PointSchema, PositionSchema } from './geojson.js'
+import {
+  ListingPlacementSchema,
+  LocationApproximationSchema,
+} from './placement.js'
 import { SurroundingsSchema } from './surroundings.js'
 
 /**
@@ -80,6 +84,16 @@ export const TransitContextSchema = z.object({
   nearestStop: NearestStopSchema.nullable().describe(
     'Arrêt le plus proche tous modes confondus (2 km au plus)'
   ),
+  approximate: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Lot 12 : vrai si les distances partent d’un repère approché (centre du quartier ou de la commune)'
+    ),
+  reasons: z
+    .array(z.string())
+    .default([])
+    .describe('Réserves sur la desserte (repère approché)'),
 })
 export type TransitContext = z.infer<typeof TransitContextSchema>
 
@@ -416,6 +430,12 @@ export const ListingContextSchema = z.object({
   listingId: z.string().uuid(),
   point: PointSchema.nullable(),
   precision: LocationPrecisionSchema.nullable(),
+  placement: ListingPlacementSchema.nullable()
+    .default(null)
+    .describe('Lot 12 : comment le repère a été placé'),
+  approximation: LocationApproximationSchema.describe(
+    'Lot 12 : réserve sur les distances quand le repère est approché'
+  ),
   transit: TransitContextSchema,
   rentControl: RentControlLookupSchema,
   dpe: z.object({

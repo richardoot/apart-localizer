@@ -25,6 +25,7 @@
   import DpeBadge from './DpeBadge.vue'
   import CriteriaBadges from './CriteriaBadges.vue'
   import NewBadge from './NewBadge.vue'
+  import PrecisionBadge from './PrecisionBadge.vue'
   import RentalPill from './RentalPill.vue'
   import StatusBadge from './StatusBadge.vue'
   import VerdictPill from './VerdictPill.vue'
@@ -124,6 +125,10 @@
                 .filter(Boolean)
                 .join(' · ')
             ),
+            h(PrecisionBadge, {
+              location: ctx.row.original.listing.location,
+              compact: true,
+            }),
           ]),
         ]),
       sortFn: 'basic',
@@ -304,7 +309,9 @@
 </script>
 
 <template>
-  <div class="overflow-x-auto rounded-xl border border-line bg-surface">
+  <div
+    class="relative overflow-x-auto rounded-xl border border-line bg-surface"
+  >
     <div
       v-if="selected.length > 0"
       class="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-accent-soft px-3 py-2 text-sm"

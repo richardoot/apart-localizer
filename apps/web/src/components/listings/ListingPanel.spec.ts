@@ -294,6 +294,31 @@ describe('ListingPanel', () => {
     wrapper.unmount()
   })
 
+  it('lot 12 : pastille de précision et « Préciser l’adresse » qui ouvre la saisie sur l’adresse', async () => {
+    const atCommune = fakeEvaluated({
+      location: {
+        ...item.listing.location,
+        precision: 'commune',
+        placement: null,
+      },
+    })
+    apiMock.listings.get.mockResolvedValue(atCommune)
+    apiMock.listings.markSeen.mockResolvedValue(atCommune)
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(
+      query('[data-testid="precision-badge"]')?.getAttribute('data-precision')
+    ).toBe('commune')
+    query('[data-testid="precise-address"]')?.click()
+    await flushPromises()
+    expect(
+      query('[data-testid="tab-financer"]')?.getAttribute('aria-selected')
+    ).toBe('true')
+    expect(document.activeElement?.id).toBe('f-address')
+    expect(query('[data-testid="precise-address"]')).toBeNull()
+    wrapper.unmount()
+  })
+
   it('enregistre une offre puis propose le statut suggéré sans le forcer', async () => {
     const wrapper = mountPanel()
     await flushPromises()

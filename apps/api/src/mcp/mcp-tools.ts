@@ -86,7 +86,12 @@ import type {
   WhatsNewReport,
   WorkspaceMe,
 } from '@apart/contracts'
-import { formatEuros, formatPercent, mergeAssumptions } from '@apart/domain'
+import {
+  formatEuros,
+  formatPercent,
+  mergeAssumptions,
+  precisionBadge,
+} from '@apart/domain'
 import type { Member } from '../generated/prisma'
 import type { DuplicatesService } from '../listings/duplicates.service'
 import type { ExtractionService } from '../listings/extraction.service'
@@ -197,10 +202,25 @@ export function describeListing(item: EvaluatedListing): string {
     `verdict ${VERDICT_LABELS[m.verdict]}`,
     `location ${RENTAL_VERDICT_LABELS[item.evaluation.rental.verdict]}`,
   ]
+  parts.push(`repère : ${precisionBadge(item.listing.location).label}`)
   if (item.isNewForMe) parts.push('nouvelle pour vous')
   if (item.distanceMeters !== null)
     parts.push(`à ${Math.round(item.distanceMeters)} m`)
   return parts.join(' · ')
+}
+
+/**
+ * Lot 12 : d'où vient le repère d'une annonce (adresse, quartier reconnu,
+ * lieu-dit, commune), la méthode et les réserves, en une ligne.
+ */
+export function describePlacement(item: EvaluatedListing): string {
+  const location = item.listing.location
+  const badge = precisionBadge(location)
+  const placement = location.placement
+  const method = placement
+    ? ` [méthode ${placement.method}${placement.area ? `, zone « ${placement.area.name} »` : ''}${placement.toVerify ? ', à vérifier' : ''}]`
+    : ''
+  return `Repère : ${badge.label}${method} — ${badge.title}`
 }
 
 export function describeEvaluation(evaluation: ListingEvaluation): string {
@@ -350,8 +370,9 @@ export function describeCriteriaChanges(
 /** La desserte en une ligne. */
 export function describeTransit(transit: TransitContext): string {
   const tram = transit.nearestTram
+  const approx = transit.approximate ? '≈ ' : ''
   return tram
-    ? `Tram le plus proche : ${tram.name}${tram.lines.length ? ` (ligne ${tram.lines.join(', ')})` : ''} à ${tram.distanceMeters} m`
+    ? `Tram le plus proche : ${tram.name}${tram.lines.length ? ` (ligne ${tram.lines.join(', ')})` : ''} à ${approx}${tram.distanceMeters} m${transit.reasons.length ? ` — ${transit.reasons.join(' ')}` : ''}`
     : 'Aucun arrêt de tram à moins de 2 km (ou arrêts TBM non importés)'
 }
 
@@ -397,7 +418,7 @@ function crowFlies(meters: number): string {
 }
 
 /** Un équipement proche en quelques mots : nom, nature, drive, distance. */
-function describeAmenity(amenity: NearbyAmenity): string {
+function describeAmenity(amenity: NearbyAmenity, approximate = false): string {
   const d = amenity.details
   const nature = [
     d.facilityType,
@@ -405,7 +426,7 @@ function describeAmenity(amenity: NearbyAmenity): string {
     d.lengthMeters ? `${d.lengthMeters} m` : null,
     amenity.drive ? DRIVE_STATUS_LABELS[amenity.drive].toLowerCase() : null,
   ].filter(Boolean)
-  return `${amenity.name}${nature.length ? ` (${nature.join(', ')})` : ''}${amenity.commune ? `, ${amenity.commune}` : ''} à ${crowFlies(amenity.distanceMeters)} à vol d’oiseau`
+  return `${amenity.name}${nature.length ? ` (${nature.join(', ')})` : ''}${amenity.commune ? `, ${amenity.commune}` : ''} à ${approximate ? '≈ ' : ''}${crowFlies(amenity.distanceMeters)} à vol d’oiseau`
 }
 
 /** Une valeur absente : « non disponible » sans import, sinon la raison. */
@@ -425,19 +446,19 @@ export function describeSurroundings(s: Surroundings): string[] {
   ]
   const one = (label: string, lookup: Surroundings['athleticsTrack']) =>
     lookup.nearest
-      ? `${label} : ${describeAmenity(lookup.nearest)}`
+      ? `${label} : ${describeAmenity(lookup.nearest, lookup.approximate)}`
       : `${label} : ${missing(lookup)}`
   lines.push(one('Piste d’athlétisme la plus proche', s.athleticsTrack))
   const drives = s.supermarkets
   if (drives.status === 'ok') {
     const parts = PREFERRED_SUPERMARKET_BRANDS.map(brand => {
       const found = drives.preferred[brand]
-      return `${SUPERMARKET_BRAND_LABELS[brand]} : ${found ? describeAmenity(found) : 'aucun dans le rayon'}`
+      return `${SUPERMARKET_BRAND_LABELS[brand]} : ${found ? describeAmenity(found, drives.approximate) : 'aucun dans le rayon'}`
     })
     lines.push(`Drives des enseignes préférées : ${parts.join(' ; ')}`)
     lines.push(
       drives.nearest
-        ? `Drive le plus proche toutes enseignes : ${describeAmenity(drives.nearest)}`
+        ? `Drive le plus proche toutes enseignes : ${describeAmenity(drives.nearest, drives.approximate)}`
         : `Drive le plus proche : aucun à moins de ${crowFlies(s.searchRadiusMeters)}`
     )
   } else {
@@ -451,6 +472,9 @@ export function describeSurroundings(s: Surroundings): string[] {
 export function describeContext(context: ListingContext): string {
   return [
     `Contexte (données ouvertes) :`,
+    ...(context.approximation.note
+      ? [`  - ${context.approximation.note}`]
+      : []),
     `  - ${describeTransit(context.transit)}`,
     `  - ${describeRentControl(context.rentControl)}`,
     `  - DPE ${context.dpe.verified ? 'vérifié auprès de l’ADEME' : 'non vérifié'} : ${context.dpe.validity.messages.join(' ')}${context.dpe.search && !context.dpe.verified && context.dpe.search.candidates.length ? ` (${context.dpe.search.candidates.length} DPE candidat(s) à l'ADEME, à valider dans l'application)` : ''}`,
@@ -746,7 +770,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         "Annonces de l'espace, filtrées (statut, commune, DPE, verdict, prix, surface, pièces, « nouvelles pour moi », recherche texte, point et rayon en mètres, critère enregistré `criteriaId` : son périmètre et ses filtres, exactement comme dans l'application), " +
         'triées et paginées (50 par page par défaut), chacune avec ses indicateurs calculés (coût, mensualité, rendements, effort, verdict, prix cible), ' +
         'son verdict de louabilité, ses avis et ses tâches. Sans filtre de statut : les annonces actives (à étudier, à visiter, visité, offre faite, offre acceptée). ' +
-        'Avec `near`, chaque annonce porte sa distance au point.',
+        'Avec `near`, chaque annonce porte sa distance au point. ' +
+        'Lot 12 : chaque annonce porte la précision de son repère (`location.precision` : exact au numéro, street à la rue, district au centre du quartier, commune au centre de la commune) et son placement (`location.placement` : méthode, quartier retenu, texte reconnu, « à vérifier ») ; le filtre `precision` (exact, street, district, commune, none) sépare les annonces exactement localisées des génériques.',
       inputSchema: McpListListingsInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -771,7 +796,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         'Une annonce complète : tous ses champs et leur provenance, ses indicateurs calculés, le détail des contrôles de louabilité (phase 2), ' +
         "le prix cible par critère, les avis des membres, les tâches (avec leurs identifiants), l'historique des prix, les critères de recherche dans lesquels elle est entrée, " +
         "et son contexte de données ouvertes (`context`) : arrêt de tram le plus proche (distance, ligne), plafond d'encadrement (Bordeaux), DPE vérifié auprès de l'ADEME et sa validité, comparables DVF datés ; " +
-        'et (lot 11) son quartier (quartier officiel, IRIS ou commune, avec sa source), la piste d’athlétisme, le drive le plus proche de chaque enseigne préférée (Carrefour, Auchan, Intermarché) et toutes enseignes, et la salle Fitness Park les plus proches, distances à vol d’oiseau (« non disponible » si la source n’est pas importée).',
+        'et (lot 11) son quartier (quartier officiel, IRIS ou commune, avec sa source), la piste d’athlétisme, le drive le plus proche de chaque enseigne préférée (Carrefour, Auchan, Intermarché) et toutes enseignes, et la salle Fitness Park les plus proches, distances à vol d’oiseau (« non disponible » si la source n’est pas importée). ' +
+        'Lot 12 : la précision du repère et son placement (`listing.location.placement` : adresse, quartier reconnu dans `district` avec sa zone et son texte, lieu-dit OpenStreetMap, centre de la commune ou point saisi) ; `context.approximation` dit quand les distances partent du centre du quartier ou de la commune (à lire « ≈ »). Dites-le au membre et proposez de préciser l’adresse.',
       inputSchema: McpGetListingInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -786,7 +812,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           ? `\nCritères : ${item.criteriaMatches.map(m => `« ${m.name} »${m.approximate ? ' (sous réserve)' : ''}`).join(', ')}`
           : ''
         return dataResult(
-          `${describeListing(item)}${criteria}\nContrôles de louabilité :\n${checks}\n${describeContext(context)}`,
+          `${describeListing(item)}${criteria}\n${describePlacement(item)}\nContrôles de louabilité :\n${checks}\n${describeContext(context)}`,
           { ...item, context }
         )
       })
@@ -890,6 +916,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       description:
         "Enregistre une annonce normalisée dans l'espace, avec la checklist par défaut et un premier événement de prix. Elle apparaît « nouvelle » pour les autres membres. " +
         "Donnez tout ce que l'annonce dit (prix FAI, surface Carrez, pièces, étage, DPE, charges annuelles, taxe foncière, adresse, commune, quartier, loyer visé dans rentalPlan, point GeoJSON [lng, lat] si connu) ; sans point, l'adresse est géocodée côté serveur. " +
+        'Placement du repère (lot 12) : mettez dans `location.addressRaw` l’adresse la plus précise que l’annonce ou le membre donne (numéro et rue : repère « exact ») ; et dans `location.district` le quartier ou secteur cité, du plus large au plus fin (« Bordeaux Sud, Victoire »), sans la commune ni les mentions de tram : sans numéro, le repère est placé au centre du quartier reconnu (précision `district`), sinon au centre de la commune (`commune`) ; les distances sont alors approchées. Ne passez un point que s’il est sûr (lu sur une carte de l’annonce) : il prime sur le géocodage. ' +
         'Passez la fiche rendue par extract_listing telle quelle (fieldSources : provenance, confiance et extrait par champ ; mettez `user` sur les champs que le membre a corrigés). ' +
         'La réponse liste les doublons probables (la création n’est pas bloquée ; `ignoreDuplicates: true` quand le membre a vu l’alerte et confirme), les tâches créées pour les champs indispensables manquants, ' +
         'les critères de recherche dans lesquels l’annonce entre (`criteriaChanges`), et les enrichissements open data faits côté serveur (arrêt de tram, plafond d’encadrement, prix médian DVF, DPE vérifié à l’ADEME). ' +
@@ -931,7 +958,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       description:
         'Mise à jour partielle : seuls les champs de `patch` changent ; un sous-objet fourni (travaux, phase 2, localisation) remplace l’existant. ' +
         'Garde-fous optimistes : `expectedUpdatedAt` (le `updatedAt` lu) et `expectedPrice` ; si l’annonce a changé entre-temps, rien n’est écrit et la réponse l’explique. ' +
-        'Un nouveau prix ajoute une ligne à l’historique. Portée listings:write.',
+        'Un nouveau prix ajoute une ligne à l’historique. ' +
+        'Pour préciser la localisation (lot 12), passez `location` entier (adresse au numéro dans `addressRaw`, commune, quartier cité dans `district`, sans `point`) : le repère est replacé côté serveur (adresse, sinon quartier reconnu, sinon commune) et les distances recalculées ; changer seulement le quartier ne touche pas un repère déjà à l’adresse (numéro ou rue). Portée listings:write.',
       inputSchema: McpUpdateListingInputSchema,
       annotations: {
         readOnlyHint: false,

@@ -10,6 +10,7 @@
   } from '@apart/contracts'
   import type {
     AmenityLookup,
+    LocationApproximation,
     NearbyAmenity,
     Surroundings,
   } from '@apart/contracts'
@@ -21,7 +22,19 @@
    * d'oiseau calculées par PostGIS, règles de `domain`). Une source non
    * importée s'affiche « non disponible ».
    */
-  const props = defineProps<{ surroundings: Surroundings }>()
+  const props = defineProps<{
+    surroundings: Surroundings
+    /** Lot 12 : d'où partent les distances quand le repère est approché. */
+    approximation?: LocationApproximation | null
+  }>()
+
+  /** « ≈ 1,2 km » depuis un repère approché (lot 12), « 1,2 km » sinon. */
+  function distance(
+    meters: number | null | undefined,
+    approximate: boolean
+  ): string {
+    return `${approximate ? '≈ ' : ''}${formatDistance(meters)}`
+  }
 
   const n = computed(() => props.surroundings.neighbourhood)
   /** « quartier Bordeaux maritime, Bordeaux » : le quartier parent et la commune. */
@@ -80,7 +93,10 @@
 <template>
   <div class="grid gap-2 text-sm" data-testid="surroundings">
     <h4 class="text-xs font-medium text-muted">
-      Quartier et équipements (à vol d’oiseau)
+      Quartier et équipements (à vol d’oiseau<template
+        v-if="approximation?.approximate"
+        >, ≈ depuis le {{ approximation.origin }}</template
+      >)
     </h4>
 
     <div class="grid gap-0.5" data-testid="surroundings-neighbourhood">
@@ -116,7 +132,12 @@
         Piste d’athlétisme la plus proche :
         <strong>{{ surroundings.athleticsTrack.nearest.name }}</strong>
         à
-        {{ formatDistance(surroundings.athleticsTrack.nearest.distanceMeters) }}
+        {{
+          distance(
+            surroundings.athleticsTrack.nearest.distanceMeters,
+            surroundings.athleticsTrack.approximate
+          )
+        }}
         <span
           v-if="nature(surroundings.athleticsTrack.nearest)"
           class="block text-xs text-muted"
@@ -146,7 +167,12 @@
             :
             <template v-if="drives.preferred[brand]">
               {{ drives.preferred[brand]?.name }} à
-              {{ formatDistance(drives.preferred[brand]?.distanceMeters) }}
+              {{
+                distance(
+                  drives.preferred[brand]?.distanceMeters,
+                  drives.approximate
+                )
+              }}
               <span
                 v-if="drives.preferred[brand]?.drive === 'to_verify'"
                 :class="STATUS_CLASSES.to_verify"
@@ -163,7 +189,7 @@
             <span class="font-medium">Toutes enseignes</span> :
             <template v-if="drives.nearest">
               {{ nearestLabel }} à
-              {{ formatDistance(drives.nearest.distanceMeters) }}
+              {{ distance(drives.nearest.distanceMeters, drives.approximate) }}
               <span
                 v-if="drives.nearest.drive === 'to_verify'"
                 :class="STATUS_CLASSES.to_verify"
@@ -182,7 +208,13 @@
       <p v-if="surroundings.fitnessPark.nearest">
         Fitness Park le plus proche :
         <strong>{{ surroundings.fitnessPark.nearest.name }}</strong>
-        à {{ formatDistance(surroundings.fitnessPark.nearest.distanceMeters) }}
+        à
+        {{
+          distance(
+            surroundings.fitnessPark.nearest.distanceMeters,
+            surroundings.fitnessPark.approximate
+          )
+        }}
         <span
           v-if="surroundings.fitnessPark.nearest.address"
           class="block text-xs text-muted"

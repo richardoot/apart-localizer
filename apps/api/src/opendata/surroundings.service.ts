@@ -5,6 +5,7 @@ import {
   NEIGHBOURHOOD_TERRITORY,
 } from '@apart/contracts'
 import type {
+  ListingPlacement,
   LocationPrecision,
   NearbyAmenity,
   Point,
@@ -44,10 +45,17 @@ export class SurroundingsService {
   async at(
     point: Point | null,
     precision: LocationPrecision | null,
-    at: Date = new Date()
+    at: Date = new Date(),
+    /** Lot 12 : comment le repère a été placé, pour les réserves « ≈ ». */
+    location: {
+      placement?: ListingPlacement | null
+      commune?: string | null
+    } = {}
   ): Promise<Surroundings> {
     const computedAt = at.toISOString()
     const sources = await this.sources()
+    const placement = location.placement ?? null
+    const commune = location.commune ?? null
     if (!point) {
       return surroundingsOf({
         point,
@@ -58,6 +66,8 @@ export class SurroundingsService {
         nearestFitnessPark: null,
         supermarketCandidates: [],
         computedAt,
+        placement,
+        commune,
       })
     }
     const radius = AMENITY_SEARCH_METERS
@@ -98,6 +108,8 @@ export class SurroundingsService {
       supermarketCandidates: drives.map(toNearbyAmenity),
       computedAt,
       radiusMeters: radius,
+      placement,
+      commune,
     })
   }
 }

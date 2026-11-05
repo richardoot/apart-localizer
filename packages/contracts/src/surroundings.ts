@@ -221,11 +221,20 @@ export const NeighbourhoodLookupSchema = z.object({
 })
 export type NeighbourhoodLookup = z.infer<typeof NeighbourhoodLookupSchema>
 
+/** Lot 12 : distances mesurées depuis un repère approché (centre du quartier ou de la commune). */
+const approximate = z
+  .boolean()
+  .default(false)
+  .describe(
+    'Vrai si la distance part d’un repère approché (centre du quartier, lieu-dit ou centre de la commune) : à lire « ≈ »'
+  )
+
 export const AmenityLookupSchema = z.object({
   status: OpenDataStatusSchema,
   nearest: NearbyAmenitySchema.nullable().describe(
     'Le plus proche à vol d’oiseau, dans le rayon de recherche'
   ),
+  approximate,
   reasons,
 })
 export type AmenityLookup = z.infer<typeof AmenityLookupSchema>
@@ -244,6 +253,7 @@ export const SupermarketsLookupSchema = z.object({
   nearest: NearbyAmenitySchema.nullable().describe(
     'Le drive le plus proche toutes enseignes confondues (même règle)'
   ),
+  approximate,
   reasons,
 })
 export type SupermarketsLookup = z.infer<typeof SupermarketsLookupSchema>

@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common'
-import type { NearestStop, Point, TransitContext } from '@apart/contracts'
+import type {
+  LocationApproximation,
+  NearestStop,
+  Point,
+  TransitContext,
+} from '@apart/contracts'
+import { approximationReason } from '@apart/domain'
 import { GeoService } from '../geo/geo.service'
 import type { NearestStop as NearestStopRow } from '../geo/geo.service'
 
@@ -11,13 +17,35 @@ export const TRANSIT_SEARCH_METERS = 2000
 export class TransitService {
   constructor(private readonly geo: GeoService) {}
 
-  async at(point: Point | null): Promise<TransitContext> {
-    if (!point) return { nearestTram: null, nearestStop: null }
+  /**
+   * Les arrêts les plus proches du point ; lot 12 : avec la réserve d'un
+   * repère approché (centre du quartier ou de la commune).
+   */
+  async at(
+    point: Point | null,
+    approximation: LocationApproximation | null = null
+  ): Promise<TransitContext> {
+    if (!point) {
+      return {
+        nearestTram: null,
+        nearestStop: null,
+        approximate: false,
+        reasons: [],
+      }
+    }
     const [tram, any] = await Promise.all([
       this.geo.nearestTransitStop(point, TRANSIT_SEARCH_METERS, 'tram'),
       this.geo.nearestTransitStop(point, TRANSIT_SEARCH_METERS),
     ])
-    return { nearestTram: toStop(tram), nearestStop: toStop(any) }
+    const reason = approximation
+      ? approximationReason('transit', approximation)
+      : null
+    return {
+      nearestTram: toStop(tram),
+      nearestStop: toStop(any),
+      approximate: reason !== null,
+      reasons: reason ? [reason] : [],
+    }
   }
 }
 

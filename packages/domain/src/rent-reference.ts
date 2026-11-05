@@ -125,6 +125,18 @@ export interface RentReferenceQuery {
    */
   zoneContainsPoint?: boolean
   precision: LocationPrecision | null
+  /**
+   * Lot 12 : pour un repère approché, la zone où le bien se trouve d'après
+   * l'annonce (quartier retenu, ou commune) et les zones d'encadrement
+   * qu'elle recoupe.
+   */
+  area?: {
+    /** « secteur « Stéhélin, Monséjour » », « commune de Bordeaux ». */
+    label: string
+    zones: readonly number[]
+    /** La zone sort en partie du zonage (secteur d'activité, hors commune). */
+    outsideZoning: boolean
+  } | null
   rooms: number | null
   constructionYear: number | null
   constructionPeriod: string | null
@@ -200,9 +212,7 @@ export function lookupRentReference(
       `Adresse localisée à la rue, sans numéro${query.zones[0] ? ` : zone ${query.zones[0].zone} probable` : ''} ; précisez le numéro pour confirmer la zone.`
     )
   } else if (query.precision !== 'exact') {
-    reasons.push(
-      "Adresse imprécise (quartier ou commune) : la zone d'encadrement ne peut pas être déterminée."
-    )
+    reasons.push(approximateZoneReason(query))
   }
   const distinct = [...new Set(query.zones.map(z => z.zone))]
   const zone = query.zones[0] ?? null
@@ -289,6 +299,29 @@ export function lookupRentReference(
     reasons,
     notes,
   }
+}
+
+/**
+ * Lot 12 : la zone d'un repère approché. Sa zone (quartier retenu, commune)
+ * tient dans une seule zone d'encadrement : zone probable, à confirmer avec
+ * l'adresse ; elle en chevauche plusieurs : zone à vérifier. Jamais « ok » :
+ * le quartier vient du texte de l'annonce.
+ */
+function approximateZoneReason(query: RentReferenceQuery): string {
+  const area = query.area
+  const at = query.zones[0] ? ` ; zone ${query.zones[0].zone} au repère` : ''
+  if (!area || area.zones.length === 0) {
+    return "Adresse imprécise (quartier ou commune) : la zone d'encadrement ne peut pas être déterminée."
+  }
+  if (area.zones.length === 1 && !area.outsideZoning) {
+    return `Repère approché, ${area.label} entièrement en zone ${area.zones[0]} : zone probable, à confirmer avec l’adresse.`
+  }
+  const zones = [...area.zones].sort((a, b) => a - b)
+  const list =
+    zones.length > 1
+      ? `les zones ${zones.slice(0, -1).join(', ')} et ${zones[zones.length - 1]}`
+      : `la zone ${zones[0]} et des secteurs hors zonage`
+  return `Repère approché, ${area.label} chevauche ${list} : zone à vérifier${at}.`
 }
 
 function frDate(day: string): string {

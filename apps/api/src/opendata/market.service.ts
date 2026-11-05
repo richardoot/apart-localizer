@@ -1,7 +1,14 @@
 import { Injectable } from '@nestjs/common'
 import { MARKET_MIN_COMPARABLES, MARKET_RADII } from '@apart/contracts'
-import type { DvfComparable, MarketContext, Point } from '@apart/contracts'
+import type {
+  DvfComparable,
+  LocationApproximation,
+  LocationPrecision,
+  MarketContext,
+  Point,
+} from '@apart/contracts'
 import {
+  approximationReason,
   comparableSurfaceRange,
   gapToMarket,
   marketPrice,
@@ -21,6 +28,13 @@ export interface MarketTarget {
   price?: number | null
   /** Rayon imposé ; absent = 500 m, élargi à 1 000 puis 2 000 m faute de ventes. */
   radiusMeters?: number | null
+  /**
+   * Lot 12 : la réserve d'un repère approché. Au centre du quartier : la
+   * médiane reste, signalée indicative ; au centre de la commune : « à
+   * vérifier » (les ventes du centre ne disent rien d'un autre quartier).
+   */
+  approximation?: LocationApproximation | null
+  precision?: LocationPrecision | null
 }
 
 /**
@@ -107,6 +121,10 @@ export class MarketService {
         `Données DVF disponibles jusqu'en ${last} (publication avec six mois à un an de décalage).`
       )
     }
+    const approximate = target.approximation
+      ? approximationReason('market', target.approximation)
+      : null
+    if (approximate) reasons.push(approximate)
     const listingPricePerM2 =
       target.price && surface ? target.price / surface : null
     const enough = stats !== null && stats.count >= MARKET_MIN_COMPARABLES
@@ -128,7 +146,10 @@ export class MarketService {
             : null,
       }))
     return {
-      status: enough && surface !== null ? 'ok' : 'to_verify',
+      status:
+        enough && surface !== null && target.precision !== 'commune'
+          ? 'ok'
+          : 'to_verify',
       point: target.point,
       radiusMeters: radius,
       surface,

@@ -7,7 +7,11 @@
     OfferUpdate,
     SensitivityAxis,
   } from '@apart/contracts'
-  import { mergeAssumptions } from '@apart/domain'
+  import {
+    locationApproximation,
+    mergeAssumptions,
+    precisionBadge,
+  } from '@apart/domain'
   import SidePanel from '@/components/ui/SidePanel.vue'
   import {
     useListing,
@@ -38,6 +42,7 @@
   import MetricsPreview from './MetricsPreview.vue'
   import NewBadge from './NewBadge.vue'
   import OpinionsSection from './OpinionsSection.vue'
+  import PrecisionBadge from './PrecisionBadge.vue'
   import RentalChecksList from './RentalChecksList.vue'
   import SensitivityTable from './SensitivityTable.vue'
   import StatusBadge from './StatusBadge.vue'
@@ -179,6 +184,20 @@
     tab.value = 'financer'
     void nextTick(() => {
       formBox.value?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+    })
+  }
+
+  /**
+   * Lot 12 : « Préciser l'adresse » ouvre le formulaire sur l'adresse. À
+   * l'enregistrement, le serveur replace le repère (adresse au numéro, sinon
+   * quartier reconnu, sinon commune).
+   */
+  function preciseAddress(): void {
+    startEditing()
+    void nextTick(() => {
+      const field = document.getElementById('f-address')
+      field?.focus?.({ preventScroll: true })
+      field?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
     })
   }
 
@@ -353,9 +372,26 @@
                 .join(' · ')
             }}
             <template v-if="item.distanceMeters !== null">
-              · à {{ formatDistance(item.distanceMeters) }}</template
+              · à
+              {{
+                locationApproximation(item.listing.location).approximate
+                  ? '≈ '
+                  : ''
+              }}{{ formatDistance(item.distanceMeters) }}</template
             >
           </span>
+          <PrecisionBadge :location="item.listing.location" />
+          <button
+            v-if="
+              !editing && precisionBadge(item.listing.location).tone !== 'exact'
+            "
+            type="button"
+            class="text-xs text-accent underline hover:text-fg"
+            data-testid="precise-address"
+            @click="preciseAddress"
+          >
+            Préciser l’adresse
+          </button>
         </div>
         <p class="text-xs text-muted">
           Ajoutée le {{ formatDate(item.listing.createdAt) }} · modifiée le
@@ -558,6 +594,8 @@
           <ContextSection
             :listing-id="item.listing.id"
             :updated-at="item.listing.updatedAt"
+            :location="item.listing.location"
+            @precise="preciseAddress"
           />
           <section
             class="grid gap-3 rounded-xl border border-line p-4"

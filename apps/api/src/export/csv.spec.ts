@@ -4,7 +4,7 @@ import {
   EvaluatedListingSchema,
   ListingInputSchema,
 } from '@apart/contracts'
-import { mergeAssumptions } from '@apart/domain'
+import { mergeAssumptions, precisionBadge } from '@apart/domain'
 import { evaluateListing } from '../listings/evaluate'
 import {
   LISTING_CSV_COLUMNS,
@@ -103,5 +103,7 @@ describe('CSV pour un tableur français', () => {
     expect(cell('Note moyenne (/5)')).toBe('4')
     expect(cell('Visites')).toBe(2)
     expect(cell('Ajoutée le')).toBe('2026-11-03')
+    // Lot 12 : la précision du repère, en clair.
+    expect(cell('Repère')).toBe(precisionBadge(item.listing.location).label)
   })
 })

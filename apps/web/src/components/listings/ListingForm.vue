@@ -234,15 +234,16 @@
         </datalist>
       </FormField>
       <FormField
-        label="Quartier / arrêt de tram"
+        label="Quartier ou secteur"
         for-id="f-district"
         v-bind="meta('f-district')"
+        hint="Sans numéro, le repère va au centre du quartier reconnu (« Bordeaux Sud, Victoire »), sinon de la commune"
       >
         <input
           id="f-district"
           v-model="form.district"
           :class="inputClass"
-          placeholder="Forum (tram B)"
+          placeholder="Bordeaux Sud, Victoire"
         />
       </FormField>
       <FormField

@@ -288,6 +288,8 @@ export const api = {
         `/listings${queryString(listingFiltersToQuery(filters))}`
       ),
     get: (id: string) => apiFetch<EvaluatedListing>(`/listings/${id}`),
+    /** Lot 12 : contours des annonces placées au quartier (GeoJSON), pour la carte. */
+    areas: () => apiFetch<LayerFeatureCollection>('/listings/areas'),
     create: (input: ListingCreateRaw) =>
       apiFetch<ListingCreateResult>('/listings', {
         method: 'POST',

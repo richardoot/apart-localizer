@@ -70,6 +70,10 @@ describe('CompareTable', () => {
     ).toHaveLength(0)
     await wrapper.findAll('thead button')[1]?.trigger('click')
     expect(wrapper.emitted('open')).toEqual([[dear.listing.id]])
+    // Lot 12 : la précision du repère de chaque annonce.
+    const precision = wrapper.get('[data-row="precision"]')
+    expect(precision.find('th').text()).toBe('Repère')
+    expect(precision.findAll('[data-testid="precision-badge"]')).toHaveLength(2)
   })
 
   it('lot 9 : « Coût tout compris » et la base de calcul de chaque indicateur', () => {

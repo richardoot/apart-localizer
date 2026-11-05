@@ -15,6 +15,32 @@ const apiMock = vi.hoisted(() => ({
     searchDpe: vi.fn(),
     verifyDpe: vi.fn(),
     regeocode: vi.fn(),
+    areas: vi.fn(() =>
+      Promise.resolve({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [-0.6, 44.8],
+                  [-0.59, 44.8],
+                  [-0.59, 44.81],
+                  [-0.6, 44.8],
+                ],
+              ],
+            },
+            properties: {
+              listingId: '11111111-1111-4111-8111-111111111111',
+              name: 'Secteur fictif',
+              level: 'sector',
+            },
+          },
+        ],
+      })
+    ),
   },
   opendata: {
     amenities: vi.fn(() =>
@@ -108,7 +134,12 @@ describe('ContextSection', () => {
     apiMock.listings.context.mockResolvedValueOnce(
       fakeContext({
         point: null,
-        transit: { nearestTram: null, nearestStop: null },
+        transit: {
+          nearestTram: null,
+          nearestStop: null,
+          approximate: false,
+          reasons: [],
+        },
         market: {
           ...fakeContext().market,
           stats: null,
@@ -162,6 +193,7 @@ describe('ContextSection', () => {
     const missing = {
       status: 'not_applicable' as const,
       nearest: null,
+      approximate: false,
       reasons: ['Annonce sans point : saisissez une adresse ou une commune.'],
     }
     apiMock.listings.context.mockResolvedValueOnce(
@@ -185,6 +217,7 @@ describe('ContextSection', () => {
               name: 'Fitness Park fictif',
               address: '9 avenue Fictive',
             }),
+            approximate: false,
             reasons: [],
           },
         }),
@@ -204,6 +237,91 @@ describe('ContextSection', () => {
     expect(
       wrapper.get('[data-testid="surroundings-fitness"]').text()
     ).toContain('9 avenue Fictive')
+    wrapper.unmount()
+  })
+
+  it('lot 12 : repère au quartier — pastille, explication, distances « ≈ », contour retenu, « Préciser l’adresse »', async () => {
+    const surroundings = fakeSurroundings()
+    apiMock.listings.context.mockResolvedValueOnce(
+      fakeContext({
+        precision: 'district',
+        placement: {
+          method: 'neighbourhood_match',
+          precision: 'district',
+          matchedText: 'Secteur fictif',
+          area: {
+            level: 'sector',
+            name: 'Secteur fictif',
+            codes: ['S1'],
+            commune: 'Bordeaux',
+            inseeCode: '33063',
+            source: 'Secteurs fictifs',
+            areaSquareMeters: 1_000_000,
+          },
+          toVerify: false,
+          reasons: [
+            'Secteur « Secteur fictif » reconnu dans « Secteur fictif ».',
+          ],
+          computedAt: '2026-11-05T10:00:00.000Z',
+        },
+        approximation: {
+          approximate: true,
+          origin: 'centre du secteur « Secteur fictif »',
+          note: 'Repère approché.',
+        },
+        transit: {
+          ...fakeContext().transit,
+          approximate: true,
+          reasons: ['Desserte mesurée depuis le centre du secteur (fictif).'],
+        },
+        surroundings: {
+          ...surroundings,
+          athleticsTrack: { ...surroundings.athleticsTrack, approximate: true },
+          supermarkets: { ...surroundings.supermarkets, approximate: true },
+        },
+      })
+    )
+    const wrapper = mountSection()
+    await flushPromises()
+    const placement = wrapper.get('[data-testid="placement"]')
+    expect(placement.text()).toContain('Au quartier (Secteur fictif)')
+    expect(placement.text()).toContain(
+      'repère au centre du secteur « Secteur fictif »'
+    )
+    expect(wrapper.get('[data-testid="placement-reasons"]').text()).toContain(
+      'reconnu dans'
+    )
+    expect(wrapper.get('[data-testid="transit"]').text()).toContain('à ≈ 240 m')
+    expect(wrapper.get('[data-testid="transit"]').text()).toContain(
+      'Desserte mesurée'
+    )
+    expect(wrapper.get('[data-testid="surroundings"]').text()).toContain(
+      '≈ depuis le centre du secteur « Secteur fictif »'
+    )
+    expect(wrapper.get('[data-testid="surroundings-track"]').text()).toContain(
+      'à ≈ 1,3 km'
+    )
+    expect(wrapper.get('[data-testid="surroundings-drives"]').text()).toContain(
+      '≈ 1,8 km'
+    )
+    await wrapper.get('[data-action="precise-address"]').trigger('click')
+    expect(wrapper.emitted('precise')).toHaveLength(1)
+    await flushPromises()
+    expect(apiMock.listings.areas).toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="retained-area-legend"]').exists()).toBe(
+      true
+    )
+    wrapper.unmount()
+  })
+
+  it('lot 12 : repère à l’adresse : pas de « ≈ », pas de bouton', async () => {
+    const wrapper = mountSection()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="placement"]').text()).toContain(
+      'Adresse exacte'
+    )
+    expect(wrapper.find('[data-action="precise-address"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="transit"]').text()).not.toContain('≈')
     wrapper.unmount()
   })
 })

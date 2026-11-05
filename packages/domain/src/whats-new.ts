@@ -251,6 +251,7 @@ export function listingChangedFields(
         fields.add('status')
         break
       case 'listing.geocoded':
+      case 'listing.relocated':
         fields.add('location')
         break
       default:

@@ -85,9 +85,14 @@ describe('réponses MCP du lot 4', () => {
   })
 
   it('desserte, encadrement, marché', () => {
-    expect(describeTransit({ nearestTram: null, nearestStop: null })).toContain(
-      'Aucun arrêt'
-    )
+    expect(
+      describeTransit({
+        nearestTram: null,
+        nearestStop: null,
+        approximate: false,
+        reasons: [],
+      })
+    ).toContain('Aucun arrêt')
     expect(
       describeTransit({
         nearestTram: {
@@ -98,8 +103,27 @@ describe('réponses MCP du lot 4', () => {
           point: { type: 'Point', coordinates: [0, 0] },
         },
         nearestStop: null,
+        approximate: false,
+        reasons: [],
       })
     ).toBe('Tram le plus proche : Forum (ligne B) à 120 m')
+    // Lot 12 : depuis un repère approché, la distance se lit « ≈ ».
+    expect(
+      describeTransit({
+        nearestTram: {
+          name: 'Forum',
+          mode: 'tram',
+          lines: [],
+          distanceMeters: 300,
+          point: { type: 'Point', coordinates: [0, 0] },
+        },
+        nearestStop: null,
+        approximate: true,
+        reasons: ['Desserte mesurée depuis le centre du quartier (fictif).'],
+      })
+    ).toBe(
+      'Tram le plus proche : Forum à ≈ 300 m — Desserte mesurée depuis le centre du quartier (fictif).'
+    )
     expect(describeRentControl(rent)).toContain(
       'loyer de référence majoré 17.5 €/m²'
     )
@@ -133,7 +157,14 @@ describe('réponses MCP du lot 4', () => {
       listingId: '11111111-1111-4111-8111-111111111111',
       point: null,
       precision: null,
-      transit: { nearestTram: null, nearestStop: null },
+      placement: null,
+      approximation: { approximate: false, origin: null, note: null },
+      transit: {
+        nearestTram: null,
+        nearestStop: null,
+        approximate: false,
+        reasons: [],
+      },
       rentControl: rent,
       dpe: {
         verified: false,
@@ -201,7 +232,12 @@ describe('réponses MCP du lot 4', () => {
         },
         market,
         rentControl: rent,
-        transit: { nearestTram: null, nearestStop: null },
+        transit: {
+          nearestTram: null,
+          nearestStop: null,
+          approximate: false,
+          reasons: [],
+        },
       })
     ).toContain('-0.58, 44.84')
   })
