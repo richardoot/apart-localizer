@@ -260,9 +260,10 @@ export const NegotiationArgumentKindSchema = z
     'charges',
     'previous_offer',
     'in_target',
+    'republished',
   ])
   .describe(
-    'Levier de négociation factuel : durée en ligne, baisses passées, DPE, travaux, charges élevées, offre précédente, déjà dans la cible'
+    'Levier de négociation factuel : durée en ligne, baisses passées, DPE, travaux, charges élevées, offre précédente, déjà dans la cible, annonce republiée (lot 15)'
   )
 export type NegotiationArgumentKind = z.infer<
   typeof NegotiationArgumentKindSchema

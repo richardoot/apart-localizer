@@ -16,9 +16,10 @@ export const ListingSortSchema = z
     'opinion',
     'createdAt',
     'discount',
+    'lastCheckedAt',
   ])
   .describe(
-    'Clé de tri : score (meilleur verdict), rendement brut ou net, effort, prix au m², prix, surface, compatibilité location, avis moyen, date d’ajout, décote'
+    'Clé de tri : score (meilleur verdict), rendement brut ou net, effort, prix au m², prix, surface, compatibilité location, avis moyen, date d’ajout, décote, dernière vérification sur le portail (à défaut, date d’ajout ; croissant = la plus ancienne d’abord)'
   )
 export type ListingSort = z.infer<typeof ListingSortSchema>
 
@@ -80,6 +81,15 @@ export const ListingFiltersSchema = z.object({
     .uuid()
     .optional()
     .describe('Critère de recherche enregistré à appliquer'),
+  staleDays: z
+    .number()
+    .int()
+    .min(1)
+    .max(365)
+    .optional()
+    .describe(
+      'Lot 15 : seulement les annonces à revérifier, actives et sans vérification depuis plus de N jours (à défaut de vérification, depuis leur ajout) ; 7 dans l’application'
+    ),
   near: PointRadiusSchema.optional().describe(
     'Point et rayon : annonces dans le rayon, avec leur distance en mètres'
   ),
@@ -156,6 +166,7 @@ export const ListingListQuerySchema = z.object({
   roomsMin: integer(0),
   newForMe: bool,
   criteriaId: z.string().uuid().optional(),
+  staleDays: integer(1, 365),
   lng: optionalNumber(z.coerce.number().min(-180).max(180)),
   lat: optionalNumber(z.coerce.number().min(-90).max(90)),
   radius: integer(1, 50_000),
@@ -194,6 +205,7 @@ export function listingFiltersFromQuery(
     ...(query.roomsMin !== undefined ? { roomsMin: query.roomsMin } : {}),
     ...(query.newForMe !== undefined ? { newForMe: query.newForMe } : {}),
     ...(query.criteriaId ? { criteriaId: query.criteriaId } : {}),
+    ...(query.staleDays !== undefined ? { staleDays: query.staleDays } : {}),
     ...(near ? { near } : {}),
     ...(query.search ? { search: query.search } : {}),
     sort: query.sort,
@@ -230,6 +242,7 @@ export function listingFiltersToQuery(
   num('roomsMin', filters.roomsMin)
   if (filters.newForMe) query.newForMe = 'true'
   if (filters.criteriaId) query.criteriaId = filters.criteriaId
+  num('staleDays', filters.staleDays)
   if (filters.near) {
     query.lng = String(filters.near.longitude)
     query.lat = String(filters.near.latitude)

@@ -87,6 +87,7 @@ export const useFiltersStore = defineStore('filters', () => {
     if (f.surfaceMin !== undefined || f.surfaceMax !== undefined) count += 1
     if (f.roomsMin !== undefined) count += 1
     if (f.newForMe) count += 1
+    if (f.staleDays !== undefined) count += 1
     if (f.near) count += 1
     if (f.criteriaId) count += 1
     if (f.search) count += 1

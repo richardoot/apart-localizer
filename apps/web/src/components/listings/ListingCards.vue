@@ -12,6 +12,7 @@
   import CostBasisBadge from './CostBasisBadge.vue'
   import DpeBadge from './DpeBadge.vue'
   import CriteriaBadges from './CriteriaBadges.vue'
+  import CheckFreshnessBadge from './CheckFreshnessBadge.vue'
   import NewBadge from './NewBadge.vue'
   import PrecisionBadge from './PrecisionBadge.vue'
   import RentalPill from './RentalPill.vue'
@@ -59,7 +60,13 @@
               }}{{ formatDistance(item.distanceMeters) }}</template
             >
           </p>
-          <PrecisionBadge :location="item.listing.location" />
+          <div class="flex flex-wrap items-center gap-2">
+            <PrecisionBadge :location="item.listing.location" />
+            <CheckFreshnessBadge
+              :listing="item.listing"
+              :last-outcome="item.lastCheck?.outcome ?? null"
+            />
+          </div>
         </div>
         <VerdictPill :verdict="item.evaluation.metrics.verdict" />
       </header>

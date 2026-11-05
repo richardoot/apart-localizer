@@ -1,4 +1,5 @@
 import {
+  LISTING_CHECK_OUTCOME_LABELS,
   LISTING_STATUS_LABELS,
   RENTAL_VERDICT_LABELS,
   VERDICT_LABELS,
@@ -101,6 +102,10 @@ export const LISTING_CSV_COLUMNS = [
   'Ajoutée le',
   'Modifiée le',
   'Identifiant',
+  // Lot 15, en fin de ligne pour ne décaler aucune colonne.
+  'Vérifiée le',
+  'Vue en ligne le',
+  'Dernière vérification',
 ] as const
 
 /** Une ligne par annonce, dans l'ordre de `LISTING_CSV_COLUMNS`. */
@@ -158,5 +163,8 @@ export function listingCsvRow(
     day(l.createdAt),
     day(l.updatedAt),
     l.id,
+    day(l.lastCheckedAt),
+    day(l.lastSeenOnlineAt),
+    item.lastCheck ? LISTING_CHECK_OUTCOME_LABELS[item.lastCheck.outcome] : '',
   ]
 }

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { Prisma } from '../generated/prisma'
-import { toListingDto, num } from './listing.mapper'
+import {
+  toLastCheck,
+  toListingCheckDto,
+  toListingDto,
+  toRepublication,
+  num,
+} from './listing.mapper'
 import type { ListingRow } from './listing.mapper'
 import { evaluateListing } from './evaluate'
 import { DEFAULT_ASSUMPTIONS } from '@apart/contracts'
@@ -72,6 +78,9 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     discardedAt: null,
     assumptionsOverride: null,
     openDataContext: null,
+    lastCheckedAt: null,
+    lastSeenOnlineAt: null,
+    republishedFromId: null,
     createdById: null,
     createdAt: now,
     updatedAt: now,
@@ -98,6 +107,9 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     priceEvents: [],
     offers: [],
     criteriaMatches: [],
+    checks: [],
+    republishedFrom: null,
+    republishedAs: null,
     ...over,
   }
 }
@@ -170,5 +182,77 @@ describe('toListingDto', () => {
     expect(bare.rental.checks.find(c => c.key === 'demand')?.level).toBe(
       'unknown'
     )
+  })
+})
+
+describe('lot 15 : vérifications et republication', () => {
+  const check = {
+    id: '44444444-4444-4444-8444-444444444444',
+    listingId: '11111111-1111-4111-8111-111111111111',
+    workspaceId: '22222222-2222-4222-8222-222222222222',
+    checkedAt: now,
+    authorId: null,
+    channel: 'mcp' as const,
+    outcome: 'changed' as const,
+    changes: [
+      {
+        field: 'price',
+        label: 'Prix',
+        before: 215000,
+        after: 205000,
+        disposition: 'applied',
+        text: 'Prix 215 000 € → 205 000 €',
+      },
+      { field: 'inconnu' },
+    ],
+    summary: 'Prix 215 000 € → 205 000 €',
+    evidence: null,
+    checkedUrl: null,
+    linkedListingId: null,
+    suggestedStatus: null,
+  }
+
+  it('dates de vérification, republication et dernier résultat', () => {
+    const dto = toListingDto(
+      row({
+        lastCheckedAt: now,
+        lastSeenOnlineAt: now,
+        republishedFromId: '55555555-5555-4555-8555-555555555555',
+      })
+    )
+    expect(dto.lastCheckedAt).toBe('2026-11-03T10:00:00.000Z')
+    expect(dto.lastSeenOnlineAt).toBe('2026-11-03T10:00:00.000Z')
+    expect(dto.republishedFromId).toBe('55555555-5555-4555-8555-555555555555')
+    expect(toLastCheck(row())).toBeNull()
+    expect(toLastCheck(row({ checks: [check] }))).toEqual({
+      id: check.id,
+      checkedAt: '2026-11-03T10:00:00.000Z',
+      channel: 'mcp',
+      authorId: null,
+      outcome: 'changed',
+      summary: 'Prix 215 000 € → 205 000 €',
+    })
+    expect(
+      toLastCheck(row({ checks: [{ ...check, channel: 'system' }] }))?.channel
+    ).toBe('web')
+    const linked = {
+      id: '55555555-5555-4555-8555-555555555555',
+      title: 'T3 (1re publication)',
+      status: 'sold_or_withdrawn' as const,
+    }
+    expect(toRepublication(row({ republishedFrom: linked }))).toEqual({
+      from: linked,
+      to: null,
+    })
+  })
+
+  it('une vérification : écarts illisibles omis, annonce liée', () => {
+    const dto = toListingCheckDto({ ...check, linkedListing: null })
+    expect(dto.changes).toHaveLength(1)
+    expect(dto.channel).toBe('mcp')
+    expect(dto.linkedListing).toBeNull()
+    expect(
+      toListingCheckDto({ ...check, changes: null, channel: 'web' }).changes
+    ).toEqual([])
   })
 })

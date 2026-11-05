@@ -89,6 +89,22 @@ export function whatsNewKindOf(
     }
     case 'listing.status_changed':
       return 'status_change'
+    case 'listing.checked': {
+      // Lot 15 : seule une vérification qui a trouvé quelque chose compte ;
+      // un prix changé est un changement de prix.
+      const after = event.after as Record<string, unknown> | null
+      const outcome = after?.outcome
+      if (
+        outcome !== 'changed' &&
+        outcome !== 'offline' &&
+        outcome !== 'republished'
+      )
+        return null
+      const facts = after?.facts as Record<string, unknown> | null | undefined
+      return facts && typeof facts === 'object' && 'price' in facts
+        ? 'price_change'
+        : 'listing_check'
+    }
     case 'opinion.created':
     case 'opinion.updated':
       return byOther ? 'opinion' : null
@@ -120,7 +136,17 @@ function itemOf(
   let summary = `${who} ${description.summary}`
   let from: string | null = null
   let to: string | null = null
-  if (kind === 'new_listing') {
+  if (event.action === 'listing.checked') {
+    // Lot 15 : le résumé de la vérification, prix avant et après s'il change.
+    const facts = (record: Record<string, unknown> | null) =>
+      (record?.facts as Record<string, unknown> | undefined) ?? undefined
+    if (kind === 'price_change') {
+      from = formatActivityValue('price', facts(before)?.price, names)
+      to = formatActivityValue('price', facts(after)?.price, names)
+    }
+    const text = typeof after?.summary === 'string' ? after.summary : ''
+    summary = `Vérifiée sur le portail par ${who} : ${text}`
+  } else if (kind === 'new_listing') {
     summary = `Ajoutée par ${who}`
   } else if (kind === 'price_change') {
     from = formatActivityValue('price', before?.price, names)
@@ -247,6 +273,17 @@ export function listingChangedFields(
       case 'listing.price_changed':
         fields.add('price')
         break
+      case 'listing.checked': {
+        const before = event.before as Record<string, unknown> | null
+        const after = event.after as Record<string, unknown> | null
+        for (const change of activityChanges(
+          before?.facts ?? null,
+          after?.facts ?? null
+        )) {
+          fields.add(change.field)
+        }
+        break
+      }
       case 'listing.status_changed':
         fields.add('status')
         break

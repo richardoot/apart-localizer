@@ -87,6 +87,16 @@ export function notificationTypeOf(
         : null
     case 'member.joined':
       return str(event.after, 'via') === 'invitation' ? 'member_joined' : null
+    case 'listing.checked': {
+      // Lot 15 : une vérification qui a trouvé quelque chose (jamais une
+      // vérification inchangée ni une page inaccessible).
+      const outcome = str(event.after, 'outcome')
+      return outcome === 'changed' ||
+        outcome === 'offline' ||
+        outcome === 'republished'
+        ? 'listing_checked'
+        : null
+    }
     default:
       return null
   }
@@ -179,6 +189,11 @@ export function notificationsForActivity(
       body = `À valider${subject ? ` : « ${subject.slice(0, 120)} »` : ''}.`
       break
     }
+    case 'listing_checked': {
+      heading = `Mise à jour : ${title}`
+      body = `${str(event.after, 'summary') ?? 'Annonce vérifiée sur le portail'} (vérifiée par ${who}).`
+      break
+    }
     case 'member_joined': {
       const name =
         (event.actorMemberId
@@ -206,7 +221,9 @@ export function notificationsForActivity(
         ? '/?brouillons=1'
         : type === 'member_joined'
           ? '/espace'
-          : url,
+          : type === 'listing_checked' && url
+            ? `${url}?onglet=suivi`
+            : url,
     listingId: event.listingId,
   }))
 }

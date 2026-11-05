@@ -150,7 +150,8 @@ http://localhost:3000/mcp` ([développement local](docs/developpement-local.md#t
   actifs avec leurs annonces et leurs nouveautés pour moi, nouvelles annonces, meilleures
   annonces.
 - **Annonces** (`/annonces`) : filtres partagés (statut, commune, critère enregistré, verdict,
-  DPE, prix, recherche, « nouvelles pour moi », point et rayon) synchronisés avec l'URL, trois
+  DPE, prix, recherche, « nouvelles pour moi », « à revérifier », point et rayon) synchronisés
+  avec l'URL ; chaque annonce dit « Vérifiée il y a 3 j » ou « À revérifier » (lot 15) ; trois
   vues : tableau comparatif (TanStack Table, tri par colonne), cartes (mobile), carte MapLibre
   (marqueurs colorés par verdict ou statut, popup vers la fiche, clic = point du filtre, curseur
   de rayon, couches activables : périmètres des critères, arrêts de tram et de bus, ventes DVF
@@ -209,7 +210,10 @@ http://localhost:3000/mcp` ([développement local](docs/developpement-local.md#t
   DPE vérifié auprès de l'ADEME avec les candidats à retenir et la validité, plafond
   d'encadrement et son état, ventes DVF comparables datées avec la médiane au m², carte
   miniature, relance du géocodage) et risques Géorisques à l'adresse. **Suivi** (avec le nombre de
-  tâches ouvertes) : avis des deux membres, tâches (dont « IA · champ manquant »), **visites**
+  tâches ouvertes) : **mises à jour** (lot 15 : chronologie des vérifications de l'annonce sur
+  son portail, par Claude ou un membre, avec le résultat, les changements avant → après, l'extrait
+  de la page et l'annonce rattachée par une republication ; « Vue en ligne aujourd'hui » et
+  « Plus en ligne », dont le statut proposé n'est appliqué qu'après confirmation), avis des deux membres, tâches (dont « IA · champ manquant »), **visites**
   (faites ou planifiées, participants, compte rendu, points positifs et négatifs, note, tâche
   « Préparer la visite », statut « Visité » proposé sans être forcé, photos réduites sur
   l'appareil, envoyées dans un stockage privé, vignettes par URL signées, supprimables par leur

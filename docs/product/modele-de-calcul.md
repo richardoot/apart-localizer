@@ -265,6 +265,16 @@ brief de négociation (`negotiationBrief`, fonction pure, aucune IA) donne :
   40 €/m²/an, offre précédente (refusée, contre-proposition sous ou au-dessus du prix cible, en
   attente, acceptée), et « déjà dans la cible » quand la décote est négative.
 
+**Republication (lot 15, ADR 0025).** Quand l'annonce est rattachée à une publication antérieure
+du même bien (`republishedFromId`, de proche en proche), la durée en ligne part de la
+publication d'origine (sa date de publication, sinon son ajout), et l'historique des prix est
+celui de la chaîne : le premier prix d'une republication a pour ancien prix le dernier prix de la
+publication précédente, si bien que republier moins cher compte comme une baisse. Le brief
+porte alors `republication` (nombre de publications antérieures, origine, première publication)
+et l'argument « Annonce republiée : le bien n'a pas trouvé preneur à sa première publication ».
+Exemple : publiée à 152 000 €, baissée à 149 000 €, retirée, republiée à 145 000 € puis baissée
+à 139 000 € : trois baisses, −13 000 € (8,6 %) depuis 152 000 €.
+
 Le **rang** d'une annonce est sa position par décote nécessaire croissante parmi les annonces
 actives de l'espace dont le prix cible est calculable (1 = la plus proche de sa cible). Les
 offres enregistrées (montant, date, canal, réponse, contre-proposition) **proposent** un statut

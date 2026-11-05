@@ -55,6 +55,35 @@ export const PriceDropsSummarySchema = z.object({
 })
 export type PriceDropsSummary = z.infer<typeof PriceDropsSummarySchema>
 
+/**
+ * La chaîne de republication d'une annonce (lot 15) : combien de
+ * publications antérieures du même bien sont rattachées, depuis quand le
+ * bien est en ligne.
+ */
+export const RepublicationChainSummarySchema = z.object({
+  count: z
+    .number()
+    .int()
+    .min(1)
+    .describe('Publications antérieures rattachées (1 = une republication)'),
+  firstListingId: z
+    .string()
+    .uuid()
+    .nullable()
+    .describe('La publication d’origine'),
+  firstTitle: z.string().nullable(),
+  firstSeenAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .describe(
+      'Première publication constatée (date de publication, à défaut d’ajout) de la publication d’origine'
+    ),
+})
+export type RepublicationChainSummary = z.infer<
+  typeof RepublicationChainSummarySchema
+>
+
 export const LastOfferSummarySchema = z.object({
   amount: z.number().describe('Montant de la dernière offre en euros'),
   response: OfferResponseSchema,
@@ -116,5 +145,10 @@ export const NegotiationBriefSchema = z.object({
   priceDrops: PriceDropsSummarySchema,
   lastOffer: LastOfferSummarySchema.nullable(),
   arguments: z.array(NegotiationArgumentSchema),
+  republication: RepublicationChainSummarySchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 15 : annonce republiée (même bien, publication antérieure rattachée) ; durée en ligne et baisses comptées depuis la première publication ; null sinon'
+    ),
 })
 export type NegotiationBrief = z.infer<typeof NegotiationBriefSchema>

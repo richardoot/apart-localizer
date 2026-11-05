@@ -45,6 +45,7 @@ import {
   McpListVisitsInputSchema,
   McpWhatsNewInputSchema,
   McpListMembersInputSchema,
+  LISTING_CHECK_OUTCOME_LABELS,
   MEMBER_ROLE_LABELS,
   VISIT_STATUS_LABELS,
   WHATS_NEW_KIND_LABELS,
@@ -87,6 +88,8 @@ import type {
   WorkspaceMe,
 } from '@apart/contracts'
 import {
+  checkFreshness,
+  formatCheckDay,
   formatEuros,
   formatPercent,
   mergeAssumptions,
@@ -95,6 +98,7 @@ import {
 import type { Member } from '../generated/prisma'
 import type { DuplicatesService } from '../listings/duplicates.service'
 import type { ExtractionService } from '../listings/extraction.service'
+import type { ListingChecksService } from '../listings/listing-checks.service'
 import type { ListingsService } from '../listings/listings.service'
 import type { TargetPriceService } from '../listings/target-price.service'
 import type { ListingEnrichmentService } from '../listings/enrichment.service'
@@ -133,6 +137,8 @@ export interface McpToolContext {
   compliance: ComplianceService
   visits: VisitsService
   whatsNew: WhatsNewService
+  /** Lot 15 : vérifications des annonces sur le portail. */
+  checks: ListingChecksService
 }
 
 const CHANNEL = 'mcp' as const
@@ -142,7 +148,8 @@ const CHANNEL = 'mcp' as const
  * (extraction et doublons), lot 3 (prix cible, offres, prix, comparaison,
  * hypothèses), lot 4 (critères de recherche, contexte de marché), lot 5
  * (scénarios, projection, conformité, comparables de loyer), lot 6
- * (visites, « ce qui a changé »), lot 8 (membres, en lecture seule).
+ * (visites, « ce qui a changé »), lot 8 (membres, en lecture seule), lot 15
+ * (vérification des annonces sur le portail, `mcp-checks.ts`).
  */
 export const MCP_TOOL_NAMES = [
   'list_listings',
@@ -174,10 +181,12 @@ export const MCP_TOOL_NAMES = [
   'list_visits',
   'whats_new',
   'list_members',
+  'check_listing',
+  'apply_listing_check',
 ] as const
 
-/** Les prompts du connecteur. */
-export const MCP_PROMPT_NAMES = ['analyze_listing'] as const
+/** Les prompts du connecteur ; `review_listings` (lot 15) est dans `mcp-checks.ts`. */
+export const MCP_PROMPT_NAMES = ['analyze_listing', 'review_listings'] as const
 
 /** Les ressources du connecteur : schéma d'annonce et glossaire. */
 export const MCP_RESOURCE_URIS = [
@@ -207,6 +216,18 @@ export function describeListing(item: EvaluatedListing): string {
   if (item.distanceMeters !== null)
     parts.push(`à ${Math.round(item.distanceMeters)} m`)
   return parts.join(' · ')
+}
+
+/** Lot 15 : « dernière vérification le 2 novembre 2026 : Inchangée », « à revérifier (jamais vérifiée) ». */
+export function describeCheckState(
+  item: EvaluatedListing,
+  now: Date = new Date()
+): string {
+  const freshness = checkFreshness(item.listing, now)
+  const last = item.lastCheck
+    ? `dernière vérification le ${formatCheckDay(item.lastCheck.checkedAt)} : ${LISTING_CHECK_OUTCOME_LABELS[item.lastCheck.outcome]}`
+    : 'jamais vérifiée'
+  return freshness.stale ? `à revérifier (${last})` : last
 }
 
 /**
@@ -771,7 +792,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         'triées et paginées (50 par page par défaut), chacune avec ses indicateurs calculés (coût, mensualité, rendements, effort, verdict, prix cible), ' +
         'son verdict de louabilité, ses avis et ses tâches. Sans filtre de statut : les annonces actives (à étudier, à visiter, visité, offre faite, offre acceptée). ' +
         'Avec `near`, chaque annonce porte sa distance au point. ' +
-        'Lot 12 : chaque annonce porte la précision de son repère (`location.precision` : exact au numéro, street à la rue, district au centre du quartier, commune au centre de la commune) et son placement (`location.placement` : méthode, quartier retenu, texte reconnu, « à vérifier ») ; le filtre `precision` (exact, street, district, commune, none) sépare les annonces exactement localisées des génériques.',
+        'Lot 12 : chaque annonce porte la précision de son repère (`location.precision` : exact au numéro, street à la rue, district au centre du quartier, commune au centre de la commune) et son placement (`location.placement` : méthode, quartier retenu, texte reconnu, « à vérifier ») ; le filtre `precision` (exact, street, district, commune, none) sépare les annonces exactement localisées des génériques. ' +
+        'Lot 15 : chaque annonce porte `listing.lastCheckedAt` (dernière vérification sur le portail), `listing.lastSeenOnlineAt` (dernière fois vue en ligne) et `lastCheck` (date, résultat, résumé) ; `staleDays: 7` ne garde que les annonces à revérifier (actives, sans vérification depuis plus de N jours, à défaut depuis leur ajout) et `sort: "lastCheckedAt"`, `order: "asc"` les range de la plus ancienne vérification à la plus récente : la file de la tournée de mise à jour (prompt review_listings).',
       inputSchema: McpListListingsInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -779,7 +801,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       answer(async () => {
         const page = await ctx.listings.list(ctx.member, filters)
         const lines = page.items.map(
-          item => `- ${describeListing(item)} [id ${item.listing.id}]`
+          item =>
+            `- ${describeListing(item)} · ${describeCheckState(item)} [id ${item.listing.id}]`
         )
         const summary =
           `${page.total} annonce(s), page ${page.page}/${Math.max(page.pageCount, 1)}` +

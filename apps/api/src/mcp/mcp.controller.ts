@@ -28,6 +28,8 @@ import { RentComparablesService } from '../study/rent-comparables.service'
 import { ComplianceService } from '../study/compliance.service'
 import { VisitsService } from '../visits/visits.service'
 import { WhatsNewService } from '../whats-new/whats-new.service'
+import { ListingChecksService } from '../listings/listing-checks.service'
+import { registerCheckPrompts, registerCheckTools } from './mcp-checks'
 import { McpAuthGuard } from './mcp-auth.guard'
 import type { McpAuthenticatedRequest } from './mcp-auth.guard'
 import { registerPrompts, registerResources, registerTools } from './mcp-tools'
@@ -62,7 +64,8 @@ export class McpController {
     private readonly comparables: RentComparablesService,
     private readonly compliance: ComplianceService,
     private readonly visits: VisitsService,
-    private readonly whatsNew: WhatsNewService
+    private readonly whatsNew: WhatsNewService,
+    private readonly checks: ListingChecksService
   ) {}
 
   @Post()
@@ -87,7 +90,7 @@ export class McpController {
     body?: unknown
   ): Promise<void> {
     const server = new McpServer(MCP_SERVER_INFO)
-    registerTools(server, {
+    const context = {
       member: req.member,
       scopes: req.mcpScopes,
       listings: this.listings,
@@ -107,8 +110,13 @@ export class McpController {
       compliance: this.compliance,
       visits: this.visits,
       whatsNew: this.whatsNew,
-    })
+      checks: this.checks,
+    }
+    registerTools(server, context)
+    // Lot 15 : vérification des annonces sur le portail.
+    registerCheckTools(server, context)
     registerPrompts(server)
+    registerCheckPrompts(server)
     registerResources(server)
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

@@ -379,6 +379,33 @@ export function describeActivity(
         ].filter(c => c.before !== c.after)
       )
     }
+    case 'listing.checked': {
+      // Lot 15 : une vérification sur le portail ; les faits appliqués
+      // sont dans `facts`, avant et après.
+      const outcome = text(after, 'outcome')
+      const heads: Record<string, string> = {
+        unchanged: "a vérifié l'annonce sur le portail : inchangée",
+        changed: "a vérifié l'annonce sur le portail : mise à jour",
+        offline: "a vérifié l'annonce sur le portail : plus en ligne",
+        republished: "a vérifié l'annonce sur le portail : republiée",
+        inaccessible:
+          "n'a pas pu vérifier l'annonce : page inaccessible (rien n'est vérifié)",
+      }
+      const suggested = text(after, 'suggestedStatus')
+      const head =
+        (outcome ? heads[outcome] : undefined) ??
+        "a vérifié l'annonce sur le portail"
+      return describe(
+        suggested
+          ? `${head} ; statut proposé « ${formatActivityValue('status', suggested, members) ?? suggested} » (non appliqué)`
+          : head,
+        activityChanges(
+          isRecord(before) ? before.facts : null,
+          isRecord(after) ? after.facts : null,
+          members
+        )
+      )
+    }
     case 'listing.enriched':
       return describe(
         'données ouvertes mises à jour (tram, plafond, marché, quartier, équipements)'

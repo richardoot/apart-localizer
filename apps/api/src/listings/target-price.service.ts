@@ -27,8 +27,9 @@ import {
 import { PrismaService } from '../prisma/prisma.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
 import type { Member } from '../generated/prisma'
+import type { NegotiationPredecessor } from '@apart/domain'
 import { evaluateListing } from './evaluate'
-import { listingInclude } from './listing.mapper'
+import { listingInclude, toPriceEventDto } from './listing.mapper'
 import { ListingsService } from './listings.service'
 
 /**
@@ -72,6 +73,11 @@ export class TargetPriceService {
       !options.scenario && ACTIVE_LISTING_STATUSES.includes(item.listing.status)
         ? await this.rankAmongActive(member, id)
         : null
+    // Lot 15 : une republication rattachée compte dans la durée en ligne et les baisses.
+    const predecessors = await this.republicationChain(
+      member,
+      item.listing.republishedFromId
+    )
     return TargetPriceReportSchema.parse({
       listingId: item.listing.id,
       title: item.listing.title,
@@ -79,7 +85,7 @@ export class TargetPriceService {
       price: item.listing.price,
       targetPrice: item.evaluation.targetPrice,
       rank,
-      negotiation: briefOf(item, assumptions),
+      negotiation: briefOf(item, assumptions, undefined, predecessors),
       notaryFees: item.evaluation.metrics.notaryFeesDetail,
       assumptions,
       sensitivity: options.sensitivity
@@ -192,6 +198,43 @@ export class TargetPriceService {
     })
   }
 
+  /**
+   * Les publications antérieures du même bien (lot 15), de la plus ancienne
+   * à la plus récente, en remontant `republishedFromId` (vingt au plus).
+   */
+  async republicationChain(
+    member: Member,
+    fromId: string | null
+  ): Promise<NegotiationPredecessor[]> {
+    const chain: NegotiationPredecessor[] = []
+    const seen = new Set<string>()
+    let next = fromId
+    while (next !== null && !seen.has(next) && seen.size < 20) {
+      seen.add(next)
+      const row = await this.prisma.listing.findFirst({
+        where: { id: next, workspaceId: member.workspaceId },
+        select: {
+          id: true,
+          title: true,
+          publishedAt: true,
+          createdAt: true,
+          republishedFromId: true,
+          priceEvents: { orderBy: { occurredAt: 'asc' } },
+        },
+      })
+      if (!row) break
+      chain.unshift({
+        id: row.id,
+        title: row.title,
+        publishedAt: row.publishedAt?.toISOString() ?? null,
+        createdAt: row.createdAt.toISOString(),
+        priceEvents: row.priceEvents.map(toPriceEventDto),
+      })
+      next = row.republishedFromId
+    }
+    return chain
+  }
+
   /** Rang par décote nécessaire croissante parmi les annonces actives de l'espace. */
   private async rankAmongActive(
     member: Member,
@@ -234,10 +277,12 @@ export class TargetPriceService {
 export function briefOf(
   item: EvaluatedListing,
   assumptions: Assumptions,
-  now?: Date
+  now?: Date,
+  predecessors: readonly NegotiationPredecessor[] = []
 ): NegotiationBrief {
   return negotiationBrief(
     {
+      predecessors,
       price: item.listing.price,
       publishedAt: item.listing.publishedAt,
       createdAt: item.listing.createdAt,

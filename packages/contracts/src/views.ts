@@ -11,6 +11,10 @@ import { ListingStatusSchema } from './enums.js'
 import { LISTING_PAGE_MAX } from './filters.js'
 import { ListingInputSchema, ListingSchema } from './listing.js'
 import {
+  ListingCheckSummarySchema,
+  ListingRepublicationSchema,
+} from './listing-checks.js'
+import {
   ListingEvaluationSchema,
   NotaryFeesBreakdownSchema,
   SensitivityGridSchema,
@@ -61,6 +65,17 @@ export const EvaluatedListingSchema = z.object({
     .describe(
       "Après une création ou une mise à jour : critères dans lesquels l'annonce entre ou dont elle sort ; null à la lecture"
     ),
+  lastCheck: ListingCheckSummarySchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 15 : la dernière vérification sur le portail (date, canal, résultat, résumé) ; null si jamais vérifiée'
+    ),
+  republication: ListingRepublicationSchema.default({
+    from: null,
+    to: null,
+  }).describe(
+    'Lot 15 : annonce que celle-ci reprend et annonce qui la reprend (republication du même bien)'
+  ),
 })
 export type EvaluatedListing = z.infer<typeof EvaluatedListingSchema>
 

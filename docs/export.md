@@ -31,7 +31,11 @@ Pièces, Chambres, Étage, Ascenseur, Année de construction, DPE, GES, Charges 
 Taxe foncière (€), Loyer visé (€/mois), Loyer retenu (€/mois), Prix au m² (€), Frais de notaire
 (€), Travaux (€), Coût total (€), Mensualité (€), Rendement brut (%), Rendement net (%), Effort
 mensuel (€), Verdict, Location, Prix cible (€), Décote nécessaire (%), Note moyenne (/5), Tâches
-ouvertes, Visites, Dernière offre (€), Ajoutée le, Modifiée le, Identifiant.
+ouvertes, Visites, Dernière offre (€), Ajoutée le, Modifiée le, Identifiant, puis (lot 15, en fin
+de ligne pour ne décaler aucune colonne) Vérifiée le (dernière vérification sur le portail, quel
+qu'en soit le résultat), Vue en ligne le, Dernière vérification (résultat : « Inchangée », « Mise à
+jour », « Plus en ligne », « Republiée », « Non vérifiée : page inaccessible » ; vide si jamais
+vérifiée).
 
 La colonne « Coût total (€) » garde son nom depuis le lot 9, pour les tableurs qui la lisent :
 c'est le **coût tout compris** de l'interface (prix affiché + frais de notaire + travaux +
@@ -50,7 +54,11 @@ non plus : `listing.location.placement` (comment le repère a été placé : mé
 texte reconnu, réserves ; `null` pour une annonce antérieure au lot 12), les champs
 `approximate` des équipements de `surroundings` (`false` par défaut), et la colonne CSV
 « Repère » (« Adresse exacte », « À la rue », « Au quartier (X) », « Commune seulement »,
-« Non localisée »).
+« Non localisée »). Le lot 15 non plus : `listing.lastCheckedAt`, `listing.lastSeenOnlineAt` et
+`listing.republishedFromId` (`null` par défaut), et `checks` par annonce (les vérifications sur le
+portail, de la plus récente à la plus ancienne ; une liste vide quand un export antérieur n'en a
+pas) ; l'extrait-preuve d'une vérification est court (500 caractères), téléphones et adresses
+e-mail masqués.
 
 ```text
 {
@@ -69,7 +77,8 @@ texte reconnu, réserves ; `null` pour une annonce antérieure au lot 12), les c
     priceEvents: PriceEvent[],
     offers: Offer[],
     visits: Visit[],                        // sans `photos` ; `photoCount` seulement
-    rentComparables: RentComparable[]
+    rentComparables: RentComparable[],
+    checks: ListingCheck[]                  // lot 15 : date, auteur, canal, résultat, écarts, extrait
   }],
   searchCriteria: SearchCriteria[],         // filtres et périmètre GeoJSON
   scenarios: Scenario[]                     // de l'espace et des annonces exportées

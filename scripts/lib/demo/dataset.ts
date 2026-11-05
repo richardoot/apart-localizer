@@ -15,6 +15,9 @@ import type {
   ActivityChannel,
   Assumptions,
   DpeClass,
+  ListingCheckChange,
+  ListingCheckOutcome,
+  ListingObserved,
   LeaseType,
   ListingInput,
   ListingSource,
@@ -30,7 +33,16 @@ import type {
   SearchCriteriaInput,
   Verdict,
 } from '@apart/contracts'
-import { compute, financialsFromListing } from '@apart/domain'
+import {
+  compute,
+  effectiveObserved,
+  financialsFromListing,
+  listingCheckDiff,
+  listingCheckSummary,
+  republicationProposal,
+  resolveCheckOutcome,
+  sanitizeEvidence,
+} from '@apart/domain'
 import { DEMO_ACCOUNTS, DEMO_WORKSPACE_NAME } from './accounts.js'
 import { DEMO_WORKSPACE_ID, demoId } from './ids.js'
 
@@ -99,6 +111,21 @@ export interface DemoVisit {
   prepTaskId: string | null
 }
 
+/** Lot 15 : une vérification de l'annonce sur son portail (fictif). */
+export interface DemoCheck {
+  id: string
+  at: string
+  by: DemoHandle
+  channel: 'web' | 'mcp'
+  outcome: ListingCheckOutcome
+  changes: ListingCheckChange[]
+  summary: string
+  evidence: string | null
+  checkedUrl: string | null
+  linkedListingId: string | null
+  suggestedStatus: ListingStatus | null
+}
+
 export interface DemoListing {
   key: string
   id: string
@@ -131,6 +158,12 @@ export interface DemoListing {
     at: string
   }>
   views: Array<{ handle: DemoHandle; seenAt: string }>
+  /** Lot 15 : vérifications sur le portail, de la plus ancienne à la plus récente. */
+  checks: DemoCheck[]
+  lastCheckedAt: string | null
+  lastSeenOnlineAt: string | null
+  /** Lot 15 : l'annonce plus ancienne dont celle-ci est la republication. */
+  republishedFromId: string | null
 }
 
 export interface DemoCriteria {
@@ -248,6 +281,10 @@ interface ListingSpec {
   statuses?: Array<[number, ListingStatus, DemoHandle, string?]>
   /** Tâches par défaut déjà cochées (indices dans DEFAULT_TASKS). */
   doneDefaults?: number[]
+  /** Lot 15 : la clé de l'annonce plus ancienne dont celle-ci est la republication. */
+  republishedFrom?: string
+  /** Date de publication sur le portail : il y a N jours (absente sinon). */
+  publishedDays?: number
 }
 
 const SPECS: ListingSpec[] = [
@@ -674,6 +711,42 @@ const SPECS: ListingSpec[] = [
       'Exemple fictif : grand séjour avec vue dégagée, copropriété importante, ascenseur récent.',
     createdBy: 'demo2',
     channel: 'mcp',
+    // Lot 15 : le même bien que « cenon-t3-origine », republié moins cher.
+    republishedFrom: 'cenon-t3-origine',
+    publishedDays: 3,
+  },
+  {
+    key: 'cenon-t3-origine',
+    title: 'T3 avec vue sur la ville, Cenon (première annonce)',
+    commune: 'Cenon',
+    inseeCode: '33119',
+    district: 'Palmer',
+    address: '40 avenue des Coteaux-Imaginaires, 33150 Cenon (adresse fictive)',
+    point: [-0.5335, 44.8575],
+    precision: 'district',
+    source: 'bienici',
+    prices: [
+      [58, 152_000],
+      [30, 149_000],
+    ],
+    publishedDays: 60,
+    surface: 64,
+    rooms: 3,
+    bedrooms: 2,
+    floor: 6,
+    floorsTotal: 8,
+    elevator: true,
+    year: 1968,
+    dpe: 'E',
+    annualCharges: 2400,
+    propertyTax: 1100,
+    targetRent: 790,
+    demand: 'medium',
+    description:
+      'Exemple fictif : la première publication du T3 de Cenon, retirée puis republiée moins cher.',
+    createdBy: 'demo2',
+    channel: 'web',
+    statuses: [[4, 'sold_or_withdrawn', 'demo2']],
   },
   {
     key: 'villenave-t2',
@@ -1077,6 +1150,8 @@ function buildListing(
     url: `https://exemple.invalid/annonces/${spec.key}`,
     externalId: `demo-${spec.key}`,
     title: spec.title,
+    publishedAt:
+      spec.publishedDays !== undefined ? at(spec.publishedDays, 8) : null,
     description: spec.description,
     notes: 'Annonce de démonstration : toutes les données sont fictives.',
     price,
@@ -1145,6 +1220,13 @@ function buildListing(
   }))
   prices.forEach((p, index) => {
     if (index === 0) return
+    // Lot 15 : un prix trouvé par une vérification est journalisé par elle.
+    if (
+      (CHECKS[spec.key] ?? []).some(
+        c => c.observed.price === p.price && c.days === spec.prices[index]?.[0]
+      )
+    )
+      return
     log({
       at: p.at,
       actor: other,
@@ -1400,6 +1482,15 @@ function buildListing(
   if (createdDays >= 7 && createdAt < otherSince)
     views.push({ handle: other, seenAt: at(createdDays - 1, 21) })
 
+  // Lot 15 : vérifications sur le portail (règles de `domain`, données fictives).
+  const checks = buildChecks(spec, input, prices, statuses, at, log)
+  const seen = checks.filter(
+    c =>
+      c.outcome === 'unchanged' ||
+      c.outcome === 'changed' ||
+      (c.outcome === 'republished' && c.linkedListingId === null)
+  )
+
   const updatedAt =
     [createdAt, ...prices.map(p => p.at), ...statuses.map(s => s.at)]
       .sort()
@@ -1420,7 +1511,224 @@ function buildListing(
     visits,
     rentComparables,
     views,
+    checks,
+    lastCheckedAt: checks.at(-1)?.at ?? null,
+    lastSeenOnlineAt: seen.at(-1)?.at ?? null,
+    republishedFromId: spec.republishedFrom
+      ? demoId(`listing:${spec.republishedFrom}`)
+      : null,
   }
+}
+
+/**
+ * Lot 15 : les vérifications fictives d'une annonce. Chacune compare ce qui
+ * est « lu » sur la page à l'état de la fiche à ce moment-là, par `domain`
+ * (écarts, résultat, résumé), et va au journal (`listing.checked`). Le
+ * changement de prix qu'une vérification trouve n'est pas journalisé une
+ * deuxième fois.
+ */
+interface DemoCheckSpec {
+  days: number
+  hour?: number
+  by: DemoHandle
+  channel: 'web' | 'mcp'
+  observed: ListingObserved
+  outcome?: ListingCheckOutcome
+  evidence?: string
+  linkedKey?: string
+}
+
+const CHECKS: Record<string, DemoCheckSpec[]> = {
+  'talence-peixotto-t3': [
+    {
+      days: 15,
+      by: 'demo2',
+      channel: 'mcp',
+      observed: { online: true, price: 239_000, annualCharges: 1100 },
+      evidence: 'Prix : 239 000 € — charges : 92 €/mois (exemple fictif)',
+    },
+    {
+      days: 8,
+      by: 'demo2',
+      channel: 'mcp',
+      observed: { online: true, price: 225_000, annualCharges: 1100 },
+      evidence:
+        'Prix en baisse : 225 000 € (au lieu de 239 000 €) — exemple fictif',
+    },
+    {
+      days: 3,
+      hour: 18,
+      by: 'demo',
+      channel: 'web',
+      observed: { online: true },
+      outcome: 'unchanged',
+    },
+  ],
+  'talence-forum-t2': [
+    {
+      days: 2,
+      by: 'demo',
+      channel: 'mcp',
+      observed: {},
+      outcome: 'inaccessible',
+    },
+  ],
+  // La chronologie complète : inchangée, prix, plus en ligne, republiée.
+  'cenon-t3-origine': [
+    {
+      days: 45,
+      by: 'demo2',
+      channel: 'mcp',
+      observed: { online: true, price: 152_000, annualCharges: 2400 },
+      evidence: 'Prix : 152 000 € — charges : 200 €/mois (exemple fictif)',
+    },
+    {
+      days: 30,
+      by: 'demo2',
+      channel: 'mcp',
+      observed: { online: true, price: 149_000 },
+      evidence:
+        'Prix en baisse : 149 000 € (au lieu de 152 000 €) — exemple fictif',
+    },
+    {
+      days: 4,
+      hour: 9,
+      by: 'demo2',
+      channel: 'mcp',
+      observed: { online: false },
+      evidence: 'Cette annonce n’est plus disponible. (exemple fictif)',
+    },
+    {
+      days: 2,
+      by: 'demo2',
+      channel: 'mcp',
+      observed: { online: false },
+      linkedKey: 'cenon-t3',
+      evidence:
+        'Même adresse, même surface (64 m²), mêmes photos : republiée à 145 000 € (exemple fictif)',
+    },
+  ],
+}
+
+function buildChecks(
+  spec: ListingSpec,
+  input: ListingInput,
+  prices: Array<{ at: string; price: number }>,
+  statuses: Array<{ at: string; status: ListingStatus }>,
+  at: ReturnType<typeof clock>,
+  log: (
+    entry: Omit<DemoActivity, 'id' | 'before' | 'after'> & {
+      before?: Record<string, unknown> | null
+      after?: Record<string, unknown> | null
+    }
+  ) => void
+): DemoCheck[] {
+  return (CHECKS[spec.key] ?? []).map((c, index) => {
+    // À l'heure des changements de prix (11 h) : la vérification trouve celui
+    // du même instant, qu'elle a fait enregistrer.
+    const checkAt = at(c.days, c.hour ?? 11)
+    const latest = <T extends { at: string }>(list: T[]): T | undefined =>
+      list.filter(x => x.at < checkAt).at(-1)
+    const stored = {
+      ...input,
+      price: latest(prices)?.price ?? input.price,
+      status: latest(statuses)?.status ?? ('to_study' as const),
+    }
+    const observed = effectiveObserved(c.observed, c.outcome)
+    const diff = listingCheckDiff(stored, observed)
+    const resolution = resolveCheckOutcome({
+      declared: c.outcome,
+      observed,
+      diff,
+      linked: c.linkedKey !== undefined,
+    })
+    if (!resolution.ok) {
+      throw new Error(
+        `Vérification fictive incohérente : ${resolution.problem}`
+      )
+    }
+    const linked = c.linkedKey
+      ? SPECS.find(x => x.key === c.linkedKey)
+      : undefined
+    let changes = resolution.applyFacts ? diff.changes : []
+    let suggestedStatus = resolution.applyFacts ? diff.suggestedStatus : null
+    // La publication d'origine est la plus ancienne des deux (ajoutée plus tôt).
+    const linkedIsOrigin =
+      linked !== undefined &&
+      (linked.prices[0]?.[0] ?? 0) > (spec.prices[0]?.[0] ?? 0)
+    if (linked) {
+      const statusOf = (s: ListingSpec, current: ListingStatus | undefined) =>
+        current ??
+        (s.statuses ?? [])
+          .filter(([days]) => at(days, 19) <= checkAt)
+          .at(-1)?.[1] ??
+        'to_study'
+      const origin = linkedIsOrigin ? linked : spec
+      const successor = linkedIsOrigin ? spec : linked
+      const proposal = republicationProposal(
+        {
+          title: origin.title,
+          status: statusOf(origin, linkedIsOrigin ? undefined : stored.status),
+        },
+        { title: successor.title }
+      )
+      changes = [
+        ...changes.filter(
+          x => !(x.field === 'status' && x.disposition === 'proposed')
+        ),
+        ...(proposal ? [proposal] : []),
+      ]
+      suggestedStatus = proposal ? 'sold_or_withdrawn' : null
+    }
+    const summary = listingCheckSummary(
+      resolution.outcome,
+      changes,
+      linked
+        ? {
+            title: linked.title,
+            role: linkedIsOrigin ? 'predecessor' : 'successor',
+          }
+        : null
+    )
+    const id = demoId(`check:${spec.key}:${index}`)
+    const linkedListingId = linked ? demoId(`listing:${linked.key}`) : null
+    const applied = changes.filter(x => x.disposition === 'applied')
+    log({
+      at: checkAt,
+      actor: c.by,
+      channel: c.channel,
+      action: 'listing.checked',
+      listingKey: spec.key,
+      before: applied.length
+        ? { facts: Object.fromEntries(applied.map(x => [x.field, x.before])) }
+        : null,
+      after: {
+        checkId: id,
+        outcome: resolution.outcome,
+        summary,
+        ...(applied.length
+          ? {
+              facts: Object.fromEntries(applied.map(x => [x.field, x.after])),
+            }
+          : {}),
+        ...(suggestedStatus ? { suggestedStatus } : {}),
+        ...(linkedListingId ? { linkedListingId } : {}),
+      },
+    })
+    return {
+      id,
+      at: checkAt,
+      by: c.by,
+      channel: c.channel,
+      outcome: resolution.outcome,
+      changes,
+      summary,
+      evidence: sanitizeEvidence(c.evidence),
+      checkedUrl: input.url,
+      linkedListingId,
+      suggestedStatus,
+    }
+  })
 }
 
 const MANUAL_TASKS: Record<

@@ -141,6 +141,9 @@ export function fakeListing(over: Partial<Listing> = {}): Listing {
     updatedAt: now,
     views: [],
     openDataContext: null,
+    lastCheckedAt: null,
+    lastSeenOnlineAt: null,
+    republishedFromId: null,
     ...over,
   }
 }
@@ -220,6 +223,8 @@ export function fakeEvaluated(
     offers: [],
     criteriaMatches: [],
     criteriaChanges: null,
+    lastCheck: null,
+    republication: { from: null, to: null },
     ...over,
   }
 }

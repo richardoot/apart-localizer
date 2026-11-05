@@ -9,8 +9,21 @@ describe('filtre du journal par sorte', () => {
     expect(kindWhere('task')).toEqual({
       OR: [{ action: { startsWith: 'task.' } }],
       NOT: {
-        action: { in: ['listing.status_changed', 'listing.price_changed'] },
+        action: {
+          in: [
+            'listing.status_changed',
+            'listing.price_changed',
+            'listing.checked',
+          ],
+        },
       },
+    })
+    // Lot 15 : les vérifications ont leur sorte, hors de « annonce ».
+    expect(kindWhere('check')).toEqual({
+      OR: [{ action: { in: ['listing.checked'] } }],
+    })
+    expect(kindWhere('listing')).toMatchObject({
+      NOT: { action: { in: expect.arrayContaining(['listing.checked']) } },
     })
     expect(kindWhere('study')).toMatchObject({
       OR: [

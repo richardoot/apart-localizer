@@ -15,6 +15,11 @@ import { SensitivityRequestSchema } from './metrics.js'
 import { MarketContextRequestSchema } from './opendata.js'
 import { RentComparableInputSchema } from './rent-market.js'
 import { VisitInputSchema } from './visits.js'
+import {
+  DEFAULT_STALE_DAYS,
+  ListingCheckInputSchema,
+  ListingCheckPreviewRequestSchema,
+} from './listing-checks.js'
 import { WhatsNewQuerySchema } from './whats-new.js'
 import { ProjectionRequestSchema, ScenarioOverridesSchema } from './study.js'
 import {
@@ -418,3 +423,66 @@ export type McpWhatsNewInput = z.infer<typeof McpWhatsNewInputSchema>
  */
 export const McpListMembersInputSchema = z.object({})
 export type McpListMembersInput = z.infer<typeof McpListMembersInputSchema>
+
+// ---------------------------------------------------------------------------
+// Lot 15 : suivi des mises à jour des annonces
+// ---------------------------------------------------------------------------
+
+/**
+ * `check_listing` (lecture, rien n'est écrit) : ce que Claude a lu sur la
+ * page de l'annonce (`observed`), ou le texte de la page (`pageText`, lu par
+ * l'extraction côté serveur, coût signalé) ; rend les écarts classés, le
+ * statut proposé et les republications probables.
+ */
+export const McpCheckListingInputSchema = z
+  .object({
+    listingId,
+    ...ListingCheckPreviewRequestSchema.shape,
+  })
+  .refine(
+    value =>
+      value.observed !== undefined ||
+      (value.pageText !== undefined && value.pageText.trim().length > 0) ||
+      value.images.length > 0,
+    {
+      message:
+        'Donnez observed (valeurs lues sur la page) ou pageText (texte de la page)',
+      path: ['observed'],
+    }
+  )
+export type McpCheckListingInput = z.infer<typeof McpCheckListingInputSchema>
+
+/**
+ * `apply_listing_check` (écriture) : applique les faits lus, enregistre la
+ * vérification et rend le statut proposé, jamais appliqué.
+ */
+export const McpApplyListingCheckInputSchema = z.object({
+  listingId,
+  ...ListingCheckInputSchema.shape,
+})
+export type McpApplyListingCheckInput = z.infer<
+  typeof McpApplyListingCheckInputSchema
+>
+
+/** Arguments du prompt MCP « tournée de mise à jour » (chaînes, par protocole). */
+export const McpReviewListingsPromptArgsSchema = z.object({
+  staleDays: z
+    .string()
+    .optional()
+    .describe(
+      `Revérifier les annonces sans vérification depuis plus de N jours (${DEFAULT_STALE_DAYS} par défaut)`
+    ),
+  limit: z
+    .string()
+    .optional()
+    .describe('Nombre d’annonces à revérifier au plus dans cette tournée'),
+  notes: z
+    .string()
+    .optional()
+    .describe(
+      'Consignes du membre (« seulement Talence », « commence par les offres faites »)'
+    ),
+})
+export type McpReviewListingsPromptArgs = z.infer<
+  typeof McpReviewListingsPromptArgsSchema
+>

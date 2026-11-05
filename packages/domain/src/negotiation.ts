@@ -5,11 +5,32 @@ import type {
   NegotiationBrief,
   NegotiationCriterion,
   OfferResponse,
+  RepublicationChainSummary,
   TargetPrice,
 } from '@apart/contracts'
 import { formatEuros, formatPercent } from './format.js'
 import { DEFAULT_DPE_BAN_SCHEDULE } from './rental-checks.js'
 import { classifyDiscount } from './target-price.js'
+
+/** Un prix constaté : ancien prix (null pour le premier constat), nouveau prix. */
+export interface NegotiationPriceEvent {
+  occurredAt: string
+  oldPrice: number | null
+  newPrice: number
+}
+
+/**
+ * Une publication antérieure du même bien (lot 15) : l'annonce que celle-ci
+ * reprend, de proche en proche. Sa date de publication et ses prix comptent
+ * dans la durée en ligne et les baisses.
+ */
+export interface NegotiationPredecessor {
+  id?: string | null
+  title?: string | null
+  publishedAt: string | null
+  createdAt: string | null
+  priceEvents: ReadonlyArray<NegotiationPriceEvent>
+}
 
 /** Ce que le brief lit d'une annonce et de son historique. */
 export interface NegotiationListing {
@@ -22,11 +43,12 @@ export interface NegotiationListing {
   renovationTotal: number
   annualCharges: number | null
   surface: number | null
-  priceEvents: ReadonlyArray<{
-    occurredAt: string
-    oldPrice: number | null
-    newPrice: number
-  }>
+  priceEvents: ReadonlyArray<NegotiationPriceEvent>
+  /**
+   * Lot 15 : les publications antérieures rattachées (republication), de la
+   * plus ancienne à la plus récente ; absent ou vide = aucune.
+   */
+  predecessors?: ReadonlyArray<NegotiationPredecessor>
   offers: ReadonlyArray<{
     madeAt: string
     amount: number
@@ -59,6 +81,33 @@ const dateFr = (iso: string): string =>
     month: 'long',
     year: 'numeric',
   })
+
+/**
+ * L'historique des prix d'une chaîne de publications, dans l'ordre : le
+ * premier constat d'une republication prend pour ancien prix le dernier prix
+ * de la publication précédente (republiée moins cher = une baisse).
+ */
+export function chainPriceEvents(
+  lists: ReadonlyArray<ReadonlyArray<NegotiationPriceEvent>>
+): NegotiationPriceEvent[] {
+  const merged: NegotiationPriceEvent[] = []
+  let last: number | null = null
+  for (const list of lists) {
+    const sorted = [...list].sort(
+      (x, y) => Date.parse(x.occurredAt) - Date.parse(y.occurredAt)
+    )
+    sorted.forEach((event, index) => {
+      merged.push(
+        index === 0 && event.oldPrice === null && last !== null
+          ? { ...event, oldPrice: last }
+          : event
+      )
+    })
+    const tail = sorted.at(-1)
+    if (tail) last = tail.newPrice
+  }
+  return merged
+}
 
 const daysBetween = (from: string, now: Date): number | null => {
   const start = Date.parse(from)
@@ -107,21 +156,39 @@ export function negotiationBrief(
       ? target.targetPrice - suggestedOffer
       : null
 
-  const since = listing.publishedAt
+  // Lot 15 : une republication rattachée compte depuis la publication d'origine.
+  const chain = listing.predecessors ?? []
+  const origin = chain[0] ?? listing
+  const since = origin.publishedAt
     ? ('published' as const)
-    : listing.createdAt
+    : origin.createdAt
       ? ('added' as const)
       : null
   const daysOnline = since
     ? daysBetween(
-        (since === 'published' ? listing.publishedAt : listing.createdAt) ?? '',
+        (since === 'published' ? origin.publishedAt : origin.createdAt) ?? '',
         now
       )
     : null
+  const republication: RepublicationChainSummary | null =
+    chain.length > 0
+      ? {
+          count: chain.length,
+          firstListingId: chain[0]?.id ?? null,
+          firstTitle: chain[0]?.title ?? null,
+          firstSeenAt: origin.publishedAt
+            ? new Date(origin.publishedAt).toISOString()
+            : origin.createdAt
+              ? new Date(origin.createdAt).toISOString()
+              : null,
+        }
+      : null
+  const across = republication ? ', republication comprise' : ''
 
-  const events = [...listing.priceEvents].sort(
-    (x, y) => Date.parse(x.occurredAt) - Date.parse(y.occurredAt)
-  )
+  const events = chainPriceEvents([
+    ...chain.map(c => c.priceEvents),
+    listing.priceEvents,
+  ])
   const first = events[0]
   const firstPrice = first ? (first.oldPrice ?? first.newPrice) : null
   const dropCount = events.filter(
@@ -155,14 +222,20 @@ export function negotiationBrief(
       kind: 'time_on_market',
       text:
         since === 'published'
-          ? `En ligne depuis ${daysOnline} jours sans vente.`
-          : `Suivie depuis ${daysOnline} jours (date de publication inconnue : vérifier l'ancienneté réelle sur le portail).`,
+          ? `En ligne depuis ${daysOnline} jours sans vente${across}.`
+          : `Suivie depuis ${daysOnline} jours${across} (date de publication inconnue : vérifier l'ancienneté réelle sur le portail).`,
+    })
+  }
+  if (republication) {
+    args.push({
+      kind: 'republished',
+      text: `Annonce republiée${republication.count > 1 ? ` ${republication.count} fois` : ''} : le bien n'a pas trouvé preneur à sa première publication${republication.firstTitle ? ` (« ${republication.firstTitle} »${republication.firstSeenAt ? `, le ${dateFr(republication.firstSeenAt)}` : ''})` : ''}.`,
     })
   }
   if (dropCount > 0 && firstPrice !== null && totalDrop > 0) {
     args.push({
       kind: 'price_drops',
-      text: `Déjà ${dropCount} baisse${dropCount > 1 ? 's' : ''} de prix : −${formatEuros(totalDrop)} (${formatPercent(totalDropRate ?? 0)}) depuis le premier prix constaté (${formatEuros(firstPrice)}) : le vendeur a de la marge.`,
+      text: `Déjà ${dropCount} baisse${dropCount > 1 ? 's' : ''} de prix : −${formatEuros(totalDrop)} (${formatPercent(totalDropRate ?? 0)}) depuis le premier prix constaté (${formatEuros(firstPrice)})${across} : le vendeur a de la marge.`,
     })
   }
   const ban = listing.dpeClass ? schedule[listing.dpeClass] : undefined
@@ -211,6 +284,7 @@ export function negotiationBrief(
     priceDrops: { count: dropCount, firstPrice, totalDrop, totalDropRate },
     lastOffer,
     arguments: args,
+    republication,
   }
 }
 

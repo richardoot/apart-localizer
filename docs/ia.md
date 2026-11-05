@@ -216,6 +216,15 @@ tâches « IA · champ manquant ».
   simple de `contracts/share.ts` prend le lien, le prix, la surface, les pièces et la commune
   quand le texte les dit (provenance « annonce », confiance 0,6) : aucune valeur n'est devinée.
 
+## Vérification d'une annonce (lot 15)
+
+`check_listing` (MCP) et `POST /listings/:id/checks/preview` acceptent, à la place des valeurs
+lues par Claude (`observed`), le texte de la page (`pageText`, et des captures) : la même
+extraction le lit, par le **modèle économique** par défaut (`quality: "fast"`), et son coût est
+journalisé (`ai.extraction`) et rendu dans la réponse. Les valeurs lues par Claude priment sur
+celles extraites ; la description extraite n'est pas comparée (le modèle la condense). Rien
+n'est enregistré : `apply_listing_check` écrit, avec les valeurs que Claude lui passe.
+
 ## Variables d'environnement (API)
 
 ```

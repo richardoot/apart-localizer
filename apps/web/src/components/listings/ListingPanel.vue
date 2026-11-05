@@ -32,6 +32,8 @@
   } from '@/lib/listing-form'
   import { DEFAULT_LISTING_TAB } from '@/lib/listing-tabs'
   import type { ListingTab } from '@/lib/listing-tabs'
+  import CheckFreshnessBadge from './CheckFreshnessBadge.vue'
+  import ChecksSection from './ChecksSection.vue'
   import ContextSection from './ContextSection.vue'
   import CriteriaBadges from './CriteriaBadges.vue'
   import DpeBadge from './DpeBadge.vue'
@@ -396,6 +398,12 @@
         <p class="text-xs text-muted">
           Ajoutée le {{ formatDate(item.listing.createdAt) }} · modifiée le
           {{ formatDate(item.listing.updatedAt) }}
+          <template v-if="item.listing.lastCheckedAt">
+            ·
+            <CheckFreshnessBadge
+              :listing="item.listing"
+              :last-outcome="item.lastCheck?.outcome ?? null"
+          /></template>
           <template v-if="aiFieldCount > 0">
             ·
             <span data-testid="ai-field-count"
@@ -609,6 +617,17 @@
         </template>
 
         <template v-else>
+          <ChecksSection
+            :listing-id="item.listing.id"
+            :status="item.listing.status"
+            :updated-at="item.listing.updatedAt"
+            :created-at="item.listing.createdAt"
+            :last-checked-at="item.listing.lastCheckedAt"
+            :last-seen-online-at="item.listing.lastSeenOnlineAt"
+            :url="item.listing.url"
+            :members="members"
+            @set-status="status => changeStatus({ status, reason: null })"
+          />
           <OpinionsSection
             :opinions="item.opinions"
             :members="members"

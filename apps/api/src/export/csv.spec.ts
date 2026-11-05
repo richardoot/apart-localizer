@@ -105,5 +105,41 @@ describe('CSV pour un tableur français', () => {
     expect(cell('Ajoutée le')).toBe('2026-11-03')
     // Lot 12 : la précision du repère, en clair.
     expect(cell('Repère')).toBe(precisionBadge(item.listing.location).label)
+    // Lot 15 : jamais vérifiée, cellules vides en fin de ligne.
+    expect(cell('Vérifiée le')).toBe('')
+    expect(cell('Dernière vérification')).toBe('')
+    const checked = listingCsvRow(
+      {
+        ...item,
+        listing: {
+          ...item.listing,
+          lastCheckedAt: '2026-11-05T09:00:00.000Z',
+          lastSeenOnlineAt: '2026-11-04T09:00:00.000Z',
+        },
+        lastCheck: {
+          id: '55555555-5555-4555-8555-555555555555',
+          checkedAt: '2026-11-05T09:00:00.000Z',
+          channel: 'mcp',
+          authorId: null,
+          outcome: 'offline',
+          summary: 'Plus en ligne',
+        },
+      },
+      0
+    )
+    const at = (column: (typeof LISTING_CSV_COLUMNS)[number]) =>
+      checked[LISTING_CSV_COLUMNS.indexOf(column)]
+    expect(at('Vérifiée le')).toBe('2026-11-05')
+    expect(at('Vue en ligne le')).toBe('2026-11-04')
+    expect(at('Dernière vérification')).toBe('Plus en ligne')
+  })
+
+  it('les colonnes du lot 15 viennent après « Identifiant » : aucune colonne ne se décale', () => {
+    expect(LISTING_CSV_COLUMNS.slice(-4)).toEqual([
+      'Identifiant',
+      'Vérifiée le',
+      'Vue en ligne le',
+      'Dernière vérification',
+    ])
   })
 })

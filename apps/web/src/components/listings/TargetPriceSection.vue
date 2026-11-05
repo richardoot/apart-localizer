@@ -8,7 +8,7 @@
     TargetPriceRank,
   } from '@apart/contracts'
   import DefinitionButton from '@/components/ui/DefinitionButton.vue'
-  import { formatEuros, formatPercent } from '@/lib/format'
+  import { formatDate, formatEuros, formatPercent } from '@/lib/format'
   import {
     DISCOUNT_CLASS_CLASSES,
     DISCOUNT_CLASS_LABELS,
@@ -145,6 +145,25 @@
         <p v-else class="text-xs text-muted">
           Aucun levier factuel pour l'instant : l'ancienneté, les baisses de
           prix et les travaux en deviendront.
+        </p>
+        <p
+          v-if="negotiation.republication"
+          class="text-xs text-muted"
+          data-testid="negotiation-republication"
+        >
+          Annonce republiée : durée en ligne
+          <template v-if="negotiation.daysOnline !== null"
+            >({{ negotiation.daysOnline }} jours)</template
+          >
+          et baisses ({{ negotiation.priceDrops.count }}) comptées depuis la
+          première publication<template
+            v-if="negotiation.republication.firstTitle"
+          >
+            « {{ negotiation.republication.firstTitle }} »</template
+          ><template v-if="negotiation.republication.firstSeenAt"
+            >, le
+            {{ formatDate(negotiation.republication.firstSeenAt) }}</template
+          >.
         </p>
       </div>
     </template>

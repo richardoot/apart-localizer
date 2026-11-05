@@ -6,6 +6,7 @@
     NOTIFICATION_TYPE_LABELS,
     NotificationChannelSchema,
     NotificationTypeSchema,
+    resolveNotificationPreferences,
   } from '@apart/contracts'
   import type {
     Notification,
@@ -33,6 +34,15 @@
     settings.data.value ? `${apiUrl}${settings.data.value.inbound.path}` : ''
   )
 
+  /**
+   * Les préférences, complétées des valeurs par défaut : une API d'une
+   * version antérieure ne connaît pas encore les types récents (lot 15 :
+   * « Mise à jour d'une annonce »).
+   */
+  const preferences = computed(() =>
+    resolveNotificationPreferences(settings.data.value?.preferences ?? {})
+  )
+
   function toggle(
     type: NotificationType,
     channel: NotificationChannel,
@@ -57,7 +67,7 @@
         <p class="text-sm text-muted">
           Nouvelle annonce de l'autre membre ou de Claude, changement de statut,
           tâche assignée, entrée dans un critère, réponse à une offre, annonces
-          reçues par e-mail.
+          reçues par e-mail, mise à jour trouvée en vérifiant une annonce.
         </p>
       </div>
       <button
@@ -135,7 +145,7 @@
                   type="checkbox"
                   class="accent-accent"
                   :aria-label="`${NOTIFICATION_TYPE_LABELS[type]} — ${NOTIFICATION_CHANNEL_LABELS[channel]}`"
-                  :checked="settings.data.value.preferences[type][channel]"
+                  :checked="preferences[type][channel]"
                   :data-pref="`${type}.${channel}`"
                   @change="
                     toggle(

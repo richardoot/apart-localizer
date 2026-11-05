@@ -207,8 +207,64 @@ describe('jeu de démonstration', () => {
       'criteria.created',
       'assumptions.updated',
       'draft.received',
+      'listing.checked',
     ]) {
       expect(actions).toContain(action)
+    }
+  })
+
+  it('lot 15 : des vérifications fictives (prix trouvé, inchangée, plus en ligne, republiée, inaccessible)', () => {
+    const byKey = new Map(dataset.listings.map(l => [l.key, l]))
+    const peixotto = byKey.get('talence-peixotto-t3')
+    expect(peixotto?.checks.map(c => c.outcome)).toEqual([
+      'unchanged',
+      'changed',
+      'unchanged',
+    ])
+    expect(peixotto?.checks[1]?.changes[0]).toMatchObject({
+      field: 'price',
+      before: 239_000,
+      after: 225_000,
+      disposition: 'applied',
+    })
+    expect(peixotto?.lastCheckedAt).toBe(peixotto?.checks[2]?.at)
+    expect(peixotto?.lastSeenOnlineAt).toBe(peixotto?.checks[2]?.at)
+    // Le changement de prix trouvé par la vérification n'est journalisé qu'une fois.
+    expect(
+      dataset.activity.filter(
+        a =>
+          a.listingKey === 'talence-peixotto-t3' &&
+          a.action === 'listing.price_changed'
+      )
+    ).toEqual([])
+    // La publication d'origine : inchangée, prix, plus en ligne, republiée.
+    const origin = byKey.get('cenon-t3-origine')
+    const republished = byKey.get('cenon-t3')
+    expect(origin?.checks.map(c => c.outcome)).toEqual([
+      'unchanged',
+      'changed',
+      'offline',
+      'republished',
+    ])
+    expect(origin?.checks[2]?.suggestedStatus).toBe('sold_or_withdrawn')
+    expect(origin?.checks[3]).toMatchObject({
+      linkedListingId: republished?.id,
+      suggestedStatus: null,
+      summary: expect.stringContaining(
+        'Republiée : reprise par « T3 avec vue sur la ville, Cenon »'
+      ),
+    })
+    expect(origin?.lastSeenOnlineAt).toBe(origin?.checks[1]?.at)
+    expect(republished?.republishedFromId).toBe(origin?.id)
+    expect(republished?.input.publishedAt).not.toBeNull()
+    expect(byKey.get('talence-forum-t2')?.checks[0]?.summary).toBe(
+      'Non vérifiée : page inaccessible'
+    )
+    for (const listing of dataset.listings) {
+      for (const check of listing.checks) {
+        expect(check.evidence?.length ?? 0).toBeLessThanOrEqual(500)
+        expect(check.checkedUrl).toMatch(/^https:\/\/exemple\.invalid\//)
+      }
     }
   })
 

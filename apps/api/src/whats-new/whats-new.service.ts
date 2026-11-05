@@ -31,6 +31,8 @@ const WHATS_NEW_ACTIONS = [
   'task.created',
   'task.completed',
   'criteria.matched',
+  // Lot 15 : une vérification sur le portail qui a trouvé quelque chose.
+  'listing.checked',
 ]
 
 function toEvent(row: ActivityLog): WhatsNewEvent {

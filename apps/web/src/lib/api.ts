@@ -7,6 +7,11 @@ import type {
   ExportFormat,
   ExportScope,
   ListingChanges,
+  ListingCheck,
+  ListingCheckInputRaw,
+  ListingCheckPreview,
+  ListingCheckPreviewRequestInput,
+  ListingCheckWriteResult,
   ListingDraft,
   ListingDraftDecision,
   ListingDraftStatus,
@@ -358,6 +363,20 @@ export const api = {
       apiFetch<EvaluatedListing>(`/listings/${id}/dpe/verify`, {
         method: 'POST',
         json: request,
+      }),
+    /** Lot 15 : la chronologie des vérifications sur le portail. */
+    checks: (id: string) => apiFetch<ListingCheck[]>(`/listings/${id}/checks`),
+    /** Lot 15 : une vérification à blanc ; rien n'est écrit. */
+    previewCheck: (id: string, request: ListingCheckPreviewRequestInput) =>
+      apiFetch<ListingCheckPreview>(`/listings/${id}/checks/preview`, {
+        method: 'POST',
+        json: request,
+      }),
+    /** Lot 15 : enregistre une vérification (« Vue en ligne aujourd'hui », « Plus en ligne »). */
+    applyCheck: (id: string, input: ListingCheckInputRaw) =>
+      apiFetch<ListingCheckWriteResult>(`/listings/${id}/checks`, {
+        method: 'POST',
+        json: input,
       }),
   },
 

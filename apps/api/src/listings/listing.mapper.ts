@@ -1,4 +1,6 @@
 import {
+  ListingCheckChangeSchema,
+  ListingCheckSchema,
   ListingOpenDataContextSchema,
   ListingPlacementSchema,
   ListingSchema,
@@ -11,6 +13,10 @@ import {
 import type {
   CriteriaMatch,
   FieldProvenanceMap,
+  LinkedListing,
+  ListingCheck as ListingCheckDto,
+  ListingCheckSummary,
+  ListingRepublication,
   Listing as ListingDto,
   ListingPlacement,
   Offer as OfferDto,
@@ -20,12 +26,16 @@ import type {
   Task as TaskDto,
 } from '@apart/contracts'
 import type {
+  ListingCheck,
   Offer,
   Opinion,
   PriceEvent,
   Prisma,
   Task,
 } from '../generated/prisma'
+
+/** Une annonce liée, en quelques champs (republication, vérification). */
+const linkedSelect = { id: true, title: true, status: true } as const
 
 /** Une annonce avec tout ce que l'API renvoie. */
 export const listingInclude = {
@@ -41,6 +51,10 @@ export const listingInclude = {
     include: { criteria: { select: { name: true } } },
     orderBy: { matchedAt: 'desc' },
   },
+  // Lot 15 : le dernier résultat et les liens de republication.
+  checks: { orderBy: { checkedAt: 'desc' }, take: 1 },
+  republishedFrom: { select: linkedSelect },
+  republishedAs: { select: linkedSelect },
 } satisfies Prisma.ListingInclude
 
 export type ListingRow = Prisma.ListingGetPayload<{
@@ -226,8 +240,60 @@ export function toListingDto(row: ListingRow): ListingDto {
       seenAt: view.seenAt.toISOString(),
     })),
     openDataContext: openDataContextOf(row.openDataContext),
+    lastCheckedAt: row.lastCheckedAt?.toISOString() ?? null,
+    lastSeenOnlineAt: row.lastSeenOnlineAt?.toISOString() ?? null,
+    republishedFromId: row.republishedFromId,
   }
   return ListingSchema.parse(dto)
+}
+
+/** Une vérification (lot 15) ; des écarts illisibles (version antérieure) sont omis. */
+export function toListingCheckDto(
+  check: ListingCheck & { linkedListing?: LinkedListing | null }
+): ListingCheckDto {
+  const changes = Array.isArray(check.changes)
+    ? check.changes.flatMap(change => {
+        const parsed = ListingCheckChangeSchema.safeParse(change)
+        return parsed.success ? [parsed.data] : []
+      })
+    : []
+  return ListingCheckSchema.parse({
+    id: check.id,
+    listingId: check.listingId,
+    checkedAt: check.checkedAt.toISOString(),
+    authorId: check.authorId,
+    channel: check.channel === 'mcp' ? 'mcp' : 'web',
+    outcome: check.outcome,
+    changes,
+    summary: check.summary,
+    evidence: check.evidence,
+    checkedUrl: check.checkedUrl,
+    linkedListing: check.linkedListing ?? null,
+    suggestedStatus: check.suggestedStatus,
+  })
+}
+
+/** Le dernier résultat d'une annonce, pour la liste. */
+export function toLastCheck(row: ListingRow): ListingCheckSummary | null {
+  const last = row.checks[0]
+  return last
+    ? {
+        id: last.id,
+        checkedAt: last.checkedAt.toISOString(),
+        channel: last.channel === 'mcp' ? 'mcp' : 'web',
+        authorId: last.authorId,
+        outcome: last.outcome,
+        summary: last.summary,
+      }
+    : null
+}
+
+/** Les liens de republication d'une annonce. */
+export function toRepublication(row: ListingRow): ListingRepublication {
+  return {
+    from: row.republishedFrom ?? null,
+    to: row.republishedAs ?? null,
+  }
 }
 
 /** Le placement du repère (lot 12) ; absent ou illisible : null. */

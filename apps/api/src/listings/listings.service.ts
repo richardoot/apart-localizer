@@ -36,7 +36,12 @@ import type {
   RenovationInput,
   RentalPlanInput,
 } from '@apart/contracts'
-import { criteriaFilterMatch, mergeAssumptions } from '@apart/domain'
+import {
+  checkReference,
+  criteriaFilterMatch,
+  isStale,
+  mergeAssumptions,
+} from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
@@ -63,10 +68,12 @@ import { evaluateListing } from './evaluate'
 import {
   listingInclude,
   toCriteriaMatchDtos,
+  toLastCheck,
   toListingDto,
   toOfferDto,
   toOpinionDto,
   toPriceEventDto,
+  toRepublication,
   toTaskDto,
 } from './listing.mapper'
 import type { ListingRow } from './listing.mapper'
@@ -255,6 +262,12 @@ export class ListingsService {
       items = items.filter(item =>
         filters.verdict?.includes(item.evaluation.metrics.verdict)
       )
+    }
+    if (filters.staleDays !== undefined) {
+      // Lot 15 : la file « à revérifier » (règle de `domain`).
+      const now = new Date()
+      const days = filters.staleDays
+      items = items.filter(item => isStale(item.listing, now, days))
     }
     items.sort(comparator(filters))
     const total = items.length
@@ -674,13 +687,13 @@ export class ListingsService {
         data: { price: new Prisma.Decimal(input.newPrice) },
       })
       await tx.priceEvent.create({
-        data: {
-          listingId: id,
-          occurredAt: input.occurredAt ? new Date(input.occurredAt) : undefined,
-          oldPrice: new Prisma.Decimal(currentPrice),
-          newPrice: new Prisma.Decimal(input.newPrice),
-          source: input.source,
-        },
+        data: priceEventData(
+          id,
+          currentPrice,
+          input.newPrice,
+          input.source,
+          input.occurredAt ? new Date(input.occurredAt) : undefined
+        ),
       })
       await this.activity.record(
         {
@@ -738,7 +751,8 @@ export class ListingsService {
     }
   }
 
-  private checkGuards(before: ListingDto, guards: ListingUpdateGuards): void {
+  /** Les garde-fous optimistes d'une écriture (mise à jour, vérification du lot 15). */
+  checkGuards(before: ListingDto, guards: ListingUpdateGuards): void {
     if (
       guards.expectedUpdatedAt !== undefined &&
       Date.parse(guards.expectedUpdatedAt) !== Date.parse(before.updatedAt)
@@ -785,6 +799,8 @@ export class ListingsService {
       priceEvents: row.priceEvents.map(toPriceEventDto),
       offers: row.offers.map(toOfferDto),
       criteriaMatches: toCriteriaMatchDtos(row),
+      lastCheck: toLastCheck(row),
+      republication: toRepublication(row),
     })
   }
 
@@ -960,6 +976,28 @@ export class ListingsService {
     }
     await this.enrichment.enrich(member, id, { dpe: true, channel })
     return this.afterWrite(member, id, channel)
+  }
+}
+
+/**
+ * Une ligne de l'historique des prix : ancien et nouveau prix, source
+ * (`listing` quand le portail affiche le nouveau prix). Partagée par
+ * `recordPriceChange` et la vérification d'une annonce (lot 15), pour que
+ * le brief de négociation lise les mêmes baisses.
+ */
+export function priceEventData(
+  listingId: string,
+  oldPrice: number | null,
+  newPrice: number,
+  source: FieldSource,
+  occurredAt?: Date
+): Prisma.PriceEventUncheckedCreateInput {
+  return {
+    listingId,
+    ...(occurredAt ? { occurredAt } : {}),
+    oldPrice: dec(oldPrice),
+    newPrice: new Prisma.Decimal(newPrice),
+    source,
   }
 }
 
@@ -1224,6 +1262,9 @@ const SORT_KEYS = {
   createdAt: (item: EvaluatedListing) => Date.parse(item.listing.createdAt),
   discount: (item: EvaluatedListing) =>
     item.evaluation.targetPrice.discount ?? Number.POSITIVE_INFINITY,
+  // Lot 15 : dernière vérification, à défaut date d'ajout (croissant = la plus ancienne d'abord).
+  lastCheckedAt: (item: EvaluatedListing) =>
+    Date.parse(checkReference(item.listing)),
 } as const
 
 export function comparator(

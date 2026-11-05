@@ -26,6 +26,14 @@ elles sont protégées.
   annonces repérées vivent dans les brouillons.
 - **IA** : seul le texte de l'annonce (ou de l'alerte) part au modèle, jamais de donnée de
   membre (docs/ia.md).
+- **Vérifications des annonces (lot 15, ADR 0025)** : la page d'un portail est lue par Claude
+  dans le navigateur de l'utilisateur, jamais téléchargée par le serveur. Une vérification garde
+  la date, le membre (ou Claude pour lui), le résultat, les écarts, l'URL consultée et un
+  extrait-preuve **court** (500 caractères au plus) dont les numéros de téléphone et les adresses
+  e-mail sont masqués à l'écriture (`sanitizeEvidence` dans `domain`), pour ne pas conserver les
+  coordonnées d'un agent ou d'un vendeur ; les avant et après d'une description sont tronqués et
+  masqués de même. Les vérifications sont lisibles par les membres de l'espace, au journal et dans
+  l'export ; elles partent avec l'annonce (cascade).
 - **Fonds de carte (lot 10, ADR 0020)** : le fond choisi est retenu dans le `localStorage` du
   navigateur, sous la clé `apart-localizer-base-map:<identifiant de la personne>` (l'UUID
   Supabase, déjà présent dans la session stockée par le même navigateur) ; la valeur n'est que

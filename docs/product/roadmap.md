@@ -8,7 +8,9 @@ lots 0 à 11 sont déployés (Vercel et Supabase cloud, imports et rattrapage du
 production). Le lot 12 (placement des annonces) attend son déploiement : migration additive
 `20261105180000_lot12_listing_placement`, `import:places` puis `relocate:listings`, en simulation
 d'abord ([docs/deploiement.md](../deploiement.md) § 2) ; le lot 13 (page Hypothèses, sans
-migration ni variable nouvelle) le sien. Restent les actions
+migration ni variable nouvelle) le sien. Le lot 15 (suivi des mises à jour des annonces) est
+livré côté code, tests et documentation et attend son déploiement : migration additive
+`20261106110000_lot15_listing_checks`, sans variable ni import nouveau. Restent les actions
 d'exploitation (Supabase cloud, Vercel, clés et connecteur :
 [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard » dans chaque lot, et
 les critères « Fini quand » qui demandent le déploiement ou un usage réel (lot 1 : déploiement et
@@ -419,3 +421,59 @@ réglages sans lire le modèle de calcul, on voit ce qu'on a changé avant d'enr
 impact sur les annonces, et une saisie identique enregistre les mêmes hypothèses qu'avant.
 (Vérifié en tests automatisés et sur captures Chromium de la page réelle, API simulée ; à
 confirmer par Richard sur le site déployé.)
+
+## Lot 15 : suivi des mises à jour des annonces
+
+Statut : livré (à déployer : migration additive `20261106110000_lot15_listing_checks`, sans
+variable ni import nouveau, [docs/deploiement.md](../deploiement.md) § 2).
+
+- Besoins C8 (précisé) et S8. Demande de Richard : « J'aimerais lui demander [à Claude] de faire
+  une mise à jour des annonces enregistrées, et qu'il y ait pour chaque annonce un suivi de ces
+  mises à jour. » Aucun scraping : Claude lit la page dans le navigateur de l'utilisateur (ou le
+  texte collé) ; un portail qui bloque laisse l'annonce « non vérifiée : page inaccessible ».
+  ADR 0025.
+- Livré :
+  - **Modèle** : `listings.last_checked_at`, `listings.last_seen_online_at`,
+    `listings.republished_from_id` (republication rattachée, unique), table `listing_checks`
+    (date, auteur et canal, résultat, écarts appliqués, proposés ou notés, résumé,
+    extrait-preuve de 500 caractères au plus sans téléphone ni e-mail, URL consultée, annonce
+    liée, statut proposé), notification `listing_checked`.
+  - **Règles** (`domain`, `listing-checks.ts`) : `listingCheckDiff` (seuls les champs fournis,
+    tolérances d'arrondi ; faits appliqués, « plus en ligne » propose « Vendu ou retiré »,
+    annonce « remontée » notée, première publication gardée), `resolveCheckOutcome`,
+    `listingCheckSummary` (« Prix 215 000 € → 205 000 € »), `isStale` et `checkFreshness`
+    (7 jours, `DEFAULT_STALE_DAYS`), `sanitizeEvidence`, `orderRepublication`,
+    `republicationLinkProblem` ; brief de négociation sur la chaîne de republication (durée en
+    ligne depuis la publication d'origine, baisses cumulées, argument « Annonce republiée »).
+  - **API** : `GET /listings/:id/checks`, `POST /listings/:id/checks/preview`,
+    `POST /listings/:id/checks` ; une vérification s'applique en une transaction (faits,
+    historique des prix source `listing`, dates, rattachement, ligne, journal
+    `listing.checked`, notifications), puis plafond et marché si la surface ou les pièces
+    changent ; garde-fous `expectedUpdatedAt` et `expectedPrice` ; « ce qui a changé » et
+    notifications reprennent ce qu'une vérification trouve, jamais une vérification inchangée.
+    Filtre `staleDays` et tri `lastCheckedAt` de la liste.
+  - **MCP** : `check_listing` (lecture), `apply_listing_check` (écriture, statut jamais
+    appliqué), file « à revérifier » de `list_listings`, prompt `review_listings` (tournée : une
+    annonce à la fois, navigateur de l'utilisateur, arrêt sans contournement d'un portail qui
+    bloque, résumé et statuts à confirmer) : 31 outils, deux prompts.
+  - **Interface** : section « Mises à jour » de l'onglet Suivi (chronologie : date, qui,
+    résultat, changements avant → après, extrait dépliable, annonce rattachée ; « Vue en ligne
+    aujourd'hui », « Plus en ligne » avec confirmation puis statut proposé, appliqué seulement
+    sur accord) ; mention « Vérifiée il y a 3 j », « Page inaccessible… » ou « À revérifier »
+    dans la liste, les cartes et l'en-tête de la fiche ; filtre « À revérifier » (URL
+    `staleDays=7`) et tri « Dernière vérification » ; note de republication dans le brief.
+  - **Export** : trois colonnes CSV en fin de ligne (Vérifiée le, Vue en ligne le, Dernière
+    vérification), `checks` par annonce dans le JSON (version 1, champ ajouté).
+  - **Démo** : vérifications fictives (prix trouvé, inchangée, plus en ligne, republiée, page
+    inaccessible) et une republication rattachée.
+- Plus tard : une tournée planifiée (rappel « à revérifier » par notification) ; le rattachement
+  d'une republication proposé depuis la fiche (aujourd'hui par le MCP) ; la comparaison des
+  photos d'une republication (lue par Claude, jamais par le serveur).
+
+Fini quand : Claude fait la tournée des annonces à revérifier depuis le navigateur de Richard,
+une à la fois, sans contourner un portail qui bloque ; chaque annonce montre ses vérifications
+(qui, quand, quoi, preuve) ; un prix lu sur le portail entre dans l'historique et le brief, une
+annonce disparue se voit proposer « Vendu ou retiré » sans que le statut change d'office ; une
+republication rattachée cumule durée en ligne et baisses. (Vérifié en tests automatisés, e2e MCP
+JSON-RPC compris, et sur captures Chromium d'un banc d'essai, jeu de démo fictif ; à confirmer par
+Richard avec une vraie tournée après le déploiement.)

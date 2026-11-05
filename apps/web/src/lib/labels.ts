@@ -210,6 +210,7 @@ export const SORT_LABELS: Record<ListingSort, string> = {
   opinion: 'Nos avis (moyenne)',
   createdAt: "Date d'ajout",
   discount: 'Décote nécessaire',
+  lastCheckedAt: 'Dernière vérification',
 }
 
 /** Communes de Bordeaux Métropole proposées dans le formulaire (liste ouverte). */

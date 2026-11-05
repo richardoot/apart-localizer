@@ -135,6 +135,38 @@ export async function writeDemoDataset(
         }
       }
 
+      // Lot 15 : republications et vérifications, une fois toutes les annonces là.
+      for (const listing of dataset.listings) {
+        if (listing.republishedFromId) {
+          await tx.listing.update({
+            where: { id: listing.id },
+            data: {
+              republishedFromId: listing.republishedFromId,
+              updatedAt: new Date(listing.updatedAt),
+            },
+          })
+        }
+      }
+      await tx.listingCheck.createMany({
+        data: dataset.listings.flatMap(listing =>
+          listing.checks.map(c => ({
+            id: c.id,
+            listingId: listing.id,
+            workspaceId,
+            checkedAt: new Date(c.at),
+            authorId: idOf(c.by),
+            channel: c.channel,
+            outcome: c.outcome,
+            changes: json(c.changes),
+            summary: c.summary,
+            evidence: c.evidence,
+            checkedUrl: c.checkedUrl,
+            linkedListingId: c.linkedListingId,
+            suggestedStatus: c.suggestedStatus,
+          }))
+        ),
+      })
+
       for (const c of dataset.criteria) {
         const perimeter = c.input.perimeter
         await tx.searchCriteria.create({
@@ -413,6 +445,7 @@ async function createListing(
       url: input.url,
       externalId: input.externalId,
       title: input.title,
+      publishedAt: input.publishedAt ? new Date(input.publishedAt) : null,
       description: input.description,
       notes: input.notes,
       addressRaw: input.location.addressRaw,
@@ -438,6 +471,14 @@ async function createListing(
       discardedAt: discarded ? new Date(discarded.at) : null,
       createdAt: new Date(listing.createdAt),
       updatedAt: new Date(listing.updatedAt),
+      // Lot 15 : dates de vérification (le lien de republication est posé
+      // une fois toutes les annonces créées).
+      lastCheckedAt: listing.lastCheckedAt
+        ? new Date(listing.lastCheckedAt)
+        : null,
+      lastSeenOnlineAt: listing.lastSeenOnlineAt
+        ? new Date(listing.lastSeenOnlineAt)
+        : null,
       renovation: input.renovation
         ? {
             create: {

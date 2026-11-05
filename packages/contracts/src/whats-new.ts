@@ -18,9 +18,10 @@ export const WhatsNewKindSchema = z
     'opinion',
     'task',
     'criteria_match',
+    'listing_check',
   ])
   .describe(
-    "Nouvelle annonce, changement de prix, de statut, avis ou tâche de l'autre membre, annonce entrée dans un critère"
+    "Nouvelle annonce, changement de prix, de statut, avis ou tâche de l'autre membre, annonce entrée dans un critère, mise à jour trouvée en vérifiant une annonce sur le portail (lot 15)"
   )
 export type WhatsNewKind = z.infer<typeof WhatsNewKindSchema>
 
@@ -31,6 +32,7 @@ export const WHATS_NEW_KIND_LABELS: Record<WhatsNewKind, string> = {
   opinion: 'Nouveaux avis',
   task: 'Tâches',
   criteria_match: 'Entrées dans un critère',
+  listing_check: "Mises à jour d'annonces",
 }
 
 export const WhatsNewItemSchema = z.object({

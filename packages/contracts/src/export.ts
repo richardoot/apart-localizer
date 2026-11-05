@@ -7,6 +7,7 @@ import {
   TaskSchema,
 } from './collaboration.js'
 import { ListingSchema } from './listing.js'
+import { ListingCheckSchema } from './listing-checks.js'
 import { ListingMetricsSchema, TargetPriceSchema } from './metrics.js'
 import { RentalVerdictSchema } from './enums.js'
 import { ListingListQuerySchema } from './filters.js'
@@ -77,6 +78,12 @@ export const ExportListingSchema = z.object({
   offers: z.array(OfferSchema),
   visits: z.array(ExportVisitSchema),
   rentComparables: z.array(RentComparableSchema),
+  checks: z
+    .array(ListingCheckSchema)
+    .default([])
+    .describe(
+      'Lot 15 : vérifications sur le portail, de la plus récente à la plus ancienne (absent dans un export antérieur)'
+    ),
 })
 export type ExportListing = z.infer<typeof ExportListingSchema>
 

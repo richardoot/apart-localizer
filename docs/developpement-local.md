@@ -120,13 +120,15 @@ hors du dépôt. Un nouveau fichier part du `.env.example` correspondant.
 - **`none`** (défaut) : rien n'est chargé ni supprimé.
 - **`demo`** : l'espace « Démo », **entièrement fictif** (adresses marquées « adresse fictive »,
   liens `exemple.invalid`), recréé à l'identique à chaque fois, sans jamais toucher aux autres
-  espaces (ils sont comptés avant et après ; tout est annulé s'ils ont bougé). Quatorze annonces
+  espaces (ils sont comptés avant et après ; tout est annulé s'ils ont bougé). Quinze annonces
   dans Bordeaux Métropole, des statuts « à étudier » à « vendue », des verdicts cible, à creuser et
   hors cible ; deux versions d'hypothèses ; travaux et phase 2 ; avis des deux membres ; tâches
   (dont assignées) ; offres avec réponses et contre-propositions ; historique de prix ; visites
   faites et planifiées (sans photo) ; deux critères (un polygone sur le centre et un rayon de
   1,5 km autour du tram B à Talence) avec leurs entrées ; comparables de loyer ; deux scénarios ;
-  une alerte e-mail à valider ; le journal et les notifications qu'il fait naître. Les dates sont
+  une alerte e-mail à valider ; des vérifications sur le portail (lot 15 : prix trouvé,
+  inchangée, plus en ligne, republiée, page inaccessible) et une republication rattachée (le T3
+  de Cenon et sa première annonce) ; le journal et les notifications qu'il fait naître. Les dates sont
   relatives au jour du seed : il y a toujours des « nouvelles » et une visite à venir.
 - **`artifact`** : l'import de `data/private/artifact-export/` (vos annonces). Sans ce dossier,
   `stack:up` le dit et s'arrête. Les e-mails des membres viennent de `--richard-email` et

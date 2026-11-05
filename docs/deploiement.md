@@ -194,6 +194,18 @@ intérieur de sa commune (contours importés) ; une annonce sans commune reste �
 le déploiement du web, la première visite recharge la page une fois pour passer à la nouvelle
 version (service worker, ADR 0022).
 
+### Suivi des mises à jour des annonces (lot 15)
+
+Migration `20261106110000_lot15_listing_checks` : purement additive (colonnes facultatives
+`listings.last_checked_at`, `listings.last_seen_online_at` et `listings.republished_from_id`,
+NULL pour les annonces existantes, qui sont donc « jamais vérifiées » ; table `listing_checks` ;
+énumération `ListingCheckOutcome` ; valeur `listing_checked` de `NotificationType`), aucune
+donnée réécrite ; appliquée par `prisma:deploy` (ou `build:vercel`) comme les autres. Ni
+variable, ni import, ni rattrapage. Après le déploiement, la liste montre « À revérifier » pour
+les annonces actives ajoutées il y a plus de sept jours ; le connecteur claude.ai découvre les
+deux outils et le prompt nouveaux à sa prochaine lecture de `tools/list` (nouvelle conversation ;
+le reconnecter s'ils n'apparaissent pas).
+
 ## 3. Projet Vercel : API
 
 Projet `apart-localizer-backend` relié au dépôt GitHub, **Root Directory** `apps/api`, framework
@@ -418,3 +430,7 @@ partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « C
       carte : repères pleins, creux et pointillés, contour du quartier au survol ; onglet
       Quartier : distances « ≈ » et « Préciser l'adresse » ; filtre « Repère » ; après le
       déploiement du web, la page se recharge une seule fois.
+- [ ] Lot 15 : migration `20261106110000_lot15_listing_checks` appliquée ; onglet Suivi d'une
+      annonce : section « Mises à jour », « Vue en ligne aujourd'hui » et « Plus en ligne »
+      (statut proposé, appliqué seulement sur accord) ; liste : « À revérifier » et le filtre ;
+      dans claude.ai, prompt « Tournée de mise à jour » essayé sur deux ou trois annonces.

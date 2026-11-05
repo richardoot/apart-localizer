@@ -16,9 +16,10 @@ export const NotificationTypeSchema = z
     'offer_response',
     'drafts_received',
     'member_joined',
+    'listing_checked',
   ])
   .describe(
-    "Type : nouvelle annonce (par l'autre membre ou par le MCP), changement de statut, tâche assignée, annonce entrée dans un critère, réponse à une offre, annonces reçues par e-mail, arrivée d'un membre invité (pour les propriétaires)"
+    "Type : nouvelle annonce (par l'autre membre ou par le MCP), changement de statut, tâche assignée, annonce entrée dans un critère, réponse à une offre, annonces reçues par e-mail, arrivée d'un membre invité (pour les propriétaires), mise à jour trouvée en vérifiant une annonce sur le portail (prix, charges, plus en ligne, republiée ; lot 15)"
   )
 export type NotificationType = z.infer<typeof NotificationTypeSchema>
 
@@ -30,6 +31,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   offer_response: 'Réponse à une offre',
   drafts_received: 'Annonces reçues par e-mail',
   member_joined: "Arrivée d'un membre dans l'espace",
+  listing_checked: "Mise à jour d'une annonce (vérification sur le portail)",
 }
 
 export const NotificationChannelSchema = z
@@ -65,6 +67,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: Record<
   offer_response: { in_app: true, push: true, email: false },
   drafts_received: { in_app: true, push: true, email: false },
   member_joined: { in_app: true, push: true, email: false },
+  listing_checked: { in_app: true, push: true, email: false },
 }
 
 export const NotificationPreferencesSchema = z.object(

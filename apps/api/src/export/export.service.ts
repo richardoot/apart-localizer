@@ -17,6 +17,7 @@ import type {
 import { AssumptionsService } from '../assumptions/assumptions.service'
 import { ListingsService } from '../listings/listings.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { toListingCheckDto } from '../listings/listing.mapper'
 import { toSearchCriteriaDto } from '../search-criteria/search-criteria.mapper'
 import { toRentComparableDto, toScenarioDto } from '../study/study.mapper'
 import { VisitsService } from '../visits/visits.service'
@@ -117,37 +118,52 @@ export class ExportService {
     visits: Visit[]
   ): Promise<ExportDocument> {
     const ids = items.map(i => i.listing.id)
-    const [workspace, current, history, criteria, scenarios, comparables] =
-      await Promise.all([
-        this.prisma.workspace.findUniqueOrThrow({
-          where: { id: member.workspaceId },
-          // Membres actifs et anciens (auteurs d'avis, de tâches, de visites) ;
-          // pas les invitations.
-          include: {
-            members: {
-              where: { status: { in: ['active', 'removed'] } },
-              orderBy: MEMBER_ORDER,
-            },
+    const [
+      workspace,
+      current,
+      history,
+      criteria,
+      scenarios,
+      comparables,
+      checks,
+    ] = await Promise.all([
+      this.prisma.workspace.findUniqueOrThrow({
+        where: { id: member.workspaceId },
+        // Membres actifs et anciens (auteurs d'avis, de tâches, de visites) ;
+        // pas les invitations.
+        include: {
+          members: {
+            where: { status: { in: ['active', 'removed'] } },
+            orderBy: MEMBER_ORDER,
           },
-        }),
-        this.assumptions.current(member.workspaceId),
-        this.assumptions.history(member.workspaceId),
-        this.prisma.searchCriteria.findMany({
-          where: { workspaceId: member.workspaceId },
-          orderBy: { createdAt: 'asc' },
-        }),
-        this.prisma.scenario.findMany({
-          where: {
-            workspaceId: member.workspaceId,
-            OR: [{ listingId: null }, { listingId: { in: ids } }],
-          },
-          orderBy: { createdAt: 'asc' },
-        }),
-        this.prisma.rentComparable.findMany({
-          where: { listingId: { in: ids } },
-          orderBy: { createdAt: 'asc' },
-        }),
-      ])
+        },
+      }),
+      this.assumptions.current(member.workspaceId),
+      this.assumptions.history(member.workspaceId),
+      this.prisma.searchCriteria.findMany({
+        where: { workspaceId: member.workspaceId },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.scenario.findMany({
+        where: {
+          workspaceId: member.workspaceId,
+          OR: [{ listingId: null }, { listingId: { in: ids } }],
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.rentComparable.findMany({
+        where: { listingId: { in: ids } },
+        orderBy: { createdAt: 'asc' },
+      }),
+      // Lot 15 : les vérifications sur le portail.
+      this.prisma.listingCheck.findMany({
+        where: { workspaceId: member.workspaceId, listingId: { in: ids } },
+        orderBy: { checkedAt: 'desc' },
+        include: {
+          linkedListing: { select: { id: true, title: true, status: true } },
+        },
+      }),
+    ])
     const byListing = <T extends { listingId: string }>(rows: T[]) => {
       const map = new Map<string, T[]>()
       for (const row of rows) {
@@ -157,6 +173,7 @@ export class ExportService {
     }
     const visitsOf = byListing(visits)
     const comparablesOf = byListing(comparables.map(toRentComparableDto))
+    const checksOf = byListing(checks.map(toListingCheckDto))
     // Les NaN (surface ou coût nul) restent des nombres ici ; ils deviennent
     // null à l'écriture du fichier.
     return ExportDocumentSchema.parse({
@@ -186,6 +203,7 @@ export class ExportService {
           ({ photos: _photos, ...visit }) => visit
         ),
         rentComparables: comparablesOf.get(item.listing.id) ?? [],
+        checks: checksOf.get(item.listing.id) ?? [],
       })),
       searchCriteria: criteria.map(toSearchCriteriaDto),
       scenarios: scenarios.map(toScenarioDto),

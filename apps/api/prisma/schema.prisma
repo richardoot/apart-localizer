@@ -201,6 +201,18 @@ enum NotificationType {
   offer_response
   drafts_received
   member_joined
+  listing_checked
+
+  @@schema("app")
+}
+
+/// Résultat d'une vérification d'annonce sur le portail (lot 15, ADR 0025).
+enum ListingCheckOutcome {
+  unchanged
+  changed
+  offline
+  republished
+  inaccessible
 
   @@schema("app")
 }
@@ -299,6 +311,7 @@ model Workspace {
   notifications  Notification[]
   listingDrafts  ListingDraft[]
   visitPhotos    VisitPhoto[]
+  listingChecks  ListingCheck[]
 
   @@map("workspaces")
   @@schema("app")
@@ -361,6 +374,7 @@ model Member {
   notifications     Notification[]
   pushSubscriptions PushSubscription[]
   decidedDrafts     ListingDraft[]     @relation("DraftDecider")
+  listingChecks     ListingCheck[]     @relation("ListingCheckAuthor")
   invitedBy         Member?            @relation("MemberInviter", fields: [invitedById], references: [id], onDelete: SetNull)
   invitees          Member[]           @relation("MemberInviter")
   removedBy         Member?            @relation("MemberRemover", fields: [removedById], references: [id], onDelete: SetNull)
@@ -488,6 +502,15 @@ model Listing {
   // Dernier enrichissement open data (JSON validé par ListingOpenDataContextSchema)
   openDataContext Json? @map("open_data_context")
 
+  // Suivi des mises à jour sur le portail (lot 15, ADR 0025)
+  /// Dernière vérification, quel qu'en soit le résultat.
+  lastCheckedAt     DateTime? @map("last_checked_at") @db.Timestamptz(6)
+  /// Dernière fois que l'annonce a été vue en ligne.
+  lastSeenOnlineAt  DateTime? @map("last_seen_online_at") @db.Timestamptz(6)
+  /// Annonce plus ancienne dont celle-ci est la republication (même bien) :
+  /// une annonce reprend au plus une annonce et n'est reprise que par une.
+  republishedFromId String?   @unique @map("republished_from_id")
+
   createdById String?  @map("created_by_id")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -508,6 +531,10 @@ model Listing {
   rentComparables RentComparable[]
   notifications   Notification[]
   drafts          ListingDraft[]
+  checks          ListingCheck[]   @relation("ListingChecks")
+  linkedChecks    ListingCheck[]   @relation("ListingCheckLinked")
+  republishedFrom Listing?         @relation("ListingRepublication", fields: [republishedFromId], references: [id], onDelete: SetNull)
+  republishedAs   Listing?         @relation("ListingRepublication")
 
   @@index([workspaceId, status])
   @@index([workspaceId, commune])
@@ -774,6 +801,41 @@ model VisitPhoto {
 
   @@index([visitId])
   @@map("visit_photos")
+  @@schema("app")
+}
+
+/// Une vérification d'annonce sur le portail (lot 15, ADR 0025) : ce que
+/// Claude (au MCP) ou un membre (dans le web) a constaté sur la page, ce qui
+/// a été appliqué à la fiche ou seulement proposé. Le serveur ne télécharge
+/// jamais la page. Jamais supprimée, sauf avec l'annonce.
+model ListingCheck {
+  id              String              @id @default(uuid())
+  listingId       String              @map("listing_id")
+  workspaceId     String              @map("workspace_id")
+  checkedAt       DateTime            @default(now()) @map("checked_at") @db.Timestamptz(6)
+  authorId        String?             @map("author_id")
+  channel         ActivityChannel
+  outcome         ListingCheckOutcome
+  /// Écarts : [{ field, label, before, after, disposition, text }]
+  /// (ListingCheckChangeSchema), appliqués, proposés ou notés.
+  changes         Json                @default("[]")
+  summary         String
+  /// Extrait-preuve, 500 caractères au plus, téléphones et e-mails masqués.
+  evidence        String?
+  checkedUrl      String?             @map("checked_url")
+  /// Annonce rattachée par une republication.
+  linkedListingId String?             @map("linked_listing_id")
+  /// Statut proposé, jamais appliqué d'office.
+  suggestedStatus ListingStatus?      @map("suggested_status")
+
+  listing       Listing   @relation("ListingChecks", fields: [listingId], references: [id], onDelete: Cascade)
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  author        Member?   @relation("ListingCheckAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  linkedListing Listing?  @relation("ListingCheckLinked", fields: [linkedListingId], references: [id], onDelete: SetNull)
+
+  @@index([listingId, checkedAt(sort: Desc)])
+  @@index([workspaceId, checkedAt(sort: Desc)])
+  @@map("listing_checks")
   @@schema("app")
 }
 

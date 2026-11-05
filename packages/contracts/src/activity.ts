@@ -31,10 +31,11 @@ export const ActivityKindSchema = z
     'study',
     'draft',
     'member',
+    'check',
     'other',
   ])
   .describe(
-    "Sorte d'événement : annonce, statut, prix, tâche, avis, offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon reçu, membres de l'espace (invitations, arrivées, retraits, rôles), autre"
+    "Sorte d'événement : annonce, statut, prix, tâche, avis, offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon reçu, membres de l'espace (invitations, arrivées, retraits, rôles), vérification sur le portail (lot 15), autre"
   )
 export type ActivityKind = z.infer<typeof ActivityKindSchema>
 
@@ -52,6 +53,7 @@ export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
   study: 'Étude',
   draft: 'Brouillon reçu',
   member: 'Membres',
+  check: 'Vérification',
   other: 'Autre',
 }
 
@@ -65,6 +67,7 @@ export const ACTIVITY_KIND_RULES: Record<
 > = {
   status: { actions: ['listing.status_changed'] },
   price: { actions: ['listing.price_changed'] },
+  check: { actions: ['listing.checked'] },
   listing: { prefixes: ['listing'] },
   task: { prefixes: ['task'] },
   opinion: { prefixes: ['opinion'] },
@@ -187,6 +190,9 @@ export const LISTING_FIELD_LABELS: Record<string, string> = {
   role: 'Rôle',
   filters: 'Filtres',
   perimeterType: 'Périmètre',
+  online: 'En ligne',
+  lastCheckedAt: 'Vérifiée le',
+  lastSeenOnlineAt: 'Vue en ligne le',
 }
 
 /** Le libellé d'un champ, ou son nom. */

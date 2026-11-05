@@ -2,6 +2,7 @@
   import { computed } from 'vue'
   import {
     ACTIVE_LISTING_STATUSES,
+    DEFAULT_STALE_DAYS,
     DpeClassSchema,
     LOCATION_PRECISION_LABELS,
     ListingSortSchema,
@@ -106,7 +107,10 @@
 
   /** Le sens naturel d'un tri : les plus petits prix et efforts d'abord. */
   function defaultOrder(sort: ListingSort): 'asc' | 'desc' {
-    return sort === 'price' || sort === 'pricePerM2' || sort === 'discount'
+    return sort === 'price' ||
+      sort === 'pricePerM2' ||
+      sort === 'discount' ||
+      sort === 'lastCheckedAt'
       ? 'asc'
       : sort === 'effort'
         ? 'desc'
@@ -302,6 +306,25 @@
           "
         />
         Nouvelles pour moi
+      </label>
+      <label
+        class="flex items-center gap-2 text-sm"
+        :title="`Annonces actives sans vérification sur le portail depuis plus de ${DEFAULT_STALE_DAYS} jours (à défaut, depuis leur ajout)`"
+      >
+        <input
+          type="checkbox"
+          class="accent-accent"
+          data-testid="filter-stale"
+          :checked="store.filters.staleDays !== undefined"
+          @change="
+            store.patch({
+              staleDays: ($event.target as HTMLInputElement).checked
+                ? DEFAULT_STALE_DAYS
+                : undefined,
+            })
+          "
+        />
+        À revérifier
       </label>
       <button
         v-if="store.filters.near"

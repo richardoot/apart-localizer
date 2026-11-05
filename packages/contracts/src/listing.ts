@@ -331,6 +331,29 @@ export const ListingSchema = ListingInputSchema.omit({
     .describe(
       'Dernier enrichissement par données ouvertes : prix médian DVF, recherche DPE, plafond d’encadrement, tram le plus proche'
     ),
+  // Lot 15 : suivi des mises à jour (vérifications sur le portail).
+  lastCheckedAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .default(null)
+    .describe(
+      'Dernière vérification sur le portail, quel qu’en soit le résultat ; null si jamais vérifiée'
+    ),
+  lastSeenOnlineAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .default(null)
+    .describe('Dernière fois que l’annonce a été vue en ligne sur le portail'),
+  republishedFromId: z
+    .string()
+    .uuid()
+    .nullable()
+    .default(null)
+    .describe(
+      'Annonce plus ancienne dont celle-ci est la republication (même bien) : durée en ligne et baisses se cumulent'
+    ),
 })
 export type Listing = z.infer<typeof ListingSchema>
 

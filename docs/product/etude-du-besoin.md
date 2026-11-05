@@ -169,6 +169,7 @@ reste optionnel.
 | S5 | Offres : montant, date, réponse, contre-proposition | S |
 | S6 | Journal d'activité par annonce (qui a changé quoi, quand, par quel canal : web ou MCP) | S |
 | S7 | Notifications (nouvelle annonce, changement de statut, tâche assignée) par e-mail ou web push ; livrées au lot 6 avec aussi l'entrée dans un critère, la réponse à une offre et les annonces reçues par e-mail, dans l'application et en web push, l'e-mail restant en option (ADR 0015) | L |
+| S8 | Suivi des mises à jour : Claude revérifie les annonces sur leur portail (dans le navigateur de l'utilisateur), une vérification datée par annonce (qui, résultat, changements, preuve), faits appliqués, statut proposé jamais appliqué d'office, file « à revérifier », republication rattachée (lot 15, ADR 0025) | S |
 
 ### 3.3 Évaluation financière
 
@@ -240,6 +241,7 @@ Lecture :
 | `get_compliance` | Checklist réglementaire datée à la date de mise en location, risques Géorisques à l'adresse |
 | `list_visits` | Visites d'une annonce : date, état, participants, compte rendu, points positifs et négatifs, note, nombre de photos (lot 6) |
 | `whats_new` | Ce qui a changé pour le membre depuis sa dernière visite : nouvelles annonces, prix, statuts, avis et tâches de l'autre membre, entrées dans un critère (lot 6) |
+| `check_listing` | Compare la page d'une annonce lue par Claude (ou son texte) à la fiche : écarts classés (appliqués, proposés, notés), résultat, statut proposé, republications probables ; rien n'est écrit (lot 15) |
 
 Écriture (toutes réversibles, aucune suppression) :
 
@@ -256,6 +258,7 @@ Lecture :
 | `create_search_criteria`, `update_search_criteria` | Critères de recherche : filtres et périmètre en GeoJSON (point et rayon, polygone) ou paramètres d'isochrone |
 | `add_rent_comparable` | Une annonce de location comparable saisie (loyer, surface, meublé, date, source) ; répond avec la médiane à jour |
 | `add_visit` | Une visite faite ou planifiée (date, participants, compte rendu, points positifs et négatifs, note, tâche de préparation), sans photo ; renvoie le statut proposé sans l'appliquer (lot 6) |
+| `apply_listing_check` | Enregistre une vérification : faits lus appliqués (prix par l'historique), dates de vérification, republication rattachée, extrait-preuve ; renvoie le statut proposé sans l'appliquer (lot 15) |
 
 Ressources et prompts : le schéma d'annonce en JSON Schema (`apart://schema/listing`), le
 glossaire des indicateurs (`apart://glossaire`), un prompt « analyser cette annonce » qui
@@ -356,6 +359,11 @@ fiscaux datés ; versionnées (date d'effet) ; surcharge partielle par annonce.
 **Task** : annonce, libellé, fait, assigné, origine (défaut, manuelle, champ manquant).
 
 **PriceEvent** : annonce, date, ancien prix, nouveau prix, source.
+
+**ListingCheck** (lot 15) : annonce, date, membre et canal, résultat (inchangée, mise à jour, plus
+en ligne, republiée, page inaccessible), écarts (champ, avant, après, appliqué, proposé ou noté),
+résumé, extrait-preuve court, URL consultée, annonce liée, statut proposé. Sur l'annonce :
+dernière vérification, dernière fois vue en ligne, annonce dont elle est la republication.
 
 **Offer** : annonce, date, montant, canal (e-mail, téléphone, agence, en personne, courrier), réponse (en attente, acceptée, refusée, contre-proposition), contre-proposition, date de la réponse, auteur, notes. Une offre ne se supprime pas ; sa réponse propose un statut à l'annonce sans le changer d'office (ADR 0009).
 

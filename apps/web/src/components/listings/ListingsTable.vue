@@ -24,6 +24,7 @@
   import CostBasisBadge from './CostBasisBadge.vue'
   import DpeBadge from './DpeBadge.vue'
   import CriteriaBadges from './CriteriaBadges.vue'
+  import CheckFreshnessBadge from './CheckFreshnessBadge.vue'
   import NewBadge from './NewBadge.vue'
   import PrecisionBadge from './PrecisionBadge.vue'
   import RentalPill from './RentalPill.vue'
@@ -128,6 +129,11 @@
             h(PrecisionBadge, {
               location: ctx.row.original.listing.location,
               compact: true,
+            }),
+            // Lot 15 : « Vérifiée il y a 3 j » ou « À revérifier ».
+            h(CheckFreshnessBadge, {
+              listing: ctx.row.original.listing,
+              lastOutcome: ctx.row.original.lastCheck?.outcome ?? null,
             }),
           ]),
         ]),
