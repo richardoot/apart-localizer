@@ -7,12 +7,14 @@
   import { useBaseMap } from '@/composables/useBaseMap'
   import { useListingAreas } from '@/composables/useListings'
   import { useMapLayers } from '@/composables/useMapLayers'
+  import { useSearchCriteriaList } from '@/composables/useSearchCriteria'
   import type {
     MapLayerToggles,
     SurroundingsLayerKey,
   } from '@/composables/useMapLayers'
   import {
     ATHLETICS_LAYERS,
+    CRITERIA_LAYERS,
     DRIVE_LAYERS,
     FITNESS_LAYERS,
     LISTING_AREA_COLOR,
@@ -33,6 +35,7 @@
     surroundingsFrame,
     upsertGeoJsonLayer,
   } from '@/lib/map-layers'
+  import { criteriaFeatures } from '@/lib/perimeter'
   import BaseMapSwitcher from '@/components/map/BaseMapSwitcher.vue'
   import SurroundingsLegend from '@/components/map/SurroundingsLegend.vue'
 
@@ -40,7 +43,10 @@
    * Carte du quartier de la fiche : l'annonce, l'arrêt de tram et les
    * équipements les plus proches (lot 11), les ventes comparables ; en
    * option, les couches complètes des pistes, drives, Fitness Park et
-   * contours des quartiers. Le fond est celui choisi pour toutes les cartes.
+   * contours des quartiers ; lot 14 : les périmètres des critères actifs,
+   * sous le contour du quartier retenu, pour voir d'un coup d'œil pourquoi
+   * une annonce au quartier est « à confirmer ». Le fond est celui choisi
+   * pour toutes les cartes.
    */
   const props = defineProps<{ context: ListingContext }>()
 
@@ -67,6 +73,11 @@
   // Lot 12 : le contour du quartier retenu d'une annonce placée au quartier.
   const areas = useListingAreas(
     computed(() => props.context.precision === 'district')
+  )
+  // Lot 14 : les périmètres des critères actifs (couche marquée, ADR 0020).
+  const { data: criteriaData } = useSearchCriteriaList(false)
+  const perimeters = computed(() =>
+    criteriaFeatures(criteriaData.value ?? [], null)
   )
   const retainedArea = computed(() =>
     props.context.precision === 'district'
@@ -175,6 +186,12 @@
       NEIGHBOURHOOD_HOVER_SOURCE,
       null,
       NEIGHBOURHOOD_HOVER_LAYERS
+    )
+    upsertGeoJsonLayer(
+      map,
+      'criteria-perimeters',
+      perimeters.value,
+      CRITERIA_LAYERS
     )
     upsertGeoJsonLayer(
       map,
@@ -337,7 +354,13 @@
     flush: 'post',
   })
   watch(
-    () => [props.context, toggles.value, layers.value, retainedArea.value],
+    () => [
+      props.context,
+      toggles.value,
+      layers.value,
+      retainedArea.value,
+      perimeters.value,
+    ],
     render,
     { deep: true }
   )
@@ -377,6 +400,17 @@
           aria-hidden="true"
         />
         quartier retenu (repère en son centre)
+      </span>
+      <span
+        v-if="perimeters.features.length"
+        class="flex items-center gap-1 text-muted"
+        data-testid="criteria-perimeters-legend"
+      >
+        <span
+          class="inline-block h-2.5 w-4 rounded-sm border-2 border-dashed border-accent bg-accent-soft"
+          aria-hidden="true"
+        />
+        périmètres des critères actifs
       </span>
     </div>
     <div class="relative">

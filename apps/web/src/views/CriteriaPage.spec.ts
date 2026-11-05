@@ -63,7 +63,19 @@ describe('CriteriaPage', () => {
     expect(first.text()).toContain('Talence fictif')
     expect(first.get('[data-testid="count"]').text()).toBe('3')
     expect(first.text()).toContain('1 nouvelle(s)')
-    expect(first.text()).toContain('dont 1 sous réserve')
+    expect(first.text()).toContain('dont 1 à confirmer faute d’adresse')
+    // Lot 14 : annonces par niveau d'adéquation et marges appliquées.
+    expect(
+      first.findAll('[data-testid="fit-counts"] [data-fit]').map(b => b.text())
+    ).toEqual([
+      'Dans les critères · 2',
+      'À confirmer · 1',
+      'À la marge · 0',
+      'Hors critères · 1',
+    ])
+    expect(first.get('[data-testid="tolerance-summary"]').text()).toBe(
+      'Marges appliquées : périmètre 300 m, prix +5 %.'
+    )
     expect(first.text()).toContain('Polygone dessiné')
     expect(first.text()).toContain('≤ 200')
     expect(first.text()).toContain('Voir les annonces')

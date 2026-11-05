@@ -420,8 +420,17 @@ describe('ListingPanel', () => {
           name: 'Talence fictif',
           matchedAt: '2026-11-03T10:00:00.000Z',
           approximate: false,
+          level: 'in' as const,
+          reasons: [],
         },
       ],
+      criteriaFit: {
+        ...item.criteriaFit,
+        level: 'in' as const,
+        activeCriteria: 1,
+        criteriaId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        name: 'Talence fictif',
+      },
     }
     apiMock.listings.get.mockResolvedValue(matched)
     apiMock.listings.markSeen.mockResolvedValue(matched)
@@ -429,7 +438,10 @@ describe('ListingPanel', () => {
       notice: 'Annonce créée. Entre dans le critère « Talence fictif ».',
     })
     await flushPromises()
-    expect(text()).toContain('◎ Talence fictif')
+    // Lot 14 : la pastille d'adéquation dans l'en-tête de la fiche.
+    expect(query('header [data-testid="fit-badge"]')?.textContent).toContain(
+      'Dans les critères'
+    )
     expect(text()).toContain('Entre dans le critère « Talence fictif »')
     wrapper.unmount()
   })

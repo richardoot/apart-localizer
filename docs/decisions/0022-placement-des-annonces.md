@@ -1,6 +1,6 @@
 # 0022. Placement des annonces : adresse, puis quartier reconnu dans le texte, puis lieu-dit, puis commune ; repère au point intérieur du quartier, zone gardée, réserves « ≈ »
 
-Statut : acceptée, 5 novembre 2026.
+Statut : acceptée, 5 novembre 2026 ; précisée par 0024 (le contour, pas le repère, décide d'un critère à périmètre).
 
 ## Contexte
 

@@ -2,11 +2,13 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import {
   ListingFiltersSchema,
+  MAIN_TAB_FIT_LEVELS,
   ListingListQuerySchema,
   listingFiltersFromQuery,
   listingFiltersToQuery,
 } from '@apart/contracts'
 import type {
+  CriteriaFitLevel,
   ListingFilters,
   ListingFiltersInput,
   ListingStatus,
@@ -15,6 +17,35 @@ import type {
 import type { LocationQueryRaw } from 'vue-router'
 
 export type ListingView = 'table' | 'cards' | 'map'
+
+/** Lot 14 : l'onglet de la liste, « Dans les critères » ou « Hors critères ». */
+export type FitTab = 'main' | 'out'
+
+/** L'onglet d'un filtre `fit` : « Hors critères » dès que le niveau out est demandé. */
+export function fitTabOf(fit: readonly CriteriaFitLevel[] | undefined): FitTab {
+  return fit?.includes('out') ? 'out' : 'main'
+}
+
+/**
+ * Les niveaux de l'onglet principal après une pastille cochée ou décochée :
+ * tous (ou aucun) = pas de filtre, l'onglet par défaut avec les annonces
+ * gardées.
+ */
+export function toggledFitLevels(
+  current: readonly CriteriaFitLevel[] | undefined,
+  level: CriteriaFitLevel
+): CriteriaFitLevel[] | undefined {
+  const base: CriteriaFitLevel[] = (current ?? MAIN_TAB_FIT_LEVELS).filter(
+    l => l !== 'out'
+  )
+  const next = base.includes(level)
+    ? base.filter(l => l !== level)
+    : [...base, level]
+  const all = MAIN_TAB_FIT_LEVELS.every(l => next.includes(l))
+  return next.length === 0 || all
+    ? undefined
+    : MAIN_TAB_FIT_LEVELS.filter(l => next.includes(l))
+}
 export const LISTING_VIEWS: readonly ListingView[] = ['table', 'cards', 'map']
 
 /** Les filtres sans tri ni pagination, tels que l'écran les manipule. */
@@ -119,6 +150,17 @@ export const useFiltersStore = defineStore('filters', () => {
     patch({ near })
   }
 
+  const fitTab = computed<FitTab>(() => fitTabOf(filters.value.fit))
+
+  /** Lot 14 : change d'onglet ; « Hors critères » = le niveau out seulement. */
+  function setFitTab(tab: FitTab): void {
+    patch({ fit: tab === 'out' ? ['out'] : undefined })
+  }
+
+  function toggleFitLevel(level: CriteriaFitLevel): void {
+    patch({ fit: toggledFitLevels(filters.value.fit, level) })
+  }
+
   function setSort(
     sort: FilterState['sort'],
     order?: FilterState['order']
@@ -146,6 +188,9 @@ export const useFiltersStore = defineStore('filters', () => {
     patch,
     toggleStatus,
     setNear,
+    fitTab,
+    setFitTab,
+    toggleFitLevel,
     setSort,
     reset,
     loadFromQuery,

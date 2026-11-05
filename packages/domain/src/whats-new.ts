@@ -112,10 +112,24 @@ export function whatsNewKindOf(
     case 'task.completed':
       return byOther ? 'task' : null
     case 'criteria.matched':
-      return 'criteria_match'
+      return fitChangeFromListing(event.after) ? 'criteria_match' : null
+    case 'criteria.unmatched':
+      return fitChangeFromListing(event.after) ? 'criteria_exit' : null
     default:
       return null
   }
+}
+
+/**
+ * Lot 14 : une entrée ou une sortie compte quand l'annonce a bougé (prix,
+ * adresse, fiche) ; pas quand un membre a modifié un critère ou les
+ * hypothèses (il voit l'effet à l'écran, ADR 0024) ni au rattrapage. Une
+ * ligne antérieure au lot 14 n'a pas de cause : elle venait de l'annonce.
+ */
+export function fitChangeFromListing(after: unknown): boolean {
+  if (typeof after !== 'object' || after === null) return true
+  const cause = (after as Record<string, unknown>).cause
+  return cause === undefined || cause === 'listing'
 }
 
 function itemOf(
@@ -162,7 +176,7 @@ function itemOf(
       .filter(Boolean)
       .join(' — ')
     summary = `Avis de ${who}${to ? ` : ${to}` : ''}`
-  } else if (kind === 'criteria_match') {
+  } else if (kind === 'criteria_match' || kind === 'criteria_exit') {
     summary =
       description.summary.charAt(0).toUpperCase() + description.summary.slice(1)
   }
@@ -199,10 +213,11 @@ export function computeWhatsNew(input: WhatsNewInput): WhatsNewReport {
     const kind = whatsNewKindOf(event, input.memberId)
     if (!kind) continue
     // Une annonce nouvelle se lit en entier : ses autres changements n'en
-    // sont pas, sauf son entrée dans un critère.
+    // sont pas, sauf son entrée dans un critère ou sa sortie.
     if (
       newListings.has(event.listingId) &&
       kind !== 'criteria_match' &&
+      kind !== 'criteria_exit' &&
       kind !== 'new_listing'
     )
       continue

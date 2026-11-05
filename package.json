@@ -38,7 +38,8 @@
     "import:neighbourhoods": "pnpm --filter @apart/scripts import:neighbourhoods",
     "refresh:surroundings": "pnpm --filter @apart/scripts refresh:surroundings",
     "import:places": "pnpm --filter @apart/scripts import:places",
-    "relocate:listings": "pnpm --filter @apart/scripts relocate:listings"
+    "relocate:listings": "pnpm --filter @apart/scripts relocate:listings",
+    "refresh:criteria-fit": "pnpm --filter @apart/scripts refresh:criteria-fit"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

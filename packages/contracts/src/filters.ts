@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { CriteriaFitLevelSchema } from './criteria-fit.js'
 import { DpeClassSchema, ListingStatusSchema, VerdictSchema } from './enums.js'
 import { PointRadiusSchema } from './geojson.js'
 import { LocationPrecisionFilterSchema } from './placement.js'
@@ -59,6 +60,12 @@ export const ListingFiltersSchema = z.object({
     .optional()
     .describe(
       'Précisions du repère retenues (lot 12) : exact, street, district (au quartier), commune, none (sans repère)'
+    ),
+  fit: z
+    .array(CriteriaFitLevelSchema)
+    .optional()
+    .describe(
+      'Adéquation aux critères actifs (lot 14) : in, to_confirm, margin, out. Absent = l’onglet « Dans les critères » : in, to_confirm et margin, plus les annonces hors critères gardées (offre en cours, visite prévue) ; donné = exactement ces niveaux (out = l’onglet « Hors critères »). Avec `criteriaId`, le niveau de ce critère'
     ),
   priceMin: positiveOrNull('Prix affiché minimal en euros'),
   priceMax: positiveOrNull('Prix affiché maximal en euros'),
@@ -159,6 +166,7 @@ export const ListingListQuerySchema = z.object({
   dpe: csv(DpeClassSchema),
   verdict: csv(VerdictSchema),
   precision: csv(LocationPrecisionFilterSchema),
+  fit: csv(CriteriaFitLevelSchema),
   priceMin: money,
   priceMax: money,
   surfaceMin: money,
@@ -198,6 +206,7 @@ export function listingFiltersFromQuery(
     ...(query.dpe ? { dpe: query.dpe } : {}),
     ...(query.verdict ? { verdict: query.verdict } : {}),
     ...(query.precision ? { precision: query.precision } : {}),
+    ...(query.fit ? { fit: query.fit } : {}),
     ...(query.priceMin !== undefined ? { priceMin: query.priceMin } : {}),
     ...(query.priceMax !== undefined ? { priceMax: query.priceMax } : {}),
     ...(query.surfaceMin !== undefined ? { surfaceMin: query.surfaceMin } : {}),
@@ -235,6 +244,7 @@ export function listingFiltersToQuery(
   list('dpe', filters.dpe)
   list('verdict', filters.verdict)
   list('precision', filters.precision)
+  list('fit', filters.fit)
   num('priceMin', filters.priceMin)
   num('priceMax', filters.priceMax)
   num('surfaceMin', filters.surfaceMin)

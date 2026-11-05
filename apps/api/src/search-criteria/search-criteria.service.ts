@@ -5,23 +5,37 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common'
-import { CriteriaFiltersSchema } from '@apart/contracts'
+import {
+  CriteriaFiltersSchema,
+  CriteriaToleranceSchema,
+  EMPTY_FIT_COUNTS,
+} from '@apart/contracts'
 import type {
   ActivityChannel,
-  CriteriaFilters,
+  CriteriaFitCounts,
+  CriteriaFitRefreshSummary,
   Perimeter,
   PerimeterInput,
   SearchCriteriaInput,
   SearchCriteriaPreview,
+  SearchCriteriaPreviewExample,
   SearchCriteriaPreviewRequest,
   SearchCriteriaSummary,
   SearchCriteriaUpdate,
 } from '@apart/contracts'
+import { fitRank } from '@apart/domain'
 import { ActivityService } from '../activity/activity.service'
 import { GeoService } from '../geo/geo.service'
 import type { CriteriaGeoDraft } from '../geo/geo.service'
-import { CriteriaMatchService } from '../listings/criteria-match.service'
-import { ListingsService } from '../listings/listings.service'
+import {
+  CriteriaMatchService,
+  countedStatuses,
+  fitRuleOf,
+} from '../listings/criteria-match.service'
+import type {
+  ComputedListing,
+  FitRule,
+} from '../listings/criteria-match.service'
 import { GeocodingService } from '../opendata/geocoding.service'
 import { IsochroneService } from '../opendata/isochrone.service'
 import { PrismaService } from '../prisma/prisma.service'
@@ -36,11 +50,8 @@ import { toSearchCriteriaDto } from './search-criteria.mapper'
 export const POLYGON_MIN_M2 = 100
 export const POLYGON_MAX_M2 = 1_000_000_000
 
-/** La partie géographique d'un périmètre résolu, pour le prédicat PostGIS. */
-export function draftOf(
-  perimeter: Perimeter | null,
-  filters: CriteriaFilters
-): CriteriaGeoDraft & { filters: CriteriaFilters } {
+/** La partie géographique d'un périmètre résolu, pour les mesures PostGIS. */
+export function draftOf(perimeter: Perimeter | null): CriteriaGeoDraft {
   return {
     perimeterType: perimeter?.type ?? null,
     center:
@@ -53,9 +64,14 @@ export function draftOf(
         : null,
     polygon:
       perimeter && perimeter.type !== 'point_radius' ? perimeter.polygon : null,
-    filters,
   }
 }
+
+/** Le nombre d'exemples rendus par l'aperçu. */
+export const PREVIEW_EXAMPLES_MAX = 20
+
+/** L'identifiant de la règle d'un brouillon (aperçu). */
+const DRAFT_ID = '00000000-0000-4000-8000-000000000000'
 
 /** Les colonnes d'un périmètre (le polygone lui-même passe par le module geo). */
 function perimeterColumns(perimeter: Perimeter | null): {
@@ -82,11 +98,12 @@ function perimeterColumns(perimeter: Perimeter | null): {
 
 /**
  * Critères de recherche enregistrés et partagés dans l'espace (besoins G3 à
- * G6) : création, lecture avec compteurs, mise à jour avec garde-fou,
- * archivage (actif = faux), suppression (REST seulement). Un périmètre
- * isochrone est calculé par la Géoplateforme et figé en polygone ; un
- * polygone dessiné est validé par PostGIS. Chaque écriture est journalisée
- * et resynchronise la table des entrées (alertes).
+ * G6) : création, lecture avec compteurs par niveau d'adéquation (lot 14),
+ * aperçu avant enregistrement, mise à jour avec garde-fou, archivage (actif
+ * = faux), suppression (REST seulement). Un périmètre isochrone est calculé
+ * par la Géoplateforme et figé en polygone ; un polygone dessiné est validé
+ * par PostGIS. Chaque écriture est journalisée et recalcule l'adéquation des
+ * annonces de l'espace (sans alerte : ce n'est pas l'annonce qui a bougé).
  */
 @Injectable()
 export class SearchCriteriaService {
@@ -94,7 +111,6 @@ export class SearchCriteriaService {
     private readonly prisma: PrismaService,
     private readonly geo: GeoService,
     private readonly activity: ActivityService,
-    private readonly listings: ListingsService,
     private readonly matches: CriteriaMatchService,
     private readonly isochrone: IsochroneService,
     private readonly geocoding: GeocodingService
@@ -111,30 +127,46 @@ export class SearchCriteriaService {
       },
       orderBy: { createdAt: 'asc' },
     })
-    const summaries: SearchCriteriaSummary[] = []
-    for (const row of rows) summaries.push(await this.summary(member, row))
-    return summaries
+    return this.summaries(member, rows)
   }
 
   async get(member: Member, id: string): Promise<SearchCriteriaSummary> {
-    return this.summary(member, await this.findRow(member, id))
+    const [summary] = await this.summaries(member, [
+      await this.findRow(member, id),
+    ])
+    return summary as SearchCriteriaSummary
   }
 
-  /** Aperçu sans enregistrer : périmètre résolu (isochrone calculée) et annonces retenues. */
+  /**
+   * Aperçu sans enregistrer : périmètre résolu (isochrone calculée) et
+   * annonces par niveau d'adéquation, avec la marge saisie ; les mêmes
+   * mesures et la même décision que les critères enregistrés.
+   */
   async preview(
     member: Member,
     request: SearchCriteriaPreviewRequest
   ): Promise<SearchCriteriaPreview> {
     const perimeter = await this.resolvePerimeter(request.perimeter)
-    const { items, approximate } = await this.listings.listingsForCriteria(
-      member,
-      { draft: draftOf(perimeter, request.filters) }
-    )
+    const rule: FitRule = {
+      id: DRAFT_ID,
+      name: 'Aperçu',
+      perimeterType: perimeter?.type ?? null,
+      filters: request.filters,
+      tolerance: request.tolerance,
+      statuses: request.filters.statuses,
+    }
+    const computed = await this.matches.compute(member.workspaceId, {
+      rules: [rule],
+      draft: draftOf(perimeter),
+    })
+    const counted = counting(computed, rule)
     return {
       perimeter,
-      listingCount: items.length,
-      approximateCount: items.filter(i => approximate.has(i.listing.id)).length,
-      listingIds: items.map(i => i.listing.id),
+      listingCount: counted.kept.length,
+      approximateCount: counted.approximate,
+      listingIds: counted.kept.map(c => c.row.id),
+      fitCounts: counted.counts,
+      examples: counted.examples,
     }
   }
 
@@ -154,6 +186,7 @@ export class SearchCriteriaService {
           name: input.name,
           active: input.active,
           filters: input.filters as unknown as Prisma.InputJsonValue,
+          tolerance: input.tolerance as unknown as Prisma.InputJsonValue,
           ...perimeterColumns(perimeter),
         },
       })
@@ -171,6 +204,7 @@ export class SearchCriteriaService {
             name: input.name,
             active: input.active,
             filters: input.filters,
+            tolerance: input.tolerance,
             perimeterType: perimeter?.type ?? null,
             isochrone:
               perimeter?.type === 'isochrone' ? perimeter.params : null,
@@ -180,8 +214,8 @@ export class SearchCriteriaService {
       )
       return created
     })
-    await this.sync(member, row.id, input.active)
-    return this.get(member, row.id)
+    const fitChanges = await this.refreshFits(member, channel, input.name)
+    return { ...(await this.get(member, row.id)), fitChanges }
   }
 
   async update(
@@ -216,6 +250,13 @@ export class SearchCriteriaService {
       changes.filters !== undefined
         ? CriteriaFiltersSchema.parse({ ...before.filters, ...changes.filters })
         : before.filters
+    const tolerance =
+      changes.tolerance !== undefined
+        ? CriteriaToleranceSchema.parse({
+            ...before.tolerance,
+            ...changes.tolerance,
+          })
+        : before.tolerance
     const perimeter = resolved === undefined ? before.perimeter : resolved
     const active = changes.active ?? before.active
     await this.prisma.$transaction(async tx => {
@@ -231,6 +272,7 @@ export class SearchCriteriaService {
           ...(changes.name !== undefined ? { name: changes.name } : {}),
           active,
           filters: filters as unknown as Prisma.InputJsonValue,
+          tolerance: tolerance as unknown as Prisma.InputJsonValue,
           ...(resolved !== undefined ? perimeterColumns(perimeter) : {}),
         },
       })
@@ -255,6 +297,7 @@ export class SearchCriteriaService {
             name: before.name,
             active: before.active,
             filters: before.filters,
+            tolerance: before.tolerance,
             perimeterType: before.perimeterType,
           },
           after: {
@@ -266,8 +309,12 @@ export class SearchCriteriaService {
         tx
       )
     })
-    await this.sync(member, id, active)
-    return this.get(member, id)
+    const fitChanges = await this.refreshFits(
+      member,
+      channel,
+      changes.name ?? before.name
+    )
+    return { ...(await this.get(member, id)), fitChanges }
   }
 
   /** Suppression définitive (REST seulement ; le MCP archive avec `active: false`). */
@@ -290,6 +337,9 @@ export class SearchCriteriaService {
         tx
       )
     })
+    // Ses lignes d'adéquation partent avec lui (cascade) : le meilleur niveau
+    // des annonces est recalculé.
+    await this.refreshFits(member, channel, row.name)
   }
 
   /** Résout un périmètre demandé : point et rayon tel quel, polygone validé, isochrone calculée. */
@@ -360,42 +410,47 @@ export class SearchCriteriaService {
     }
   }
 
-  private async sync(
+  /**
+   * L'adéquation de toutes les annonces de l'espace recalculée après
+   * l'écriture d'un critère, journalisée sans alerte (cause « critère »).
+   */
+  private async refreshFits(
     member: Member,
-    id: string,
-    active: boolean
-  ): Promise<void> {
-    if (!active) {
-      await this.matches.syncCriteria(id, [])
-      return
-    }
-    const { items, approximate } = await this.listings.listingsForCriteria(
-      member,
-      { criteriaId: id }
-    )
-    await this.matches.syncCriteria(
-      id,
-      items.map(i => ({
-        id: i.listing.id,
-        approximate: approximate.has(i.listing.id),
-      }))
-    )
+    channel: ActivityChannel,
+    criteriaName: string
+  ): Promise<CriteriaFitRefreshSummary> {
+    const { summary } = await this.matches.refresh(member.workspaceId, {
+      origin: { cause: 'criteria', criteriaName },
+      actorMemberId: member.id,
+      channel,
+    })
+    return summary
   }
 
-  private async summary(
+  /**
+   * Les compteurs de critères (archivés compris, comptés à la lecture comme
+   * l'aperçu) : une seule comparaison des annonces à tous les critères.
+   */
+  private async summaries(
     member: Member,
-    row: SearchCriteriaRow
-  ): Promise<SearchCriteriaSummary> {
-    const { items, approximate } = await this.listings.listingsForCriteria(
-      member,
-      { criteriaId: row.id }
-    )
-    return {
-      ...toSearchCriteriaDto(row),
-      listingCount: items.length,
-      newCount: items.filter(i => i.isNewForMe).length,
-      approximateCount: items.filter(i => approximate.has(i.listing.id)).length,
-    }
+    rows: readonly SearchCriteriaRow[]
+  ): Promise<SearchCriteriaSummary[]> {
+    if (rows.length === 0) return []
+    const rules = rows.map(fitRuleOf)
+    const computed = await this.matches.compute(member.workspaceId, { rules })
+    return rows.map((row, index) => {
+      const counted = counting(computed, rules[index] as FitRule)
+      return {
+        ...toSearchCriteriaDto(row),
+        listingCount: counted.kept.length,
+        newCount: counted.kept.filter(
+          c => !c.row.views.some(v => v.memberId === member.id)
+        ).length,
+        approximateCount: counted.approximate,
+        fitCounts: counted.counts,
+        fitChanges: null,
+      }
+    })
   }
 
   private async findRow(
@@ -407,5 +462,49 @@ export class SearchCriteriaService {
     })
     if (!row) throw new NotFoundException('Critère de recherche introuvable')
     return row
+  }
+}
+
+/**
+ * Les annonces d'un critère comptées sur ses statuts (actifs par défaut) :
+ * par niveau, celles qu'il garde (dans, à confirmer, à la marge), celles à
+ * confirmer à cause de la localisation, et des exemples hors « dans ».
+ */
+function counting(
+  computed: readonly ComputedListing[],
+  rule: FitRule
+): {
+  counts: CriteriaFitCounts
+  kept: ComputedListing[]
+  approximate: number
+  examples: SearchCriteriaPreviewExample[]
+} {
+  const statuses = countedStatuses(rule)
+  const counts = { ...EMPTY_FIT_COUNTS }
+  const kept: ComputedListing[] = []
+  const examples: SearchCriteriaPreviewExample[] = []
+  let approximate = 0
+  for (const c of computed) {
+    if (!statuses.includes(c.row.status)) continue
+    const fit = c.fits.get(rule.id)
+    if (!fit) continue
+    counts[fit.level] += 1
+    if (fit.level !== 'out') kept.push(c)
+    if (fit.level !== 'out' && fit.locationPending) approximate += 1
+    if (fit.level !== 'in') {
+      examples.push({
+        listingId: c.row.id,
+        title: c.row.title,
+        level: fit.level,
+        reasons: fit.reasons,
+      })
+    }
+  }
+  examples.sort((a, b) => fitRank(a.level) - fitRank(b.level))
+  return {
+    counts,
+    kept,
+    approximate,
+    examples: examples.slice(0, PREVIEW_EXAMPLES_MAX),
   }
 }

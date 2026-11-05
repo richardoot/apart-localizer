@@ -227,7 +227,7 @@ Lecture :
 
 | Outil | Rôle |
 | --- | --- |
-| `list_listings` | Annonces filtrées (statut, commune, DPE, verdict, nouveau pour moi, critère enregistré, point et rayon) et triées, avec les indicateurs calculés |
+| `list_listings` | Annonces filtrées (statut, commune, DPE, verdict, nouveau pour moi, critère enregistré, point et rayon, adéquation aux critères) et triées, avec les indicateurs calculés et l'adéquation (par défaut l'onglet « Dans les critères », lot 14) |
 | `get_listing` | Une annonce complète : champs, provenance, calculs, phase 2, avis, tâches, historique |
 | `get_assumptions` | Hypothèses globales en vigueur |
 | `evaluate_listing` | Calcule une annonce hypothétique ou une variante (taux, apport, loyer) sans rien enregistrer |
@@ -235,12 +235,12 @@ Lecture :
 | `compare_listings` | Tableau comparatif de 2 à 6 annonces |
 | `find_duplicates` | Doublons probables pour une URL, une adresse, un point (50 m) ou un trio commune, prix et surface, ou pour une annonce enregistrée |
 | `get_market_context` | Plafond d'encadrement, références DVF, desserte pour une commune ou une adresse |
-| `list_search_criteria` | Critères de recherche enregistrés, avec le nombre d'annonces et de nouveautés dans chacun |
+| `list_search_criteria` | Critères de recherche enregistrés, avec leur marge de tolérance, le nombre d'annonces par niveau d'adéquation et de nouveautés dans chacun |
 | `evaluate_scenario` | Scénario « et si » sur une annonce (surcharges ou scénario enregistré) comparé à la base ; `saveAs` l'enregistre (portée écriture) |
 | `get_projection` | Fiscalité estimée par régime, projection annuelle jusqu'à la revente, plus-value, TRI, VAN, enrichissement net |
 | `get_compliance` | Checklist réglementaire datée à la date de mise en location, risques Géorisques à l'adresse |
 | `list_visits` | Visites d'une annonce : date, état, participants, compte rendu, points positifs et négatifs, note, nombre de photos (lot 6) |
-| `whats_new` | Ce qui a changé pour le membre depuis sa dernière visite : nouvelles annonces, prix, statuts, avis et tâches de l'autre membre, entrées dans un critère (lot 6) |
+| `whats_new` | Ce qui a changé pour le membre depuis sa dernière visite : nouvelles annonces, prix, statuts, avis et tâches de l'autre membre, entrées dans un critère et sorties vers « hors critères » (lots 6 et 14) |
 | `check_listing` | Compare la page d'une annonce lue par Claude (ou son texte) à la fiche : écarts classés (appliqués, proposés, notés), résultat, statut proposé, republications probables ; rien n'est écrit (lot 15) |
 
 Écriture (toutes réversibles, aucune suppression) :
@@ -255,7 +255,7 @@ Lecture :
 | `record_price_change` | Baisse ou hausse constatée sur l'annonce source |
 | `record_offer` | Offre (montant, date, canal) et, pour une offre existante, réponse du vendeur et contre-proposition ; renvoie le statut proposé |
 | `set_assumptions` | Hypothèses globales : champs modifiés seulement, garde-fou sur la version en vigueur, impact rendu (verdicts qui changent) (portée écriture) |
-| `create_search_criteria`, `update_search_criteria` | Critères de recherche : filtres et périmètre en GeoJSON (point et rayon, polygone) ou paramètres d'isochrone |
+| `create_search_criteria`, `update_search_criteria` | Critères de recherche : filtres, marge de tolérance (lot 14) et périmètre en GeoJSON (point et rayon, polygone) ou paramètres d'isochrone |
 | `add_rent_comparable` | Une annonce de location comparable saisie (loyer, surface, meublé, date, source) ; répond avec la médiane à jour |
 | `add_visit` | Une visite faite ou planifiée (date, participants, compte rendu, points positifs et négatifs, note, tâche de préparation), sans photo ; renvoie le statut proposé sans l'appliquer (lot 6) |
 | `apply_listing_check` | Enregistre une vérification : faits lus appliqués (prix par l'historique), dates de vérification, republication rattachée, extrait-preuve ; renvoie le statut proposé sans l'appliquer (lot 15) |
@@ -301,9 +301,13 @@ interface, avec un cache en base et un marquage de la date de récupération.
 | G7 | Couches de contexte sur la carte : arrêts de tram et bus, ventes DVF récentes, zone d'encadrement | L |
 | G8 | Voir les rues et les bâtiments, surtout pour dessiner un périmètre : choix du fond (plan OpenStreetMap, plan IGN, photo aérienne IGN avec les noms de rues) commun aux cartes et retenu par appareil, couches et dessin conservés au changement de fond, carte de dessin cadrée de près et recentrée sur une adresse (lot 10, ADR 0020) | S |
 | G9 | Couches d'équipements et de quartiers, sur la carte des annonces et la carte du quartier de la fiche : pistes d'athlétisme, supermarchés drive (enseignes préférées distinguées par la forme et la légende), salles Fitness Park, contours des quartiers (nom au survol et au clic) ; fenêtres avec nom, enseigne, adresse et source ; lisibles sur les trois fonds (lot 11, ADR 0021) | L |
+| G10 | Adéquation aux critères actifs, distincte du statut : « dans les critères », « à confirmer » (adresse au quartier ou à la commune dont le contour touche le périmètre ou sa marge, ou donnée manquante), « à la marge » (dépassement dans la marge de tolérance du critère, raison chiffrée), « hors critères » ; marge réglable par critère (0 = strict) ; onglets « Dans les critères » et « Hors critères » de la liste, rien n'est perdu ; une annonce hors critères avec une offre en cours ou une visite prévue reste dans la liste (lot 14, ADR 0024) | S |
 
 Le filtrage géographique se fait en base (PostGIS) et jamais dans le navigateur, pour que la
-liste, la carte, le MCP et les alertes donnent le même résultat. Sur mobile, le point et rayon et
+liste, la carte, le MCP et les alertes donnent le même résultat. Depuis le lot 14, PostGIS mesure
+(distance au périmètre, relation du contour de l'annonce au périmètre, distance au tram) et
+`domain` décide du niveau d'adéquation ; pour une adresse au quartier ou à la commune, c'est le
+contour qui est comparé, jamais le repère. Sur mobile, le point et rayon et
 l'isochrone sont les modes principaux ; le dessin de polygone vise le grand écran.
 
 ---
@@ -391,12 +395,16 @@ la lecture (lot 6). Le membre porte aussi sa dernière visite de l'application e
 départ de « ce qui a changé ».
 
 **SearchCriteria** : espace, nom, créé par, actif, filtres (communes, prix, surface, pièces, DPE,
-verdict, statuts, distance maximale au tram), périmètre : type (`point_radius`, `polygon`,
-`isochrone`), géométrie PostGIS, GeoJSON d'origine, paramètres de l'isochrone (point, mode, durée,
-date de calcul, approximation éventuelle).
+verdict, statuts, distance maximale au tram), marge de tolérance (lot 14 : périmètre, prix
+maximal et minimal, surface, pièces, DPE, tram ; 0 = strict), périmètre : type (`point_radius`,
+`polygon`, `isochrone`), géométrie PostGIS, GeoJSON d'origine, paramètres de l'isochrone (point,
+mode, durée, date de calcul, approximation éventuelle).
 
-**CriteriaMatch** : critère, annonce, date d'entrée, localisation imprécise (« sous réserve ») ;
-la matière des alertes et du badge (ADR 0010).
+**CriteriaMatch** : l'adéquation d'une annonce à un critère actif (lot 14) : niveau (dans les
+critères, à confirmer, à la marge, hors critères), raisons chiffrées, détail filtre par filtre,
+date du dernier changement de niveau, date de la dernière entrée, « à confirmer » à cause de la
+localisation ; la matière des alertes, du badge et de l'historique (ADR 0010, 0024). L'annonce
+porte son meilleur niveau, sa date et sa cause.
 
 **TransitStop** : réseau, identifiant d'import, mode (tram, bus, bateau), lignes, nom, point
 géographique (import TBM).
@@ -463,7 +471,7 @@ frais de notaire et les paramètres fiscaux vivent dans les hypothèses (ADR 000
 | Fiscalité complexe et dépendante de la situation du foyer | Hors MVP ; champs TMI et régime prévus, estimation signalée comme telle |
 | Accès aux données DVF (API officielle instable, services tiers payants) | Import des fichiers ouverts DGFiP pour la Gironde dans Postgres ; pas de dépendance à une API tierce |
 | Dessin d'un polygone peu pratique sur mobile | Point et rayon et isochrone comme modes principaux sur mobile ; polygone sur grand écran |
-| Adresse approximative dans l'annonce (quartier seulement) | Précision stockée avec le point ; une annonce imprécise est incluse « sous réserve » dans un périmètre et signalée |
+| Adresse approximative dans l'annonce (quartier seulement) | Précision stockée avec le point ; pour un critère à périmètre, le contour du quartier ou de la commune est comparé, jamais le repère : contour qui touche le périmètre = « à confirmer » jusqu'à l'adresse (lot 14) |
 | Migration des données de l'artefact | Export de la collection `annonces` et des réglages, script d'import avec correspondance des champs |
 
 Questions à trancher avec Richard avant le squelette : voir la fin de [tech-stack.md](tech-stack.md).

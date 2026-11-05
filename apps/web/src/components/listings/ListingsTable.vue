@@ -11,7 +11,7 @@
   } from '@tanstack/vue-table'
   import type { ColumnDef } from '@tanstack/vue-table'
   import type { EvaluatedListing } from '@apart/contracts'
-  import { rankValues } from '@apart/domain'
+  import { fitRank, keptLabel, rankValues } from '@apart/domain'
   import {
     formatEuros,
     formatEurosPerM2,
@@ -23,7 +23,7 @@
   import type { CostBasis } from '@/lib/labels'
   import CostBasisBadge from './CostBasisBadge.vue'
   import DpeBadge from './DpeBadge.vue'
-  import CriteriaBadges from './CriteriaBadges.vue'
+  import FitSummary from './FitSummary.vue'
   import CheckFreshnessBadge from './CheckFreshnessBadge.vue'
   import NewBadge from './NewBadge.vue'
   import PrecisionBadge from './PrecisionBadge.vue'
@@ -31,7 +31,14 @@
   import StatusBadge from './StatusBadge.vue'
   import VerdictPill from './VerdictPill.vue'
 
-  const props = defineProps<{ items: EvaluatedListing[] }>()
+  const props = withDefaults(
+    defineProps<{
+      items: EvaluatedListing[]
+      /** Lot 14 : l'onglet « Hors critères » (depuis quand). */
+      outTab?: boolean
+    }>(),
+    { outTab: false }
+  )
   const emit = defineEmits<{ open: [id: string]; compare: [ids: string[]] }>()
 
   /** Au plus six annonces côte à côte. */
@@ -112,7 +119,6 @@
           h('div', { class: 'flex items-center gap-2' }, [
             h('span', { class: 'font-medium' }, ctx.row.original.listing.title),
             h(NewBadge, { isNew: ctx.row.original.isNewForMe }),
-            h(CriteriaBadges, { matches: ctx.row.original.criteriaMatches }),
           ]),
           h('div', { class: 'flex flex-wrap items-center gap-1.5' }, [
             h(StatusBadge, { status: ctx.row.original.listing.status }),
@@ -136,7 +142,30 @@
               lastOutcome: ctx.row.original.lastCheck?.outcome ?? null,
             }),
           ]),
+          // Lot 14 : une annonce hors critères gardée dans la liste.
+          ctx.row.original.criteriaFit.kept && !props.outTab
+            ? h(
+                'span',
+                {
+                  class: 'text-xs font-medium text-fg',
+                  'data-testid': 'fit-kept',
+                },
+                keptLabel(ctx.row.original.criteriaFit.kept)
+              )
+            : null,
         ]),
+      sortFn: 'basic',
+    }),
+    // Lot 14 : l'adéquation aux critères actifs, sa raison, depuis quand.
+    helper.accessor(row => fitRank(row.criteriaFit.level), {
+      id: 'fit',
+      header: () => (props.outTab ? 'Pourquoi hors critères' : 'Adéquation'),
+      cell: ctx =>
+        h(FitSummary, {
+          fit: ctx.row.original.criteriaFit,
+          since: props.outTab,
+          hideKept: true,
+        }),
       sortFn: 'basic',
     }),
     helper.accessor(row => row.evaluation.metrics.score, {

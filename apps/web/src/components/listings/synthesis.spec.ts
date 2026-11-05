@@ -482,6 +482,8 @@ describe('ListingSynthesis', () => {
     )
     const report = fakeTargetPriceReport(item)
     const wrapper = mount(ListingSynthesis, {
+      // Lot 14 : le bloc d’adéquation a ses propres tests (CriteriaFitSection.spec).
+      global: { stubs: { CriteriaFitSection: true } },
       props: {
         item,
         evaluation: item.evaluation,
@@ -529,6 +531,8 @@ describe('ListingSynthesis', () => {
   it('sans évaluation, invite à saisir ; sans données ouvertes, le quartier est à vérifier', () => {
     const item = fakeEvaluated()
     const wrapper = mount(ListingSynthesis, {
+      // Lot 14 : le bloc d’adéquation a ses propres tests (CriteriaFitSection.spec).
+      global: { stubs: { CriteriaFitSection: true } },
       props: {
         item,
         evaluation: null,
@@ -564,6 +568,8 @@ describe('ListingSynthesis', () => {
     })
     const mountWith = (value: typeof surroundings) =>
       mount(ListingSynthesis, {
+        // Lot 14 : le bloc d’adéquation a ses propres tests (CriteriaFitSection.spec).
+        global: { stubs: { CriteriaFitSection: true } },
         props: {
           item: fakeEvaluated({
             openDataContext: {
@@ -618,6 +624,8 @@ describe('ListingSynthesis', () => {
   it('louabilité : compte les points bloquants, d’attention et à vérifier', () => {
     const item = fakeEvaluated({ dpeClass: 'G' })
     const wrapper = mount(ListingSynthesis, {
+      // Lot 14 : le bloc d’adéquation a ses propres tests (CriteriaFitSection.spec).
+      global: { stubs: { CriteriaFitSection: true } },
       props: {
         item,
         evaluation: item.evaluation,

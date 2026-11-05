@@ -1,4 +1,8 @@
-import { PerimeterSchema, SearchCriteriaSchema } from '@apart/contracts'
+import {
+  PerimeterSchema,
+  SearchCriteriaSchema,
+  criteriaToleranceOf,
+} from '@apart/contracts'
 import type { Perimeter, SearchCriteria } from '@apart/contracts'
 import type { SearchCriteria as SearchCriteriaRow } from '../generated/prisma'
 import { criteriaFiltersOf } from '../listings/criteria-match.service'
@@ -33,6 +37,7 @@ export function toSearchCriteriaDto(row: SearchCriteriaRow): SearchCriteria {
     name: row.name,
     active: row.active,
     filters: criteriaFiltersOf(row.filters),
+    tolerance: criteriaToleranceOf(row.tolerance),
     perimeterType: row.perimeterType,
     perimeter: perimeterOf(row),
     createdAt: row.createdAt.toISOString(),

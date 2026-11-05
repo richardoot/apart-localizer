@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { CriteriaFiltersSchema } from '@apart/contracts'
+import {
+  CriteriaFiltersSchema,
+  DEFAULT_CRITERIA_TOLERANCE,
+} from '@apart/contracts'
 import type {
   MarketContext,
   RentControlLookup,
@@ -64,7 +67,12 @@ describe('réponses MCP du lot 4', () => {
   it('entrées et sorties de critères', () => {
     expect(describeCriteriaChanges(null)).toBeNull()
     expect(
-      describeCriteriaChanges({ entered: [], left: [], current: [] })
+      describeCriteriaChanges({
+        entered: [],
+        left: [],
+        changed: [],
+        current: [],
+      })
     ).toBeNull()
     expect(
       describeCriteriaChanges({
@@ -74,13 +82,37 @@ describe('réponses MCP du lot 4', () => {
             name: 'Talence',
             matchedAt: '2026-11-03T10:00:00.000Z',
             approximate: true,
+            level: 'to_confirm',
+            reasons: [
+              'quartier à cheval sur le périmètre : adresse à préciser',
+            ],
+          },
+          {
+            criteriaId: 'c',
+            name: 'Centre',
+            matchedAt: '2026-11-03T10:00:00.000Z',
+            approximate: false,
+            level: 'in',
+            reasons: [],
           },
         ],
-        left: [{ criteriaId: 'b', name: 'Bègles' }],
+        left: [
+          { criteriaId: 'b', name: 'Bègles', reasons: ['Prix +19 % (…)'] },
+          { criteriaId: 'd', name: 'Nord', reasons: [] },
+        ],
+        changed: [
+          {
+            criteriaId: 'e',
+            name: 'Tram',
+            before: 'margin',
+            after: 'in',
+            reasons: [],
+          },
+        ],
         current: [],
       })
     ).toBe(
-      'Entre dans le critère « Talence » (sous réserve : localisation imprécise). Sort du critère « Bègles ».'
+      'Entre dans le critère « Talence » (à confirmer : Quartier à cheval sur le périmètre : adresse à préciser). Entre dans le critère « Centre ». Sort du critère « Bègles » (hors critères : Prix +19 % (…)). Sort du critère « Nord » (hors critères). Critère « Tram » : à la marge → dans les critères.'
     )
   })
 
@@ -289,12 +321,19 @@ describe('réponses MCP du lot 4', () => {
       listingCount: 3,
       newCount: 1,
       approximateCount: 1,
+      tolerance: DEFAULT_CRITERIA_TOLERANCE,
+      fitCounts: { in: 1, to_confirm: 1, margin: 1, out: 2 },
+      fitChanges: null,
     }
     const line = describeCriteria(base)
     expect(line).toContain('(archivé)')
     expect(line).toContain('isochrone 12 min à vélo')
     expect(line).toContain('tram à 500 m au plus')
-    expect(line).toContain('1 sous réserve')
+    expect(line).toContain('1 à confirmer faute d’adresse')
+    expect(line).toContain(
+      '3 annonce(s) (1 dans les critères, 1 à confirmer, 1 à la marge), 2 hors critères'
+    )
+    expect(line).toContain('Marges appliquées : périmètre 300 m')
     expect(
       describeCriteria({
         ...base,

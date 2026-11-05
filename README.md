@@ -156,9 +156,13 @@ http://localhost:3000/mcp` ([développement local](docs/developpement-local.md#t
   (marqueurs colorés par verdict ou statut, popup vers la fiche, clic = point du filtre, curseur
   de rayon, couches activables : périmètres des critères, arrêts de tram et de bus, ventes DVF
   des trois dernières années, zones d'encadrement avec leur légende ; un clic sur un arrêt ou une
-  vente en montre le détail). Les annonces entrées dans un critère portent son badge ◎.
-- **Critères** (`/criteres`) : critères de recherche partagés avec leurs compteurs (annonces,
-  nouveautés pour moi, sous réserve), création et modification (filtres, périmètre dessiné en
+  vente en montre le détail). Lot 14 : deux onglets « Dans les critères » et « Hors critères »
+  (dans l'URL), pastilles d'adéquation (dans les critères, à confirmer, à la marge, hors
+  critères) avec leur raison ; une annonce hors critères avec une offre en cours ou une visite
+  prévue reste dans la liste.
+- **Critères** (`/criteres`) : critères de recherche partagés avec leurs compteurs (annonces
+  par niveau d'adéquation, nouveautés pour moi), création et modification (filtres, marge de
+  tolérance et seuils réels, aperçu par niveau avant d'enregistrer, périmètre dessiné en
   polygone ou en cercle avec terra-draw, polygone retouchable sommet par sommet, point et rayon
   par clic, isochrone par adresse ou clic,
   à pied, à vélo ou en voiture, aperçu du nombre d'annonces), archivage, suppression,

@@ -26,7 +26,8 @@ Lit le champ « quartier » de chaque annonce et le compare aux contours des qua
 lieux-dits importés de sa commune ; un quartier reconnu place le repère en son centre
 (précision district). Les annonces à l'adresse (numéro ou rue) et les points saisis ne sont
 jamais touchés. L'instantané de contexte (desserte, marché, encadrement, quartier et
-équipements) est recalculé pour chaque annonce replacée.
+équipements) est recalculé pour chaque annonce replacée, ainsi que son adéquation aux critères
+(lot 14).
 
 Options :
   --dry-run           affiche « annonce : précision avant → après (quartier) » sans rien écrire

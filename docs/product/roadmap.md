@@ -3,13 +3,12 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
-État au 5 novembre 2026 : **les lots 0 à 13 sont livrés** côté code, tests et documentation ; les
-lots 0 à 11 sont déployés (Vercel et Supabase cloud, imports et rattrapage du lot 11 faits en
-production). Le lot 12 (placement des annonces) attend son déploiement : migration additive
-`20261105180000_lot12_listing_placement`, `import:places` puis `relocate:listings`, en simulation
-d'abord ([docs/deploiement.md](../deploiement.md) § 2) ; le lot 13 (page Hypothèses, sans
-migration ni variable nouvelle) le sien. Le lot 15 (suivi des mises à jour des annonces) est
-livré côté code, tests et documentation et attend son déploiement : migration additive
+État au 5 novembre 2026 : **les lots 0 à 15 sont livrés** côté code, tests et documentation ; les
+lots 0 à 13 sont déployés (Vercel et Supabase cloud ; imports du lot 11, `import:places` et
+`relocate:listings` du lot 12 faits en production). Le lot 14 (adéquation aux critères) attend
+son déploiement : migration additive `20261106100000_lot14_criteria_fit`, puis
+`refresh:criteria-fit` en simulation et en vrai ([docs/deploiement.md](../deploiement.md) § 2) ;
+le lot 15 (suivi des mises à jour des annonces) le sien : migration additive
 `20261106110000_lot15_listing_checks`, sans variable ni import nouveau. Restent les actions
 d'exploitation (Supabase cloud, Vercel, clés et connecteur :
 [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard » dans chaque lot, et
@@ -20,7 +19,8 @@ Richard et Chloé, sur ordinateur et sur téléphone ; lot 10 : un périmètre d
 sur la photo aérienne, sur le site déployé ; lot 11 : les imports faits sur la base de
 production et l'onglet Quartier des annonces réelles relu par Richard ; lot 12 : le
 rattrapage relu en simulation puis passé sur la production, et les quartiers retenus relus par
-Richard), à constater après la mise en ligne.
+Richard ; lot 14 : les critères de Richard créés sur le site déployé et les deux onglets relus),
+à constater après la mise en ligne.
 
 ## Lot 0 : socle
 
@@ -477,3 +477,61 @@ annonce disparue se voit proposer « Vendu ou retiré » sans que le statut chan
 republication rattachée cumule durée en ligne et baisses. (Vérifié en tests automatisés, e2e MCP
 JSON-RPC compris, et sur captures Chromium d'un banc d'essai, jeu de démo fictif ; à confirmer par
 Richard avec une vraie tournée après le déploiement.)
+
+## Lot 14 : adéquation aux critères
+
+Statut : livré (à déployer : migration additive `20261106100000_lot14_criteria_fit`, puis
+`refresh:criteria-fit` en simulation et en vrai, [docs/deploiement.md](../deploiement.md) § 2).
+
+- Besoins G3, G6 (précisés), D12. Demande de Richard : les annonces actives coïncident avec les
+  critères actifs ; celles qui en sortent passent dans un état différent sans être perdues ;
+  des critères non stricts (un peu hors du polygone, un peu au-dessus du prix) ; une annonce
+  placée au quartier ne sort pas d'un critère dont le polygone recoupe son quartier tant que
+  l'adresse exacte n'est pas connue. Conception et maquette validées (ordinateur et mobile
+  390 px). ADR 0024.
+- Livré :
+  - **Quatre niveaux** par annonce et critère actif, distincts du statut : « dans les critères »,
+    « à confirmer » (adresse au quartier ou à la commune dont le contour touche le périmètre ou
+    sa marge, ou donnée manquante : jamais « hors » pour une donnée manquante), « à la marge »
+    (dépassement dans la tolérance, raison chiffrée), « hors critères » ; le meilleur parmi les
+    critères actifs, le détail gardé ; sans critère actif, tout est « dans les critères ». Le
+    verdict en fait partie, le statut non.
+  - **Adresse imprécise** : le contour du quartier ou de la commune décide, jamais le repère ;
+    distance au tram depuis la partie du contour la plus proche d'un arrêt.
+  - **Marge de tolérance** par critère, défaut daté (300 m, prix +5 %, prix minimal −5 %,
+    surface −5 %, pièces 0, DPE une classe, tram +100 m), 0 = strict ; page Critères : seuils
+    réels (« soit 231 000 € »), « Marge appliquée / désactivée », rappel de la règle des
+    adresses imprécises, aperçu par niveau avant d'enregistrer, compteurs par niveau.
+  - **Mesures et décision** : une requête PostGIS de mesures (module geo) pour la liste,
+    l'aperçu, les alertes et le rattrapage ; la décision, les raisons et les textes dans
+    `domain` (`criteriaFit`, `bestFit`). Stockage : `criteria_matches` étendue (niveau,
+    raisons, détail, date du changement) et le meilleur niveau sur l'annonce ; recalcul à chaque
+    écriture d'annonce, de critère ou d'hypothèses ; journal `criteria.matched`,
+    `criteria.unmatched`, `criteria.fit_changed` avec la cause ; alerte seulement à l'entrée due
+    à l'annonce ; sorties dans « ce qui a changé ».
+  - **Page Annonces** : onglets « Dans les critères · n » et « Hors critères · n » dans l'URL,
+    pastilles « Adéquation », pastilles lisibles sans la couleur et raison dessous ; une annonce
+    hors critères avec une offre en cours ou une visite prévue reste dans l'onglet principal
+    (« Gardée dans la liste ») ; onglet « Hors critères » : explication, raison, « depuis » ; la
+    carte suit l'onglet.
+  - **Fiche** : « Correspond-elle à ce qu'on cherche ? » en tête de la synthèse (niveau,
+    explication, « Préciser l'adresse », détail par critère filtre par filtre, marges,
+    historique daté) ; périmètres des critères sur la carte du quartier.
+  - **MCP** : filtre `fit` et adéquation dans `list_listings` (l'onglet principal par défaut),
+    détail dans `get_listing`, compteurs et marge dans `list_search_criteria`, `tolerance` à la
+    création et à la modification d'un critère, changements de niveau dans les réponses
+    d'écriture et dans `whats_new`. **Export** : deux colonnes en fin de CSV, `criteriaFit` dans
+    le JSON (version 1). **Rattrapage** `pnpm refresh:criteria-fit` (`--dry-run`, idempotent,
+    canal `system`), enchaîné par `stack:up --opendata` ; jeu de démo : un troisième critère à
+    marge réglée, les quatre niveaux représentés.
+- Plus tard : la distance au tram maximale d'un contour (une annonce au quartier tout près d'un
+  arrêt pourrait être « dans ») ; un schéma périmètre et contour dans la fiche elle-même ; des
+  marges plus fines (prix au m²).
+
+Fini quand : chaque annonce dit, critère par critère, si elle correspond à ce qu'on cherche et
+pourquoi ; une annonce au quartier dont le contour chevauche un périmètre y reste « à
+confirmer » jusqu'à l'adresse ; un léger dépassement reste visible « à la marge » ; une annonce
+hors critères n'est jamais perdue et revient d'elle-même ; la liste, l'aperçu, le MCP, l'export
+et le rattrapage disent la même chose. (Vérifié en tests automatisés, sur une base jetable avec
+les vraies données ouvertes et des annonces fictives, et sur captures Chromium ; à confirmer par
+Richard sur le site déployé avec ses critères.)

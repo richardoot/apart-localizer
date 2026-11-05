@@ -73,7 +73,8 @@ export class ListingsController {
     description:
       'Listes séparées par des virgules (status, commune, dpe, verdict) ; bornes priceMin, priceMax, surfaceMin, surfaceMax, roomsMin ; ' +
       'point et rayon : lng, lat, radius (mètres) ; page et limit (50 par défaut, 200 au plus). ' +
-      'Le verdict, le tri et la pagination s’appliquent après le calcul des indicateurs.',
+      'Le verdict, le tri et la pagination s’appliquent après le calcul des indicateurs. ' +
+      'Lot 14 : fit (in, to_confirm, margin, out) filtre par adéquation aux critères actifs ; absent = l’onglet « Dans les critères » (et les hors critères gardées pour une offre en cours ou une visite prévue) ; la réponse compte les annonces par niveau (fit).',
   })
   @ZodResponse({ status: 200, type: ListingListDto })
   list(
@@ -336,7 +337,7 @@ export class ListingsController {
   ): Promise<ListingContextDto> {
     await this.enrichment.searchDpe(member, id, 'web')
     // Un DPE appliqué d'office change la classe, que lit le filtre « DPE au plus ».
-    await this.listings.afterWrite(member, id, 'web')
+    await this.listings.afterWrite(member, id, 'web', 'dpe')
     return this.enrichment.context(member, id)
   }
 
@@ -364,6 +365,6 @@ export class ListingsController {
     }
     await this.enrichment.verifyDpe(member, id, body.number, 'web')
     // La classe retenue peut faire entrer l'annonce dans un critère ou l'en sortir.
-    return this.listings.afterWrite(member, id, 'web')
+    return this.listings.afterWrite(member, id, 'web', 'dpe')
   }
 }

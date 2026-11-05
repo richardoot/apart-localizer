@@ -1,6 +1,8 @@
 import {
   ListingCheckChangeSchema,
   ListingCheckSchema,
+  CriteriaFitCheckSchema,
+  CriteriaFitOriginSchema,
   ListingOpenDataContextSchema,
   ListingPlacementSchema,
   ListingSchema,
@@ -11,7 +13,9 @@ import {
   TaskSchema,
 } from '@apart/contracts'
 import type {
+  CriteriaFitEntry,
   CriteriaMatch,
+  ListingCriteriaFit,
   FieldProvenanceMap,
   LinkedListing,
   ListingCheck as ListingCheckDto,
@@ -25,6 +29,7 @@ import type {
   PriceEvent as PriceEventDto,
   Task as TaskDto,
 } from '@apart/contracts'
+import { listingCriteriaFit } from '@apart/domain'
 import type {
   ListingCheck,
   Offer,
@@ -46,15 +51,19 @@ export const listingInclude = {
   tasks: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] },
   priceEvents: { orderBy: { occurredAt: 'desc' } },
   offers: { orderBy: { madeAt: 'desc' } },
+  // Lot 14 : l'adéquation à chaque critère actif, dans l'ordre de création
+  // des critères (hors critères compris).
   criteriaMatches: {
     where: { criteria: { active: true } },
     include: { criteria: { select: { name: true } } },
-    orderBy: { matchedAt: 'desc' },
+    orderBy: { criteria: { createdAt: 'asc' } },
   },
   // Lot 15 : le dernier résultat et les liens de republication.
   checks: { orderBy: { checkedAt: 'desc' }, take: 1 },
   republishedFrom: { select: linkedSelect },
   republishedAs: { select: linkedSelect },
+  // Lot 14 : une visite prévue garde une annonce hors critères dans la liste.
+  visits: { where: { status: 'planned' }, select: { id: true } },
 } satisfies Prisma.ListingInclude
 
 export type ListingRow = Prisma.ListingGetPayload<{
@@ -310,12 +319,55 @@ function openDataContextOf(value: unknown): ListingDto['openDataContext'] {
   return parsed.success ? parsed.data : null
 }
 
-/** Les critères dans lesquels l'annonce est entrée (alertes). */
+/** Les critères qui gardent l'annonce (dans, à confirmer, à la marge), de l'entrée la plus récente à la plus ancienne. */
 export function toCriteriaMatchDtos(row: ListingRow): CriteriaMatch[] {
-  return row.criteriaMatches.map(match => ({
-    criteriaId: match.criteriaId,
-    name: match.criteria.name,
-    matchedAt: match.matchedAt.toISOString(),
-    approximate: match.approximate,
-  }))
+  return row.criteriaMatches
+    .filter(match => match.level !== 'out')
+    .sort((a, b) => b.matchedAt.getTime() - a.matchedAt.getTime())
+    .map(match => ({
+      criteriaId: match.criteriaId,
+      name: match.criteria.name,
+      matchedAt: match.matchedAt.toISOString(),
+      approximate: match.approximate,
+      level: match.level,
+      reasons: stringsOf(match.reasons),
+    }))
+}
+
+function originOf(value: unknown): ListingCriteriaFit['origin'] {
+  const parsed = CriteriaFitOriginSchema.safeParse(value)
+  return parsed.success ? parsed.data : null
+}
+
+function stringsOf(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === 'string')
+    : []
+}
+
+/** Le détail de l'adéquation par critère actif (lot 14). */
+export function toCriteriaFitEntries(row: ListingRow): CriteriaFitEntry[] {
+  return row.criteriaMatches.map(match => {
+    const checks = CriteriaFitCheckSchema.array().safeParse(match.checks)
+    return {
+      criteriaId: match.criteriaId,
+      name: match.criteria.name,
+      level: match.level,
+      reasons: stringsOf(match.reasons),
+      checks: checks.success ? checks.data : [],
+      locationPending: match.approximate,
+      since: match.levelChangedAt.toISOString(),
+    }
+  })
+}
+
+/** L'adéquation enregistrée de l'annonce : meilleur niveau, détail, « depuis », gardée. */
+export function toListingCriteriaFit(row: ListingRow): ListingCriteriaFit {
+  return listingCriteriaFit({
+    entries: toCriteriaFitEntries(row),
+    since: row.criteriaFitChangedAt?.toISOString() ?? null,
+    origin: originOf(row.criteriaFitOrigin),
+    status: row.status,
+    plannedVisits: row.visits.length,
+  })
 }

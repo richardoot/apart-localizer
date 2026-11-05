@@ -31,11 +31,19 @@ Pièces, Chambres, Étage, Ascenseur, Année de construction, DPE, GES, Charges 
 Taxe foncière (€), Loyer visé (€/mois), Loyer retenu (€/mois), Prix au m² (€), Frais de notaire
 (€), Travaux (€), Coût total (€), Mensualité (€), Rendement brut (%), Rendement net (%), Effort
 mensuel (€), Verdict, Location, Prix cible (€), Décote nécessaire (%), Note moyenne (/5), Tâches
-ouvertes, Visites, Dernière offre (€), Ajoutée le, Modifiée le, Identifiant, puis (lot 15, en fin
-de ligne pour ne décaler aucune colonne) Vérifiée le (dernière vérification sur le portail, quel
-qu'en soit le résultat), Vue en ligne le, Dernière vérification (résultat : « Inchangée », « Mise à
-jour », « Plus en ligne », « Republiée », « Non vérifiée : page inaccessible » ; vide si jamais
-vérifiée).
+ouvertes, Visites, Dernière offre (€), Ajoutée le, Modifiée le, Identifiant, puis, en fin de ligne
+pour ne décaler aucune colonne existante, Vérifiée le, Vue en ligne le, Dernière vérification
+(lot 15) et Adéquation, Raisons de l'adéquation (lot 14).
+
+« Vérifiée le » est la dernière vérification sur le portail, quel qu'en soit le résultat ;
+« Dernière vérification » en donne le résultat (« Inchangée », « Mise à jour », « Plus en ligne »,
+« Republiée », « Non vérifiée : page inaccessible » ; vide si jamais vérifiée). Les deux colonnes
+du lot 14 (ADR 0024) : « Adéquation » vaut « Dans les critères », « À confirmer », « À la marge »,
+« Hors critères » ou « Aucun critère actif » ; « Raisons de l'adéquation » donne le critère qui
+fixe ce niveau, ses raisons chiffrées (« « Talence » : Prix +3,6 % (maximum 220 000 €, marge
+5 %) ») et, le cas échéant, « Gardée dans la liste : offre en cours ». L'export de tout l'espace
+(`scope=workspace`) prend toutes les annonces, hors critères comprises ; une sélection suit
+l'onglet de la liste (`fit`).
 
 La colonne « Coût total (€) » garde son nom depuis le lot 9, pour les tableurs qui la lisent :
 c'est le **coût tout compris** de l'interface (prix affiché + frais de notaire + travaux +
@@ -54,11 +62,13 @@ non plus : `listing.location.placement` (comment le repère a été placé : mé
 texte reconnu, réserves ; `null` pour une annonce antérieure au lot 12), les champs
 `approximate` des équipements de `surroundings` (`false` par défaut), et la colonne CSV
 « Repère » (« Adresse exacte », « À la rue », « Au quartier (X) », « Commune seulement »,
-« Non localisée »). Le lot 15 non plus : `listing.lastCheckedAt`, `listing.lastSeenOnlineAt` et
-`listing.republishedFromId` (`null` par défaut), et `checks` par annonce (les vérifications sur le
-portail, de la plus récente à la plus ancienne ; une liste vide quand un export antérieur n'en a
-pas) ; l'extrait-preuve d'une vérification est court (500 caractères), téléphones et adresses
-e-mail masqués.
+« Non localisée »). Le lot 14 non plus : `criteriaFit` par annonce (niveau, critère, raisons,
+« depuis » et sa cause, `kept`, détail par critère filtre par filtre) et `tolerance` de chaque
+critère dans `searchCriteria` (la marge par défaut pour un critère antérieur). Le lot 15 non plus :
+`listing.lastCheckedAt`, `listing.lastSeenOnlineAt` et `listing.republishedFromId` (`null` par
+défaut), et `checks` par annonce (les vérifications sur le portail, de la plus récente à la plus
+ancienne ; une liste vide quand un export antérieur n'en a pas) ; l'extrait-preuve d'une
+vérification est court (500 caractères), téléphones et adresses e-mail masqués.
 
 ```text
 {
@@ -78,9 +88,10 @@ e-mail masqués.
     offers: Offer[],
     visits: Visit[],                        // sans `photos` ; `photoCount` seulement
     rentComparables: RentComparable[],
-    checks: ListingCheck[]                  // lot 15 : date, auteur, canal, résultat, écarts, extrait
+    checks: ListingCheck[],                 // lot 15 : date, auteur, canal, résultat, écarts, extrait
+    criteriaFit: ListingCriteriaFit         // lot 14 : adéquation aux critères actifs
   }],
-  searchCriteria: SearchCriteria[],         // filtres et périmètre GeoJSON
+  searchCriteria: SearchCriteria[],         // filtres, marge de tolérance et périmètre GeoJSON
   scenarios: Scenario[]                     // de l'espace et des annonces exportées
 }
 ```

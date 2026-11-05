@@ -38,6 +38,7 @@ import type {
   AssumptionsVersion,
   CompareResult,
   ComplianceReport,
+  CriteriaFitHistory,
   OccupancyReport,
   ProjectionQuery,
   ProjectionReport,
@@ -295,6 +296,9 @@ export const api = {
     get: (id: string) => apiFetch<EvaluatedListing>(`/listings/${id}`),
     /** Lot 12 : contours des annonces placées au quartier (GeoJSON), pour la carte. */
     areas: () => apiFetch<LayerFeatureCollection>('/listings/areas'),
+    /** Lot 14 : historique de l'adéquation aux critères (entrées, sorties, niveaux). */
+    criteriaFitHistory: (id: string) =>
+      apiFetch<CriteriaFitHistory>(`/listings/${id}/criteria-fit/history`),
     create: (input: ListingCreateRaw) =>
       apiFetch<ListingCreateResult>('/listings', {
         method: 'POST',

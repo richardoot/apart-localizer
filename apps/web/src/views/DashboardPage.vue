@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { computed } from 'vue'
-  import { ListingStatusSchema } from '@apart/contracts'
+  import { CriteriaFitLevelSchema, ListingStatusSchema } from '@apart/contracts'
   import { summarizeListings } from '@apart/domain'
   import StatTile from '@/components/ui/StatTile.vue'
   import ListingCards from '@/components/listings/ListingCards.vue'
@@ -16,9 +16,11 @@
 
   const router = useRouter()
   const { data: workspace } = useWorkspace()
-  // Tous les statuts : la synthèse compte aussi les écartées et les vendues.
+  // Tous les statuts : la synthèse compte aussi les écartées et les vendues ;
+  // et toute l'adéquation (lot 14) : les annonces hors critères aussi.
   const { data, isPending, error } = useListingList({
     status: [...ListingStatusSchema.options],
+    fit: [...CriteriaFitLevelSchema.options],
     sort: 'score',
     limit: 200,
   })
@@ -200,7 +202,7 @@
                 >{{ c.newCount }} nouvelle(s)</span
               >
               <span v-if="c.approximateCount" class="ml-1 text-xs text-muted"
-                >dont {{ c.approximateCount }} sous réserve</span
+                >dont {{ c.approximateCount }} à confirmer</span
               >
             </span>
           </li>

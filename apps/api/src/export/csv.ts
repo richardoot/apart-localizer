@@ -1,11 +1,12 @@
 import {
   LISTING_CHECK_OUTCOME_LABELS,
+  CRITERIA_FIT_LEVEL_LABELS,
   LISTING_STATUS_LABELS,
   RENTAL_VERDICT_LABELS,
   VERDICT_LABELS,
 } from '@apart/contracts'
 import type { EvaluatedListing } from '@apart/contracts'
-import { precisionBadge } from '@apart/domain'
+import { fitReasonsText, keptLabel, precisionBadge } from '@apart/domain'
 
 /**
  * Le CSV pour un tableur français : séparateur « ; », UTF-8 avec BOM (Excel
@@ -106,6 +107,9 @@ export const LISTING_CSV_COLUMNS = [
   'Vérifiée le',
   'Vue en ligne le',
   'Dernière vérification',
+  // Lot 14, en fin de ligne pour ne pas décaler les colonnes existantes.
+  'Adéquation',
+  'Raisons de l’adéquation',
 ] as const
 
 /** Une ligne par annonce, dans l'ordre de `LISTING_CSV_COLUMNS`. */
@@ -166,5 +170,28 @@ export function listingCsvRow(
     day(l.lastCheckedAt),
     day(l.lastSeenOnlineAt),
     item.lastCheck ? LISTING_CHECK_OUTCOME_LABELS[item.lastCheck.outcome] : '',
+    fitCell(item),
+    fitReasonsCell(item),
   ]
+}
+
+/** Lot 14 : le niveau d'adéquation, ou « Aucun critère actif ». */
+function fitCell(item: EvaluatedListing): string {
+  const fit = item.criteriaFit
+  return fit.activeCriteria === 0
+    ? 'Aucun critère actif'
+    : CRITERIA_FIT_LEVEL_LABELS[fit.level]
+}
+
+/** Lot 14 : le critère, les raisons courtes et l'exception « gardée ». */
+function fitReasonsCell(item: EvaluatedListing): string {
+  const fit = item.criteriaFit
+  if (fit.activeCriteria === 0) return ''
+  return [
+    fit.name ? `« ${fit.name} »` : null,
+    fit.reasons.length ? fitReasonsText(fit.reasons) : null,
+    fit.kept ? keptLabel(fit.kept) : null,
+  ]
+    .filter(Boolean)
+    .join(' : ')
 }

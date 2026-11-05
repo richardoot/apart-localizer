@@ -222,6 +222,7 @@ describe('computeWhatsNew', () => {
       criteria_match: 1,
       // Lot 15 : les vérifications sur le portail ont leur propre compte.
       listing_check: 0,
+      criteria_exit: 0,
     })
     expect(report.items.map(i => i.kind)).toEqual([
       'criteria_match',

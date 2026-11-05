@@ -139,8 +139,13 @@ describe('jeu de démonstration', () => {
     expect(l.flatMap(x => x.rentComparables).length).toBeGreaterThanOrEqual(6)
     expect(dataset.criteria.map(c => c.input.perimeter?.type).sort()).toEqual([
       'point_radius',
+      'point_radius',
       'polygon',
     ])
+    // Lot 14 : un critère montre une marge de tolérance réglée.
+    expect(
+      dataset.criteria.some(c => c.input.tolerance.perimeterMeters === 400)
+    ).toBe(true)
   })
 
   it('est fictif : adresses marquées, liens en .invalid, points dans la métropole', () => {

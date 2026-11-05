@@ -54,13 +54,17 @@ describe('DashboardPage', () => {
     const wrapper = mountPage()
     await flushPromises()
     expect(apiMock.searchCriteria.list).toHaveBeenCalledWith(false)
+    // Lot 14 : la synthèse compte toutes les annonces, hors critères comprises.
+    expect(apiMock.listings.list).toHaveBeenCalledWith(
+      expect.objectContaining({ fit: ['in', 'to_confirm', 'margin', 'out'] })
+    )
     const row = wrapper.get(
       '[data-criteria-count="cccccccc-cccc-4ccc-8ccc-cccccccccccc"]'
     )
     expect(row.text()).toContain('Talence fictif')
     expect(row.text()).toContain('3 annonce(s)')
     expect(row.text()).toContain('1 nouvelle(s)')
-    expect(row.text()).toContain('dont 1 sous réserve')
+    expect(row.text()).toContain('dont 1 à confirmer')
     wrapper.unmount()
   })
 

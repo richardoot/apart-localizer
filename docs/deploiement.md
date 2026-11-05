@@ -206,6 +206,37 @@ les annonces actives ajoutées il y a plus de sept jours ; le connecteur claude.
 deux outils et le prompt nouveaux à sa prochaine lecture de `tools/list` (nouvelle conversation ;
 le reconnecter s'ils n'apparaissent pas).
 
+### Adéquation aux critères (lot 14)
+
+Migration `20261106100000_lot14_criteria_fit` : purement additive (énumération
+`CriteriaFitLevel` ; `search_criteria.tolerance`, JSON vide par défaut = marge par défaut ;
+`criteria_matches` gagne le niveau, les raisons, le détail et la date du changement, les lignes
+existantes valant « dans les critères » ; `listings.criteria_fit_level`, `criteria_fit_changed_at`
+et `criteria_fit_origin`, NULL pour les annonces existantes ; deux index), aucune donnée réécrite ;
+appliquée par `prisma:deploy` (ou `build:vercel`) comme les autres. Ensuite, depuis un poste, avec
+la connexion directe :
+
+```bash
+# 1. Migration (si build:vercel ne l'a pas déjà appliquée)
+cd apps/api && DIRECT_URL='<connexion directe>' DATABASE_URL='<connexion directe>' pnpm prisma:deploy && cd ../..
+# 2. Rattrapage de l'adéquation : d'abord la simulation (« annonce : avant → après (critère :
+#    raisons) »), relue, puis en vrai
+pnpm refresh:criteria-fit -- --dry-run --database-url '<connexion directe>'
+pnpm refresh:criteria-fit -- --database-url '<connexion directe>'
+```
+
+Le rattrapage compare chaque annonce aux critères actifs de son espace avec les règles de l'API
+(mesures PostGIS, décision de `domain`), écrit le niveau de chaque critère et le meilleur sur
+l'annonce, journalise chaque changement (`criteria.matched`, `criteria.unmatched`,
+`criteria.fit_changed`, canal `system`, cause « rattrapage ») sans notification ni « ce qui a
+changé », et ne change rien à la deuxième passe. Il n'appelle aucun service en ligne et ne touche
+pas à la date de modification des annonces. Tant qu'aucun critère n'existe (cas de la production
+au déploiement), il ne fait qu'écrire « dans les critères » sur les annonces : le premier critère
+créé dans l'application compare ensuite toutes les annonces, sans alerte. À relancer après un
+import d'arrêts TBM ou de contours (les mesures changent sans écriture d'annonce) ;
+`relocate:listings` recalcule lui-même l'adéquation des annonces qu'il replace, et
+`stack:up --opendata` enchaîne le rattrapage en local.
+
 ## 3. Projet Vercel : API
 
 Projet `apart-localizer-backend` relié au dépôt GitHub, **Root Directory** `apps/api`, framework
@@ -434,3 +465,8 @@ partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « C
       annonce : section « Mises à jour », « Vue en ligne aujourd'hui » et « Plus en ligne »
       (statut proposé, appliqué seulement sur accord) ; liste : « À revérifier » et le filtre ;
       dans claude.ai, prompt « Tournée de mise à jour » essayé sur deux ou trois annonces.
+- [ ] Lot 14 : migration `20261106100000_lot14_criteria_fit` appliquée ; `refresh:criteria-fit`
+      relu en simulation puis passé ; un premier critère créé (avec sa marge) : onglets « Dans les
+      critères » et « Hors critères » de la liste, pastilles et raisons, une annonce au quartier
+      « à confirmer » et son bloc « Correspond-elle à ce qu'on cherche ? » dans la fiche ;
+      `list_listings` depuis claude.ai donne l'adéquation.

@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import { mapLibreMock, terraDrawMock } from '@/test/setup'
+import {
+  DEFAULT_CRITERIA_TOLERANCE,
+  STRICT_CRITERIA_TOLERANCE,
+} from '@apart/contracts'
 import { SQUARE, fakeCriteria } from '@/test/criteria-fixtures'
 
 const apiMock = vi.hoisted(() => ({
@@ -60,6 +64,15 @@ describe('CriteriaEditor', () => {
           listingCount: 4,
           approximateCount: 1,
           listingIds: [],
+          fitCounts: { in: 2, to_confirm: 1, margin: 1, out: 3 },
+          examples: [
+            {
+              listingId: '11111111-1111-4111-8111-111111111111',
+              title: 'T3 fictif',
+              level: 'margin',
+              reasons: ['Prix +3,6 % (maximum 210 000 €, marge 5 %)'],
+            },
+          ],
         })
     )
     apiMock.searchCriteria.create.mockResolvedValue(fakeCriteria())
@@ -83,7 +96,7 @@ describe('CriteriaEditor', () => {
       '4 annonce(s)'
     )
     expect(wrapper.get('[data-testid="preview"]').text()).toContain(
-      '1 sous réserve'
+      '1 à confirmer faute d’adresse'
     )
     await wrapper.get('form').trigger('submit')
     await flushPromises()
@@ -92,6 +105,7 @@ describe('CriteriaEditor', () => {
         name: 'Talence sud',
         filters: expect.objectContaining({ priceMax: 210000 }),
         perimeter: { type: 'polygon', polygon: SQUARE },
+        tolerance: DEFAULT_CRITERIA_TOLERANCE,
       })
     )
     expect(wrapper.emitted('saved')).toHaveLength(1)
@@ -168,6 +182,76 @@ describe('CriteriaEditor', () => {
       }),
     })
     expect(call?.[1]).not.toHaveProperty('perimeter')
+    wrapper.unmount()
+  })
+
+  it('lot 14 : marge de tolérance, seuils réels, aperçu par niveau, marge désactivée', async () => {
+    const wrapper = mountEditor()
+    await flushPromises()
+    await wrapper.get('[data-testid="c-price-max"]').setValue('220000')
+    await flushPromises()
+    const tolerance = wrapper.get('[data-testid="tolerance"]')
+    expect(tolerance.text()).toContain('Marge de tolérance')
+    expect(tolerance.text()).toContain('Annonces sans adresse exacte')
+    expect(
+      wrapper.get('[data-testid="tol-price-max-threshold"]').text()
+    ).toMatch(/soit 231\s000 €/)
+    // L'aperçu demande la marge saisie et montre les quatre niveaux.
+    expect(
+      apiMock.searchCriteria.preview.mock.calls.at(-1)?.[0].tolerance
+    ).toEqual(DEFAULT_CRITERIA_TOLERANCE)
+    const preview = wrapper.get('[data-testid="fit-preview"]')
+    expect(preview.findAll('[data-preview-level]').map(d => d.text())).toEqual([
+      '2',
+      '1',
+      '1',
+      '3',
+    ])
+    expect(wrapper.get('[data-testid="fit-preview-note"]').text()).toContain(
+      'prix +3,6 %'
+    )
+    // Marge désactivée : tout à 0, puis la marge revient.
+    const toggle = wrapper.get('[data-testid="tolerance-toggle"]')
+    expect(toggle.attributes('aria-pressed')).toBe('true')
+    await toggle.trigger('click')
+    await flushPromises()
+    expect(toggle.text()).toBe('Marge désactivée')
+    expect(
+      apiMock.searchCriteria.preview.mock.calls.at(-1)?.[0].tolerance
+    ).toEqual(STRICT_CRITERIA_TOLERANCE)
+    expect(wrapper.get('[data-testid="fit-preview-note"]').text()).toContain(
+      'Marge désactivée'
+    )
+    await toggle.trigger('click')
+    await flushPromises()
+    expect(
+      apiMock.searchCriteria.preview.mock.calls.at(-1)?.[0].tolerance
+    ).toEqual(DEFAULT_CRITERIA_TOLERANCE)
+    // Une marge réglée part avec la création.
+    await wrapper.get('[data-testid="tol-perimeter"]').setValue('500')
+    await wrapper.get('#c-name').setValue('Avec marge')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(apiMock.searchCriteria.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tolerance: { ...DEFAULT_CRITERIA_TOLERANCE, perimeterMeters: 500 },
+      })
+    )
+    wrapper.unmount()
+  })
+
+  it('lot 14 : modifier la marge d’un critère strict la rétablit par défaut', async () => {
+    const criteria = fakeCriteria({ tolerance: STRICT_CRITERIA_TOLERANCE })
+    const wrapper = mountEditor(criteria)
+    await flushPromises()
+    const toggle = wrapper.get('[data-testid="tolerance-toggle"]')
+    expect(toggle.attributes('aria-pressed')).toBe('false')
+    await toggle.trigger('click')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(apiMock.searchCriteria.update.mock.calls[0]?.[1]).toMatchObject({
+      tolerance: DEFAULT_CRITERIA_TOLERANCE,
+    })
     wrapper.unmount()
   })
 })

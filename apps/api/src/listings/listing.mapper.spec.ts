@@ -110,6 +110,10 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     checks: [],
     republishedFrom: null,
     republishedAs: null,
+    visits: [],
+    criteriaFitLevel: null,
+    criteriaFitChangedAt: null,
+    criteriaFitOrigin: null,
     ...over,
   }
 }

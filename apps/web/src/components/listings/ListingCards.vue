@@ -11,7 +11,7 @@
   } from '@/lib/format'
   import CostBasisBadge from './CostBasisBadge.vue'
   import DpeBadge from './DpeBadge.vue'
-  import CriteriaBadges from './CriteriaBadges.vue'
+  import FitSummary from './FitSummary.vue'
   import CheckFreshnessBadge from './CheckFreshnessBadge.vue'
   import NewBadge from './NewBadge.vue'
   import PrecisionBadge from './PrecisionBadge.vue'
@@ -19,7 +19,14 @@
   import StatusBadge from './StatusBadge.vue'
   import VerdictPill from './VerdictPill.vue'
 
-  defineProps<{ items: EvaluatedListing[] }>()
+  withDefaults(
+    defineProps<{
+      items: EvaluatedListing[]
+      /** Lot 14 : l'onglet « Hors critères » (depuis quand). */
+      outTab?: boolean
+    }>(),
+    { outTab: false }
+  )
   const emit = defineEmits<{ open: [id: string] }>()
 
   const openTasks = (item: EvaluatedListing): number =>
@@ -44,7 +51,7 @@
             {{ item.listing.title }}
             <NewBadge :is-new="item.isNewForMe" />
           </h3>
-          <CriteriaBadges :matches="item.criteriaMatches" />
+          <FitSummary :fit="item.criteriaFit" :since="outTab" />
           <p class="text-xs text-muted">
             {{
               [item.listing.location.commune, item.listing.location.district]

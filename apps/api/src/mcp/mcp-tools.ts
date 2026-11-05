@@ -3,6 +3,7 @@ import { ServiceUnavailableException } from '@nestjs/common'
 import { z } from 'zod'
 import {
   AssumptionsSchema,
+  CRITERIA_FIT_LEVEL_LABELS,
   DISCOUNT_CLASS_LABELS,
   DUPLICATE_REASON_LABELS,
   INDICATOR_GLOSSARY,
@@ -62,7 +63,9 @@ import {
 import type {
   AssumptionsImpact,
   CompareResult,
+  CriteriaFitRefreshSummary,
   CriteriaMatchChanges,
+  ListingList,
   ListingContext,
   MarketContext,
   MarketContextReport,
@@ -90,10 +93,14 @@ import type {
 import {
   checkFreshness,
   formatCheckDay,
+  describeListingFit,
+  fitReasonsText,
   formatEuros,
   formatPercent,
+  keptLabel,
   mergeAssumptions,
   precisionBadge,
+  toleranceSummary,
 } from '@apart/domain'
 import type { Member } from '../generated/prisma'
 import type { DuplicatesService } from '../listings/duplicates.service'
@@ -212,6 +219,13 @@ export function describeListing(item: EvaluatedListing): string {
     `location ${RENTAL_VERDICT_LABELS[item.evaluation.rental.verdict]}`,
   ]
   parts.push(`repère : ${precisionBadge(item.listing.location).label}`)
+  // Lot 14 : l'adéquation aux critères actifs, avec la raison.
+  const fit = item.criteriaFit
+  if (fit.activeCriteria > 0) {
+    parts.push(
+      `adéquation : ${CRITERIA_FIT_LEVEL_LABELS[fit.level]}${fit.reasons.length ? ` (${fitReasonsText(fit.reasons)})` : ''}${fit.kept ? ` — ${keptLabel(fit.kept).toLowerCase()}` : ''}`
+    )
+  }
   if (item.isNewForMe) parts.push('nouvelle pour vous')
   if (item.distanceMeters !== null)
     parts.push(`à ${Math.round(item.distanceMeters)} m`)
@@ -373,19 +387,69 @@ export function describeImpact(impact: AssumptionsImpact): string {
   ].join('\n')
 }
 
-/** Les critères dans lesquels une annonce entre ou dont elle sort, en une ligne. */
+/**
+ * Ce qu'une écriture change à l'adéquation d'une annonce (lot 14), en une
+ * ligne : critères dans lesquels elle entre (et à quel niveau), dont elle
+ * sort (hors critères, avec la raison), dont le niveau change.
+ */
 export function describeCriteriaChanges(
   changes: CriteriaMatchChanges | null
 ): string | null {
   if (!changes) return null
   const parts: string[] = []
+  const why = (reasons: readonly string[]): string =>
+    reasons.length ? ` : ${fitReasonsText(reasons)}` : ''
   for (const m of changes.entered) {
     parts.push(
-      `Entre dans le critère « ${m.name} »${m.approximate ? ' (sous réserve : localisation imprécise)' : ''}.`
+      `Entre dans le critère « ${m.name} »${m.level === 'in' ? '' : ` (${CRITERIA_FIT_LEVEL_LABELS[m.level].toLowerCase()}${why(m.reasons)})`}.`
     )
   }
-  for (const m of changes.left) parts.push(`Sort du critère « ${m.name} ».`)
+  for (const m of changes.left) {
+    parts.push(
+      `Sort du critère « ${m.name} » (hors critères${why(m.reasons)}).`
+    )
+  }
+  for (const m of changes.changed) {
+    parts.push(
+      `Critère « ${m.name} » : ${CRITERIA_FIT_LEVEL_LABELS[m.before].toLowerCase()} → ${CRITERIA_FIT_LEVEL_LABELS[m.after].toLowerCase()}${why(m.reasons)}.`
+    )
+  }
   return parts.length ? parts.join(' ') : null
+}
+
+/** L'adéquation d'une annonce, critère par critère (get_listing). */
+export function describeFitDetail(item: EvaluatedListing): string {
+  const fit = item.criteriaFit
+  if (fit.activeCriteria === 0) {
+    return 'Adéquation : aucun critère actif, l’annonce est « dans les critères » par défaut.'
+  }
+  return [
+    `Adéquation : ${describeListingFit(fit)}`,
+    ...fit.criteria.map(
+      c =>
+        `  - « ${c.name} » : ${CRITERIA_FIT_LEVEL_LABELS[c.level]}${c.reasons.length ? ` — ${fitReasonsText(c.reasons)}` : ''}${c.locationPending ? ' (préciser l’adresse tranchera)' : ''}`
+    ),
+  ].join('\n')
+}
+
+/** Les compteurs de la page de liste par niveau d'adéquation (list_listings). */
+export function describeListFit(fit: ListingList['fit']): string {
+  if (fit.activeCriteria.length === 0) {
+    return 'Aucun critère actif : toutes les annonces sont « dans les critères ».'
+  }
+  const c = fit.counts
+  return `Adéquation (${fit.criteriaId ? 'critère choisi' : `${fit.activeCriteria.length} critère(s) actif(s)`}) : ${c.in} dans les critères, ${c.to_confirm} à confirmer, ${c.margin} à la marge, ${c.out} hors critères${fit.kept ? ` (dont ${fit.kept} gardée(s) dans la liste : offre en cours ou visite prévue)` : ''}.`
+}
+
+/** Ce qu'une écriture de critère ou d'hypothèses change à l'adéquation des annonces. */
+export function describeFitRefresh(
+  summary: CriteriaFitRefreshSummary | null
+): string | null {
+  if (!summary) return null
+  if (summary.entered + summary.left + summary.changed === 0) {
+    return `Adéquation : aucun changement sur ${summary.listings} annonce(s).`
+  }
+  return `Adéquation sur ${summary.listings} annonce(s) : ${summary.entered} entrée(s), ${summary.left} sortie(s) vers « hors critères », ${summary.changed} autre(s) changement(s) de niveau.`
 }
 
 /** La desserte en une ligne. */
@@ -546,7 +610,13 @@ export function describeCriteria(c: SearchCriteriaSummary): string {
       ? f.statuses.map(st => LISTING_STATUS_LABELS[st]).join(', ')
       : null,
   ].filter(Boolean)
-  return `« ${c.name} »${c.active ? '' : ' (archivé)'} : ${perimeter}${filters.length ? `, ${filters.join(', ')}` : ''} — ${c.listingCount} annonce(s), ${c.newCount} nouvelle(s) pour vous${c.approximateCount ? `, ${c.approximateCount} sous réserve` : ''} [id ${c.id}, modifié ${c.updatedAt}]`
+  const counts = c.fitCounts
+  const margins = toleranceSummary({
+    perimeterType: c.perimeterType,
+    filters: c.filters,
+    tolerance: c.tolerance,
+  })
+  return `« ${c.name} »${c.active ? '' : ' (archivé)'} : ${perimeter}${filters.length ? `, ${filters.join(', ')}` : ''} — ${c.listingCount} annonce(s) (${counts.in} dans les critères, ${counts.to_confirm} à confirmer, ${counts.margin} à la marge), ${counts.out} hors critères, ${c.newCount} nouvelle(s) pour vous${c.approximateCount ? `, ${c.approximateCount} à confirmer faute d’adresse` : ''} ; ${margins} [id ${c.id}, modifié ${c.updatedAt}]`
 }
 
 /** Un service open data en panne (isochrones) : refus lisible plutôt qu'erreur de transport. */
@@ -793,7 +863,9 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         'son verdict de louabilité, ses avis et ses tâches. Sans filtre de statut : les annonces actives (à étudier, à visiter, visité, offre faite, offre acceptée). ' +
         'Avec `near`, chaque annonce porte sa distance au point. ' +
         'Lot 12 : chaque annonce porte la précision de son repère (`location.precision` : exact au numéro, street à la rue, district au centre du quartier, commune au centre de la commune) et son placement (`location.placement` : méthode, quartier retenu, texte reconnu, « à vérifier ») ; le filtre `precision` (exact, street, district, commune, none) sépare les annonces exactement localisées des génériques. ' +
-        'Lot 15 : chaque annonce porte `listing.lastCheckedAt` (dernière vérification sur le portail), `listing.lastSeenOnlineAt` (dernière fois vue en ligne) et `lastCheck` (date, résultat, résumé) ; `staleDays: 7` ne garde que les annonces à revérifier (actives, sans vérification depuis plus de N jours, à défaut depuis leur ajout) et `sort: "lastCheckedAt"`, `order: "asc"` les range de la plus ancienne vérification à la plus récente : la file de la tournée de mise à jour (prompt review_listings).',
+        'Lot 15 : chaque annonce porte `listing.lastCheckedAt` (dernière vérification sur le portail), `listing.lastSeenOnlineAt` (dernière fois vue en ligne) et `lastCheck` (date, résultat, résumé) ; `staleDays: 7` ne garde que les annonces à revérifier (actives, sans vérification depuis plus de N jours, à défaut depuis leur ajout) et `sort: "lastCheckedAt"`, `order: "asc"` les range de la plus ancienne vérification à la plus récente : la file de la tournée de mise à jour (prompt review_listings). ' +
+        'Lot 14 : chaque annonce porte son adéquation aux critères actifs (`criteriaFit` : meilleur niveau in « dans les critères », to_confirm « à confirmer » (adresse au quartier ou à la commune dont le contour touche le périmètre, ou donnée manquante), margin « à la marge » (dépassement dans la marge de tolérance), out « hors critères » ; raisons chiffrées ; détail par critère ; `kept` quand une annonce hors critères reste dans la liste pour une offre en cours ou une visite prévue). ' +
+        'Sans filtre `fit`, la réponse est l’onglet « Dans les critères » de l’application (in, to_confirm, margin, plus les hors critères gardées) ; `fit: ["out"]` donne l’onglet « Hors critères » (rien n’est perdu), `fit` liste exactement les niveaux voulus. Sans critère actif, tout est « dans les critères ». `fit` de la réponse compte les annonces par niveau.',
       inputSchema: McpListListingsInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -805,7 +877,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
             `- ${describeListing(item)} · ${describeCheckState(item)} [id ${item.listing.id}]`
         )
         const summary =
-          `${page.total} annonce(s), page ${page.page}/${Math.max(page.pageCount, 1)}` +
+          `${page.total} annonce(s), page ${page.page}/${Math.max(page.pageCount, 1)}\n${describeListFit(page.fit)}` +
           (lines.length ? `\n${lines.join('\n')}` : '')
         return dataResult(summary, page)
       })
@@ -820,7 +892,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         "le prix cible par critère, les avis des membres, les tâches (avec leurs identifiants), l'historique des prix, les critères de recherche dans lesquels elle est entrée, " +
         "et son contexte de données ouvertes (`context`) : arrêt de tram le plus proche (distance, ligne), plafond d'encadrement (Bordeaux), DPE vérifié auprès de l'ADEME et sa validité, comparables DVF datés ; " +
         'et (lot 11) son quartier (quartier officiel, IRIS ou commune, avec sa source), la piste d’athlétisme, le drive le plus proche de chaque enseigne préférée (Carrefour, Auchan, Intermarché) et toutes enseignes, et la salle Fitness Park les plus proches, distances à vol d’oiseau (« non disponible » si la source n’est pas importée). ' +
-        'Lot 12 : la précision du repère et son placement (`listing.location.placement` : adresse, quartier reconnu dans `district` avec sa zone et son texte, lieu-dit OpenStreetMap, centre de la commune ou point saisi) ; `context.approximation` dit quand les distances partent du centre du quartier ou de la commune (à lire « ≈ »). Dites-le au membre et proposez de préciser l’adresse.',
+        'Lot 12 : la précision du repère et son placement (`listing.location.placement` : adresse, quartier reconnu dans `district` avec sa zone et son texte, lieu-dit OpenStreetMap, centre de la commune ou point saisi) ; `context.approximation` dit quand les distances partent du centre du quartier ou de la commune (à lire « ≈ »). Dites-le au membre et proposez de préciser l’adresse. ' +
+        'Lot 14 : `criteriaFit`, l’adéquation aux critères actifs : meilleur niveau, raisons, « depuis », et pour chaque critère le niveau, les raisons et le détail filtre par filtre (`checks` : valeur de l’annonce, seuil, marge appliquée). Une annonce « à confirmer » à cause de l’adresse (`locationPending`) sera tranchée en précisant l’adresse (update_listing).',
       inputSchema: McpGetListingInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -831,11 +904,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         const checks = item.evaluation.rental.checks
           .map(c => `  - [${c.level}] ${c.message}`)
           .join('\n')
-        const criteria = item.criteriaMatches.length
-          ? `\nCritères : ${item.criteriaMatches.map(m => `« ${m.name} »${m.approximate ? ' (sous réserve)' : ''}`).join(', ')}`
-          : ''
         return dataResult(
-          `${describeListing(item)}${criteria}\n${describePlacement(item)}\nContrôles de louabilité :\n${checks}\n${describeContext(context)}`,
+          `${describeListing(item)}\n${describeFitDetail(item)}\n${describePlacement(item)}\nContrôles de louabilité :\n${checks}\n${describeContext(context)}`,
           { ...item, context }
         )
       })
@@ -1336,7 +1406,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       title: 'Modifier les hypothèses',
       description:
         "Enregistre une nouvelle version des hypothèses de l'espace à partir des champs modifiés seulement (`values` : taux en fractions, apport en euros, seuils, marges, critères du prix cible, seuils de décote, mode et barème des frais de notaire…) ; les autres champs gardent leur valeur en vigueur. " +
-        '`expectedVersion` (identifiant rendu par get_assumptions) est le garde-fou optimiste : refus si une autre version a été enregistrée depuis. La réponse donne l’impact : annonces actives dont le verdict change. Journalisé. Portée listings:write.',
+        '`expectedVersion` (identifiant rendu par get_assumptions) est le garde-fou optimiste : refus si une autre version a été enregistrée depuis. La réponse donne l’impact : annonces actives dont le verdict change, et (lot 14) l’adéquation aux critères recalculée quand un critère filtre le verdict (`criteriaFit`). Journalisé. Portée listings:write.',
       inputSchema: McpSetAssumptionsInputSchema,
       annotations: {
         readOnlyHint: false,
@@ -1371,7 +1441,13 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           CHANNEL
         )
         return dataResult(
-          `Hypothèses enregistrées (version ${result.id}${result.label ? `, « ${result.label} »` : ''}) : ${changed.join(', ')}.\n${describeImpact(result.impact)}`,
+          [
+            `Hypothèses enregistrées (version ${result.id}${result.label ? `, « ${result.label} »` : ''}) : ${changed.join(', ')}.`,
+            describeImpact(result.impact),
+            describeFitRefresh(result.criteriaFit),
+          ]
+            .filter(Boolean)
+            .join('\n'),
           result
         )
       })
@@ -1381,8 +1457,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     {
       title: 'Lister les critères de recherche',
       description:
-        "Critères de recherche enregistrés et partagés dans l'espace : nom, filtres (prix, surface, pièces, DPE, verdict, statuts, distance au tram), périmètre (point et rayon, polygone, isochrone), " +
-        "nombre d'annonces qui le satisfont, nouveautés pour le membre connecté, annonces incluses sous réserve (localisation imprécise). Les identifiants servent à list_listings (`criteriaId`) et à update_search_criteria.",
+        "Critères de recherche enregistrés et partagés dans l'espace : nom, filtres (prix, surface, pièces, DPE, verdict, statuts, distance au tram), périmètre (point et rayon, polygone, isochrone), marge de tolérance (`tolerance`, lot 14), " +
+        "nombre d'annonces gardées (dans les critères, à confirmer, à la marge) et compteurs par niveau (`fitCounts`, hors critères compris), nouveautés pour le membre connecté, annonces à confirmer faute d'adresse. Les identifiants servent à list_listings (`criteriaId`) et à update_search_criteria.",
       inputSchema: McpListSearchCriteriaInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -1420,9 +1496,9 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     {
       title: 'Créer un critère de recherche',
       description:
-        "Enregistre un critère partagé dans l'espace : `name`, `filters` (priceMax, priceMin, surfaceMin, roomsMin, dpeMax, verdicts, statuses, communes, maxTramDistanceMeters) et `perimeter` : " +
+        "Enregistre un critère partagé dans l'espace : `name`, `filters` (priceMax, priceMin, surfaceMin, roomsMin, dpeMax, verdicts, statuses, communes, maxTramDistanceMeters), `tolerance` (lot 14, marge de tolérance : perimeterMeters, priceMaxShare et priceMinShare en fractions, surfaceMinShare, roomsMin, dpeClasses, tramMeters ; défaut 300 m, +5 %, −5 %, −5 %, 0 pièce, une classe, +100 m ; 0 = strict) et `perimeter` : " +
         "{ type: 'point_radius', longitude, latitude, radiusMeters }, { type: 'polygon', polygon: GeoJSON [lng, lat] fermé }, ou { type: 'isochrone', origin (point) ou address, mode : walking, cycling (approché), driving, durationMinutes } calculée par la Géoplateforme et figée en polygone. " +
-        'La réponse donne le nombre d’annonces qui le satisfont ; les annonces créées ensuite y sont confrontées (alerte « entre dans le critère »). Portée listings:write.',
+        'La réponse donne le nombre d’annonces gardées, les compteurs par niveau d’adéquation et les changements d’adéquation des annonces (`fitChanges`, journalisés sans alerte) ; les annonces créées ensuite y sont confrontées (alerte « entre dans le critère »). Portée listings:write.',
       inputSchema: McpCreateSearchCriteriaInputSchema,
       annotations: {
         readOnlyHint: false,
@@ -1437,9 +1513,15 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           const denied = writeRefusal(ctx.scopes)
           if (denied) return denied
           const created = await ctx.criteria.create(ctx.member, input, CHANNEL)
-          return dataResult(`Critère créé : ${describeCriteria(created)}`, {
-            criteria: created,
-          })
+          return dataResult(
+            [
+              `Critère créé : ${describeCriteria(created)}`,
+              describeFitRefresh(created.fitChanges),
+            ]
+              .filter(Boolean)
+              .join('\n'),
+            { criteria: created }
+          )
         })
       )
   )
@@ -1449,7 +1531,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     {
       title: 'Modifier un critère de recherche',
       description:
-        'Modifie un critère : `name`, `filters` (fusionnés avec les filtres enregistrés), `perimeter` (remplacé ; null = aucun), `active: false` pour l’archiver (aucune suppression par le MCP). ' +
+        'Modifie un critère : `name`, `filters` (fusionnés avec les filtres enregistrés), `tolerance` (marges fusionnées ; 0 = strict, lot 14), `perimeter` (remplacé ; null = aucun), `active: false` pour l’archiver (aucune suppression par le MCP). La réponse donne les changements d’adéquation des annonces (`fitChanges`). ' +
         '`expectedUpdatedAt` (le `updatedAt` lu avec list_search_criteria) est le garde-fou optimiste : refus si le critère a changé depuis. Portée listings:write.',
       inputSchema: McpUpdateSearchCriteriaInputSchema,
       annotations: {
@@ -1470,9 +1552,15 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
             patch,
             CHANNEL
           )
-          return dataResult(`Critère modifié : ${describeCriteria(updated)}`, {
-            criteria: updated,
-          })
+          return dataResult(
+            [
+              `Critère modifié : ${describeCriteria(updated)}`,
+              describeFitRefresh(updated.fitChanges),
+            ]
+              .filter(Boolean)
+              .join('\n'),
+            { criteria: updated }
+          )
         })
       )
   )
@@ -1678,7 +1766,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     {
       title: 'Ce qui a changé',
       description:
-        "Ce qui a changé pour le membre connecté depuis sa dernière visite de l'application (ou depuis `since`, ISO 8601) et, annonce par annonce, depuis sa dernière ouverture de la fiche : nouvelles annonces, changements de prix et de statut, avis et tâches de l'autre membre, annonces entrées dans un critère. " +
+        "Ce qui a changé pour le membre connecté depuis sa dernière visite de l'application (ou depuis `since`, ISO 8601) et, annonce par annonce, depuis sa dernière ouverture de la fiche : nouvelles annonces, changements de prix et de statut, avis et tâches de l'autre membre, annonces entrées dans un critère et (lot 14) annonces passées hors critères, quand c'est l'annonce qui a bougé (pas quand un membre a modifié un critère ou les hypothèses). " +
         "Ce que le membre a fait lui-même dans l'application n'y figure pas ; ce que Claude a fait pour lui au MCP, si. Même calcul que le bandeau de la synthèse. Lecture seule : rien n'est marqué vu.",
       inputSchema: McpWhatsNewInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },

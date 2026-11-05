@@ -1,4 +1,7 @@
-import { CriteriaFiltersSchema } from '@apart/contracts'
+import {
+  CriteriaFiltersSchema,
+  DEFAULT_CRITERIA_TOLERANCE,
+} from '@apart/contracts'
 import type {
   ListingContext,
   NearbyAmenity,
@@ -32,6 +35,7 @@ export function fakeCriteria(
     name: 'Talence fictif',
     active: true,
     filters: CriteriaFiltersSchema.parse({ priceMax: 200_000 }),
+    tolerance: { ...DEFAULT_CRITERIA_TOLERANCE },
     perimeterType: 'polygon',
     perimeter: { type: 'polygon', polygon: SQUARE },
     createdAt: now,
@@ -39,6 +43,8 @@ export function fakeCriteria(
     listingCount: 3,
     newCount: 1,
     approximateCount: 1,
+    fitCounts: { in: 2, to_confirm: 1, margin: 0, out: 1 },
+    fitChanges: null,
     ...over,
   }
 }

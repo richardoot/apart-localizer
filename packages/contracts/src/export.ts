@@ -10,6 +10,7 @@ import { ListingSchema } from './listing.js'
 import { ListingCheckSchema } from './listing-checks.js'
 import { ListingMetricsSchema, TargetPriceSchema } from './metrics.js'
 import { RentalVerdictSchema } from './enums.js'
+import { ListingCriteriaFitSchema } from './criteria-fit.js'
 import { ListingListQuerySchema } from './filters.js'
 import { RentComparableSchema } from './rent-market.js'
 import { SearchCriteriaSchema } from './search-criteria.js'
@@ -84,6 +85,9 @@ export const ExportListingSchema = z.object({
     .describe(
       'Lot 15 : vérifications sur le portail, de la plus récente à la plus ancienne (absent dans un export antérieur)'
     ),
+  criteriaFit: ListingCriteriaFitSchema.describe(
+    'Adéquation aux critères actifs à l’export (lot 14) : niveau, raisons, détail par critère'
+  ),
 })
 export type ExportListing = z.infer<typeof ExportListingSchema>
 

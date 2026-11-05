@@ -33,6 +33,7 @@ const WHATS_NEW_ACTIONS = [
   'criteria.matched',
   // Lot 15 : une vérification sur le portail qui a trouvé quelque chose.
   'listing.checked',
+  'criteria.unmatched',
 ]
 
 function toEvent(row: ActivityLog): WhatsNewEvent {

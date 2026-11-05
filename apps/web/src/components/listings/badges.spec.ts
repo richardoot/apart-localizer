@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import CriteriaBadges from './CriteriaBadges.vue'
+import FitBadge from './FitBadge.vue'
+import FitSummary from './FitSummary.vue'
 import DpeBadge from './DpeBadge.vue'
 import NewBadge from './NewBadge.vue'
 import ProvenanceBadge from './ProvenanceBadge.vue'
@@ -94,30 +95,67 @@ describe('ProvenanceBadge', () => {
     )
   })
 
-  it('badges des critères : nom, « ≈ » sous réserve, rien sans critère', () => {
-    const wrapper = mount(CriteriaBadges, {
-      props: {
-        matches: [
-          {
-            criteriaId: 'a',
-            name: 'Talence',
-            matchedAt: '2026-11-03T10:00:00.000Z',
-            approximate: false,
-          },
-          {
-            criteriaId: 'b',
-            name: 'Tram',
-            matchedAt: '2026-11-03T10:00:00.000Z',
-            approximate: true,
-          },
-        ],
-      },
-    })
-    const badges = wrapper.findAll('[data-testid="criteria-badge"]')
-    expect(badges.map(b => b.text())).toEqual(['◎ Talence', '◎ Tram ≈'])
-    expect(badges[1]?.attributes('title')).toContain('sous réserve')
+  it('lot 14 : pastilles d’adéquation, lisibles sans la couleur', () => {
+    const levels = ['in', 'to_confirm', 'margin', 'out'] as const
+    const badges = levels.map(level =>
+      mount(FitBadge, { props: { level } }).find('[data-testid="fit-badge"]')
+    )
+    expect(badges.map(b => b.text())).toEqual([
+      'Dans les critères',
+      'À confirmer',
+      'À la marge',
+      'Hors critères',
+    ])
+    // Dans : une coche ; à confirmer : un bord pointillé.
+    expect(badges[0]?.find('svg').exists()).toBe(true)
+    expect(badges[1]?.classes()).toContain('border-dashed')
+    expect(badges[2]?.attributes('title')).toContain('marge')
     expect(
-      mount(CriteriaBadges, { props: { matches: [] } }).html()
-    ).not.toContain('criteria-badge')
+      mount(FitBadge, { props: { level: 'margin', count: 2 } }).text()
+    ).toBe('À la marge · 2')
+  })
+
+  it('lot 14 : résumé d’adéquation, raison, gardée, depuis ; rien sans critère', () => {
+    const fit = {
+      level: 'out' as const,
+      activeCriteria: 1,
+      criteriaId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      name: 'Talence',
+      reasons: ['Prix +19 % (maximum 220 000 €, marge 5 %)'],
+      locationPending: false,
+      since: '2026-11-02T09:00:00.000Z',
+      origin: {
+        cause: 'listing' as const,
+        trigger: 'price_up',
+        criteriaName: null,
+      },
+      kept: 'offer' as const,
+      criteria: [],
+    }
+    const wrapper = mount(FitSummary, { props: { fit, since: true } })
+    expect(wrapper.find('[data-testid="fit-reason"]').text()).toContain(
+      'Prix +19 %'
+    )
+    expect(wrapper.find('[data-testid="fit-kept"]').text()).toBe(
+      'Gardée dans la liste : offre en cours'
+    )
+    expect(wrapper.find('[data-testid="fit-since"]').text()).toContain(
+      'Prix remonté le 2 novembre'
+    )
+    expect(
+      mount(FitSummary, { props: { fit, hideKept: true } })
+        .find('[data-testid="fit-kept"]')
+        .exists()
+    ).toBe(false)
+    const inside = mount(FitSummary, {
+      props: { fit: { ...fit, level: 'in', reasons: [], kept: null } },
+    })
+    expect(inside.find('[data-testid="fit-reason"]').text()).toBe('Talence')
+    expect(inside.find('[data-testid="fit-since"]').exists()).toBe(false)
+    expect(
+      mount(FitSummary, { props: { fit: { ...fit, activeCriteria: 0 } } })
+        .find('[data-testid="fit-summary"]')
+        .exists()
+    ).toBe(false)
   })
 })

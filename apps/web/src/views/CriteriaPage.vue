@@ -1,8 +1,13 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue'
-  import type { SearchCriteriaSummary } from '@apart/contracts'
+  import type {
+    CriteriaFitLevel,
+    SearchCriteriaSummary,
+  } from '@apart/contracts'
+  import { toleranceSummary } from '@apart/domain'
   import SidePanel from '@/components/ui/SidePanel.vue'
   import CriteriaEditor from '@/components/criteria/CriteriaEditor.vue'
+  import FitBadge from '@/components/listings/FitBadge.vue'
   import {
     useCriteriaMutations,
     useSearchCriteriaList,
@@ -14,7 +19,8 @@
 
   /**
    * Critères de recherche enregistrés et partagés (besoins G3 à G6) : la
-   * liste avec les compteurs (annonces, nouveautés pour moi, sous réserve),
+   * liste avec les compteurs (annonces gardées, nouveautés pour moi, et
+   * lot 14 : annonces par niveau d'adéquation et marge de tolérance),
    * création, modification, archivage, suppression ; « Voir les annonces »
    * ouvre la liste filtrée par le critère.
    */
@@ -25,6 +31,21 @@
   const creating = ref(false)
   const failure = ref<string | null>(null)
   const criteria = computed(() => data.value ?? [])
+
+  const LEVELS: readonly CriteriaFitLevel[] = [
+    'in',
+    'to_confirm',
+    'margin',
+    'out',
+  ]
+  /** Lot 14 : les marges appliquées par le critère, en une phrase. */
+  function margins(c: SearchCriteriaSummary): string {
+    return toleranceSummary({
+      perimeterType: c.perimeterType,
+      filters: c.filters,
+      tolerance: c.tolerance,
+    })
+  }
 
   function summary(c: SearchCriteriaSummary): string {
     const f = c.filters
@@ -143,16 +164,33 @@
           </h2>
           <p class="text-sm">
             <strong data-testid="count">{{ c.listingCount }}</strong> annonce(s)
+            gardée(s)
             <span
               v-if="c.newCount"
               class="ml-1 rounded-full bg-accent-soft px-2 text-xs"
               >{{ c.newCount }} nouvelle(s)</span
             >
             <span v-if="c.approximateCount" class="ml-1 text-xs text-muted"
-              >dont {{ c.approximateCount }} sous réserve</span
+              >dont {{ c.approximateCount }} à confirmer faute d’adresse</span
             >
           </p>
         </div>
+        <div
+          class="flex flex-wrap items-center gap-1.5"
+          role="group"
+          :aria-label="`Annonces par niveau d’adéquation au critère « ${c.name} »`"
+          data-testid="fit-counts"
+        >
+          <FitBadge
+            v-for="level in LEVELS"
+            :key="level"
+            :level="level"
+            :count="c.fitCounts[level]"
+          />
+        </div>
+        <p class="text-xs text-muted" data-testid="tolerance-summary">
+          {{ margins(c) }}
+        </p>
         <p class="text-sm text-muted">
           {{ describePerimeter(c.perimeter)
           }}<template v-if="summary(c)"> · {{ summary(c) }}</template>

@@ -231,6 +231,8 @@ describe('openDataPlan', () => {
       'import-rent-control.ts',
       'import-transit-stops.ts',
       'import-dvf.ts',
+      // Lot 14 : les arrêts de tram changent l'adéquation aux critères.
+      'refresh-criteria-fit.ts',
     ])
     expect(plan.steps[2]?.args).toEqual(['--year', '2023', '--year', '2024'])
     // Seules les sources des lots 11 et 12, absentes ici, sont sautées.
@@ -274,6 +276,7 @@ describe('openDataPlan', () => {
       ['import-supermarkets.ts', []],
       ['relocate-listings.ts', []],
       ['refresh-surroundings.ts', []],
+      ['refresh-criteria-fit.ts', []],
     ])
     const partial = openDataPlan({
       encadrement: [],
@@ -289,6 +292,7 @@ describe('openDataPlan', () => {
       ['import-sports-facilities.ts', ['--only', 'tracks', '--no-osm-tracks']],
       ['relocate-listings.ts', []],
       ['refresh-surroundings.ts', []],
+      ['refresh-criteria-fit.ts', []],
     ])
     expect(partial.skipped.at(-1)).toContain('drives')
     const fitnessOnly = openDataPlan({

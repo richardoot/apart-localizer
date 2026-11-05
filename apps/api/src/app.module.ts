@@ -13,6 +13,7 @@ import { WorkspaceModule } from './workspace/workspace.module'
 import { AuthModule } from './auth/auth.module'
 import { AssumptionsModule } from './assumptions/assumptions.module'
 import { ListingsModule } from './listings/listings.module'
+import { CriteriaFitModule } from './listings/criteria-fit.module'
 import { OpinionsModule } from './opinions/opinions.module'
 import { OffersModule } from './offers/offers.module'
 import { TasksModule } from './tasks/tasks.module'
@@ -42,6 +43,7 @@ import { McpModule } from './mcp/mcp.module'
     PrismaModule,
     ActivityModule,
     GeoModule,
+    CriteriaFitModule,
     HealthModule,
     WorkspaceModule,
     AuthModule,

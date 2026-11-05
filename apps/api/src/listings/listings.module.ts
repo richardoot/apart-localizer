@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common'
 import { AiModule } from '../ai/ai.module'
 import { AssumptionsModule } from '../assumptions/assumptions.module'
 import { OpendataModule } from '../opendata/opendata.module'
-import { CriteriaMatchService } from './criteria-match.service'
+import { CriteriaFitController } from './criteria-fit.controller'
 import { DuplicatesService } from './duplicates.service'
 import { ListingEnrichmentService } from './enrichment.service'
 import { ExtractionService } from './extraction.service'
@@ -19,13 +19,13 @@ import { TargetPriceService } from './target-price.service'
     ListingsController,
     MarketContextController,
     ListingChecksController,
+    CriteriaFitController,
   ],
   providers: [
     ListingsService,
     DuplicatesService,
     ExtractionService,
     TargetPriceService,
-    CriteriaMatchService,
     ListingEnrichmentService,
     ListingChecksService,
   ],
@@ -34,7 +34,6 @@ import { TargetPriceService } from './target-price.service'
     DuplicatesService,
     ExtractionService,
     TargetPriceService,
-    CriteriaMatchService,
     ListingEnrichmentService,
     ListingChecksService,
     OpendataModule,

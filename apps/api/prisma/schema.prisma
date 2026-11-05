@@ -256,6 +256,17 @@ enum PerimeterType {
   @@schema("app")
 }
 
+/// Adéquation d'une annonce à un critère (lot 14, ADR 0024) : dans les
+/// critères, à confirmer, à la marge, hors critères.
+enum CriteriaFitLevel {
+  in
+  to_confirm
+  margin
+  out
+
+  @@schema("app")
+}
+
 enum TransitMode {
   tram
   bus
@@ -511,6 +522,14 @@ model Listing {
   /// une annonce reprend au plus une annonce et n'est reprise que par une.
   republishedFromId String?   @unique @map("republished_from_id")
 
+  // Adéquation aux critères actifs (lot 14) : le meilleur niveau parmi les
+  // critères actifs (null = jamais comparée), la date de son dernier
+  // changement et ce qui l'a fait changer ({ cause, trigger, criteriaName }).
+  // Le détail par critère est dans criteria_matches.
+  criteriaFitLevel     CriteriaFitLevel? @map("criteria_fit_level")
+  criteriaFitChangedAt DateTime?         @map("criteria_fit_changed_at") @db.Timestamptz(6)
+  criteriaFitOrigin    Json?             @map("criteria_fit_origin")
+
   createdById String?  @map("created_by_id")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -539,6 +558,7 @@ model Listing {
   @@index([workspaceId, status])
   @@index([workspaceId, commune])
   @@index([workspaceId, url])
+  @@index([workspaceId, criteriaFitLevel])
   @@map("listings")
   @@schema("app")
 }
@@ -961,6 +981,9 @@ model SearchCriteria {
   active      Boolean @default(true)
   /// JSON validé par CriteriaFiltersSchema
   filters     Json    @default("{}")
+  /// Marge de tolérance (lot 14), JSON validé par CriteriaToleranceSchema ;
+  /// un champ absent prend la valeur par défaut.
+  tolerance   Json    @default("{}")
 
   perimeterType    PerimeterType?                           @map("perimeter_type")
   /// Point et rayon
@@ -984,21 +1007,32 @@ model SearchCriteria {
   @@schema("app")
 }
 
-/// Une annonce entrée dans un critère de recherche (alerte, badge). Mise à
-/// jour à chaque écriture d'annonce et de critère ; les compteurs et la liste
-/// filtrée, eux, sont recalculés à la lecture.
+/// L'adéquation d'une annonce à un critère actif (lot 14) : une ligne par
+/// (critère actif, annonce), à tout niveau ; « hors critères » compris. Mise
+/// à jour à chaque écriture d'annonce, de critère ou d'hypothèses et par le
+/// rattrapage (`refresh:criteria-fit`). Une ligne non « hors critères » est
+/// une entrée : alerte, badge, `criteriaMatches` des annonces.
 model CriteriaMatch {
-  criteriaId  String   @map("criteria_id")
-  listingId   String   @map("listing_id")
-  matchedAt   DateTime @default(now()) @map("matched_at") @db.Timestamptz(6)
-  /// Localisation imprécise (quartier ou commune) : incluse sous réserve.
-  approximate Boolean  @default(false)
+  criteriaId     String           @map("criteria_id")
+  listingId      String           @map("listing_id")
+  /// Date de la dernière entrée (passage à un niveau autre que « hors critères »).
+  matchedAt      DateTime         @default(now()) @map("matched_at") @db.Timestamptz(6)
+  /// À confirmer à cause de la localisation (adresse au quartier ou à la commune).
+  approximate    Boolean          @default(false)
+  level          CriteriaFitLevel @default(in)
+  /// Raisons chiffrées (JSON : tableau de textes).
+  reasons        Json             @default("[]")
+  /// Le détail filtre par filtre (JSON validé par CriteriaFitCheckSchema).
+  checks         Json             @default("[]")
+  /// Date du dernier changement de niveau.
+  levelChangedAt DateTime         @default(now()) @map("level_changed_at") @db.Timestamptz(6)
 
   criteria SearchCriteria @relation(fields: [criteriaId], references: [id], onDelete: Cascade)
   listing  Listing        @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@id([criteriaId, listingId])
   @@index([listingId])
+  @@index([criteriaId, level])
   @@map("criteria_matches")
   @@schema("app")
 }

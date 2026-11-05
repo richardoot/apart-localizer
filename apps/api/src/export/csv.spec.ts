@@ -132,14 +132,52 @@ describe('CSV pour un tableur français', () => {
     expect(at('Vérifiée le')).toBe('2026-11-05')
     expect(at('Vue en ligne le')).toBe('2026-11-04')
     expect(at('Dernière vérification')).toBe('Plus en ligne')
+    // Lot 14 : l'adéquation, en toute fin de ligne.
+    expect(cell('Adéquation')).toBe('Aucun critère actif')
+    expect(cell('Raisons de l’adéquation')).toBe('')
+    const kept = listingCsvRow(
+      {
+        ...item,
+        criteriaFit: {
+          ...item.criteriaFit,
+          level: 'out',
+          activeCriteria: 1,
+          criteriaId: '55555555-5555-4555-8555-555555555555',
+          name: 'Talence',
+          reasons: ['Prix +19 % (maximum 220 000 €, marge 5 %)'],
+          kept: 'offer',
+        },
+      },
+      0
+    )
+    expect(kept.at(-2)).toBe('Hors critères')
+    expect(kept.at(-1)).toBe(
+      '« Talence » : Prix +19 % (maximum 220 000 €, marge 5 %) : Gardée dans la liste : offre en cours'
+    )
+    const inside = listingCsvRow(
+      {
+        ...item,
+        criteriaFit: {
+          ...item.criteriaFit,
+          level: 'in',
+          activeCriteria: 1,
+          name: null,
+        },
+      },
+      0
+    )
+    expect(inside.at(-2)).toBe('Dans les critères')
+    expect(inside.at(-1)).toBe('')
   })
 
-  it('les colonnes du lot 15 viennent après « Identifiant » : aucune colonne ne se décale', () => {
-    expect(LISTING_CSV_COLUMNS.slice(-4)).toEqual([
+  it('les colonnes des lots 15 et 14 viennent après « Identifiant » : aucune colonne ne se décale', () => {
+    expect(LISTING_CSV_COLUMNS.slice(-6)).toEqual([
       'Identifiant',
       'Vérifiée le',
       'Vue en ligne le',
       'Dernière vérification',
+      'Adéquation',
+      'Raisons de l’adéquation',
     ])
   })
 })

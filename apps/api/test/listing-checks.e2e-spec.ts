@@ -577,10 +577,11 @@ describe('Lot 15 : vérifications des annonces (e2e)', () => {
     const [header, row] = csv.text.replace(/^\uFEFF/, '').split('\r\n')
     expect(
       header?.endsWith(
-        'Identifiant;Vérifiée le;Vue en ligne le;Dernière vérification'
+        'Identifiant;Vérifiée le;Vue en ligne le;Dernière vérification;Adéquation;Raisons de l’adéquation'
       )
     ).toBe(true)
-    expect(row?.endsWith(';Mise à jour')).toBe(true)
+    // Les deux colonnes du lot 14 suivent le résultat de la vérification.
+    expect(row).toMatch(/;Mise à jour;[^;]*;[^;]*$/)
     const json = await api()
       .get('/export?format=json')
       .set(ctx.auth(richard))

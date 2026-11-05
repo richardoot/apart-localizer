@@ -193,6 +193,10 @@ describe('relocate:listings (e2e, PostGIS)', () => {
   it('replace les annonces approchées, jamais celles à l’adresse, et recalcule leur instantané', async () => {
     const { stats } = await relocateListings(deps(), { dryRun: false, at: NOW })
     expect(stats.changed).toBe(4)
+    // Lot 14 : l'adéquation des annonces replacées est recalculée (aucun
+    // critère ici : « dans les critères », sans ligne de journal).
+    expect((await row('quartier')).criteriaFitLevel).toBe('in')
+    expect((await row('adresse')).criteriaFitLevel).toBeNull()
 
     const quartier = await row('quartier')
     expect(quartier.locationPrecision).toBe('district')

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { CriteriaFitRefreshSummarySchema } from './criteria-fit.js'
 import {
   NotaryModeSchema,
   TargetCriterionSchema,
@@ -386,6 +387,11 @@ export type AssumptionsPreviewRequest = z.infer<
 /** Réponse d'un enregistrement : la version créée et son impact sur les annonces. */
 export const AssumptionsUpdateResultSchema = AssumptionsVersionSchema.extend({
   impact: AssumptionsImpactSchema,
+  criteriaFit: CriteriaFitRefreshSummarySchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 14 : l’adéquation aux critères recalculée avec les nouvelles hypothèses (le verdict est un filtre des critères) ; null sans critère actif'
+    ),
 })
 export type AssumptionsUpdateResult = z.infer<
   typeof AssumptionsUpdateResultSchema

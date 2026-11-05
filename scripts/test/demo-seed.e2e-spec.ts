@@ -61,7 +61,8 @@ describe('seed de démonstration (e2e, PostGIS)', () => {
          (SELECT count(*)::int FROM app.listings WHERE workspace_id = $1) AS listings,
          (SELECT count(*)::int FROM app.listings WHERE workspace_id = $1 AND latitude IS NOT NULL) AS located,
          (SELECT count(*)::int FROM app.members WHERE workspace_id = $1) AS members,
-         (SELECT count(*)::int FROM app.criteria_matches m JOIN app.search_criteria c ON c.id = m.criteria_id WHERE c.workspace_id = $1) AS matches,
+         (SELECT count(*)::int FROM app.criteria_matches m JOIN app.search_criteria c ON c.id = m.criteria_id WHERE c.workspace_id = $1 AND m.level <> 'out') AS matches,
+         (SELECT count(*)::int FROM app.criteria_matches m JOIN app.search_criteria c ON c.id = m.criteria_id WHERE c.workspace_id = $1) AS fits,
          (SELECT count(*)::int FROM app.search_criteria WHERE workspace_id = $1 AND perimeter IS NOT NULL) AS polygons,
          (SELECT count(*)::int FROM app.notifications WHERE workspace_id = $1) AS notifications,
          (SELECT count(*)::int FROM app.notifications WHERE workspace_id = $1 AND read_at IS NULL) AS unread,
@@ -88,9 +89,15 @@ describe('seed de démonstration (e2e, PostGIS)', () => {
       other_members: 1,
       other_activity: 1,
     })
-    // Polygone : Chartrons et Bastide (Saint-Michel est DPE E) ; tram B : Talence Forum et Peixotto.
-    expect(c.matches).toBe(4)
-    expect(report.criteriaMatches).toBe(4)
+    // Lot 14 : une ligne d'adéquation par critère et annonce. Polygone :
+    // Chartrons et Bastide, Saint-Michel à la marge (DPE E, une classe) ;
+    // tram B : Talence Forum et Peixotto ; rive droite : le T3 de Cenon et sa
+    // première annonce (lot 15, vendue ou retirée) à confirmer (au quartier,
+    // sans adresse, dans la marge de 400 m).
+    expect(c.fits).toBe(dataset.listings.length * dataset.criteria.length)
+    expect(c.matches).toBe(7)
+    expect(report.criteriaMatches).toBe(7)
+    expect(report.criteriaFit).toMatchObject({ margin: 1, to_confirm: 2 })
     expect(c.notifications).toBeGreaterThan(20)
     expect(c.unread).toBeGreaterThan(0)
     expect(c.visits).toBe(8)

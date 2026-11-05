@@ -12,7 +12,6 @@ import {
   chooseDistrictArea,
   choosePlace,
   communePlacement,
-  criteriaApproximateNote,
   districtFragments,
   districtPlacement,
   foldPlaceText,
@@ -728,8 +727,5 @@ describe('pastille de précision et réserves « ≈ »', () => {
         }),
       })
     ).toBeNull()
-    expect(criteriaApproximateNote('Rive droite')).toContain(
-      '« Rive droite », sous réserve'
-    )
   })
 })

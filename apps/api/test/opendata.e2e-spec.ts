@@ -422,7 +422,8 @@ describe('Données ouvertes (e2e)', () => {
     expect(listing.dpeClass).toBeNull()
     expect(listing.openDataContext.dpe.status).toBe('multiple')
     expect(listing.openDataContext.dpe.candidates).toHaveLength(2)
-    // Un critère « DPE D au plus » : un DPE inconnu y entre (à vérifier).
+    // Un critère « DPE D au plus » : un DPE inconnu y entre, à confirmer
+    // (lot 14 : jamais « hors critères » pour une donnée manquante).
     const criteria = await request(ctx.server)
       .post('/search-criteria')
       .set(ctx.auth(richard))
@@ -446,19 +447,49 @@ describe('Données ouvertes (e2e)', () => {
     expect(verified.body.listing.fieldSources.dpeNumber.source).toBe(
       'open_data'
     )
-    // Le DPE retenu (E) fait sortir l'annonce du critère : badge et journal suivent.
-    expect(verified.body.criteriaChanges.left).toEqual([
-      { criteriaId: criteria.body.id, name: 'DPE D au plus' },
+    // Lot 14 : le DPE retenu (E) passe « à la marge » (une classe de marge
+    // par défaut) ; badge, adéquation et journal suivent.
+    expect(verified.body.criteriaChanges.changed).toEqual([
+      {
+        criteriaId: criteria.body.id,
+        name: 'DPE D au plus',
+        before: 'to_confirm',
+        after: 'margin',
+        reasons: ['DPE E (maximum D, marge une classe)'],
+      },
     ])
-    expect(verified.body.criteriaMatches).toEqual([])
-    expect(
-      await ctx.prisma.criteriaMatch.count({ where: { listingId: listing.id } })
-    ).toBe(0)
-    expect(
-      await ctx.prisma.activityLog.count({
-        where: { listingId: listing.id, action: 'criteria.unmatched' },
-      })
-    ).toBe(1)
+    expect(verified.body.criteriaFit).toMatchObject({
+      level: 'margin',
+      reasons: ['DPE E (maximum D, marge une classe)'],
+    })
+    expect(verified.body.criteriaMatches).toHaveLength(1)
+    const changed = await ctx.prisma.activityLog.findFirstOrThrow({
+      where: { listingId: listing.id, action: 'criteria.fit_changed' },
+    })
+    expect(changed.after).toMatchObject({ cause: 'listing', trigger: 'dpe' })
+    // Sans marge, le même DPE est hors critères : sortie journalisée, cause
+    // « critère », sans alerte.
+    await request(ctx.server)
+      .patch(`/search-criteria/${criteria.body.id}`)
+      .set(ctx.auth(richard))
+      .send({ tolerance: { dpeClasses: 0 } })
+      .expect(200)
+    const strict = await request(ctx.server)
+      .get(`/listings/${listing.id}`)
+      .set(ctx.auth(richard))
+      .expect(200)
+    expect(strict.body.criteriaFit).toMatchObject({
+      level: 'out',
+      reasons: ['DPE E (maximum D, sans marge)'],
+    })
+    expect(strict.body.criteriaMatches).toEqual([])
+    const unmatched = await ctx.prisma.activityLog.findFirstOrThrow({
+      where: { listingId: listing.id, action: 'criteria.unmatched' },
+    })
+    expect(unmatched.after).toMatchObject({
+      cause: 'criteria',
+      criteriaName: 'DPE D au plus',
+    })
     const logs = await ctx.prisma.activityLog.findMany({
       where: { listingId: listing.id, action: 'listing.dpe_verified' },
     })

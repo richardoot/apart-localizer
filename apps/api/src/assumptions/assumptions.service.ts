@@ -16,6 +16,7 @@ import type {
 import { mergeAssumptions } from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
+import { CriteriaMatchService } from '../listings/criteria-match.service'
 import { listingInclude, toListingDto } from '../listings/listing.mapper'
 import type { AssumptionsVersion, Member } from '../generated/prisma'
 import { assumptionsImpact } from './impact'
@@ -29,7 +30,8 @@ import { assumptionsImpact } from './impact'
 export class AssumptionsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly activity: ActivityService
+    private readonly activity: ActivityService,
+    private readonly criteriaFit: CriteriaMatchService
   ) {}
 
   async current(workspaceId: string): Promise<AssumptionsVersionDto> {
@@ -76,7 +78,9 @@ export class AssumptionsService {
   /**
    * Nouvelle version. `expectedVersion` est le garde-fou optimiste : si une
    * autre version a été enregistrée depuis la lecture, rien n'est écrit. La
-   * réponse porte l'impact sur les annonces actives (verdicts qui changent).
+   * réponse porte l'impact sur les annonces actives (verdicts qui changent)
+   * et, le verdict étant un filtre des critères, l'adéquation recalculée
+   * (lot 14, sans alerte : ce n'est pas l'annonce qui a bougé).
    */
   async update(
     member: Member,
@@ -125,7 +129,20 @@ export class AssumptionsService {
       )
       return version
     })
-    return { ...toDto(created), impact }
+    const active = await this.prisma.searchCriteria.count({
+      where: { workspaceId: member.workspaceId, active: true },
+    })
+    const criteriaFit = active
+      ? (
+          await this.criteriaFit.refresh(member.workspaceId, {
+            origin: { cause: 'assumptions' },
+            actorMemberId: member.id,
+            channel,
+            base: AssumptionsSchema.parse(created.values),
+          })
+        ).summary
+      : null
+    return { ...toDto(created), impact, criteriaFit }
   }
 
   /** Impact d'hypothèses candidates sur les annonces actives, sans rien enregistrer. */

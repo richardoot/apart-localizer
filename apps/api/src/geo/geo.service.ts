@@ -6,6 +6,7 @@ import {
   AmenitySourceSchema,
   DriveStatusSchema,
   LISTING_AREA_SIMPLIFY_DEGREES,
+  LocationPrecisionSchema,
   NeighbourhoodKindSchema,
   SupermarketBrandGroupSchema,
 } from '@apart/contracts'
@@ -13,7 +14,6 @@ import type {
   AmenityDetails,
   AmenityKind,
   AmenitySource,
-  CriteriaFilters,
   DriveStatus,
   LayerFeatureCollection,
   LocationPrecision,
@@ -267,73 +267,81 @@ export class GeoService {
   }
 
   // -------------------------------------------------------------------------
-  // Critères de recherche : périmètre et distance au tram
+  // Critères de recherche : mesures de l'adéquation (lot 14)
   // -------------------------------------------------------------------------
 
   /**
-   * Les annonces de l'espace qui satisfont la partie géographique d'un
-   * critère enregistré (périmètre, distance au tram), éventuellement parmi
-   * `restrictTo`. `approximate` : localisation au quartier ou à la commune.
+   * Les mesures de l'adéquation (lot 14, ADR 0024) pour les annonces de
+   * l'espace et ses critères actifs (ou ceux de `criteriaIds`, archivés
+   * compris) : distance du repère au périmètre, relation du contour de
+   * l'annonce (quartier retenu ou commune) au périmètre, distances au tram
+   * depuis le repère et depuis le contour. La décision (niveau, raisons) est
+   * dans `domain` (`criteriaFit`) ; ce module ne fait que mesurer.
    */
-  async listingsInCriteria(
+  async criteriaFitMeasures(
     workspaceId: string,
-    criteriaId: string,
-    restrictTo?: readonly string[]
-  ): Promise<CriteriaGeoMatch[]> {
-    if (restrictTo && restrictTo.length === 0) return []
-    const restrict = restrictTo
-      ? Prisma.sql`AND l."id" IN (${Prisma.join([...restrictTo])})`
+    options: {
+      criteriaIds?: readonly string[]
+      listingIds?: readonly string[]
+    } = {},
+    tx?: Pick<Prisma.TransactionClient, '$queryRaw'>
+  ): Promise<CriteriaFitMeasureRow[]> {
+    const client = tx ?? this.prisma
+    if (options.criteriaIds && options.criteriaIds.length === 0) return []
+    if (options.listingIds && options.listingIds.length === 0) return []
+    const criteria = options.criteriaIds
+      ? Prisma.sql`AND sc."id" IN (${Prisma.join([...options.criteriaIds])})`
+      : Prisma.sql`AND sc."active" = true`
+    const listings = options.listingIds
+      ? Prisma.sql`AND l."id" IN (${Prisma.join([...options.listingIds])})`
       : Prisma.empty
-    const rows = await this.prisma.$queryRaw`
-      SELECT l."id", ${APPROXIMATE} AS "approximate"
-      FROM "app"."listings" l
-      JOIN "app"."search_criteria" c ON c."id" = ${criteriaId} AND c."workspace_id" = ${workspaceId}
-      WHERE l."workspace_id" = ${workspaceId}
-        ${restrict}
-        AND ${CRITERIA_GEO_PREDICATE}`
-    return CriteriaGeoRows.parse(rows)
+    const rows = await client.$queryRaw`
+      WITH c AS (
+        SELECT sc."id", sc."perimeter_type", sc."center_longitude", sc."center_latitude",
+               sc."radius_meters", sc."perimeter"
+        FROM "app"."search_criteria" sc
+        WHERE sc."workspace_id" = ${workspaceId} ${criteria}
+      ),
+      l AS (
+        SELECT l."id", l."geom", l."location_precision", l."location_area"
+        FROM "app"."listings" l
+        WHERE l."workspace_id" = ${workspaceId} ${listings}
+      ),
+      ${TRAM_DISTANCES}
+      SELECT ${CRITERIA_FIT_MEASURES}
+      FROM l JOIN lt ON lt."id" = l."id" CROSS JOIN c`
+    return CriteriaFitMeasureRows.parse(rows)
   }
 
   /**
-   * La même chose pour un critère pas encore enregistré (aperçu) : le
-   * périmètre et les filtres passent par une ligne virtuelle `c`, évaluée par
-   * le même prédicat que les critères enregistrés.
+   * Les mêmes mesures pour un critère pas encore enregistré (aperçu) : le
+   * périmètre passe par une ligne virtuelle `c`, mesurée par la même
+   * expression que les critères enregistrés.
    */
-  async listingsInCriteriaDraft(
+  async criteriaFitMeasuresDraft(
     workspaceId: string,
     draft: CriteriaGeoDraft
-  ): Promise<CriteriaGeoMatch[]> {
+  ): Promise<CriteriaFitMeasureRow[]> {
     const polygon = draft.polygon ? JSON.stringify(draft.polygon) : null
     const rows = await this.prisma.$queryRaw`
       WITH c AS (
-        SELECT ${draft.perimeterType}::"app"."PerimeterType" AS "perimeter_type",
+        SELECT '00000000-0000-4000-8000-000000000000'::text AS "id",
+               ${draft.perimeterType}::"app"."PerimeterType" AS "perimeter_type",
                ${draft.center?.longitude ?? null}::double precision AS "center_longitude",
                ${draft.center?.latitude ?? null}::double precision AS "center_latitude",
                ${draft.center?.radiusMeters ?? null}::integer AS "radius_meters",
                CASE WHEN ${polygon}::text IS NULL THEN NULL
-                    ELSE ST_SetSRID(ST_GeomFromGeoJSON(${polygon}::text), 4326)::geography END AS "perimeter",
-               ${JSON.stringify(draft.filters)}::jsonb AS "filters"
-      )
-      SELECT l."id", ${APPROXIMATE} AS "approximate"
-      FROM "app"."listings" l, c
-      WHERE l."workspace_id" = ${workspaceId}
-        AND ${CRITERIA_GEO_PREDICATE}`
-    return CriteriaGeoRows.parse(rows)
-  }
-
-  /** Les critères actifs de l'espace dont la partie géographique contient l'annonce (alertes). */
-  async criteriaContainingListing(
-    workspaceId: string,
-    listingId: string
-  ): Promise<CriteriaContaining[]> {
-    const rows = await this.prisma.$queryRaw`
-      SELECT c."id" AS "criteria_id", ${APPROXIMATE} AS "approximate"
-      FROM "app"."search_criteria" c
-      JOIN "app"."listings" l ON l."id" = ${listingId} AND l."workspace_id" = ${workspaceId}
-      WHERE c."workspace_id" = ${workspaceId}
-        AND c."active" = true
-        AND ${CRITERIA_GEO_PREDICATE}`
-    return CriteriaContainingRows.parse(rows)
+                    ELSE ST_SetSRID(ST_GeomFromGeoJSON(${polygon}::text), 4326)::geography END AS "perimeter"
+      ),
+      l AS (
+        SELECT l."id", l."geom", l."location_precision", l."location_area"
+        FROM "app"."listings" l
+        WHERE l."workspace_id" = ${workspaceId}
+      ),
+      ${TRAM_DISTANCES}
+      SELECT ${CRITERIA_FIT_MEASURES}
+      FROM l JOIN lt ON lt."id" = l."id" CROSS JOIN c`
+    return CriteriaFitMeasureRows.parse(rows)
   }
 
   /** Validité d'un polygone dessiné (anneau qui se recoupe...) et sa surface en m². */
@@ -1337,69 +1345,100 @@ const PolygonCheckRows = z.array(
   z.object({ valid: z.boolean(), reason: z.string(), area: z.number() })
 )
 
-const CriteriaGeoRows = z.array(
-  z.object({ id: z.string(), approximate: z.boolean() })
+const nullableNumber = z.number().nullable()
+const CriteriaFitMeasureRows = z.array(
+  z.object({
+    listing_id: z.string(),
+    criteria_id: z.string(),
+    has_point: z.boolean(),
+    precision: LocationPrecisionSchema.nullable(),
+    has_area: z.boolean(),
+    point_distance: nullableNumber,
+    area_covered: z.boolean().nullable(),
+    area_distance: nullableNumber,
+    area_share: nullableNumber,
+    tram_point_distance: nullableNumber,
+    tram_area_distance: nullableNumber,
+  })
 )
-export type CriteriaGeoMatch = z.infer<typeof CriteriaGeoRows>[number]
+/** Les mesures de l'adéquation d'une annonce à un critère (mètres sur la sphère). */
+export type CriteriaFitMeasureRow = z.infer<
+  typeof CriteriaFitMeasureRows
+>[number]
 
-const CriteriaContainingRows = z.array(
-  z.object({ criteria_id: z.string(), approximate: z.boolean() })
-)
-export type CriteriaContaining = z.infer<typeof CriteriaContainingRows>[number]
-
-/** Un critère pas encore enregistré : type de périmètre, géométrie, filtres. */
+/** Un critère pas encore enregistré : type de périmètre et géométrie. */
 export interface CriteriaGeoDraft {
   perimeterType: PerimeterType | null
   center: PointRadius | null
   polygon: Polygon | null
-  filters: Pick<CriteriaFilters, 'maxTramDistanceMeters'>
 }
 
 /**
- * La partie géographique d'un critère, écrite une fois pour les trois
- * usages (liste filtrée, aperçu, alertes) : `c` est le critère (ligne de
- * `search_criteria` ou ligne virtuelle), `l` l'annonce. Sans périmètre, tout
- * passe ; avec, une annonce sans point ne passe pas. La distance au tram se
- * mesure à vol d'oiseau jusqu'à l'arrêt de tram le plus proche.
+ * Les distances d'une annonce `l` à l'arrêt de tram le plus proche, depuis
+ * son repère et depuis son contour (0 si un arrêt est dans le contour) ;
+ * null sans repère, sans contour ou sans arrêt importé. Une fois par
+ * annonce, quel que soit le nombre de critères.
  */
-const CRITERIA_GEO_PREDICATE = Prisma.sql`(
-  (
-    c."perimeter_type" IS NULL
-    OR (c."perimeter_type" = 'point_radius' AND l."geom" IS NOT NULL
-        AND ST_DWithin(l."geom", ST_SetSRID(ST_MakePoint(c."center_longitude", c."center_latitude"), 4326)::geography, c."radius_meters"))
-    OR (c."perimeter_type" IN ('polygon', 'isochrone') AND l."geom" IS NOT NULL AND c."perimeter" IS NOT NULL
-        AND ST_Intersects(l."geom", c."perimeter"))
-  )
-  AND (
-    (c."filters"->>'maxTramDistanceMeters') IS NULL
-    OR (l."geom" IS NOT NULL AND EXISTS (
-      SELECT 1 FROM "app"."transit_stops" t
-      WHERE t."mode" = 'tram' AND t."geom" IS NOT NULL
-        AND ST_DWithin(t."geom", l."geom", (c."filters"->>'maxTramDistanceMeters')::double precision)))
-  )
+const TRAM_DISTANCES = Prisma.sql`lt AS (
+  SELECT l."id",
+         MIN(ST_Distance(t."geom", l."geom")) AS "tram_point_distance",
+         MIN(ST_Distance(t."geom", l."location_area")) AS "tram_area_distance"
+  FROM l
+  LEFT JOIN "app"."transit_stops" t ON t."mode" = 'tram' AND t."geom" IS NOT NULL
+  GROUP BY l."id"
 )`
 
+/** Le centre d'un critère point et rayon. */
+const CENTER = Prisma.sql`ST_SetSRID(ST_MakePoint(c."center_longitude", c."center_latitude"), 4326)::geography`
+/** Le disque d'un critère point et rayon, en polygone (contour couvert, part de surface). */
+const DISC = Prisma.sql`ST_Buffer(${CENTER}, c."radius_meters", 'quad_segs=16')`
+
 /**
- * Une annonce au repère approché (quartier ou commune) n'est incluse que
- * sous réserve, sauf si toute sa zone (contour du quartier retenu, ou de la
- * commune) est dans le périmètre (lot 12) : la distance au tram, elle, part
- * toujours d'un repère approché.
+ * Les mesures de l'adéquation, écrites une fois pour la liste, l'aperçu,
+ * les alertes et le rattrapage : `c` est le critère (ligne de
+ * `search_criteria` ou ligne virtuelle), `l` l'annonce, `lt` ses distances
+ * au tram. Distance du repère au périmètre : 0 dedans ; pour un point et
+ * rayon, la distance au centre moins le rayon. Le contour est comparé au
+ * périmètre en entier (`ST_CoveredBy`), par sa distance (0 s'il le touche)
+ * et par la part de sa surface dedans.
  */
-const APPROXIMATE = Prisma.sql`(
-  COALESCE(l."location_precision"::text IN ('district', 'commune'), false)
-  AND (
-    (c."filters"->>'maxTramDistanceMeters') IS NOT NULL
-    OR (c."perimeter_type" IS NOT NULL AND NOT COALESCE(
-      CASE
-        WHEN l."location_area" IS NULL THEN false
-        WHEN c."perimeter_type" = 'point_radius' THEN ST_CoveredBy(
-          l."location_area"::geometry,
-          ST_Buffer(ST_SetSRID(ST_MakePoint(c."center_longitude", c."center_latitude"), 4326)::geography, c."radius_meters")::geometry)
-        WHEN c."perimeter" IS NOT NULL THEN ST_CoveredBy(l."location_area"::geometry, c."perimeter"::geometry)
-        ELSE false
-      END, false))
-  )
-)`
+const CRITERIA_FIT_MEASURES = Prisma.sql`
+  l."id" AS "listing_id",
+  c."id" AS "criteria_id",
+  l."geom" IS NOT NULL AS "has_point",
+  l."location_precision"::text AS "precision",
+  l."location_area" IS NOT NULL AS "has_area",
+  CASE
+    WHEN l."geom" IS NULL OR c."perimeter_type" IS NULL THEN NULL
+    WHEN c."perimeter_type" = 'point_radius'
+      THEN GREATEST(0, ST_Distance(l."geom", ${CENTER}) - c."radius_meters")
+    WHEN c."perimeter" IS NOT NULL THEN ST_Distance(l."geom", c."perimeter")
+  END AS "point_distance",
+  CASE
+    WHEN l."location_area" IS NULL OR c."perimeter_type" IS NULL THEN NULL
+    WHEN c."perimeter_type" = 'point_radius'
+      THEN ST_CoveredBy(l."location_area"::geometry, ${DISC}::geometry)
+    WHEN c."perimeter" IS NOT NULL
+      THEN ST_CoveredBy(l."location_area"::geometry, c."perimeter"::geometry)
+  END AS "area_covered",
+  CASE
+    WHEN l."location_area" IS NULL OR c."perimeter_type" IS NULL THEN NULL
+    WHEN c."perimeter_type" = 'point_radius'
+      THEN GREATEST(0, ST_Distance(l."location_area", ${CENTER}) - c."radius_meters")
+    WHEN c."perimeter" IS NOT NULL THEN ST_Distance(l."location_area", c."perimeter")
+  END AS "area_distance",
+  CASE
+    WHEN l."location_area" IS NULL OR c."perimeter_type" IS NULL THEN NULL
+    WHEN c."perimeter_type" = 'point_radius'
+      THEN ST_Area(ST_Intersection(l."location_area"::geometry, ${DISC}::geometry)::geography)
+           / NULLIF(ST_Area(l."location_area"), 0)
+    WHEN c."perimeter" IS NOT NULL
+      THEN ST_Area(ST_Intersection(l."location_area"::geometry, c."perimeter"::geometry)::geography)
+           / NULLIF(ST_Area(l."location_area"), 0)
+  END AS "area_share",
+  lt."tram_point_distance",
+  lt."tram_area_distance"
+`
 
 /** La zone d'une annonce à écrire : l'union de contours importés, ou une commune entière. */
 export type ListingAreaRef =

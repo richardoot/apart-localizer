@@ -266,9 +266,15 @@ describe('Critères de recherche (e2e)', () => {
       .set(ctx.auth(richard))
       .send({ newPrice: 230_000, source: 'listing' })
       .expect(200)
+    // Lot 14 : 230 000 € pour 200 000 € au plus, +15 % : au-delà de la marge.
     expect(raised.body.criteriaChanges.left).toEqual([
-      { criteriaId: criteria.id, name: 'Talence pas cher' },
+      {
+        criteriaId: criteria.id,
+        name: 'Talence pas cher',
+        reasons: [expect.stringContaining('Prix +15 %')],
+      },
     ])
+    expect(raised.body.criteriaFit.level).toBe('out')
     expect(raised.body.criteriaMatches).toEqual([])
     const unmatched = await ctx.prisma.activityLog.count({
       where: { listingId: created.listing.id, action: 'criteria.unmatched' },
@@ -560,9 +566,10 @@ describe('Critères de recherche (e2e)', () => {
     expect(renamed.criteria.name).toBe('Talence sud')
     expect(renamed.criteria.filters.priceMax).toBe(150_000)
     expect(renamed.criteria.listingCount).toBe(0)
+    // Lot 14 : l'annonce reste comparée au critère, hors critères.
     expect(
       await ctx.prisma.criteriaMatch.count({
-        where: { listingId: forum.listing.id },
+        where: { listingId: forum.listing.id, level: { not: 'out' } },
       })
     ).toBe(0)
 

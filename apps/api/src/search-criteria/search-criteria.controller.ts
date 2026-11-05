@@ -36,7 +36,7 @@ export class SearchCriteriaController {
   @Get()
   @ApiOperation({
     summary:
-      "Critères de recherche de l'espace avec le nombre d'annonces, de nouveautés pour moi et d'annonces localisées sous réserve",
+      "Critères de recherche de l'espace avec leur marge de tolérance, le nombre d'annonces gardées, de nouveautés pour moi et d'annonces par niveau d'adéquation (dans, à confirmer, à la marge, hors)",
   })
   @ZodResponse({ status: 200, type: [SearchCriteriaSummaryDto] })
   list(
@@ -65,7 +65,7 @@ export class SearchCriteriaController {
   @HttpCode(200)
   @ApiOperation({
     summary:
-      "Aperçu d'un critère sans l'enregistrer : périmètre résolu et annonces retenues",
+      "Aperçu d'un critère sans l'enregistrer : périmètre résolu et annonces par niveau d'adéquation, marge comprise",
   })
   @ZodResponse({ status: 200, type: SearchCriteriaPreviewDto })
   preview(

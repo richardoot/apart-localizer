@@ -23,15 +23,18 @@ import type {
   Prisma,
   PrismaClient,
 } from '../../apps/api/src/generated/prisma/index.js'
+import { ActivityService } from '../../apps/api/src/activity/activity.service.js'
 import type {
   GeoService,
   ListingAreaRef,
 } from '../../apps/api/src/geo/geo.service.js'
+import { CriteriaMatchService } from '../../apps/api/src/listings/criteria-match.service.js'
 import {
   listingInclude,
   toListingDto,
 } from '../../apps/api/src/listings/listing.mapper.js'
 import type { ListingRow } from '../../apps/api/src/listings/listing.mapper.js'
+import { NotificationQueueService } from '../../apps/api/src/notifications/notification-queue.service.js'
 import { MarketService } from '../../apps/api/src/opendata/market.service.js'
 import {
   PlacementService,
@@ -53,8 +56,9 @@ import type { PrismaService } from '../../apps/api/src/prisma/prisma.service.js'
  * précision moindre (`placementImproves`). Une annonce au centre de la
  * commune sans quartier reconnu garde son point et reçoit son placement et
  * sa zone (la commune). Une ligne de journal `listing.relocated` (canal
- * `system`) par annonce replacée. Idempotent : un second passage ne change
- * rien.
+ * `system`) par annonce replacée. Lot 14 : l'adéquation aux critères des
+ * annonces replacées est recalculée (cause « rattrapage », sans alerte).
+ * Idempotent : un second passage ne change rien.
  */
 
 export interface RelocateStats {
@@ -228,6 +232,31 @@ export async function relocateListings(
         },
       })
     })
+  }
+  // Lot 14 : le repère a bougé, l'adéquation aux critères aussi (ADR 0024).
+  if (!options.dryRun && plans.length) {
+    const fits = new CriteriaMatchService(
+      prisma,
+      deps.geo,
+      new ActivityService(prisma, new NotificationQueueService())
+    )
+    const byWorkspace = new Map<string, string[]>()
+    for (const row of rows) {
+      if (!plans.some(plan => plan.id === row.id)) continue
+      byWorkspace.set(row.workspaceId, [
+        ...(byWorkspace.get(row.workspaceId) ?? []),
+        row.id,
+      ])
+    }
+    for (const [workspaceId, listingIds] of byWorkspace) {
+      await fits.refresh(workspaceId, {
+        listingIds,
+        origin: { cause: 'refresh', trigger: 'location' },
+        actorMemberId: null,
+        channel: 'system',
+        at,
+      })
+    }
   }
   return { stats, plans }
 

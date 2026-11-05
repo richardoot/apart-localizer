@@ -16,7 +16,7 @@ export const criteriaKeys = {
     ['search-criteria', 'preview', request] as const,
 }
 
-/** Les critères de l'espace, avec leurs compteurs (annonces, nouveautés, sous réserve). */
+/** Les critères de l'espace, avec leurs compteurs (annonces gardées, nouveautés, lot 14 : par niveau d'adéquation). */
 export function useSearchCriteriaList(
   includeArchived: MaybeRef<boolean> = false
 ) {

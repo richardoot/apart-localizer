@@ -1,48 +1,72 @@
 import { describe, expect, it } from 'vitest'
+import type { CriteriaFitLevel } from '@apart/contracts'
 import { criteriaChangesMessage } from './criteria'
 
-const match = (name: string, approximate = false) => ({
+const match = (
+  name: string,
+  level: CriteriaFitLevel = 'in',
+  approximate = false
+) => ({
   criteriaId: `id-${name}`,
   name,
   matchedAt: '2026-11-03T10:00:00.000Z',
   approximate,
+  level,
+  reasons: [],
 })
+const left = (name: string) => ({ criteriaId: `id-${name}`, name, reasons: [] })
 
 describe('criteriaChangesMessage', () => {
   it('rien à dire sans changement', () => {
     expect(criteriaChangesMessage(null)).toBeNull()
     expect(criteriaChangesMessage(undefined)).toBeNull()
     expect(
-      criteriaChangesMessage({ entered: [], left: [], current: [] })
+      criteriaChangesMessage({
+        entered: [],
+        left: [],
+        changed: [],
+        current: [],
+      })
     ).toBeNull()
   })
 
-  it('une entrée, avec la réserve d’une localisation imprécise', () => {
+  it('lot 14 : une entrée « à confirmer » dit son niveau', () => {
     expect(
       criteriaChangesMessage({
-        entered: [match('Talence', true)],
+        entered: [match('Talence', 'to_confirm', true)],
         left: [],
+        changed: [],
         current: [],
       })
-    ).toBe('Entre dans le critère « Talence » (sous réserve).')
+    ).toBe('Entre dans le critère « Talence » (à confirmer).')
   })
 
-  it('plusieurs entrées et une sortie, au pluriel et au singulier', () => {
+  it('plusieurs entrées, une sortie, un changement de niveau', () => {
     expect(
       criteriaChangesMessage({
-        entered: [match('Talence'), match('Tram')],
-        left: [match('Bègles')],
+        entered: [match('Talence'), match('Tram', 'margin')],
+        left: [left('Bègles')],
+        changed: [
+          {
+            criteriaId: 'id-Centre',
+            name: 'Centre',
+            before: 'margin',
+            after: 'in',
+            reasons: [],
+          },
+        ],
         current: [],
       })
     ).toBe(
-      'Entre dans les critères « Talence », « Tram ». Sort du critère « Bègles ».'
+      'Entre dans les critères « Talence », « Tram » (à la marge). Sort du critère « Bègles » (hors critères). « Centre » : à la marge → dans les critères.'
     )
     expect(
       criteriaChangesMessage({
         entered: [],
-        left: [match('A'), match('B')],
+        left: [left('A'), left('B')],
+        changed: [],
         current: [],
       })
-    ).toBe('Sort des critères « A », « B ».')
+    ).toBe('Sort des critères « A », « B » (hors critères).')
   })
 })

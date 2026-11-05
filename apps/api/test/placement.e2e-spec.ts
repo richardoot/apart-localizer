@@ -478,26 +478,46 @@ describe('Placement des annonces (e2e)', () => {
     expect(manual.body.listing.location.placement.method).toBe('manual')
   })
 
-  it('critère à périmètre : sous réserve seulement si la zone n’y est pas entière', async () => {
+  it('lot 14 : au quartier, le contour est mesuré contre le périmètre, jamais seul le repère', async () => {
     const listing = await create({
       commune: 'Bordeaux',
       district: 'Secteur fictif Nord',
     })
     const workspace = await ctx.prisma.workspace.findFirstOrThrow()
-    const draft = (polygon: ReturnType<typeof square>) =>
-      geo.listingsInCriteriaDraft(workspace.id, {
+    const draft = async (polygon: ReturnType<typeof square>) => {
+      const rows = await geo.criteriaFitMeasuresDraft(workspace.id, {
         perimeterType: 'polygon',
         center: null,
         polygon,
-        filters: { maxTramDistanceMeters: null },
       })
-    expect(await draft(square(-0.61, 44.845, 0.03))).toEqual([
-      { id: listing.id, approximate: false },
-    ])
-    expect(await draft(square(-0.6, 44.85, 0.006, 0.01))).toEqual([
-      { id: listing.id, approximate: true },
-    ])
-    const radius = await geo.listingsInCriteriaDraft(workspace.id, {
+      expect(rows).toHaveLength(1)
+      return rows[0]
+    }
+    // Le secteur (0,01° de côté) est entier dans le grand carré.
+    expect(await draft(square(-0.61, 44.845, 0.03))).toMatchObject({
+      listing_id: listing.id,
+      has_point: true,
+      precision: 'district',
+      has_area: true,
+      point_distance: 0,
+      area_covered: true,
+      area_distance: 0,
+    })
+    // Un périmètre qui ne prend que la moitié est du secteur : le repère (au
+    // centre) est dehors, le contour le chevauche à moitié.
+    const half = await draft(square(-0.595 + 0.0005, 44.84, 0.02, 0.03))
+    expect(half?.area_covered).toBe(false)
+    expect(half?.area_distance).toBe(0)
+    expect(half?.point_distance).toBeGreaterThan(0)
+    expect(half?.area_share).toBeGreaterThan(0.4)
+    expect(half?.area_share).toBeLessThan(0.5)
+    // Un périmètre à l'écart : la distance du contour au périmètre.
+    const far = await draft(square(-0.58, 44.85, 0.01))
+    expect(far?.area_covered).toBe(false)
+    expect(far?.area_distance).toBeGreaterThan(700)
+    expect(far?.area_distance).toBeLessThan(900)
+    // Point et rayon : distance au centre moins le rayon, disque pour le contour.
+    const [radius] = await geo.criteriaFitMeasuresDraft(workspace.id, {
       perimeterType: 'point_radius',
       center: {
         longitude: listing.location.point.coordinates[0],
@@ -505,16 +525,22 @@ describe('Placement des annonces (e2e)', () => {
         radiusMeters: 5000,
       },
       polygon: null,
-      filters: { maxTramDistanceMeters: null },
     })
-    expect(radius).toEqual([{ id: listing.id, approximate: false }])
-    const tram = await geo.listingsInCriteriaDraft(workspace.id, {
+    expect(radius).toMatchObject({ point_distance: 0, area_covered: true })
+    // Aucun arrêt de tram importé : distances inconnues (à confirmer, jamais hors).
+    expect(radius?.tram_point_distance).toBeNull()
+    expect(radius?.tram_area_distance).toBeNull()
+    // Sans périmètre : rien à mesurer.
+    const [none] = await geo.criteriaFitMeasuresDraft(workspace.id, {
       perimeterType: null,
       center: null,
       polygon: null,
-      filters: { maxTramDistanceMeters: 100_000 },
     })
-    // Aucun arrêt importé : la distance au tram exclut l'annonce.
-    expect(tram).toEqual([])
+    expect(none).toMatchObject({
+      point_distance: null,
+      area_covered: null,
+      area_distance: null,
+      area_share: null,
+    })
   })
 })

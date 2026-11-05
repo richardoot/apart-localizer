@@ -76,6 +76,7 @@ describe('MCP lot 6', () => {
         task: 0,
         criteria_match: 0,
         listing_check: 0,
+        criteria_exit: 0,
       },
       items: [
         {

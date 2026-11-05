@@ -150,7 +150,12 @@ describe('périmètres côté carte', () => {
     ).toBe('Isochrone 12 min à vélo depuis 1 place Fictive')
     expect(criteriaChangesMessage(null)).toBeNull()
     expect(
-      criteriaChangesMessage({ entered: [], left: [], current: [] })
+      criteriaChangesMessage({
+        entered: [],
+        left: [],
+        changed: [],
+        current: [],
+      })
     ).toBeNull()
     expect(
       criteriaChangesMessage({
@@ -160,19 +165,24 @@ describe('périmètres côté carte', () => {
             name: 'Talence',
             matchedAt: '2026-11-03T10:00:00.000Z',
             approximate: false,
+            level: 'in',
+            reasons: [],
           },
           {
             criteriaId: 'b',
             name: 'Tram',
             matchedAt: '2026-11-03T10:00:00.000Z',
             approximate: true,
+            level: 'to_confirm',
+            reasons: [],
           },
         ],
-        left: [{ criteriaId: 'c', name: 'Bègles' }],
+        left: [{ criteriaId: 'c', name: 'Bègles', reasons: [] }],
+        changed: [],
         current: [],
       })
     ).toBe(
-      'Entre dans les critères « Talence », « Tram » (sous réserve). Sort du critère « Bègles ».'
+      'Entre dans les critères « Talence », « Tram » (à confirmer). Sort du critère « Bègles » (hors critères).'
     )
   })
 })

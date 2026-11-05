@@ -1,5 +1,6 @@
 import {
   ACTIVITY_CHANNEL_LABELS,
+  CRITERIA_FIT_LEVEL_LABELS,
   LEASE_TYPE_LABELS,
   LISTING_STATUS_LABELS,
   MEMBER_ROLE_LABELS,
@@ -303,6 +304,41 @@ function criteriaNames(record: unknown): string {
   return names.join(', ')
 }
 
+const FIT_LABELS: Record<string, string> = CRITERIA_FIT_LEVEL_LABELS
+
+/** « (à confirmer) » quand les critères d'une entrée ne sont pas tous « dans ». */
+function fitLevelsNote(record: unknown): string {
+  const list =
+    isRecord(record) && Array.isArray(record.criteria) ? record.criteria : []
+  const levels = [
+    ...new Set(
+      list
+        .map(c => (isRecord(c) && typeof c.level === 'string' ? c.level : null))
+        .filter((l): l is string => l !== null && l !== 'in' && l in FIT_LABELS)
+    ),
+  ]
+  return levels.length
+    ? ` (${levels.map(l => (FIT_LABELS[l] as string).toLowerCase()).join(', ')})`
+    : ''
+}
+
+/** « « Talence » à la marge → dans les critères ». */
+function criteriaLevelChanges(record: unknown): string {
+  const list =
+    isRecord(record) && Array.isArray(record.criteria) ? record.criteria : []
+  const label = (value: unknown): string =>
+    typeof value === 'string' && value in FIT_LABELS
+      ? (FIT_LABELS[value] as string).toLowerCase()
+      : '?'
+  const parts = list
+    .filter(isRecord)
+    .map(
+      c =>
+        `« ${typeof c.name === 'string' ? c.name : 'critère'} » ${label(c.before)} → ${label(c.level)}`
+    )
+  return parts.join(', ') || 'niveau recalculé'
+}
+
 /** La phrase et le détail d'une ligne du journal. */
 export function describeActivity(
   record: ActivityRecord,
@@ -458,9 +494,15 @@ export function describeActivity(
       )
     }
     case 'criteria.matched':
-      return describe(`l'annonce entre dans le critère ${criteriaNames(after)}`)
+      return describe(
+        `l'annonce entre dans le critère ${criteriaNames(after)}${fitLevelsNote(after)}`
+      )
     case 'criteria.unmatched':
-      return describe(`l'annonce sort du critère ${criteriaNames(before)}`)
+      return describe(
+        `l'annonce sort du critère ${criteriaNames(before)} (hors critères)`
+      )
+    case 'criteria.fit_changed':
+      return describe(`adéquation : ${criteriaLevelChanges(after)}`)
     case 'criteria.created':
       return describe(`a créé le critère${quoted(text(after, 'name'))}`)
     case 'criteria.updated':

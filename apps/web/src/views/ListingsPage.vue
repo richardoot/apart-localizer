@@ -5,6 +5,7 @@
   import { criteriaChangesMessage } from '@/lib/criteria'
   import CostBasisBadge from '@/components/listings/CostBasisBadge.vue'
   import FiltersBar from '@/components/listings/FiltersBar.vue'
+  import FitTabs from '@/components/listings/FitTabs.vue'
   import ListingCards from '@/components/listings/ListingCards.vue'
   import ListingCreatePanel from '@/components/listings/ListingCreatePanel.vue'
   import ListingPanel from '@/components/listings/ListingPanel.vue'
@@ -78,6 +79,10 @@
   // Lot 12 : contours des annonces au quartier, chargés pour la carte seulement.
   const listingAreas = useListingAreas(computed(() => store.view === 'map'))
   const items = computed(() => data.value?.items ?? [])
+  /** Lot 14 : l'adéquation de la liste (critères actifs, compteurs des onglets). */
+  const fit = computed(() => data.value?.fit ?? null)
+  const activeCriteria = computed(() => fit.value?.activeCriteria ?? [])
+  const outTab = computed(() => store.fitTab === 'out')
   const communes = computed(() => {
     const set = new Set<string>()
     for (const item of items.value) {
@@ -147,6 +152,27 @@
             >· actualisation…</span
           >
         </p>
+        <p
+          v-if="activeCriteria.length"
+          class="text-sm text-muted"
+          data-testid="fit-criteria"
+        >
+          Comparées
+          {{
+            activeCriteria.length > 1
+              ? `aux ${activeCriteria.length} critères actifs`
+              : 'au critère actif'
+          }}
+          :
+          <template v-for="(c, index) in activeCriteria" :key="c.id"
+            ><template v-if="index > 0"> · </template
+            ><RouterLink
+              :to="{ name: 'listings', query: { criteriaId: c.id } }"
+              class="text-accent underline-offset-2 hover:underline"
+              >{{ c.name }}</RouterLink
+            ></template
+          >
+        </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <ViewSwitch v-model="store.view" />
@@ -175,6 +201,8 @@
 
     <FiltersBar :communes="communes" :criteria="criteria" />
 
+    <FitTabs :fit="fit" />
+
     <p
       v-if="error"
       role="alert"
@@ -189,12 +217,14 @@
       <ListingsTable
         v-if="store.view === 'table'"
         :items="items"
+        :out-tab="outTab"
         @open="open"
         @compare="compare"
       />
       <ListingCards
         v-else-if="store.view === 'cards'"
         :items="items"
+        :out-tab="outTab"
         @open="open"
       />
       <ListingsMap
@@ -210,6 +240,11 @@
         @bounds="value => (bbox = value)"
       />
     </template>
+
+    <p v-if="outTab && activeCriteria.length" class="text-xs text-muted">
+      Les annonces écartées ou vendues restent gouvernées par le filtre de
+      statut, comme avant.
+    </p>
 
     <p class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
       <span

@@ -22,6 +22,12 @@ import {
 } from './metrics.js'
 import { NegotiationBriefSchema } from './negotiation.js'
 import {
+  CriteriaFitCountsSchema,
+  EMPTY_FIT_COUNTS,
+  ListingCriteriaFitSchema,
+  NO_CRITERIA_FIT,
+} from './criteria-fit.js'
+import {
   CriteriaMatchChangesSchema,
   CriteriaMatchSchema,
 } from './search-criteria.js'
@@ -60,10 +66,15 @@ export const EvaluatedListingSchema = z.object({
     .describe(
       "Critères de recherche actifs dans lesquels l'annonce est entrée (alertes)"
     ),
+  criteriaFit: ListingCriteriaFitSchema.default(() => ({
+    ...NO_CRITERIA_FIT,
+  })).describe(
+    'Adéquation aux critères actifs (lot 14) : meilleur niveau, raisons, détail par critère, « depuis », gardée malgré « hors critères »'
+  ),
   criteriaChanges: CriteriaMatchChangesSchema.nullable()
     .default(null)
     .describe(
-      "Après une création ou une mise à jour : critères dans lesquels l'annonce entre ou dont elle sort ; null à la lecture"
+      "Après une création ou une mise à jour : critères dans lesquels l'annonce entre, dont elle sort, ou dont le niveau change ; null à la lecture"
     ),
   lastCheck: ListingCheckSummarySchema.nullable()
     .default(null)
@@ -79,6 +90,37 @@ export const EvaluatedListingSchema = z.object({
 })
 export type EvaluatedListing = z.infer<typeof EvaluatedListingSchema>
 
+/**
+ * L'adéquation de la page de liste (lot 14) : les critères actifs, et les
+ * annonces par niveau pour les autres filtres de la liste (les compteurs des
+ * deux onglets ne dépendent pas de l'onglet ouvert).
+ */
+export const ListingListFitSchema = z.object({
+  activeCriteria: z
+    .array(z.object({ id: z.string().uuid(), name: z.string() }))
+    .describe(
+      'Les critères actifs comparés (aucun : toutes les annonces sont « dans les critères »)'
+    ),
+  counts: CriteriaFitCountsSchema.describe(
+    'Annonces par niveau, filtres de la liste appliqués sauf `fit`'
+  ),
+  kept: z
+    .number()
+    .int()
+    .min(0)
+    .describe(
+      'Parmi les « hors critères », celles gardées dans l’onglet principal (offre en cours, visite prévue)'
+    ),
+  criteriaId: z
+    .string()
+    .uuid()
+    .nullable()
+    .describe(
+      'Le critère appliqué (`criteriaId`) : les niveaux sont les siens'
+    ),
+})
+export type ListingListFit = z.infer<typeof ListingListFitSchema>
+
 /** Une page de la liste d'annonces. */
 export const ListingListSchema = z.object({
   items: z.array(EvaluatedListingSchema),
@@ -89,6 +131,12 @@ export const ListingListSchema = z.object({
   page: z.number().int().min(1),
   limit: z.number().int().min(1).max(LISTING_PAGE_MAX),
   pageCount: z.number().int().min(0),
+  fit: ListingListFitSchema.default(() => ({
+    activeCriteria: [],
+    counts: { ...EMPTY_FIT_COUNTS },
+    kept: 0,
+    criteriaId: null,
+  })),
 })
 export type ListingList = z.infer<typeof ListingListSchema>
 

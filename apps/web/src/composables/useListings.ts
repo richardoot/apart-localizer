@@ -26,6 +26,16 @@ export const listingKeys = {
     ['listings', 'sensitivity', id, request] as const,
   compare: (ids: string[]) => ['listings', 'compare', ids] as const,
   areas: ['listings', 'areas'] as const,
+  fitHistory: (id: string) => ['listings', 'fit-history', id] as const,
+}
+
+/** Lot 14 : l'historique de l'adéquation d'une annonce (rafraîchi avec les annonces). */
+export function useCriteriaFitHistory(id: MaybeRef<string | null | undefined>) {
+  return useQuery({
+    queryKey: computed(() => listingKeys.fitHistory(unref(id) ?? '')),
+    queryFn: () => api.listings.criteriaFitHistory(unref(id) as string),
+    enabled: computed(() => Boolean(unref(id))),
+  })
 }
 
 /**

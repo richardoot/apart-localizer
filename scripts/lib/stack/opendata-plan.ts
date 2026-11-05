@@ -157,6 +157,21 @@ export function openDataPlan(files: OpenDataFiles): OpenDataPlan {
       args: [],
     })
   }
+  // Lot 14 : les arrêts de tram et le repère des annonces changent les
+  // mesures de l'adéquation aux critères ; on la recalcule en dernier.
+  if (
+    steps.some(
+      s =>
+        s.script === 'import-transit-stops.ts' ||
+        s.script === 'relocate-listings.ts'
+    )
+  ) {
+    steps.push({
+      label: 'adéquation des annonces aux critères',
+      script: 'refresh-criteria-fit.ts',
+      args: [],
+    })
+  }
   return { steps, skipped }
 }
 

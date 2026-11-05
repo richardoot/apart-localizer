@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { NO_CRITERIA_FIT } from '@apart/contracts'
 import type {
   ListingCheckPreview,
   ListingCheckWriteResult,
@@ -236,6 +237,7 @@ describe('MCP lot 15 : suivi des mises à jour', () => {
         isNewForMe: false,
         distanceMeters: null,
         criteriaChanges: null,
+        criteriaFit: NO_CRITERIA_FIT,
       },
       suggestion: {
         listingId: ID,

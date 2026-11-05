@@ -35,8 +35,8 @@
   import CheckFreshnessBadge from './CheckFreshnessBadge.vue'
   import ChecksSection from './ChecksSection.vue'
   import ContextSection from './ContextSection.vue'
-  import CriteriaBadges from './CriteriaBadges.vue'
   import DpeBadge from './DpeBadge.vue'
+  import FitBadge from './FitBadge.vue'
   import HistorySection from './HistorySection.vue'
   import ListingForm from './ListingForm.vue'
   import ListingSynthesis from './ListingSynthesis.vue'
@@ -366,7 +366,10 @@
             v-if="shownEvaluation"
             :verdict="shownEvaluation.metrics.verdict"
           />
-          <CriteriaBadges :matches="item.criteriaMatches" />
+          <FitBadge
+            v-if="item.criteriaFit.activeCriteria > 0"
+            :level="item.criteriaFit.level"
+          />
           <span class="text-xs text-muted">
             {{
               [item.listing.location.commune, item.listing.location.district]
@@ -486,6 +489,7 @@
             :assumptions="shownAssumptions"
             :live="editing"
             @go="next => (tab = next)"
+            @precise="preciseAddress"
           />
         </template>
 

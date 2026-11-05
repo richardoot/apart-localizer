@@ -14,13 +14,15 @@
   import AtTargetPanel from './AtTargetPanel.vue'
   import CostBasisBadge from './CostBasisBadge.vue'
   import CostSummary from './CostSummary.vue'
+  import CriteriaFitSection from './CriteriaFitSection.vue'
   import NegotiationSummary from './NegotiationSummary.vue'
   import ProfitabilitySummary from './ProfitabilitySummary.vue'
   import RentalPill from './RentalPill.vue'
 
   /**
-   * L'onglet Synthèse de la fiche (lot 9) : les deux bases de calcul
-   * expliquées, trois blocs (« Combien négocier ? » sur le prix, « Combien ça
+   * L'onglet Synthèse de la fiche (lot 9) : d'abord (lot 14) « Correspond-elle
+   * à ce qu'on cherche ? », l'adéquation aux critères actifs ; puis les deux
+   * bases de calcul expliquées, trois blocs (« Combien négocier ? » sur le prix, « Combien ça
    * coûte ? » et « Est-ce rentable ? » tout compris), le pont « Et au prix
    * cible ? », puis les résumés louabilité, suivi et quartier (lot 11 :
    * quartier et équipements proches) qui mènent aux
@@ -36,7 +38,7 @@
     /** Vrai pendant l'édition : valeurs de l'aperçu en direct. */
     live?: boolean
   }>()
-  const emit = defineEmits<{ go: [tab: ListingTab] }>()
+  const emit = defineEmits<{ go: [tab: ListingTab]; precise: [] }>()
 
   const reading = computed(() =>
     readingOf(props.evaluation, props.targetPrice, props.assumptions)
@@ -90,6 +92,12 @@
 
 <template>
   <div class="@container grid gap-4" data-testid="synthesis">
+    <CriteriaFitSection
+      :listing-id="item.listing.id"
+      :fit="item.criteriaFit"
+      @precise="emit('precise')"
+      @go="next => emit('go', next)"
+    />
     <section
       class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-muted"
       aria-labelledby="cost-bases-title"

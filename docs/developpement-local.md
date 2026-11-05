@@ -124,11 +124,14 @@ hors du dépôt. Un nouveau fichier part du `.env.example` correspondant.
   dans Bordeaux Métropole, des statuts « à étudier » à « vendue », des verdicts cible, à creuser et
   hors cible ; deux versions d'hypothèses ; travaux et phase 2 ; avis des deux membres ; tâches
   (dont assignées) ; offres avec réponses et contre-propositions ; historique de prix ; visites
-  faites et planifiées (sans photo) ; deux critères (un polygone sur le centre et un rayon de
-  1,5 km autour du tram B à Talence) avec leurs entrées ; comparables de loyer ; deux scénarios ;
-  une alerte e-mail à valider ; des vérifications sur le portail (lot 15 : prix trouvé,
-  inchangée, plus en ligne, republiée, page inaccessible) et une republication rattachée (le T3
-  de Cenon et sa première annonce) ; le journal et les notifications qu'il fait naître. Les dates sont
+  faites et planifiées (sans photo) ; trois critères (un polygone sur le centre, un rayon de
+  1,5 km autour du tram B à Talence et, lot 14, un rayon sur la rive droite à marge réglée de
+  400 m et +8 %) avec l'adéquation des annonces aux quatre niveaux (dans les critères, à
+  confirmer, à la marge, hors critères, dont une gardée pour son offre) ; comparables de loyer ;
+  deux scénarios ; une alerte e-mail à valider ; des vérifications sur le portail (lot 15 : prix
+  trouvé, inchangée, plus en ligne, republiée, page inaccessible) et une republication rattachée
+  (le T3 de Cenon et sa première annonce) ; le journal et les notifications qu'il fait naître. Les
+  dates sont
   relatives au jour du seed : il y a toujours des « nouvelles » et une visite à venir.
 - **`artifact`** : l'import de `data/private/artifact-export/` (vos annonces). Sans ce dossier,
   `stack:up` le dit et s'arrête. Les e-mails des membres viennent de `--richard-email` et
@@ -146,7 +149,9 @@ hors du dépôt. Un nouveau fichier part du `.env.example` correspondant.
   équipements des annonces (`refresh:surroundings`). Lot 12 : après les quartiers, les lieux-dits
   OpenStreetMap (`osm/quartiers-places.json`, `import:places`), puis le rattrapage du repère des
   annonces au centre de la commune, au quartier ou sans repère (`relocate:listings`, avant
-  `refresh:surroundings`). Sans ces fichiers, l'onglet Quartier affiche « non disponible » ;
+  `refresh:surroundings`). Lot 14 : après les arrêts TBM ou le replacement des annonces, le
+  rattrapage de l'adéquation aux critères (`refresh:criteria-fit`), en dernier. Sans ces
+  fichiers, l'onglet Quartier affiche « non disponible » ;
   `--download` sur chaque import les lit en ligne à la place. Le plan des imports est testé ; les imports eux-mêmes n'ont pas été relancés pour ce lot
   (les données ouvertes étaient déjà en base).
 

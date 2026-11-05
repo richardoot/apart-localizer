@@ -1,6 +1,6 @@
 # 0010. Critères de recherche : un seul prédicat géographique, filtres par `domain`, table des entrées pour les alertes, compteurs à la lecture, isochrone à vélo approchée
 
-Statut : acceptée, 3 novembre 2026.
+Statut : acceptée, 3 novembre 2026 ; précisée par 0024 (adéquation aux critères, lot 14).
 
 ## Contexte
 

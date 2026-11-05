@@ -7,6 +7,7 @@ import type {
 import { activityActorName } from './activity.js'
 import type { ActivityRecord } from './activity.js'
 import { formatEuros } from './format.js'
+import { fitChangeFromListing } from './whats-new.js'
 
 /**
  * Quelles notifications une écriture journalisée fait naître (besoin S7), et
@@ -72,7 +73,9 @@ export function notificationTypeOf(
         : null
     }
     case 'criteria.matched':
-      return 'criteria_matched'
+      // Lot 14 : seulement quand l'annonce a bougé ; une entrée due à un
+      // critère ou aux hypothèses modifiés, ou au rattrapage, n'alerte pas.
+      return fitChangeFromListing(event.after) ? 'criteria_matched' : null
     case 'offer.updated': {
       const response = str(event.after, 'response')
       return response &&

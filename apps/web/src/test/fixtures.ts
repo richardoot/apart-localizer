@@ -1,4 +1,8 @@
-import { DEFAULT_ASSUMPTIONS, ListingInputSchema } from '@apart/contracts'
+import {
+  DEFAULT_ASSUMPTIONS,
+  ListingInputSchema,
+  NO_CRITERIA_FIT,
+} from '@apart/contracts'
 import type {
   DuplicateCandidate,
   EvaluatedListing,
@@ -222,6 +226,7 @@ export function fakeEvaluated(
     ],
     offers: [],
     criteriaMatches: [],
+    criteriaFit: { ...NO_CRITERIA_FIT },
     criteriaChanges: null,
     lastCheck: null,
     republication: { from: null, to: null },

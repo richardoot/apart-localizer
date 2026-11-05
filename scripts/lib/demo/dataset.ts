@@ -949,7 +949,8 @@ export function buildDemoDataset(now: Date = new Date()): DemoDataset {
 
   const listings = SPECS.map(spec => buildListing(spec, at, since, log))
 
-  // Critères : un polygone dessiné et un point avec rayon.
+  // Critères : un polygone dessiné et deux points avec rayon (lot 14 : l’un avec
+  // sa marge de tolérance réglée).
   const criteria: DemoCriteria[] = [
     {
       id: demoId('criteria:centre'),
@@ -991,6 +992,25 @@ export function buildDemoDataset(now: Date = new Date()): DemoDataset {
           latitude: 44.8083,
           radiusMeters: 1500,
         },
+      }),
+    },
+    {
+      // Lot 14 : une marge réglée (400 m, prix +8 %) ; l'annonce de Cenon,
+      // placée au quartier sans adresse, y est « à confirmer ».
+      id: demoId('criteria:rive-droite'),
+      key: 'rive-droite',
+      by: 'demo',
+      createdAt: at(12, 19),
+      input: SearchCriteriaInputSchema.parse({
+        name: 'Rive droite près du pont de pierre, T3',
+        filters: { roomsMin: 3, priceMax: 180_000 },
+        perimeter: {
+          type: 'point_radius',
+          longitude: -0.545,
+          latitude: 44.852,
+          radiusMeters: 900,
+        },
+        tolerance: { perimeterMeters: 400, priceMaxShare: 0.08 },
       }),
     },
   ]

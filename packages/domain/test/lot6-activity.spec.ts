@@ -322,7 +322,7 @@ describe('describeActivity', () => {
     ],
     [
       { action: 'criteria.unmatched', before: { criteria: [{ name: 'X' }] } },
-      "l'annonce sort du critère « X »",
+      "l'annonce sort du critère « X » (hors critères)",
     ],
     [
       { action: 'criteria.created', after: { name: 'Campus' } },

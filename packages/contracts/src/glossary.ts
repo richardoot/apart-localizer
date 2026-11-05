@@ -242,6 +242,22 @@ export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
     definition:
       'Règles datées et sourcées (interdictions de location selon le DPE, encadrement et sa date de fin, permis de louer, diagnostics du bail, décence, meublé) évaluées à la date de mise en location prévue, et risques Géorisques à l’adresse : ok, attention, bloquant ou à vérifier.',
   },
+  {
+    key: 'criteria_fit',
+    term: 'Adéquation aux critères',
+    short:
+      'Dans les critères, à confirmer, à la marge ou hors critères : le meilleur niveau parmi les critères actifs, avec la raison chiffrée.',
+    definition:
+      'Pour chaque critère actif : « dans les critères » (adresse exacte ou à la rue dans le périmètre, ou quartier entièrement dedans, et tous les filtres respectés) ; « à confirmer » (adresse au quartier ou à la commune dont le contour touche le périmètre ou sa marge, ou donnée manquante : surface, pièces, DPE ; jamais « hors critères » pour une donnée manquante) ; « à la marge » (dépassement dans la marge de tolérance, par exemple prix +3,6 %) ; « hors critères » (au-delà de la marge). Le niveau de l’annonce est le meilleur parmi les critères actifs ; sans critère actif, tout est « dans les critères ». Le statut n’en fait pas partie ; le verdict, si le critère le filtre, oui.',
+  },
+  {
+    key: 'criteria_tolerance',
+    term: 'Marge de tolérance',
+    short:
+      'Jusqu’où une annonce peut dépasser un seuil du critère et rester visible « à la marge » ; 0 = strict.',
+    definition:
+      'Réglée par critère. Par défaut : 300 m autour du périmètre (adresse exacte ou à la rue ; pour une adresse imprécise, distance du contour du quartier ou de la commune), prix maximal +5 %, prix minimal −5 %, surface minimale −5 %, aucune pièce de moins, une classe DPE de plus, 100 m de plus jusqu’au tram. Au-delà, l’annonce passe « hors critères » sans être perdue.',
+  },
 ]
 
 /** L'entrée du glossaire d'une clé (`total_cost`, `gross_yield`…), si elle existe. */

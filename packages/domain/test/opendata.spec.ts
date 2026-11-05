@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { CriteriaFiltersSchema } from '@apart/contracts'
 import type {
   DpeCandidate,
   RentControlZone,
@@ -7,8 +6,6 @@ import type {
 } from '@apart/contracts'
 import {
   comparableSurfaceRange,
-  criteriaFilterMatch,
-  dpeClassesUpTo,
   dpeMatchScore,
   dpeSearchDecision,
   dpeValidity,
@@ -388,86 +385,6 @@ describe('marché DVF', () => {
       active: false,
     })
     expect(byDefault.bindingCriterion).not.toBe('market')
-  })
-})
-
-describe('filtres des critères de recherche', () => {
-  const candidate = {
-    price: 180_000,
-    surface: 45,
-    rooms: 2,
-    dpeClass: 'D' as const,
-    status: 'to_study' as const,
-    commune: 'Talence',
-    verdict: 'to_dig' as const,
-  }
-  const filters = (over: Record<string, unknown> = {}) =>
-    CriteriaFiltersSchema.parse(over)
-
-  it('sans filtre : toute annonce active passe', () => {
-    expect(criteriaFilterMatch(candidate, filters())).toEqual({
-      matches: true,
-      failures: [],
-    })
-    expect(
-      criteriaFilterMatch({ ...candidate, status: 'discarded' }, filters())
-        .failures
-    ).toEqual(['status'])
-    expect(
-      criteriaFilterMatch(
-        { ...candidate, status: 'discarded' },
-        filters({ statuses: ['discarded'] })
-      ).matches
-    ).toBe(true)
-  })
-
-  it('chaque filtre, avec les valeurs inconnues', () => {
-    const f = filters({
-      communes: ['talence', 'Bègles'],
-      priceMin: 100_000,
-      priceMax: 200_000,
-      surfaceMin: 40,
-      roomsMin: 2,
-      dpeMax: 'D',
-      verdicts: ['target', 'to_dig'],
-    })
-    expect(criteriaFilterMatch(candidate, f).matches).toBe(true)
-    expect(
-      criteriaFilterMatch(
-        {
-          ...candidate,
-          commune: 'Pessac',
-          price: 250_000,
-          surface: null,
-          rooms: null,
-          dpeClass: 'F',
-          verdict: 'off_target',
-        },
-        f
-      ).failures
-    ).toEqual([
-      'commune',
-      'price_max',
-      'surface_min',
-      'rooms_min',
-      'dpe_max',
-      'verdict',
-    ])
-    expect(
-      criteriaFilterMatch({ ...candidate, price: 50_000 }, f).failures
-    ).toEqual(['price_min'])
-    // Un DPE inconnu est retenu (à vérifier), une commune inconnue non.
-    expect(
-      criteriaFilterMatch({ ...candidate, dpeClass: null }, f).matches
-    ).toBe(true)
-    expect(
-      criteriaFilterMatch({ ...candidate, commune: null }, f).failures
-    ).toEqual(['commune'])
-  })
-
-  it('classes DPE acceptées', () => {
-    expect(dpeClassesUpTo('A')).toEqual(['A'])
-    expect(dpeClassesUpTo('D')).toEqual(['A', 'B', 'C', 'D'])
   })
 })
 

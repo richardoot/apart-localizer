@@ -38,25 +38,24 @@ import type {
 } from '@apart/contracts'
 import {
   checkReference,
-  criteriaFilterMatch,
+  countFits,
+  fitForCriteria,
   isStale,
+  matchesFitFilter,
   mergeAssumptions,
+  priceTrigger,
 } from '@apart/domain'
+import type { CriteriaFitTrigger } from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
 import { GeoService } from '../geo/geo.service'
-import type {
-  CriteriaGeoDraft,
-  CriteriaGeoMatch,
-  ListingAreaRef,
-} from '../geo/geo.service'
+import type { ListingAreaRef } from '../geo/geo.service'
 import { GeocodingService } from '../opendata/geocoding.service'
 import { Prisma } from '../generated/prisma'
 import type { Member } from '../generated/prisma'
 import {
   CriteriaMatchService,
-  criteriaCandidateOf,
   criteriaFiltersOf,
 } from './criteria-match.service'
 import { DuplicatesService } from './duplicates.service'
@@ -69,6 +68,7 @@ import {
   listingInclude,
   toCriteriaMatchDtos,
   toLastCheck,
+  toListingCriteriaFit,
   toListingDto,
   toOfferDto,
   toOpinionDto,
@@ -99,28 +99,6 @@ export interface WriteOptions {
 export interface CreateOptions extends WriteOptions {
   /** Le membre a vu les doublons probables et crée quand même (journalisé). */
   ignoreDuplicates?: boolean
-}
-
-/** Un critère appliqué à la liste : ses filtres, et sa partie géographique si elle contraint. */
-interface CriteriaScope {
-  filters: CriteriaFilters
-  /** Annonces qui passent le périmètre et la distance au tram ; null = pas de contrainte géographique. */
-  geo: CriteriaGeoMatch[] | null
-}
-
-/** Un critère à évaluer : enregistré, ou brouillon (aperçu avant enregistrement). */
-export type CriteriaSource =
-  | { criteriaId: string }
-  | { draft: CriteriaGeoDraft & { filters: CriteriaFilters } }
-
-/** Restreint `where.id` à des identifiants, en gardant une restriction déjà posée. */
-function restrictIds(where: Prisma.ListingWhereInput, ids: string[]): void {
-  const previous = where.id
-  const allowed =
-    previous && typeof previous === 'object' && 'in' in previous && previous.in
-      ? ids.filter(id => (previous.in as string[]).includes(id))
-      : ids
-  where.id = { in: allowed }
 }
 
 /** Les champs dont un changement relance le plafond, le marché et l'arrêt le plus proche. */
@@ -155,9 +133,11 @@ export class ListingsService {
 
   /**
    * Liste filtrée. Les filtres SQL (statut, commune, DPE, prix, surface,
-   * pièces, texte, rayon PostGIS, critère) réduisent les lignes ; le verdict,
-   * le tri et la pagination s'appliquent ensuite sur les annonces évaluées,
-   * puisque le verdict dépend des hypothèses.
+   * pièces, texte, rayon PostGIS) réduisent les lignes ; le verdict,
+   * l'adéquation aux critères (lot 14 : enregistrée, l'onglet principal par
+   * défaut), le tri et la pagination s'appliquent ensuite sur les annonces
+   * évaluées, puisque le verdict dépend des hypothèses. Les compteurs par
+   * niveau (onglets) suivent tous les filtres sauf l'adéquation.
    */
   async list(member: Member, filters: ListingFilters): Promise<ListingList> {
     const where: Prisma.ListingWhereInput = {
@@ -228,36 +208,46 @@ export class ListingsService {
       for (const row of nearby) distances.set(row.id, row.distance_meters)
       where.id = { in: nearby.map(r => r.id) }
     }
-    let scope: CriteriaScope | null = null
     if (filters.criteriaId) {
-      scope = await this.criteriaScope(member.workspaceId, filters.criteriaId)
-      if (filters.status === undefined && scope.filters.statuses.length) {
-        where.status = { in: scope.filters.statuses }
+      // Le critère choisi : ses statuts quand la liste n'en fixe pas ;
+      // l'adéquation lue est alors la sienne.
+      const statuses = await this.criteriaStatuses(
+        member.workspaceId,
+        filters.criteriaId
+      )
+      if (filters.status === undefined && statuses.length) {
+        where.status = { in: statuses }
       }
-      if (scope.geo)
-        restrictIds(
-          where,
-          scope.geo.map(g => g.id)
-        )
     }
 
-    const rows = await this.prisma.listing.findMany({
-      where,
-      include: listingInclude,
-      orderBy: { createdAt: 'desc' },
-    })
+    const [rows, active] = await Promise.all([
+      this.prisma.listing.findMany({
+        where,
+        include: listingInclude,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.searchCriteria.findMany({
+        where: { workspaceId: member.workspaceId, active: true },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, name: true },
+      }),
+    ])
     const base = await this.assumptions.currentValues(member.workspaceId)
-    let items = rows.map(row =>
-      this.evaluateRow(row, member, base, distances.get(row.id))
-    )
-    if (scope) {
-      const criteriaFilters = scope.filters
-      items = items.filter(
-        item =>
-          criteriaFilterMatch(criteriaCandidateOf(item), criteriaFilters)
-            .matches
-      )
-    }
+    const criteriaId = filters.criteriaId
+    let items = rows.map(row => {
+      const item = this.evaluateRow(row, member, base, distances.get(row.id))
+      return criteriaId
+        ? {
+            ...item,
+            criteriaFit: fitForCriteria(
+              item.criteriaFit,
+              criteriaId,
+              row.status,
+              row.visits.length
+            ),
+          }
+        : item
+    })
     if (filters.verdict?.length) {
       items = items.filter(item =>
         filters.verdict?.includes(item.evaluation.metrics.verdict)
@@ -269,6 +259,13 @@ export class ListingsService {
       const days = filters.staleDays
       items = items.filter(item => isStale(item.listing, now, days))
     }
+    // Lot 14 : sans critère actif, rien n'est filtré (tout est « dans »).
+    const { counts, kept } = countFits(items.map(item => item.criteriaFit))
+    if (active.length > 0) {
+      items = items.filter(item =>
+        matchesFitFilter(item.criteriaFit, filters.fit)
+      )
+    }
     items.sort(comparator(filters))
     const total = items.length
     const start = (filters.page - 1) * filters.limit
@@ -278,6 +275,12 @@ export class ListingsService {
       page: filters.page,
       limit: filters.limit,
       pageCount: Math.ceil(total / filters.limit),
+      fit: {
+        activeCriteria: active,
+        counts,
+        kept,
+        criteriaId: criteriaId ?? null,
+      },
     }
   }
 
@@ -417,7 +420,7 @@ export class ListingsService {
     }
     // Données ouvertes (arrêt, plafond, marché, DPE vérifié), puis alertes.
     await this.enrichment.enrich(member, id, { dpe: true, channel })
-    const item = await this.afterWrite(member, id, channel)
+    const item = await this.afterWrite(member, id, channel, 'created')
     return {
       ...item,
       duplicates,
@@ -594,7 +597,13 @@ export class ListingsService {
         channel,
       })
     }
-    return this.afterWrite(member, id, channel)
+    const trigger: CriteriaFitTrigger =
+      patch.price !== undefined && patch.price !== before.price
+        ? priceTrigger(before.price, patch.price)
+        : locationChanged
+          ? 'location'
+          : 'updated'
+    return this.afterWrite(member, id, channel, trigger)
   }
 
   async setStatus(
@@ -634,7 +643,7 @@ export class ListingsService {
         tx
       )
     })
-    return this.afterWrite(member, id, channel)
+    return this.afterWrite(member, id, channel, 'status')
   }
 
   /**
@@ -708,7 +717,12 @@ export class ListingsService {
         tx
       )
     })
-    return this.afterWrite(member, id, channel)
+    return this.afterWrite(
+      member,
+      id,
+      channel,
+      priceTrigger(currentPrice, input.newPrice)
+    )
   }
 
   /**
@@ -801,110 +815,46 @@ export class ListingsService {
       criteriaMatches: toCriteriaMatchDtos(row),
       lastCheck: toLastCheck(row),
       republication: toRepublication(row),
+      criteriaFit: toListingCriteriaFit(row),
     })
   }
 
-  /** Les filtres d'un critère enregistré et sa partie géographique (PostGIS). */
-  private async criteriaScope(
+  /** Les statuts d'un critère de l'espace (404 s'il n'en est pas). */
+  private async criteriaStatuses(
     workspaceId: string,
     criteriaId: string
-  ): Promise<CriteriaScope> {
+  ): Promise<CriteriaFilters['statuses']> {
     const criteria = await this.prisma.searchCriteria.findFirst({
       where: { id: criteriaId, workspaceId },
+      select: { filters: true },
     })
     if (!criteria) {
       throw new NotFoundException('Critère de recherche introuvable')
     }
-    const filters = criteriaFiltersOf(criteria.filters)
-    const geo =
-      criteria.perimeterType !== null || filters.maxTramDistanceMeters !== null
-        ? await this.geo.listingsInCriteria(workspaceId, criteriaId)
-        : null
-    return { filters, geo }
+    return criteriaFiltersOf(criteria.filters).statuses
   }
 
   /**
-   * Toutes les annonces de l'espace qui satisfont un critère (enregistré ou
-   * brouillon), évaluées, avec le drapeau « localisation imprécise » : la
-   * même règle que `list` avec `criteriaId`, pour les compteurs, l'aperçu et
-   * la table des entrées.
-   */
-  async listingsForCriteria(
-    member: Member,
-    source: CriteriaSource
-  ): Promise<{ items: EvaluatedListing[]; approximate: Set<string> }> {
-    let filters: CriteriaFilters
-    let geo: CriteriaGeoMatch[] | null
-    if ('criteriaId' in source) {
-      const scope = await this.criteriaScope(
-        member.workspaceId,
-        source.criteriaId
-      )
-      filters = scope.filters
-      geo = scope.geo
-    } else {
-      filters = source.draft.filters
-      geo =
-        source.draft.perimeterType !== null ||
-        filters.maxTramDistanceMeters !== null
-          ? await this.geo.listingsInCriteriaDraft(
-              member.workspaceId,
-              source.draft
-            )
-          : null
-    }
-    const where: Prisma.ListingWhereInput = {
-      workspaceId: member.workspaceId,
-      status: {
-        in: filters.statuses.length
-          ? filters.statuses
-          : [...ACTIVE_LISTING_STATUSES],
-      },
-    }
-    if (geo)
-      restrictIds(
-        where,
-        geo.map(g => g.id)
-      )
-    const rows = await this.prisma.listing.findMany({
-      where,
-      include: listingInclude,
-      orderBy: { createdAt: 'desc' },
-    })
-    const base = await this.assumptions.currentValues(member.workspaceId)
-    const items = rows
-      .map(row => this.evaluateRow(row, member, base))
-      .filter(
-        item => criteriaFilterMatch(criteriaCandidateOf(item), filters).matches
-      )
-    const approximate = new Set(
-      (geo ?? []).filter(g => g.approximate).map(g => g.id)
-    )
-    return { items, approximate }
-  }
-
-  /**
-   * L'annonce vue après une écriture, avec les critères dans lesquels elle
-   * entre ou dont elle sort (table des entrées resynchronisée, alertes
-   * journalisées). Public pour les écritures faites hors de ce service (DPE
-   * retenu ou appliqué par l'enrichissement).
+   * L'annonce vue après une écriture, avec son adéquation aux critères
+   * recalculée (lot 14) : les critères dans lesquels elle entre, dont elle
+   * sort ou dont le niveau change (enregistrés, journalisés, une entrée
+   * alerte). Public pour les écritures faites hors de ce service (DPE retenu
+   * ou appliqué par l'enrichissement).
    */
   async afterWrite(
     member: Member,
     id: string,
-    channel: ActivityChannel
+    channel: ActivityChannel,
+    trigger: CriteriaFitTrigger = 'updated'
   ): Promise<EvaluatedListing> {
-    const item = await this.get(member, id)
     const criteriaChanges = await this.criteriaMatches.refreshForListing(
       member,
-      item,
-      channel
+      id,
+      channel,
+      trigger
     )
-    return {
-      ...item,
-      criteriaMatches: criteriaChanges.current,
-      criteriaChanges,
-    }
+    const item = await this.get(member, id)
+    return { ...item, criteriaChanges }
   }
 
   /**
@@ -975,7 +925,7 @@ export class ListingsService {
       )
     }
     await this.enrichment.enrich(member, id, { dpe: true, channel })
-    return this.afterWrite(member, id, channel)
+    return this.afterWrite(member, id, channel, 'location')
   }
 }
 

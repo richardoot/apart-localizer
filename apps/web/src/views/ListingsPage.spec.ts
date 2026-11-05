@@ -9,10 +9,17 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
+/** Lot 14 : l'adéquation renvoyée par la liste, réglée par test. */
+const listState = vi.hoisted(() => ({ fit: null as unknown }))
+
 vi.mock('@/composables/useListings', () => ({
   useListingAreas: () => ({ data: ref(null) }),
   useListingList: () => ({
-    data: ref({ items: [], total: 0 }),
+    data: ref({
+      items: [],
+      total: 0,
+      ...(listState.fit ? { fit: listState.fit } : {}),
+    }),
     isPending: ref(false),
     isFetching: ref(false),
     error: ref(null),
@@ -59,6 +66,7 @@ function makeRouter() {
         ],
       },
       { path: '/comparer', name: 'compare', component: Empty },
+      { path: '/criteres', name: 'criteria', component: Empty },
     ],
   })
 }
@@ -89,6 +97,34 @@ async function mountAt(path: string) {
 describe('ListingsPage : onglet de la fiche dans l’URL', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    listState.fit = null
+  })
+
+  it('lot 14 : critères comparés, onglets comptés ; « Hors critères » dans l’URL', async () => {
+    listState.fit = {
+      activeCriteria: [
+        { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', name: 'Caudéran fictif' },
+        { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', name: 'Mérignac fictif' },
+      ],
+      counts: { in: 2, to_confirm: 2, margin: 2, out: 4 },
+      kept: 1,
+      criteriaId: null,
+    }
+    const { router, wrapper } = await mountAt('/annonces')
+    expect(wrapper.get('[data-testid="fit-criteria"]').text()).toContain(
+      'aux 2 critères actifs'
+    )
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs.map(t => t.text())).toEqual([
+      'Dans les critères · 7',
+      'Hors critères · 4',
+    ])
+    await tabs[1]?.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.fit).toBe('out')
+    expect(wrapper.text()).toContain(
+      'Les annonces écartées ou vendues restent gouvernées par le filtre de statut'
+    )
   })
 
   it('ouvre la fiche sur l’onglet de l’URL, filtres compris, sans effacer l’onglet', async () => {

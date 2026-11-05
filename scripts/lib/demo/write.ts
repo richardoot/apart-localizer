@@ -1,15 +1,21 @@
-import { CriteriaFiltersSchema } from '@apart/contracts'
-import type { Point } from '@apart/contracts'
+import { EMPTY_FIT_COUNTS } from '@apart/contracts'
+import type { CriteriaFitCounts, Point } from '@apart/contracts'
 import {
   activityActorName,
-  criteriaFilterMatch,
+  bestFit,
   notificationsForActivity,
 } from '@apart/domain'
 import { Prisma } from '../../../apps/api/src/generated/prisma/index.js'
 import type { PrismaClient } from '../../../apps/api/src/generated/prisma/index.js'
+import { ActivityService } from '../../../apps/api/src/activity/activity.service.js'
 import { GeoService } from '../../../apps/api/src/geo/geo.service.js'
+import {
+  CriteriaMatchService,
+  fitRuleOf,
+} from '../../../apps/api/src/listings/criteria-match.service.js'
+import { NotificationQueueService } from '../../../apps/api/src/notifications/notification-queue.service.js'
 import type { PrismaService } from '../../../apps/api/src/prisma/prisma.service.js'
-import { currentAssumptions, demoMetrics } from './dataset.js'
+import { currentAssumptions } from './dataset.js'
 import type {
   DemoActivity,
   DemoDataset,
@@ -27,8 +33,9 @@ import { demoId } from './ids.js'
  * 3. le recrée à l'identique : membres reliés à leurs comptes GoTrue,
  *    hypothèses, annonces et tout ce qui s'y rattache, points et périmètre
  *    par le module geo de l'API (le SQL géographique n'est écrit que là),
- *    entrées dans les critères (prédicat PostGIS puis filtres de `domain`,
- *    comme l'API), journal et notifications (règles de `domain`) ;
+ *    adéquation aux critères (lot 14 : mesures PostGIS et décision de
+ *    `domain` par le service de l'API, dans la transaction), journal et
+ *    notifications (règles de `domain`) ;
  * 4. vérifie que les autres espaces n'ont pas bougé, sinon annule tout.
  */
 
@@ -43,7 +50,10 @@ export interface DemoSeedReport {
   visits: number
   opinions: number
   criteria: number
+  /** Entrées : lignes d'adéquation qui ne sont pas « hors critères ». */
   criteriaMatches: number
+  /** Lot 14 : lignes d'adéquation par niveau (critère × annonce). */
+  criteriaFit: CriteriaFitCounts
   activity: number
   notifications: number
   /** Les autres espaces, avant et après (identiques, sinon la transaction est annulée). */
@@ -177,6 +187,7 @@ export async function writeDemoDataset(
             name: c.input.name,
             active: c.input.active,
             filters: json(c.input.filters),
+            tolerance: json(c.input.tolerance),
             perimeterType: perimeter?.type ?? null,
             centerLatitude:
               perimeter?.type === 'point_radius' ? perimeter.latitude : null,
@@ -195,63 +206,104 @@ export async function writeDemoDataset(
         }
       }
 
-      // Entrées dans les critères : la partie géographique par PostGIS, les
-      // filtres par `domain`, comme CriteriaMatchService.
-      const assumptions = currentAssumptions(dataset)
+      // Adéquation aux critères (lot 14) : le service de l'API compare les
+      // annonces aux critères dans la transaction (mesures PostGIS, décision
+      // de `domain`) ; les lignes et le journal sont datés comme le jeu.
       const listingsById = new Map(dataset.listings.map(l => [l.id, l]))
+      const criteriaRows = await tx.searchCriteria.findMany({
+        where: { workspaceId, active: true },
+        orderBy: { createdAt: 'asc' },
+      })
+      const rules = criteriaRows.map(fitRuleOf)
+      const fitService = new CriteriaMatchService(
+        tx as unknown as PrismaService,
+        geo,
+        new ActivityService(
+          tx as unknown as PrismaService,
+          new NotificationQueueService()
+        )
+      )
+      const computed = await fitService.compute(workspaceId, {
+        rules,
+        base: currentAssumptions(dataset),
+        client: tx,
+        at: now,
+      })
       const matchActivity: DemoActivity[] = []
+      const criteriaFit = { ...EMPTY_FIT_COUNTS }
       let criteriaMatches = 0
-      for (const c of dataset.criteria) {
-        const filters = CriteriaFiltersSchema.parse(c.input.filters)
-        const hits = await geo.listingsInCriteria(workspaceId, c.id)
-        for (const hit of hits) {
-          const listing = listingsById.get(hit.id)
-          if (!listing) continue
-          const verdict = demoMetrics(listing, assumptions, now).verdict
-          const candidate = {
-            price: listing.input.price,
-            surface: listing.input.surface,
-            rooms: listing.input.rooms,
-            dpeClass: listing.input.dpeClass,
-            status: listing.input.status,
-            commune: listing.input.location.commune,
-            verdict,
-          }
-          if (!criteriaFilterMatch(candidate, filters).matches) continue
-          const matchedAt = new Date(
+      for (const { row, fits } of computed) {
+        const listing = listingsById.get(row.id)
+        if (!listing) continue
+        let latest = new Date(listing.createdAt)
+        for (const c of dataset.criteria) {
+          const fit = fits.get(c.id)
+          if (!fit) continue
+          const at = new Date(
             Math.max(Date.parse(listing.createdAt), Date.parse(c.createdAt)) +
               5 * 60_000
           )
+          if (at > latest) latest = at
           await tx.criteriaMatch.create({
             data: {
               criteriaId: c.id,
               listingId: listing.id,
-              matchedAt,
-              approximate: hit.approximate,
+              matchedAt: at,
+              levelChangedAt: at,
+              approximate: fit.locationPending,
+              level: fit.level,
+              reasons: json(fit.reasons),
+              checks: json(fit.checks),
             },
           })
+          criteriaFit[fit.level]++
+          if (fit.level === 'out') continue
           criteriaMatches++
           if (listing.createdAt > c.createdAt) {
             matchActivity.push({
               id: demoId(`activity:match:${c.key}:${listing.key}`),
-              at: matchedAt.toISOString(),
+              at: at.toISOString(),
               actor: listing.createdBy,
               channel: listing.channel,
               action: 'criteria.matched',
               listingKey: listing.key,
-              before: null,
+              before: {
+                criteria: [{ id: c.id, name: c.input.name, level: null }],
+              },
               after: {
+                cause: 'listing',
+                trigger: 'created',
+                criteriaName: null,
                 criteria: [
                   {
                     id: c.id,
                     name: c.input.name,
-                    approximate: hit.approximate,
+                    before: null,
+                    level: fit.level,
+                    reasons: fit.reasons,
+                    approximate: fit.locationPending,
                   },
                 ],
               },
             })
           }
         }
+        const best = bestFit(
+          rules.map(r => fits.get(r.id)).filter(f => f !== undefined)
+        )
+        await tx.listing.update({
+          where: { id: listing.id },
+          data: {
+            criteriaFitLevel: best?.level ?? 'in',
+            criteriaFitChangedAt: latest,
+            criteriaFitOrigin: json({
+              cause: 'listing',
+              trigger: 'created',
+              criteriaName: null,
+            }),
+            updatedAt: row.updatedAt,
+          },
+        })
       }
 
       await tx.scenario.createMany({
@@ -366,6 +418,7 @@ export async function writeDemoDataset(
         ...counts,
         criteria: dataset.criteria.length,
         criteriaMatches,
+        criteriaFit,
         activity: activity.length,
         notifications: notifications.length,
         otherWorkspaces: after,

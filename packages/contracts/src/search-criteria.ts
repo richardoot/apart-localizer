@@ -6,6 +6,13 @@ import {
   PerimeterTypeSchema,
   VerdictSchema,
 } from './enums.js'
+import {
+  CriteriaFitCountsSchema,
+  CriteriaFitLevelSchema,
+  CriteriaFitRefreshSummarySchema,
+  CriteriaToleranceSchema,
+  DEFAULT_CRITERIA_TOLERANCE,
+} from './criteria-fit.js'
 import { PointRadiusSchema, PointSchema, PolygonSchema } from './geojson.js'
 import { withoutDefaults } from './zod-utils.js'
 
@@ -13,9 +20,10 @@ import { withoutDefaults } from './zod-utils.js'
  * Critères de recherche enregistrés et partagés dans l'espace (besoins G3 à
  * G6) : des filtres métier et un périmètre (point et rayon, polygone dessiné,
  * isochrone figée en polygone). Le périmètre et la distance au tram sont
- * évalués en base (PostGIS, module geo) ; les autres filtres par
- * `criteriaFilterMatch` du paquet domain, appliqué à l'identique par la
- * liste, la carte, le MCP et les alertes.
+ * mesurés en base (PostGIS, module geo) ; l'adéquation (lot 14 : dans les
+ * critères, à confirmer, à la marge, hors critères) est décidée par
+ * `criteriaFit` du paquet domain, avec la marge de tolérance du critère, à
+ * l'identique pour la liste, la carte, le MCP et les alertes.
  */
 
 /** Distances maximales à un arrêt de tram acceptées par un critère, en mètres. */
@@ -45,7 +53,9 @@ export const CriteriaFiltersSchema = z.object({
     .min(0)
     .nullable()
     .default(null)
-    .describe('Surface minimale en m² (une surface inconnue ne passe pas)'),
+    .describe(
+      'Surface minimale en m² (une surface inconnue rend « à confirmer », lot 14)'
+    ),
   roomsMin: z
     .number()
     .int()
@@ -53,12 +63,12 @@ export const CriteriaFiltersSchema = z.object({
     .nullable()
     .default(null)
     .describe(
-      'Nombre de pièces minimal (un nombre de pièces inconnu ne passe pas)'
+      'Nombre de pièces minimal (un nombre de pièces inconnu rend « à confirmer », lot 14)'
     ),
   dpeMax: DpeClassSchema.nullable()
     .default(null)
     .describe(
-      'Classe DPE la plus basse acceptée (D = A à D) ; un DPE inconnu est retenu, à vérifier'
+      'Classe DPE la plus basse acceptée (D = A à D) ; un DPE inconnu rend « à confirmer » (lot 14)'
     ),
   verdicts: z
     .array(VerdictSchema)
@@ -68,7 +78,7 @@ export const CriteriaFiltersSchema = z.object({
     .array(ListingStatusSchema)
     .default([])
     .describe(
-      'Statuts retenus ; vide = statuts actifs (à étudier, à visiter, visité, offre faite, offre acceptée)'
+      'Statuts comptés et montrés par le critère ; vide = statuts actifs (à étudier, à visiter, visité, offre faite, offre acceptée). Le statut ne fait pas partie de l’adéquation (lot 14)'
     ),
   maxTramDistanceMeters: z
     .number()
@@ -204,6 +214,9 @@ export const SearchCriteriaInputSchema = z.object({
   perimeter: PerimeterInputSchema.nullable()
     .default(null)
     .describe('Périmètre ; null = pas de contrainte géographique'),
+  tolerance: CriteriaToleranceSchema.default(() => ({
+    ...DEFAULT_CRITERIA_TOLERANCE,
+  })),
 })
 export type SearchCriteriaInput = z.infer<typeof SearchCriteriaInputSchema>
 export type SearchCriteriaInputRaw = z.input<typeof SearchCriteriaInputSchema>
@@ -218,6 +231,13 @@ export const SearchCriteriaUpdateSchema = z
       .partial()
       .optional()
       .describe('Filtres modifiés, fusionnés avec les filtres enregistrés'),
+    tolerance: z
+      .object(withoutDefaults(CriteriaToleranceSchema.shape))
+      .partial()
+      .optional()
+      .describe(
+        'Marges modifiées, fusionnées avec celles enregistrées (0 = strict)'
+      ),
     expectedUpdatedAt: z
       .string()
       .datetime()
@@ -235,6 +255,7 @@ export const SearchCriteriaSchema = z.object({
   name: z.string(),
   active: z.boolean(),
   filters: CriteriaFiltersSchema,
+  tolerance: CriteriaToleranceSchema,
   perimeterType: PerimeterTypeSchema.nullable(),
   perimeter: PerimeterSchema.nullable(),
   createdAt: z.string().datetime(),
@@ -248,7 +269,9 @@ export const SearchCriteriaSummarySchema = SearchCriteriaSchema.extend({
     .number()
     .int()
     .min(0)
-    .describe("Annonces de l'espace qui satisfont le critère"),
+    .describe(
+      "Annonces de l'espace gardées par le critère : dans les critères, à confirmer ou à la marge (statuts du critère, actifs par défaut)"
+    ),
   newCount: z
     .number()
     .int()
@@ -259,7 +282,15 @@ export const SearchCriteriaSummarySchema = SearchCriteriaSchema.extend({
     .int()
     .min(0)
     .describe(
-      'Parmi elles, celles dont la localisation est imprécise (quartier ou commune) : incluses sous réserve'
+      'Parmi elles, celles à confirmer à cause de la localisation (adresse au quartier ou à la commune)'
+    ),
+  fitCounts: CriteriaFitCountsSchema.describe(
+    'Annonces par niveau d’adéquation (dans les critères, à confirmer, à la marge, hors critères), sur les statuts du critère'
+  ),
+  fitChanges: CriteriaFitRefreshSummarySchema.nullable()
+    .default(null)
+    .describe(
+      'Après une création ou une modification : les changements d’adéquation des annonces ; null à la lecture'
     ),
 })
 export type SearchCriteriaSummary = z.infer<typeof SearchCriteriaSummarySchema>
@@ -268,6 +299,9 @@ export type SearchCriteriaSummary = z.infer<typeof SearchCriteriaSummarySchema>
 export const SearchCriteriaPreviewRequestSchema = z.object({
   filters: CriteriaFiltersSchema.default(() => CriteriaFiltersSchema.parse({})),
   perimeter: PerimeterInputSchema.nullable().default(null),
+  tolerance: CriteriaToleranceSchema.default(() => ({
+    ...DEFAULT_CRITERIA_TOLERANCE,
+  })),
 })
 export type SearchCriteriaPreviewRequest = z.infer<
   typeof SearchCriteriaPreviewRequestSchema
@@ -276,13 +310,40 @@ export type SearchCriteriaPreviewRequestInput = z.input<
   typeof SearchCriteriaPreviewRequestSchema
 >
 
+/** Une annonce de l'aperçu qui n'est pas « dans les critères » : son niveau et ses raisons. */
+export const SearchCriteriaPreviewExampleSchema = z.object({
+  listingId: z.string().uuid(),
+  title: z.string(),
+  level: CriteriaFitLevelSchema,
+  reasons: z.array(z.string()),
+})
+export type SearchCriteriaPreviewExample = z.infer<
+  typeof SearchCriteriaPreviewExampleSchema
+>
+
 export const SearchCriteriaPreviewSchema = z.object({
   perimeter: PerimeterSchema.nullable().describe(
     'Le périmètre résolu (isochrone calculée, polygone validé)'
   ),
-  listingCount: z.number().int().min(0),
-  approximateCount: z.number().int().min(0),
-  listingIds: z.array(z.string().uuid()),
+  listingCount: z
+    .number()
+    .int()
+    .min(0)
+    .describe('Annonces gardées : dans les critères, à confirmer, à la marge'),
+  approximateCount: z
+    .number()
+    .int()
+    .min(0)
+    .describe('Parmi elles, à confirmer à cause de la localisation'),
+  listingIds: z.array(z.string().uuid()).describe('Les annonces gardées'),
+  fitCounts: CriteriaFitCountsSchema.describe(
+    'Annonces par niveau d’adéquation, calculées avant l’enregistrement'
+  ),
+  examples: z
+    .array(SearchCriteriaPreviewExampleSchema)
+    .describe(
+      'Les annonces à confirmer, à la marge ou hors critères, avec leurs raisons (20 au plus)'
+    ),
 })
 export type SearchCriteriaPreview = z.infer<typeof SearchCriteriaPreviewSchema>
 
@@ -297,21 +358,59 @@ export const CriteriaMatchSchema = z.object({
   approximate: z
     .boolean()
     .describe(
-      'Localisation imprécise (quartier ou commune) : incluse sous réserve'
+      'À confirmer à cause de la localisation (adresse au quartier ou à la commune)'
     ),
+  level: CriteriaFitLevelSchema.default('in').describe(
+    'Niveau d’adéquation pour ce critère (dans, à confirmer, à la marge)'
+  ),
+  reasons: z
+    .array(z.string())
+    .default([])
+    .describe('Raisons chiffrées, vides si « dans les critères »'),
 })
 export type CriteriaMatch = z.infer<typeof CriteriaMatchSchema>
 
-/** Ce qu'une écriture d'annonce change aux critères : entrées, sorties, état courant. */
+/**
+ * Ce qu'une écriture d'annonce change aux critères : entrées (de « hors
+ * critères » ou jamais comparée à un niveau gardé), sorties (vers « hors
+ * critères »), autres changements de niveau, état courant.
+ */
 export const CriteriaMatchChangesSchema = z.object({
   entered: z
     .array(CriteriaMatchSchema)
-    .describe("Critères dans lesquels l'annonce vient d'entrer"),
+    .describe(
+      "Critères dans lesquels l'annonce vient d'entrer (dans, à confirmer ou à la marge)"
+    ),
   left: z
-    .array(z.object({ criteriaId: z.string().uuid(), name: z.string() }))
-    .describe("Critères dont l'annonce vient de sortir"),
+    .array(
+      z.object({
+        criteriaId: z.string().uuid(),
+        name: z.string(),
+        reasons: z
+          .array(z.string())
+          .default([])
+          .describe('Pourquoi elle passe hors critères'),
+      })
+    )
+    .describe("Critères dont l'annonce vient de sortir (hors critères)"),
+  changed: z
+    .array(
+      z.object({
+        criteriaId: z.string().uuid(),
+        name: z.string(),
+        before: CriteriaFitLevelSchema,
+        after: CriteriaFitLevelSchema,
+        reasons: z.array(z.string()),
+      })
+    )
+    .default([])
+    .describe(
+      'Critères dont le niveau change sans entrée ni sortie (dans, à confirmer, à la marge)'
+    ),
   current: z
     .array(CriteriaMatchSchema)
-    .describe("Tous les critères actifs que l'annonce satisfait"),
+    .describe(
+      "Tous les critères actifs qui gardent l'annonce (dans, à confirmer, à la marge)"
+    ),
 })
 export type CriteriaMatchChanges = z.infer<typeof CriteriaMatchChangesSchema>

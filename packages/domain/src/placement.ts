@@ -1101,8 +1101,3 @@ export function approximationReason(
       return `Distance mesurée depuis le ${approximation.origin}, repère approché : à lire « ≈ ».`
   }
 }
-
-/** Le titre d'un critère dans lequel une annonce n'entre que sous réserve. */
-export function criteriaApproximateNote(name: string): string {
-  return `Dans le critère « ${name} », sous réserve : repère au quartier ou à la commune, dont le contour n’est pas entièrement dans le périmètre (ou distance au tram depuis un repère approché).`
-}

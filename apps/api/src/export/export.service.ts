@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import {
+  CriteriaFitLevelSchema,
   EXPORT_FORMAT_ID,
   EXPORT_FORMAT_VERSION,
   ExportDocumentSchema,
@@ -58,6 +59,8 @@ export class ExportService {
             sort: listQuery.sort,
             order: listQuery.order,
             status: [...ListingStatusSchema.options],
+            // Lot 14 : toute l'adéquation, hors critères compris.
+            fit: [...CriteriaFitLevelSchema.options],
           })
         : listingFiltersFromQuery(listQuery)
     const items: EvaluatedListing[] = []
@@ -204,6 +207,7 @@ export class ExportService {
         ),
         rentComparables: comparablesOf.get(item.listing.id) ?? [],
         checks: checksOf.get(item.listing.id) ?? [],
+        criteriaFit: item.criteriaFit,
       })),
       searchCriteria: criteria.map(toSearchCriteriaDto),
       scenarios: scenarios.map(toScenarioDto),
