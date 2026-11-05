@@ -230,7 +230,14 @@ http://localhost:3000/mcp` ([développement local](docs/developpement-local.md#t
   (faites ou planifiées, participants, compte rendu, points positifs et négatifs, note, tâche
   « Préparer la visite », statut « Visité » proposé sans être forcé, photos réduites sur
   l'appareil, envoyées dans un stockage privé, vignettes par URL signées, supprimables par leur
-  auteur) et **journal** (qui, quoi, quand, par quel canal, champs avant et après). Le
+  auteur) et **journal** (qui, quoi, quand, par quel canal, champs avant et après) ; chaque
+  tâche demandée à l'annonceur dit « Demandée le 5 nov. à l'agence » ou « Réponse du 7 nov. ».
+  **Échanges** (lot 17, avec le nombre de messages à valider) : messages préparés par Claude pour
+  l'agence ou le vendeur, au texte modifiable, validés par lot (« Valider l'envoi ») avant que
+  Claude ne les envoie depuis votre Gmail ou la messagerie du portail (l'application n'envoie
+  rien), questions à poser, contact de l'annonceur (modifiable, effaçable), chronologie des
+  demandes avec la réponse dépliable, les valeurs appliquées ou « proposées » (bouton
+  « Appliquer ») et la relance due. La Synthèse montre le bloc « Messages à valider ». Le
   changement de statut avec garde-fou reste en tête de fiche. L'ouverture marque l'annonce
   « vue » pour le membre ; le badge « nouvelle » s'éteint pour lui seul.
 - **Comparer** (`/comparer?ids=…`) : depuis le tableau, cocher deux à six annonces puis

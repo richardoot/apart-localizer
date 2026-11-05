@@ -31,6 +31,13 @@ describe('filtre du journal par sorte', () => {
         { action: { startsWith: 'rent_comparable.' } },
       ],
     })
+    // Lot 17 : les échanges avec l'annonceur (demandes, contact).
+    expect(kindWhere('agency')).toMatchObject({
+      OR: [
+        { action: { startsWith: 'agency_request.' } },
+        { action: { startsWith: 'contact.' } },
+      ],
+    })
     const other = kindWhere('other') as { NOT: unknown[] }
     expect(other.NOT).toContainEqual({ action: { startsWith: 'listing.' } })
     expect(other.NOT).toContainEqual({

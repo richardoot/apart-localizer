@@ -9,14 +9,16 @@ import {
 } from './listing-tabs'
 
 describe('onglets de la fiche dans l’URL (lot 9)', () => {
-  it('cinq onglets, la synthèse par défaut', () => {
+  it('six onglets (Échanges au lot 17), la synthèse par défaut', () => {
     expect(LISTING_TABS.map(t => t.id)).toEqual([
       'synthese',
       'negocier',
       'financer',
       'quartier',
       'suivi',
+      'echanges',
     ])
+    expect(isListingTab('echanges')).toBe(true)
     expect(DEFAULT_LISTING_TAB).toBe('synthese')
     expect(isListingTab('negocier')).toBe(true)
     expect(isListingTab('fiche')).toBe(false)

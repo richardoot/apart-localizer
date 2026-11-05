@@ -36,6 +36,13 @@ import {
   EvaluateRequestSchema,
   HypotheticalListingSchema,
 } from './views.js'
+import {
+  AgencyAnswerInputSchema,
+  AgencyChannelSchema,
+  AgencyRequestDraftInputSchema,
+  AgencyRequestSentSchema,
+  ListingContactPatchSchema,
+} from './agency-requests.js'
 
 /**
  * Entrées des outils MCP. Chaque schéma réutilise ceux de l'API : un outil
@@ -547,4 +554,125 @@ export const McpExploreListingsPromptArgsSchema = z.object({
 })
 export type McpExploreListingsPromptArgs = z.infer<
   typeof McpExploreListingsPromptArgsSchema
+>
+
+// ---------------------------------------------------------------------------
+// Lot 17 : questions aux agences
+// ---------------------------------------------------------------------------
+
+const requestId = z
+  .string()
+  .uuid()
+  .describe(
+    "Identifiant de la demande à l'annonceur (uuid, voir list_open_questions ou prepare_agency_requests)"
+  )
+
+/**
+ * `list_open_questions` (lecture) : par annonce, les tâches ouvertes qu'on
+ * peut poser à l'annonceur (avec leur champ), le contact connu, les demandes
+ * en cours et les relances dues.
+ */
+export const McpListOpenQuestionsInputSchema = z.object({
+  listingIds: z
+    .array(listingId)
+    .min(1)
+    .max(50)
+    .optional()
+    .describe(
+      'Annonces à regarder ; absent = les annonces actives qui ont une question ouverte ou une demande en cours'
+    ),
+})
+export type McpListOpenQuestionsInput = z.infer<
+  typeof McpListOpenQuestionsInputSchema
+>
+
+/**
+ * `prepare_agency_requests` (écriture) : des brouillons groupés par annonce
+ * et destinataire, à montrer au membre ; rien n'est envoyé.
+ */
+export const McpPrepareAgencyRequestsInputSchema = z.object({
+  requests: z
+    .array(
+      AgencyRequestDraftInputSchema.extend({
+        listingId,
+        contact: ListingContactPatchSchema.optional().describe(
+          "Contact de l'annonceur lu sur l'annonce (agence, interlocuteur, e-mail, téléphone, lien de la messagerie) : complète la fiche, n'efface rien"
+        ),
+        replaces: requestId
+          .optional()
+          .describe(
+            'Le message à valider (ou validé, pas encore envoyé) que celui-ci remplace, quand le membre a demandé une correction : l’ancien est annulé'
+          ),
+      })
+    )
+    .min(1)
+    .max(20)
+    .describe('Un brouillon par annonce (et destinataire)'),
+})
+export type McpPrepareAgencyRequestsInput = z.infer<
+  typeof McpPrepareAgencyRequestsInputSchema
+>
+
+/**
+ * `record_request_sent` (écriture) : enregistre l'envoi, fait par Claude avec
+ * ses propres outils. Refusé si la demande n'est pas validée, sauf accord
+ * explicite du membre dans la conversation (`approvedInChat: true`).
+ */
+export const McpRecordRequestSentInputSchema = z.object({
+  requestId,
+  approvedInChat: z
+    .boolean()
+    .optional()
+    .describe(
+      "Vrai SEULEMENT si le membre a validé ce message mot pour mot dans la conversation (« oui, envoie ») ; sans validation dans l'application ni dans la conversation, l'envoi est refusé"
+    ),
+  ...AgencyRequestSentSchema.shape,
+  channel: AgencyChannelSchema.optional().describe(
+    'Canal réellement utilisé : email (Gmail), portal_message (messagerie du portail), phone, other'
+  ),
+})
+export type McpRecordRequestSentInput = z.infer<
+  typeof McpRecordRequestSentInputSchema
+>
+
+/**
+ * `record_agency_answer` (écriture) : la réponse lue dans le fil (Gmail ou
+ * messagerie du portail), les valeurs lues, les tâches répondues.
+ */
+export const McpRecordAgencyAnswerInputSchema = z.object({
+  requestId,
+  ...AgencyAnswerInputSchema.shape,
+})
+export type McpRecordAgencyAnswerInput = z.infer<
+  typeof McpRecordAgencyAnswerInputSchema
+>
+
+/** Arguments du prompt MCP « questions aux agences » (chaînes, par protocole). */
+export const McpAskAgenciesPromptArgsSchema = z.object({
+  listingIds: z
+    .string()
+    .optional()
+    .describe(
+      'Identifiants des annonces, séparés par des virgules ; absent = toutes les annonces actives qui ont des questions ouvertes'
+    ),
+  notes: z
+    .string()
+    .optional()
+    .describe(
+      'Consignes du membre (« seulement les charges », « par la messagerie Leboncoin »)'
+    ),
+})
+export type McpAskAgenciesPromptArgs = z.infer<
+  typeof McpAskAgenciesPromptArgsSchema
+>
+
+/** Arguments du prompt MCP « réponses des agences ». */
+export const McpCheckAgencyAnswersPromptArgsSchema = z.object({
+  notes: z
+    .string()
+    .optional()
+    .describe('Consignes du membre (« seulement Gmail », « depuis lundi »)'),
+})
+export type McpCheckAgencyAnswersPromptArgs = z.infer<
+  typeof McpCheckAgencyAnswersPromptArgsSchema
 >

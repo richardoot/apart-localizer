@@ -1,5 +1,17 @@
 import { listingFiltersToQuery } from '@apart/contracts'
 import type {
+  AgencyApplyProposed,
+  AgencyApplyResult,
+  AgencyRequestDraftInput,
+  AgencyRequestSent,
+  AgencyRequestUpdate,
+  AgencyRequestWriteResult,
+  AgencyRequestsWriteResult,
+  AgencySettings,
+  ListingContact,
+  ListingContactInputRaw,
+  ListingExchanges,
+  PendingAgencyRequests,
   AmenityKind,
   ActivityChannel,
   ActivityKind,
@@ -704,6 +716,65 @@ export const api = {
     remove: (listingId: string, taskId: string) =>
       apiFetch<void>(`/listings/${listingId}/tasks/${taskId}`, {
         method: 'DELETE',
+      }),
+  },
+
+  /**
+   * Lot 17 : questions aux agences. Le serveur n'envoie jamais de message :
+   * il garde le contact, les brouillons, leur validation, l'envoi fait par
+   * Claude ou par un membre, et les réponses.
+   */
+  agency: {
+    exchanges: (listingId: string) =>
+      apiFetch<ListingExchanges>(`/listings/${listingId}/agency-requests`),
+    pending: () => apiFetch<PendingAgencyRequests>('/agency-requests/pending'),
+    putContact: (listingId: string, input: ListingContactInputRaw) =>
+      apiFetch<ListingContact>(`/listings/${listingId}/contact`, {
+        method: 'PUT',
+        json: input,
+      }),
+    clearContact: (listingId: string) =>
+      apiFetch<void>(`/listings/${listingId}/contact`, { method: 'DELETE' }),
+    draft: (listingId: string, input: AgencyRequestDraftInput = {}) =>
+      apiFetch<AgencyRequestWriteResult>(
+        `/listings/${listingId}/agency-requests`,
+        { method: 'POST', json: input }
+      ),
+    update: (requestId: string, update: AgencyRequestUpdate) =>
+      apiFetch<AgencyRequestWriteResult>(`/agency-requests/${requestId}`, {
+        method: 'PATCH',
+        json: update,
+      }),
+    approve: (requestIds: string[]) =>
+      apiFetch<AgencyRequestsWriteResult>('/agency-requests/approve', {
+        method: 'POST',
+        json: { requestIds },
+      }),
+    cancel: (requestId: string) =>
+      apiFetch<AgencyRequestWriteResult>(
+        `/agency-requests/${requestId}/cancel`,
+        { method: 'POST' }
+      ),
+    sent: (requestId: string, input: AgencyRequestSent = {}) =>
+      apiFetch<AgencyRequestWriteResult>(`/agency-requests/${requestId}/sent`, {
+        method: 'POST',
+        json: input,
+      }),
+    noAnswer: (requestId: string) =>
+      apiFetch<AgencyRequestWriteResult>(
+        `/agency-requests/${requestId}/no-answer`,
+        { method: 'POST' }
+      ),
+    apply: (requestId: string, input: AgencyApplyProposed) =>
+      apiFetch<AgencyApplyResult>(`/agency-requests/${requestId}/apply`, {
+        method: 'POST',
+        json: input,
+      }),
+    settings: () => apiFetch<AgencySettings>('/agency-requests/settings'),
+    updateSettings: (signature: string | null) =>
+      apiFetch<AgencySettings>('/agency-requests/settings', {
+        method: 'PUT',
+        json: { signature },
       }),
   },
 }

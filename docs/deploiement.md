@@ -218,6 +218,21 @@ les annonces actives ajoutées il y a plus de sept jours ; le connecteur claude.
 deux outils et le prompt nouveaux à sa prochaine lecture de `tools/list` (nouvelle conversation ;
 le reconnecter s'ils n'apparaissent pas).
 
+### Questions aux agences (lot 17)
+
+Migration `20261107110000_lot17_agency_requests` : additive (tables `listing_contacts` et
+`agency_requests` ; colonnes facultatives `tasks.field`, `tasks.requested_at`, `tasks.request_id`,
+`tasks.answered_at` et `workspaces.agency_signature` ; énumérations `AgencyChannel`,
+`AgencyRequestStatus`, `AgencyApprovalVia` ; valeurs `agency` de `FieldSource` et
+`agency_answer` de `NotificationType`), avec un rattrapage : `tasks.field` des tâches dont le
+libellé est exactement celui de la checklist par défaut ou d'un champ manquant du lot 2 (charges,
+taxe foncière, PV d'AG, adresse, surface, DPE, étage, année) ; les autres gardent NULL. Appliquée
+par `prisma:deploy` (ou `build:vercel`). Ni variable, ni import, ni envoi d'e-mail : le serveur
+n'envoie aucun message. Le connecteur claude.ai découvre les quatre outils et les deux prompts
+nouveaux à sa prochaine lecture de `tools/list` (nouvelle conversation ; le reconnecter s'ils
+n'apparaissent pas) ; Gmail et Claude in Chrome sont les outils de l'utilisateur, à connecter de
+son côté.
+
 ### Adéquation aux critères (lot 14)
 
 Migration `20261106100000_lot14_criteria_fit` : purement additive (énumération
@@ -487,3 +502,8 @@ partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « C
       critères » et « Hors critères » de la liste, pastilles et raisons, une annonce au quartier
       « à confirmer » et son bloc « Correspond-elle à ce qu'on cherche ? » dans la fiche ;
       `list_listings` depuis claude.ai donne l'adéquation.
+- [ ] Lot 17 : migration `20261107110000_lot17_agency_requests` appliquée ; onglet « Échanges »
+      d'une annonce : contact saisi puis effacé, « Préparer un message », « Valider l'envoi » ;
+      dans claude.ai, prompt « Questions aux agences » sur une annonce (accord donné dans la
+      conversation, envoi par Gmail), puis « Réponses des agences » : valeurs appliquées ou
+      proposées, tâches cochées, Chloé prévenue.

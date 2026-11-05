@@ -77,6 +77,7 @@ describe('MCP lot 6', () => {
         criteria_match: 0,
         listing_check: 0,
         criteria_exit: 0,
+        agency_answer: 0,
       },
       items: [
         {

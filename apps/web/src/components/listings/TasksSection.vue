@@ -1,8 +1,15 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue'
-  import type { Member, Task } from '@apart/contracts'
+  import type { AgencyRequest, Member, Task } from '@apart/contracts'
+  import { taskRequestState } from '@apart/domain'
+  import type { TaskRequestStateKind } from '@apart/domain'
 
-  const props = defineProps<{ tasks: Task[]; members: Member[] }>()
+  const props = defineProps<{
+    tasks: Task[]
+    members: Member[]
+    /** Lot 17 : les demandes à l'annonceur, pour l'état de chaque tâche demandée. */
+    requests?: AgencyRequest[]
+  }>()
   const emit = defineEmits<{
     add: [label: string]
     toggle: [taskId: string, done: boolean]
@@ -16,6 +23,45 @@
   )
   const nameOf = (id: string | null): string | null =>
     id ? (props.members.find(m => m.id === id)?.displayName ?? null) : null
+
+  /** Lot 17 : « Demandée le 5 nov. à l'agence », « Réponse du 7 nov. ». */
+  const states = computed(
+    () =>
+      new Map(
+        props.tasks.map(task => [
+          task.id,
+          taskRequestState(
+            {
+              id: task.id,
+              label: task.label,
+              field: task.field,
+              done: task.done,
+              requestId: task.requestId,
+              requestedAt: task.requestedAt,
+              answeredAt: task.answeredAt,
+            },
+            (props.requests ?? []).map(r => ({
+              id: r.id,
+              status: r.status,
+              taskIds: r.taskIds,
+              createdAt: r.createdAt,
+              sentAt: r.sentAt,
+              answeredAt: r.answeredAt,
+              followUpOfId: r.followUpOfId,
+              recipientName: r.recipientName,
+            }))
+          ),
+        ])
+      )
+  )
+  const STATE_TONES: Record<TaskRequestStateKind, string> = {
+    none: '',
+    draft: 'bg-warn-soft text-warn',
+    approved: 'bg-accent-soft text-accent',
+    requested: 'bg-accent-soft text-accent',
+    answered: 'bg-good-soft text-good',
+    unanswered: 'border border-dashed border-muted text-muted',
+  }
 
   function submit(): void {
     const value = label.value.trim()
@@ -68,6 +114,14 @@
           >
           <span v-if="nameOf(task.assigneeId)" class="text-xs text-muted">
             · {{ nameOf(task.assigneeId) }}</span
+          >
+          <span
+            v-if="states.get(task.id)?.label"
+            class="ml-1 inline-block rounded-full px-1.5 py-px text-[11px] font-medium whitespace-nowrap no-underline"
+            :class="STATE_TONES[states.get(task.id)?.kind ?? 'none']"
+            :data-request-state="states.get(task.id)?.kind"
+            data-testid="task-request-state"
+            >{{ states.get(task.id)?.label }}</span
           >
         </label>
         <button

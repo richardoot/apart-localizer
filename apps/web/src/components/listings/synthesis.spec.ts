@@ -56,9 +56,10 @@ describe('ListingTabs', () => {
       'Sections de la fiche'
     )
     const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs).toHaveLength(5)
+    expect(tabs).toHaveLength(6)
     expect(tabs.map(t => t.attributes('tabindex'))).toEqual([
       '0',
+      '-1',
       '-1',
       '-1',
       '-1',
@@ -74,7 +75,7 @@ describe('ListingTabs', () => {
     await tabs[1]?.trigger('keydown', { key: 'ArrowLeft' })
     expect(wrapper.emitted('update:modelValue')?.[1]).toEqual(['synthese'])
     await tabs[1]?.trigger('keydown', { key: 'End' })
-    expect(wrapper.emitted('update:modelValue')?.[2]).toEqual(['suivi'])
+    expect(wrapper.emitted('update:modelValue')?.[2]).toEqual(['echanges'])
     await tabs[1]?.trigger('keydown', { key: 'Home' })
     expect(wrapper.emitted('update:modelValue')?.[3]).toEqual(['synthese'])
     await tabs[1]?.trigger('keydown', { key: 'a' })
@@ -85,8 +86,8 @@ describe('ListingTabs', () => {
   })
 
   it('reboucle aux extrémités ; sur mobile, pastilles de 44 px qui défilent', async () => {
-    const wrapper = mount(ListingTabs, { props: { modelValue: 'suivi' } })
-    await wrapper.findAll('[role="tab"]')[4]?.trigger('keydown', {
+    const wrapper = mount(ListingTabs, { props: { modelValue: 'echanges' } })
+    await wrapper.findAll('[role="tab"]')[5]?.trigger('keydown', {
       key: 'ArrowRight',
     })
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['synthese'])
@@ -94,7 +95,7 @@ describe('ListingTabs', () => {
     await first.findAll('[role="tab"]')[0]?.trigger('keydown', {
       key: 'ArrowLeft',
     })
-    expect(first.emitted('update:modelValue')?.[0]).toEqual(['suivi'])
+    expect(first.emitted('update:modelValue')?.[0]).toEqual(['echanges'])
     expect(first.get('[role="tablist"]').classes()).toContain('overflow-x-auto')
     for (const tab of first.findAll('[role="tab"]'))
       expect(tab.classes()).toEqual(

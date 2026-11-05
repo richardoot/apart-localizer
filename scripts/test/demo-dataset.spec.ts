@@ -8,7 +8,11 @@ import {
   SearchCriteriaInputSchema,
   VisitInputSchema,
 } from '@apart/contracts'
-import { describeActivity, notificationsForActivity } from '@apart/domain'
+import {
+  describeActivity,
+  isFollowUpDue,
+  notificationsForActivity,
+} from '@apart/domain'
 import { describe, expect, it } from 'vitest'
 import { DEMO_ACCOUNTS } from '../lib/demo/accounts.js'
 import {
@@ -369,6 +373,86 @@ describe('jeu de démonstration', () => {
     expect(sent.map(s => [s.recipientId, s.title])).toEqual([
       [dataset.members[1]?.id, 'Claude a trouvé 4 annonces à valider'],
     ])
+  })
+
+  it('lot 17 : contacts fictifs, une réponse qui a rempli les charges, un message à valider, une relance due', () => {
+    expect(dataset.contacts).toHaveLength(3)
+    for (const c of dataset.contacts) {
+      expect(c.agencyName).toMatch(/^Agence \[Exemple\]/)
+      if (c.email) expect(c.email).toMatch(/@agence\.exemple\.invalid$/)
+      if (c.portalMessageUrl)
+        expect(c.portalMessageUrl).toMatch(/^https:\/\/exemple\.invalid\//)
+    }
+    const byKey = new Map(dataset.listings.map(l => [l.key, l]))
+    const requests = new Map(dataset.agencyRequests.map(r => [r.listingKey, r]))
+    expect(dataset.agencyRequests.map(r => [r.listingKey, r.status])).toEqual([
+      ['bastide-t2', 'answered'],
+      ['merignac-t2', 'draft'],
+      ['chartrons-t2', 'sent'],
+    ])
+    // La réponse a rempli les charges (source « agence ») et coché les
+    // tâches ; la taxe foncière, saisie à la main, est proposée.
+    const bastide = byKey.get('bastide-t2')
+    const answered = requests.get('bastide-t2')
+    expect(bastide?.input.annualCharges).toBe(1_680)
+    expect(bastide?.input.propertyTax).toBe(950)
+    expect(bastide?.input.fieldSources.annualCharges?.source).toBe('agency')
+    expect(ListingInputSchema.parse(bastide?.input)).toEqual(bastide?.input)
+    expect(
+      answered?.answers[0]?.changes.map(c => [c.key, c.disposition])
+    ).toEqual([
+      ['annualCharges', 'applied'],
+      ['propertyTax', 'proposed'],
+    ])
+    expect(answered?.answers[0]?.excerpt).toContain('[téléphone masqué]')
+    expect(answered?.approvedVia).toBe('chat')
+    const charges = bastide?.tasks.find(t => t.field === 'annualCharges')
+    expect(charges).toMatchObject({
+      done: true,
+      answeredAt: answered?.answeredAt,
+      requestId: answered?.id,
+    })
+    expect(bastide?.updatedAt).toBe(answered?.answeredAt)
+    // Le message à valider : texte poli, signature des membres, sans e-mail.
+    const draft = requests.get('merignac-t2')
+    expect(draft?.body).toContain('Bonjour Madame, Monsieur,')
+    expect(draft?.body).toContain('Camille (démo) et Sacha (démo)')
+    expect(draft?.body).not.toContain('@apart.local')
+    expect(draft?.channel).toBe('portal_message')
+    // La relance due : envoyée il y a douze jours, sans réponse.
+    const due = requests.get('chartrons-t2')
+    expect(
+      isFollowUpDue(
+        {
+          status: due?.status ?? 'draft',
+          sentAt: due?.sentAt ?? null,
+          answeredAt: null,
+          pendingQuestions: due?.taskIds.length ?? 0,
+          followedUp: false,
+        },
+        NOW
+      )
+    ).toBe(true)
+    const dtg = byKey
+      .get('chartrons-t2')
+      ?.tasks.find(t => t.id === due?.taskIds[0])
+    expect(dtg).toMatchObject({ done: false, requestId: due?.id })
+    // Le journal ne garde aucune coordonnée du contact.
+    const agency = dataset.activity.filter(
+      a =>
+        a.action.startsWith('agency_request.') ||
+        a.action.startsWith('contact.')
+    )
+    expect(agency.map(a => a.action)).toEqual(
+      expect.arrayContaining([
+        'contact.updated',
+        'agency_request.drafted',
+        'agency_request.approved',
+        'agency_request.sent',
+        'agency_request.answered',
+      ])
+    )
+    expect(JSON.stringify(agency)).not.toContain('exemple.invalid')
   })
 
   it('laisse des annonces « nouvelles » à chacun : sans vue du membre', () => {

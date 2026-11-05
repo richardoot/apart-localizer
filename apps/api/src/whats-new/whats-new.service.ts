@@ -34,6 +34,8 @@ const WHATS_NEW_ACTIONS = [
   // Lot 15 : une vérification sur le portail qui a trouvé quelque chose.
   'listing.checked',
   'criteria.unmatched',
+  // Lot 17 : une réponse de l'annonceur enregistrée.
+  'agency_request.answered',
 ]
 
 function toEvent(row: ActivityLog): WhatsNewEvent {

@@ -33,10 +33,11 @@ export const ActivityKindSchema = z
     'member',
     'check',
     'exploration',
+    'agency',
     'other',
   ])
   .describe(
-    "Sorte d'événement : annonce, statut, prix, tâche, avis, offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon à valider, membres de l'espace (invitations, arrivées, retraits, rôles), vérification sur le portail (lot 15), exploration des portails par Claude (lot 16), autre"
+    "Sorte d'événement : annonce, statut, prix, tâche, avis, offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon à valider, membres de l'espace (invitations, arrivées, retraits, rôles), vérification sur le portail (lot 15), exploration des portails par Claude (lot 16), échanges avec l'annonceur (contact, demandes, réponses ; lot 17), autre"
   )
 export type ActivityKind = z.infer<typeof ActivityKindSchema>
 
@@ -56,6 +57,7 @@ export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
   member: 'Membres',
   check: 'Vérification',
   exploration: 'Exploration',
+  agency: 'Échanges',
   other: 'Autre',
 }
 
@@ -82,6 +84,7 @@ export const ACTIVITY_KIND_RULES: Record<
   draft: { prefixes: ['draft'] },
   member: { prefixes: ['member', 'workspace'] },
   exploration: { prefixes: ['exploration'] },
+  agency: { prefixes: ['agency_request', 'contact'] },
 }
 
 /** La sorte d'une action (`listing.status_changed` → `status`). */
@@ -196,6 +199,9 @@ export const LISTING_FIELD_LABELS: Record<string, string> = {
   online: 'En ligne',
   lastCheckedAt: 'Vérifiée le',
   lastSeenOnlineAt: 'Vue en ligne le',
+  subject: 'Objet',
+  body: 'Message',
+  recipientName: 'Destinataire',
 }
 
 /** Le libellé d'un champ, ou son nom. */

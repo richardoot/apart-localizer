@@ -53,9 +53,9 @@ export const DpeClassSchema = z
 export type DpeClass = z.infer<typeof DpeClassSchema>
 
 export const FieldSourceSchema = z
-  .enum(['listing', 'user', 'ai', 'open_data', 'estimated'])
+  .enum(['listing', 'user', 'ai', 'open_data', 'estimated', 'agency'])
   .describe(
-    "Provenance d'une valeur : lue dans l'annonce, saisie par un membre, extraite par l'IA, issue de données ouvertes, ou estimée faute de saisie"
+    "Provenance d'une valeur : lue dans l'annonce, saisie par un membre, extraite par l'IA, issue de données ouvertes, estimée faute de saisie, ou donnée par l'annonceur en réponse à une question (agence ou vendeur, lot 17)"
   )
 export type FieldSource = z.infer<typeof FieldSourceSchema>
 

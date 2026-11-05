@@ -5,6 +5,7 @@
   import StatTile from '@/components/ui/StatTile.vue'
   import ListingCards from '@/components/listings/ListingCards.vue'
   import DraftsInbox from '@/components/drafts/DraftsInbox.vue'
+  import PendingMessages from '@/components/agency/PendingMessages.vue'
   import WhatsNewBanner from '@/components/whats-new/WhatsNewBanner.vue'
   import { useListingList } from '@/composables/useListings'
   import { useSearchCriteriaList } from '@/composables/useSearchCriteria'
@@ -75,6 +76,7 @@
 
     <WhatsNewBanner @open="open" />
     <DraftsInbox />
+    <PendingMessages />
 
     <p v-if="isPending" class="text-sm text-muted">Chargement des annonces…</p>
     <p

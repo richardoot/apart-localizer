@@ -67,7 +67,8 @@
         <p class="text-sm text-muted">
           Nouvelle annonce de l'autre membre ou de Claude, changement de statut,
           tâche assignée, entrée dans un critère, réponse à une offre, annonces
-          reçues par e-mail, mise à jour trouvée en vérifiant une annonce.
+          reçues par e-mail, mise à jour trouvée en vérifiant une annonce,
+          réponse d'une agence enregistrée.
         </p>
       </div>
       <button

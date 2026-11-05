@@ -117,6 +117,7 @@ describe('toWorkspaceDto', () => {
     const workspace: Workspace = {
       id: WS,
       name: 'Appartement',
+      agencySignature: null,
       createdAt: NOW,
       updatedAt: NOW,
     }

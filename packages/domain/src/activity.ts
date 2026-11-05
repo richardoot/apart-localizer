@@ -18,6 +18,7 @@ import type {
   ActivityKind,
 } from '@apart/contracts'
 import { formatEuros } from './format.js'
+import { describeAgencyActivity } from './agency-activity.js'
 
 /**
  * Le journal d'activité en français (besoin S6) : à partir d'une ligne
@@ -646,8 +647,14 @@ export function describeActivity(
       return describe("a renommé l'espace", [
         change('name', text(before, 'name'), text(after, 'name')),
       ])
-    default:
+    default: {
+      // Lot 17 : échanges avec l'annonceur (contact, demandes, réponses).
+      const agency = describeAgencyActivity(action, before, after, (b, a) =>
+        activityChanges(b, a, members)
+      )
+      if (agency) return describe(agency.summary, agency.changes)
       return describe(action, activityChanges(before, after, members))
+    }
   }
 }
 

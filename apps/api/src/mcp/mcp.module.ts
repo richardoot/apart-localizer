@@ -9,6 +9,7 @@ import { StudyModule } from '../study/study.module'
 import { VisitsModule } from '../visits/visits.module'
 import { WhatsNewModule } from '../whats-new/whats-new.module'
 import { ExplorationModule } from '../exploration/exploration.module'
+import { AgencyRequestsModule } from '../agency-requests/agency-requests.module'
 import { McpAuthGuard } from './mcp-auth.guard'
 import { McpController } from './mcp.controller'
 import { OAuthDiscoveryService } from './oauth-discovery.service'
@@ -30,6 +31,7 @@ import { WellKnownController } from './well-known.controller'
     VisitsModule,
     WhatsNewModule,
     ExplorationModule,
+    AgencyRequestsModule,
   ],
   controllers: [McpController, WellKnownController],
   providers: [McpAuthGuard, OAuthDiscoveryService],

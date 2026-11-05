@@ -15,7 +15,8 @@
 L'export ne contient que l'espace du membre connecté. Aucune photo n'en sort (elles restent dans
 le stockage privé), aucune adresse e-mail ni identifiant de connexion de membre. `members`
 liste les membres actifs et les anciens membres (auteurs d'avis, de tâches, de visites), jamais
-les invitations (lot 8).
+les invitations (lot 8). Le contact de l'annonceur (lot 17 : agence, interlocuteur, e-mail,
+téléphone, messagerie, données d'un tiers) n'est que dans le JSON.
 
 ## CSV
 
@@ -75,6 +76,14 @@ lignes du compte rendu — lien, portail, titre, prix, surface, pièces, commune
 raison, niveau d'adéquation, annonce et brouillon liés, extrait court masqué ; une liste vide
 quand un export antérieur n'en a pas) et `portals` de chaque critère (portails cochés, tous par
 défaut). Les brouillons « à valider » ne sont pas exportés. Le CSV est inchangé.
+Le lot 17 non
+plus : `contact` par annonce (le contact de l'annonceur, `null` s'il n'y en a pas ou dans un
+export antérieur), `agencyRequests` (les demandes à l'annonceur : message, tâches posées,
+validation, envoi, référence du fil, réponses avec leurs valeurs appliquées ou proposées et un
+extrait de 1 000 caractères masqué ; liste vide par défaut) et, dans chaque tâche, `field`,
+`requestedAt`, `requestId`, `answeredAt` (`null` par défaut). Le CSV ne change pas : une liste de
+demandes ne tient pas dans une cellule, et les coordonnées d'un tiers n'ont rien à faire dans un
+tableur partagé ; les tâches cochées par une réponse comptent déjà dans « Tâches ouvertes ».
 
 ```text
 {
@@ -95,7 +104,9 @@ défaut). Les brouillons « à valider » ne sont pas exportés. Le CSV est inch
     visits: Visit[],                        // sans `photos` ; `photoCount` seulement
     rentComparables: RentComparable[],
     checks: ListingCheck[],                 // lot 15 : date, auteur, canal, résultat, écarts, extrait
-    criteriaFit: ListingCriteriaFit         // lot 14 : adéquation aux critères actifs
+    criteriaFit: ListingCriteriaFit,        // lot 14 : adéquation aux critères actifs
+    contact: ListingContact | null,         // lot 17 : contact de l'annonceur
+    agencyRequests: AgencyRequest[]         // lot 17 : demandes, validation, envoi, réponses
   }],
   searchCriteria: SearchCriteria[],         // filtres, marge de tolérance, périmètre GeoJSON, portails (lot 16)
   scenarios: Scenario[],                    // de l'espace et des annonces exportées

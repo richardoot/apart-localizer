@@ -12,6 +12,8 @@ export const LISTING_TABS = [
   { id: 'financer', label: 'Financer et louer', short: 'Financer' },
   { id: 'quartier', label: 'Quartier', short: 'Quartier' },
   { id: 'suivi', label: 'Suivi', short: 'Suivi' },
+  // Lot 17 : les échanges avec l'annonceur (contact, messages, réponses).
+  { id: 'echanges', label: 'Échanges', short: 'Échanges' },
 ] as const
 
 export type ListingTab = (typeof LISTING_TABS)[number]['id']

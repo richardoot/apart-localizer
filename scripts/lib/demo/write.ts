@@ -63,6 +63,8 @@ export interface DemoSeedReport {
   notifications: number
   /** Les autres espaces, avant et après (identiques, sinon la transaction est annulée). */
   otherWorkspaces: OtherWorkspace[]
+  /** Lot 17 : demandes aux annonceurs. */
+  agencyRequests: number
 }
 
 export interface OtherWorkspace {
@@ -181,6 +183,61 @@ export async function writeDemoDataset(
           }))
         ),
       })
+
+      // Lot 17 : contacts des annonceurs, demandes, puis les tâches qu'elles portent.
+      await tx.listingContact.createMany({
+        data: dataset.contacts.map(c => ({
+          listingId: c.listingId,
+          workspaceId,
+          agencyName: c.agencyName,
+          contactName: c.contactName,
+          email: c.email,
+          phone: c.phone,
+          portalMessageUrl: c.portalMessageUrl,
+          preferredChannel: c.preferredChannel,
+          createdAt: new Date(c.at),
+          updatedAt: new Date(c.at),
+          updatedById: idOf(c.by),
+        })),
+      })
+      await tx.agencyRequest.createMany({
+        data: dataset.agencyRequests.map(r => ({
+          id: r.id,
+          workspaceId,
+          listingId: r.listingId,
+          status: r.status,
+          channel: r.channel,
+          recipientName: r.recipientName,
+          subject: r.subject,
+          body: r.body,
+          taskIds: r.taskIds,
+          createdById: idOf(r.by),
+          createdVia: r.createdVia,
+          createdAt: new Date(r.createdAt),
+          updatedAt: new Date(
+            r.answeredAt ?? r.sentAt ?? r.approvedAt ?? r.createdAt
+          ),
+          approvedAt: r.approvedAt ? new Date(r.approvedAt) : null,
+          approvedVia: r.approvedVia,
+          approvedById: r.approvedBy ? idOf(r.approvedBy) : null,
+          sentAt: r.sentAt ? new Date(r.sentAt) : null,
+          sentById: r.sentBy ? idOf(r.sentBy) : null,
+          threadRef: r.threadRef,
+          answeredAt: r.answeredAt ? new Date(r.answeredAt) : null,
+          answers: json(r.answers),
+          closedAt: r.closedAt ? new Date(r.closedAt) : null,
+          followUpOfId: r.followUpOfId,
+        })),
+      })
+      for (const listing of dataset.listings) {
+        for (const task of listing.tasks) {
+          if (!task.requestId) continue
+          await tx.task.update({
+            where: { id: task.id },
+            data: { requestId: task.requestId },
+          })
+        }
+      }
 
       for (const c of dataset.criteria) {
         const perimeter = c.input.perimeter
@@ -497,6 +554,7 @@ export async function writeDemoDataset(
         activity: activity.length,
         notifications: notifications.length,
         otherWorkspaces: after,
+        agencyRequests: dataset.agencyRequests.length,
       }
     },
     { timeout: 120_000, maxWait: 10_000 }
@@ -652,6 +710,10 @@ async function createListing(
           origin: t.origin,
           position: t.position,
           createdAt: new Date(t.createdAt),
+          // Lot 17 : la demande qui porte la tâche est écrite après.
+          field: t.field ?? null,
+          requestedAt: t.requestedAt ? new Date(t.requestedAt) : null,
+          answeredAt: t.answeredAt ? new Date(t.answeredAt) : null,
         })),
       },
       priceEvents: {

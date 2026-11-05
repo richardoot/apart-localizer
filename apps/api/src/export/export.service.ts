@@ -26,6 +26,7 @@ import {
   explorationDetailInclude,
   toExplorationDetail,
 } from '../exploration/exploration.mapper'
+import { AgencyRequestsService } from '../agency-requests/agency-requests.service'
 import { MEMBER_ORDER } from '../workspace/member-order'
 import type { Member } from '../generated/prisma'
 import { LISTING_CSV_COLUMNS, listingCsvRow, toCsv } from './csv'
@@ -48,7 +49,8 @@ export class ExportService {
     private readonly prisma: PrismaService,
     private readonly listings: ListingsService,
     private readonly assumptions: AssumptionsService,
-    private readonly visits: VisitsService
+    private readonly visits: VisitsService,
+    private readonly agency: AgencyRequestsService
   ) {}
 
   /** Les annonces exportées, évaluées par `domain` comme dans la liste. */
@@ -134,6 +136,7 @@ export class ExportService {
       comparables,
       checks,
       explorations,
+      exchanges,
     ] = await Promise.all([
       this.prisma.workspace.findUniqueOrThrow({
         where: { id: member.workspaceId },
@@ -177,6 +180,8 @@ export class ExportService {
         orderBy: { finishedAt: 'desc' },
         include: explorationDetailInclude,
       }),
+      // Lot 17 : contact de l'annonceur et demandes.
+      this.agency.forExport(member, items),
     ])
     const byListing = <T extends { listingId: string }>(rows: T[]) => {
       const map = new Map<string, T[]>()
@@ -219,6 +224,8 @@ export class ExportService {
         rentComparables: comparablesOf.get(item.listing.id) ?? [],
         checks: checksOf.get(item.listing.id) ?? [],
         criteriaFit: item.criteriaFit,
+        contact: exchanges.contacts.get(item.listing.id) ?? null,
+        agencyRequests: exchanges.requests.get(item.listing.id) ?? [],
       })),
       searchCriteria: criteria.map(toSearchCriteriaDto),
       scenarios: scenarios.map(toScenarioDto),

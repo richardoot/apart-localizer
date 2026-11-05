@@ -10,6 +10,7 @@ import {
   EvaluatedListingSchema,
   HypotheticalListingSchema,
   missingListingFields,
+  taskFieldForLabel,
 } from '@apart/contracts'
 import type {
   ActivityChannel,
@@ -370,11 +371,14 @@ export class ListingsService {
                 label,
                 origin: 'default' as const,
                 position,
+                // Lot 17 : le champ de la fiche que la tâche demande.
+                field: taskFieldForLabel(label),
               })),
               ...missingTaskLabels.map((label, index) => ({
                 label,
                 origin: 'missing_field' as const,
                 position: DEFAULT_TASKS.length + index,
+                field: taskFieldForLabel(label),
               })),
             ],
           },

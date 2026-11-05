@@ -16,7 +16,8 @@ elles sont protégées.
   auteur ; supprimer une visite supprime ses photos du stockage. Les photos ne passent ni par le
   MCP ni par l'export.
 - **Export** (`GET /export`) : réservé aux membres de l'espace, ne contient ni photo, ni adresse
-  e-mail, ni identifiant de connexion ; `Cache-Control: no-store`.
+  e-mail de membre, ni identifiant de connexion ; `Cache-Control: no-store`. Le contact de
+  l'annonceur et les demandes (lot 17) sont dans le JSON, jamais dans le CSV.
 - **Notifications** : le texte d'une notification push transite par le service push du
   navigateur (Google, Apple, Mozilla) chiffré de bout en bout (Web Push, RFC 8291) ; il ne porte
   que le titre de l'annonce et le nom du membre. Un abonnement expiré est supprimé. L'e-mail est
@@ -68,6 +69,24 @@ elles sont protégées.
   et le journal gardent son nom ; son identité est détachée (l'accès est coupé dès la requête
   suivante, MCP compris), ses abonnements push sont supprimés. Un espace quitté pour en rejoindre
   un autre n'est jamais supprimé.
+- **Questions aux agences (lot 17, ADR 0027)** : le **contact de l'annonceur** (`listing_contacts` :
+  nom de l'agence, interlocuteur, e-mail, téléphone, lien de la messagerie du portail, canal
+  préféré) est une donnée personnelle d'un tiers : seulement ce que l'annonce donne, saisi par un
+  membre ou complété par Claude (lu sur la page de l'annonce), modifiable et effaçable dans
+  l'onglet « Échanges » de la fiche (`DELETE /listings/:id/contact`), jamais vidé ni supprimé par
+  le MCP. Le journal d'activité n'en garde que les noms des champs changés (« a mis à jour le
+  contact de l'annonceur (e-mail, téléphone) »), jamais les valeurs : effacé, il l'est vraiment.
+  Une **demande** garde le nom affiché du destinataire (« Agence [Exemple] »), l'objet et le texte
+  du message, le canal, les dates (validation, envoi, réponse), la référence du fil (identifiant
+  de fil Gmail ou lien de la conversation sur le portail) et, par réponse, un **extrait court**
+  (1 000 caractères au plus) dont les numéros de téléphone et les adresses e-mail sont masqués à
+  l'écriture (`sanitizeEvidence`), avec les valeurs lues ; la provenance « agence » d'un champ
+  porte la date et un extrait de 300 caractères au plus, déjà masqué. Aucune signature n'ajoute
+  l'adresse ou le téléphone d'un membre : seule la signature choisie par l'espace signe (par
+  défaut, les prénoms). **Le serveur n'envoie aucun message** : Claude envoie, après la
+  validation d'un membre, avec les outils de l'utilisateur (Gmail, messagerie du portail dans son
+  navigateur) ; l'e-mail reçu n'est pas conservé en entier. Contacts et demandes partent avec
+  l'annonce (cascade) et figurent dans l'export JSON.
 
 ## Journaux
 
@@ -81,6 +100,11 @@ elles sont protégées.
 - Le journal d'activité de l'espace (`activity_logs`) garde qui a changé quoi, quand et par
   quel canal : il est lisible par les membres de l'espace et ne fait pas partie de l'export
   (format version 1).
+- Lot 17 : le contact de l'annonceur et le texte des demandes passent dans le corps des requêtes
+  (`PUT /listings/:id/contact`, `POST /agency-requests/:id/answer`…), jamais dans le chemin ni
+  la chaîne de requête : le journal de requêtes et Sentry ne les voient pas ; le journal
+  d'activité ne garde ni les coordonnées du contact ni le texte d'une réponse (seulement le
+  résumé de ce qui a été appliqué à la fiche).
 
 ## Droits des personnes
 
@@ -95,3 +119,6 @@ elles sont protégées.
   invitation annulée, refusée ou expirée s'efface de même (elle n'a rien écrit).
 - **Rectification** : tout se modifie dans l'application ; les avis et tâches de chacun restent
   à leur auteur.
+- **Tiers (lot 17)** : le contact d'un annonceur s'efface depuis l'onglet « Échanges » de la
+  fiche (bouton « Effacer ») ; les demandes déjà envoyées gardent le nom affiché du destinataire
+  et le texte envoyé, et partent avec l'annonce.

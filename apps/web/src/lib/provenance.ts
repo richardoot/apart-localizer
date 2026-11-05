@@ -18,6 +18,7 @@ export const FIELD_SOURCE_LABELS: Record<FieldSource, string> = {
   ai: 'IA',
   open_data: 'open data',
   estimated: 'estimé',
+  agency: 'agence',
 }
 
 export const FIELD_SOURCE_TITLES: Record<FieldSource, string> = {
@@ -26,6 +27,7 @@ export const FIELD_SOURCE_TITLES: Record<FieldSource, string> = {
   ai: "Extrait par l'IA",
   open_data: 'Issu de données ouvertes (géocodage IGN)',
   estimated: 'Estimé faute de saisie',
+  agency: "Donné par l'annonceur (agence ou vendeur) en réponse à une question",
 }
 
 /** Classes des pastilles ; l'IA est colorée par sa confiance. */
@@ -35,6 +37,7 @@ export const FIELD_SOURCE_CLASSES: Record<FieldSource, string> = {
   ai: 'bg-warn-soft text-warn',
   open_data: 'bg-good-soft text-good',
   estimated: 'bg-surface-2 text-muted',
+  agency: 'bg-accent-soft text-accent',
 }
 
 /** Couleur d'une valeur IA selon sa confiance : sûre, à vérifier, douteuse. */

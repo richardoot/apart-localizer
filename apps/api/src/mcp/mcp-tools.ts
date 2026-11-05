@@ -106,6 +106,7 @@ import type { Member } from '../generated/prisma'
 import type { DuplicatesService } from '../listings/duplicates.service'
 import type { ExtractionService } from '../listings/extraction.service'
 import type { ListingChecksService } from '../listings/listing-checks.service'
+import type { AgencyRequestsService } from '../agency-requests/agency-requests.service'
 import type { ListingsService } from '../listings/listings.service'
 import type { TargetPriceService } from '../listings/target-price.service'
 import type { ListingEnrichmentService } from '../listings/enrichment.service'
@@ -149,6 +150,8 @@ export interface McpToolContext {
   checks: ListingChecksService
   /** Lot 16 : exploration des portails par les critères. */
   exploration: ExplorationsService
+  /** Lot 17 : questions aux agences (contact, demandes, réponses). */
+  agency: AgencyRequestsService
 }
 
 const CHANNEL = 'mcp' as const
@@ -160,7 +163,8 @@ const CHANNEL = 'mcp' as const
  * (scénarios, projection, conformité, comparables de loyer), lot 6
  * (visites, « ce qui a changé »), lot 8 (membres, en lecture seule), lot 15
  * (vérification des annonces sur le portail, `mcp-checks.ts`), lot 16
- * (exploration des portails par les critères, `mcp-exploration.ts`).
+ * (exploration des portails par les critères, `mcp-exploration.ts`), lot 17
+ * (questions aux agences, `mcp-agency.ts`).
  */
 export const MCP_TOOL_NAMES = [
   'list_listings',
@@ -197,16 +201,23 @@ export const MCP_TOOL_NAMES = [
   'get_search_brief',
   'triage_candidates',
   'record_exploration',
+  'list_open_questions',
+  'prepare_agency_requests',
+  'record_request_sent',
+  'record_agency_answer',
 ] as const
 
 /**
  * Les prompts du connecteur ; `review_listings` (lot 15) est dans
- * `mcp-checks.ts`, `explore_listings` (lot 16) dans `mcp-exploration.ts`.
+ * `mcp-checks.ts`, `explore_listings` (lot 16) dans `mcp-exploration.ts`,
+ * `ask_agencies` et `check_agency_answers` (lot 17) dans `mcp-agency.ts`.
  */
 export const MCP_PROMPT_NAMES = [
   'analyze_listing',
   'review_listings',
   'explore_listings',
+  'ask_agencies',
+  'check_agency_answers',
 ] as const
 
 /** Les ressources du connecteur : schéma d'annonce et glossaire. */
@@ -1213,7 +1224,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         const task = await ctx.tasks.create(
           ctx.member,
           listingId,
-          { label, assigneeId, origin: 'manual' },
+          { label, assigneeId, origin: 'manual', field: null },
           CHANNEL
         )
         return dataResult(`Tâche ajoutée : ${task.label} [id ${task.id}]`, {

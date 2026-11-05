@@ -4,8 +4,10 @@ import {
   NO_CRITERIA_FIT,
 } from '@apart/contracts'
 import type {
+  AgencyRequest,
   DuplicateCandidate,
   EvaluatedListing,
+  ListingExchanges,
   ExtractionResult,
   Listing,
   Member,
@@ -163,6 +165,10 @@ export function fakeTask(over: Partial<Task> = {}): Task {
     origin: 'default',
     position: 0,
     createdAt: now,
+    field: null,
+    requestedAt: null,
+    requestId: null,
+    answeredAt: null,
     ...over,
   }
 }
@@ -421,6 +427,83 @@ export function fakeDuplicate(
         detail: 'Talence : 45 m² contre 45,2 m²',
       },
     ],
+    ...over,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Lot 17 : questions aux agences (fictif)
+// ---------------------------------------------------------------------------
+
+const LISTING_ID = '11111111-1111-4111-8111-111111111111'
+const TASK_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+
+/** Une demande à l'annonceur fictive, envoyée par défaut. */
+export function fakeAgencyRequest(
+  over: Partial<AgencyRequest> = {}
+): AgencyRequest {
+  return {
+    id: '99999999-9999-4999-8999-999999999999',
+    listingId: LISTING_ID,
+    listing: {
+      id: LISTING_ID,
+      title: 'T2 fictif',
+      status: 'to_study',
+      url: 'https://annonces.exemple.invalid/t2',
+    },
+    status: 'sent',
+    channel: 'email',
+    recipientName: 'Agence [Exemple]',
+    subject: 'Votre annonce « T2 fictif » : quelques questions',
+    body: 'Bonjour Madame, Monsieur,\n\nPourriez-vous nous indiquer :\n- le montant de la dernière taxe foncière.\n\nBien cordialement,\nRichard et Chloé',
+    taskIds: [TASK_ID],
+    questions: [
+      {
+        taskId: TASK_ID,
+        label: 'Demander la taxe foncière',
+        field: 'propertyTax',
+        question: 'le montant de la dernière taxe foncière',
+        done: false,
+      },
+    ],
+    createdAt: '2026-11-02T09:00:00.000Z',
+    createdById: MEMBERS[0]?.id ?? null,
+    createdChannel: 'mcp',
+    updatedAt: '2026-11-02T09:00:00.000Z',
+    approvedAt: '2026-11-02T09:05:00.000Z',
+    approvedVia: 'app',
+    approvedById: MEMBERS[1]?.id ?? null,
+    sentAt: '2026-11-05T09:00:00.000Z',
+    sentById: MEMBERS[0]?.id ?? null,
+    threadRef: 'thread-fictif',
+    answeredAt: null,
+    answers: [],
+    closedAt: null,
+    followUpOfId: null,
+    followUpDue: false,
+    followUpDueOn: '2026-11-13',
+    ...over,
+  }
+}
+
+/** L'onglet « Échanges » d'une annonce fictive. */
+export function fakeExchanges(
+  over: Partial<ListingExchanges> = {}
+): ListingExchanges {
+  return {
+    listingId: LISTING_ID,
+    listing: {
+      id: LISTING_ID,
+      title: 'T2 fictif',
+      status: 'to_study',
+      url: 'https://annonces.exemple.invalid/t2',
+    },
+    expectedUpdatedAt: now,
+    contact: null,
+    requests: [],
+    openQuestions: [],
+    signature: 'Richard et Chloé',
+    followUpBusinessDays: 5,
     ...over,
   }
 }

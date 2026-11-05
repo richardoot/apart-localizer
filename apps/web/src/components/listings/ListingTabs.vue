@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { nextTick, ref } from 'vue'
+  import { nextTick, onMounted, ref, watch } from 'vue'
   import { LISTING_TABS } from '@/lib/listing-tabs'
   import type { ListingTab } from '@/lib/listing-tabs'
 
@@ -12,10 +12,23 @@
   defineProps<{
     /** Nombre de tâches ouvertes, affiché sur l'onglet Suivi. */
     openTasks?: number
+    /** Lot 17 : messages à valider, affichés sur l'onglet Échanges. */
+    pendingMessages?: number
   }>()
   const tab = defineModel<ListingTab>({ required: true })
 
   const buttons = ref<HTMLButtonElement[]>([])
+
+  /** Sur mobile, les pastilles défilent : l'onglet ouvert reste visible (lot 17 : six onglets). */
+  function reveal(): void {
+    const index = LISTING_TABS.findIndex(t => t.id === tab.value)
+    buttons.value[index]?.scrollIntoView?.({
+      block: 'nearest',
+      inline: 'nearest',
+    })
+  }
+  onMounted(reveal)
+  watch(tab, () => void nextTick(reveal))
 
   function select(next: ListingTab, focus = false): void {
     tab.value = next
@@ -87,6 +100,12 @@
         class="text-xs font-normal"
         data-testid="open-tasks-count"
         >· {{ openTasks }} tâche{{ openTasks > 1 ? 's' : '' }}</span
+      >
+      <span
+        v-if="choice.id === 'echanges' && pendingMessages"
+        class="rounded-full bg-warn-soft px-1.5 text-xs font-medium text-warn"
+        data-testid="pending-messages-count"
+        >{{ pendingMessages }} à valider</span
       >
     </button>
   </div>

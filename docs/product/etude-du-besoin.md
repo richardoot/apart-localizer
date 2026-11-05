@@ -171,6 +171,7 @@ reste optionnel.
 | S6 | Journal d'activité par annonce (qui a changé quoi, quand, par quel canal : web ou MCP) | S |
 | S7 | Notifications (nouvelle annonce, changement de statut, tâche assignée) par e-mail ou web push ; livrées au lot 6 avec aussi l'entrée dans un critère, la réponse à une offre et les annonces reçues par e-mail, dans l'application et en web push, l'e-mail restant en option (ADR 0015) | L |
 | S8 | Suivi des mises à jour : Claude revérifie les annonces sur leur portail (dans le navigateur de l'utilisateur), une vérification datée par annonce (qui, résultat, changements, preuve), faits appliqués, statut proposé jamais appliqué d'office, file « à revérifier », republication rattachée (lot 15, ADR 0025) | S |
+| S9 | Questions aux agences : Claude pose à l'annonceur (agence ou vendeur) les questions ouvertes de la todo (charges, taxe foncière, DPE, travaux votés, PV d'AG…) par Gmail ou la messagerie du portail, **après validation des messages par lot** par un membre ; le serveur n'envoie rien ; la réponse remplit la fiche (source « agence ») ou propose une valeur qui contredit une saisie à la main, et coche les tâches ; contact de l'annonceur minimal et effaçable ; relance due après 5 jours ouvrés (lot 17, ADR 0027) | S |
 
 ### 3.3 Évaluation financière
 
@@ -245,6 +246,7 @@ Lecture :
 | `get_search_brief` | Ce que Claude cherche : critères actifs marges comprises, zones, portails cochés et liens de recherche fabriqués sans réseau, annonces déjà suivies et écartées, dernière exploration (lot 16) |
 | `triage_candidates` | Trie des annonces lues sur les portails sans rien écrire : déjà suivie, déjà écartée, hors critères, doublon probable, nouvelle, avec l'adéquation (lot 16) |
 | `check_listing` | Compare la page d'une annonce lue par Claude (ou son texte) à la fiche : écarts classés (appliqués, proposés, notés), résultat, statut proposé, republications probables ; rien n'est écrit (lot 15) |
+| `list_open_questions` | Questions ouvertes à poser à l'annonceur, par annonce : tâches liées à un champ, contact, demandes en cours, relances dues (lot 17) |
 
 Écriture (toutes réversibles, aucune suppression) :
 
@@ -263,11 +265,14 @@ Lecture :
 | `add_visit` | Une visite faite ou planifiée (date, participants, compte rendu, points positifs et négatifs, note, tâche de préparation), sans photo ; renvoie le statut proposé sans l'appliquer (lot 6) |
 | `record_exploration` | Enregistre une exploration : le serveur retrie, crée le compte rendu et les brouillons « à valider » (jamais une annonce), applique les vérifications des annonces déjà suivies ; idempotent par `runKey` (lot 16) |
 | `apply_listing_check` | Enregistre une vérification : faits lus appliqués (prix par l'historique), dates de vérification, republication rattachée, extrait-preuve ; renvoie le statut proposé sans l'appliquer (lot 15) |
+| `prepare_agency_requests` | Brouillons de messages à l'annonceur, groupés par annonce, texte poli par défaut ; rien n'est envoyé, le membre valide d'abord (lot 17) |
+| `record_request_sent` | Enregistre l'envoi fait par Claude avec Gmail ou la messagerie du portail ; refusé sans validation dans l'application ou accord explicite dans la conversation (lot 17) |
+| `record_agency_answer` | Enregistre la réponse : valeurs appliquées (source « agence ») ou proposées, tâches cochées, extrait masqué (lot 17) |
 
 Ressources et prompts : le schéma d'annonce en JSON Schema (`apart://schema/listing`), le
 glossaire des indicateurs (`apart://glossaire`), un prompt « analyser cette annonce » qui
 enchaîne lecture de page, extraction (`extract_listing`), doublons, confirmation du membre,
-création, évaluation. Le prompt est livré au lot 2, les ressources au lot 3.
+création, évaluation. Le prompt est livré au lot 2, les ressources au lot 3 ; au lot 17, « questions aux agences » (montrer le lot, attendre l’accord, envoyer) et « réponses des agences » (relever, enregistrer, faire confirmer les valeurs proposées).
 
 Portées OAuth `listings:read` et `listings:write`, limite connue de `bankin-analyzer` à corriger
 dès le départ.

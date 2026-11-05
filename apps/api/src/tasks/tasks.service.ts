@@ -9,6 +9,7 @@ import type {
   TaskInput,
   TaskUpdate,
 } from '@apart/contracts'
+import { taskFieldForLabel } from '@apart/contracts'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { toTaskDto } from '../listings/listing.mapper'
@@ -56,6 +57,8 @@ export class TasksService {
           label: input.label,
           assigneeId: input.assigneeId,
           origin: input.origin,
+          // Lot 17 : le champ donné, sinon celui du libellé s'il est connu.
+          field: input.field ?? taskFieldForLabel(input.label),
           position: (last?.position ?? -1) + 1,
         },
       })
@@ -71,6 +74,7 @@ export class TasksService {
             label: task.label,
             origin: task.origin,
             assigneeId: task.assigneeId,
+            ...(task.field ? { field: task.field } : {}),
           },
         },
         tx

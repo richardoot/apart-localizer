@@ -10,6 +10,7 @@ import {
   TaskOriginSchema,
 } from './enums.js'
 import { InvitationSchema } from './members.js'
+import { ListingQuestionFieldSchema } from './question-fields.js'
 
 /** Membre d'un espace de travail. */
 export const MemberSchema = z.object({
@@ -95,8 +96,14 @@ export const TaskInputSchema = z.object({
   label: z.string().min(1).max(300),
   assigneeId: z.string().uuid().nullable().default(null),
   origin: TaskOriginSchema.default('manual'),
+  field: ListingQuestionFieldSchema.nullable()
+    .default(null)
+    .describe(
+      "Lot 17 : le champ de la fiche que la tâche demande à l'annonceur ; null pour une tâche qui n'en demande aucun"
+    ),
 })
 export type TaskInput = z.infer<typeof TaskInputSchema>
+export type TaskInputRaw = z.input<typeof TaskInputSchema>
 
 export const TaskSchema = TaskInputSchema.extend({
   id: z.string().uuid(),
@@ -105,6 +112,28 @@ export const TaskSchema = TaskInputSchema.extend({
   doneAt: z.string().datetime().nullable(),
   position: z.number().int().min(0).describe("Ordre d'affichage"),
   createdAt: z.string().datetime(),
+  requestedAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .default(null)
+    .describe(
+      "Lot 17 : date d'envoi de la demande à l'annonceur qui porte la tâche ; null si elle n'a pas été demandée"
+    ),
+  requestId: z
+    .string()
+    .uuid()
+    .nullable()
+    .default(null)
+    .describe("Lot 17 : la demande à l'annonceur qui porte la tâche"),
+  answeredAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .default(null)
+    .describe(
+      "Lot 17 : date de la réponse de l'annonceur qui a fait cocher la tâche ; null sinon"
+    ),
 })
 export type Task = z.infer<typeof TaskSchema>
 

@@ -115,6 +115,10 @@ export function whatsNewKindOf(
       return fitChangeFromListing(event.after) ? 'criteria_match' : null
     case 'criteria.unmatched':
       return fitChangeFromListing(event.after) ? 'criteria_exit' : null
+    case 'agency_request.answered':
+      // Lot 17 : une réponse de l'annonceur, enregistrée par l'autre membre
+      // ou par Claude.
+      return 'agency_answer'
     default:
       return null
   }
@@ -176,6 +180,9 @@ function itemOf(
       .filter(Boolean)
       .join(' — ')
     summary = `Avis de ${who}${to ? ` : ${to}` : ''}`
+  } else if (kind === 'agency_answer') {
+    const text = typeof after?.summary === 'string' ? after.summary : ''
+    summary = `Réponse de l'annonceur enregistrée par ${who}${text ? ` : ${text}` : ''}`
   } else if (kind === 'criteria_match' || kind === 'criteria_exit') {
     summary =
       description.summary.charAt(0).toUpperCase() + description.summary.slice(1)

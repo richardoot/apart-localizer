@@ -68,6 +68,10 @@ describe('seed de démonstration (e2e, PostGIS)', () => {
          (SELECT count(*)::int FROM app.notifications WHERE workspace_id = $1 AND read_at IS NULL) AS unread,
          (SELECT count(*)::int FROM app.activity_logs WHERE workspace_id = $1) AS activity,
          (SELECT count(*)::int FROM app.visits v JOIN app.listings l ON l.id = v.listing_id WHERE l.workspace_id = $1) AS visits,
+         (SELECT count(*)::int FROM app.agency_requests WHERE workspace_id = $1) AS agency_requests,
+         (SELECT count(*)::int FROM app.listing_contacts WHERE workspace_id = $1) AS contacts,
+         (SELECT count(*)::int FROM app.tasks t JOIN app.listings l ON l.id = t.listing_id WHERE l.workspace_id = $1 AND t.request_id IS NOT NULL) AS requested_tasks,
+         (SELECT count(*)::int FROM app.notifications WHERE workspace_id = $1 AND type = 'agency_answer') AS agency_answers,
          (SELECT count(*)::int FROM app.listings WHERE workspace_id <> $1) AS other_listings,
          (SELECT count(*)::int FROM app.members WHERE workspace_id <> $1) AS other_members,
          (SELECT count(*)::int FROM app.activity_logs WHERE workspace_id <> $1) AS other_activity`,
@@ -120,6 +124,14 @@ describe('seed de démonstration (e2e, PostGIS)', () => {
         where: { workspaceId: DEMO_WORKSPACE_ID, status: 'pending' },
       })
     ).toBe(5)
+    // Lot 17 : trois demandes (réponse reçue, à valider, relance due), trois
+    // contacts, les tâches demandées ou répondues rattachées, une
+    // notification « réponse de l'agence » pour l'autre membre.
+    expect(report.agencyRequests).toBe(3)
+    expect(c.agency_requests).toBe(3)
+    expect(c.contacts).toBe(3)
+    expect(c.requested_tasks).toBe(3)
+    expect(c.agency_answers).toBe(1)
     const members = await db.prisma.member.findMany({
       where: { workspaceId: DEMO_WORKSPACE_ID },
       orderBy: { handle: 'asc' },

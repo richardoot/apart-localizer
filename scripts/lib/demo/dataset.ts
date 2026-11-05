@@ -10,6 +10,7 @@ import {
   SearchCriteriaInputSchema,
   TaskInputSchema,
   VisitInputSchema,
+  taskFieldForLabel,
 } from '@apart/contracts'
 import type {
   ActivityChannel,
@@ -18,6 +19,7 @@ import type {
   ListingCheckChange,
   ListingCheckOutcome,
   ListingObserved,
+  ListingQuestionField,
   LeaseType,
   ListingInput,
   ListingSource,
@@ -46,6 +48,8 @@ import {
 import { DEMO_ACCOUNTS, DEMO_WORKSPACE_NAME } from './accounts.js'
 import { buildDemoExplorations } from './exploration.js'
 import type { DemoExploration, DemoExplorationDraft } from './exploration.js'
+import { buildAgencyExchanges } from './agency.js'
+import type { DemoAgencyRequest, DemoContact } from './agency.js'
 import { DEMO_WORKSPACE_ID, demoId } from './ids.js'
 
 /**
@@ -85,6 +89,11 @@ export interface DemoTask {
   position: number
   createdAt: string
   createdBy: DemoHandle
+  /** Lot 17 : le champ de la fiche demandé, la demande qui porte la tâche, sa réponse. */
+  field?: ListingQuestionField | null
+  requestedAt?: string | null
+  requestId?: string | null
+  answeredAt?: string | null
 }
 
 export interface DemoOffer {
@@ -223,6 +232,9 @@ export interface DemoDataset {
   /** Lot 16 : explorations fictives et brouillons qu'elles ont déposés. */
   explorations: DemoExploration[]
   explorationDrafts: DemoExplorationDraft[]
+  /** Lot 17 : contacts des annonceurs et demandes (fictifs). */
+  contacts: DemoContact[]
+  agencyRequests: DemoAgencyRequest[]
 }
 
 // ---------------------------------------------------------------------------
@@ -959,6 +971,8 @@ export function buildDemoDataset(now: Date = new Date()): DemoDataset {
   })
 
   const listings = SPECS.map(spec => buildListing(spec, at, since, log))
+  // Lot 17 : questions aux agences (contacts, demandes, une réponse).
+  const exchanges = buildAgencyExchanges(listings, members, at, log)
 
   // Critères : un polygone dessiné et deux points avec rayon (lot 14 : l’un avec
   // sa marge de tolérance réglée).
@@ -1160,6 +1174,8 @@ export function buildDemoDataset(now: Date = new Date()): DemoDataset {
     activity,
     explorations,
     explorationDrafts,
+    contacts: exchanges.contacts,
+    agencyRequests: exchanges.agencyRequests,
   }
 }
 
@@ -1347,6 +1363,7 @@ function buildListing(
       position,
       createdAt,
       createdBy: spec.createdBy,
+      field: taskFieldForLabel(label),
     }
   })
   for (const task of tasks.filter(t => t.done).slice(0, 2)) {
@@ -1380,6 +1397,7 @@ function buildListing(
       position: DEFAULT_TASKS.length + index,
       createdAt: taskAt,
       createdBy: by,
+      field: taskFieldForLabel(label),
     })
     log({
       at: taskAt,

@@ -25,6 +25,7 @@ import { InboundModule } from './inbound/inbound.module'
 import { ExportModule } from './export/export.module'
 import { McpModule } from './mcp/mcp.module'
 import { ExplorationModule } from './exploration/exploration.module'
+import { AgencyRequestsModule } from './agency-requests/agency-requests.module'
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { ExplorationModule } from './exploration/exploration.module'
     ExportModule,
     McpModule,
     ExplorationModule,
+    AgencyRequestsModule,
   ],
   providers: [
     // Every @Body() and @Query() DTO is a createZodDto(schema): the pipe

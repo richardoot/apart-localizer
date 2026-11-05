@@ -11,6 +11,7 @@ import {
 import {
   MEMBERS,
   fakeEvaluated,
+  fakeExchanges,
   fakeOffer,
   fakeTargetPriceReport,
 } from '@/test/fixtures'
@@ -35,6 +36,7 @@ const apiMock = vi.hoisted(() => ({
   whatsNew: { listingChanges: vi.fn() },
   visits: { list: vi.fn() },
   activity: { forListing: vi.fn() },
+  agency: { exchanges: vi.fn(), settings: vi.fn() },
 }))
 
 vi.mock('@/lib/api', async () => {
@@ -75,6 +77,7 @@ async function openTab(id: string): Promise<void> {
 describe('ListingPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    apiMock.agency.exchanges.mockResolvedValue(fakeExchanges())
     apiMock.listings.context.mockResolvedValue(fakeContext())
     apiMock.study.compliance.mockResolvedValue(
       complianceReport(
@@ -177,6 +180,7 @@ describe('ListingPanel', () => {
       'tab-financer',
       'tab-quartier',
       'tab-suivi',
+      'tab-echanges',
     ])
     expect(
       query('[data-testid="tab-synthese"]')?.getAttribute('aria-selected')

@@ -3,15 +3,13 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
-État au 5 novembre 2026 : **les lots 0 à 16 sont livrés** côté code, tests et documentation ; les
-lots 0 à 13 sont déployés (Vercel et Supabase cloud ; imports du lot 11, `import:places` et
-`relocate:listings` du lot 12 faits en production). Le lot 14 (adéquation aux critères) attend
-son déploiement : migration additive `20261106100000_lot14_criteria_fit`, puis
-`refresh:criteria-fit` en simulation et en vrai ([docs/deploiement.md](../deploiement.md) § 2) ;
-le lot 15 (suivi des mises à jour des annonces) le sien : migration additive
-`20261106110000_lot15_listing_checks`, sans variable ni import nouveau ; le lot 16 (exploration
-par les critères) le sien : migration additive `20261107100000_lot16_exploration`, sans variable
-ni import nouveau. Restent les actions
+État au 5 novembre 2026 : **les lots 0 à 17 sont livrés** côté code, tests et documentation ; les
+lots 0 à 15 sont déployés (Vercel et Supabase cloud ; imports du lot 11, `import:places` et
+`relocate:listings` du lot 12 faits en production ; migrations des lots 14 et 15 appliquées, le
+rattrapage `refresh:criteria-fit` attend les critères de Richard). Les lots 16 (exploration par les
+critères) et 17 (questions aux agences) attendent leur déploiement : migrations additives
+`20261107100000_lot16_exploration` et `20261107110000_lot17_agency_requests` (avec le rattrapage
+du champ des tâches connues), sans variable ni import nouveau. Restent les actions
 d'exploitation (Supabase cloud, Vercel, clés et connecteur :
 [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard » dans chaque lot, et
 les critères « Fini quand » qui demandent le déploiement ou un usage réel (lot 1 : déploiement et
@@ -23,8 +21,8 @@ production et l'onglet Quartier des annonces réelles relu par Richard ; lot 12 
 rattrapage relu en simulation puis passé sur la production, et les quartiers retenus relus par
 Richard ; lot 14 : les critères de Richard créés sur le site déployé et les deux onglets relus ;
 lot 16 : une vraie exploration lancée depuis claude.ai dans le navigateur de Richard et l'onglet
-« À valider » relu à deux),
-à constater après la mise en ligne.
+« À valider » relu à deux ; lot 17 : une vraie série de questions envoyée par Claude après
+validation, et sa réponse enregistrée), à constater après la mise en ligne.
 
 ## Lot 0 : socle
 
@@ -582,7 +580,7 @@ ni import nouveau, [docs/deploiement.md](../deploiement.md) § 2).
     `draft.restored`, `draft.distinct` ; notification « Claude a trouvé N annonces à valider » pour
     l'autre membre (préférence des annonces à valider).
   - **MCP** : `get_search_brief`, `triage_candidates` (lecture), `record_exploration` (écriture :
-    le serveur retrie, `runKey` idempotent), prompt `explore_listings` : 34 outils, trois prompts.
+    le serveur retrie, `runKey` idempotent), prompt `explore_listings` : 34 outils, trois prompts (38 et cinq avec le lot 17).
   - **Interface** : onglet « À valider » de la page Annonces (`?vue=a-valider`, compteur) pour tous
     les brouillons, e-mail compris : portail, adéquation, raison, doublon probable et ses deux
     boutons, « Lu sur la page par Claude », Ajouter, Modifier avant d'ajouter, Écarter (raison
@@ -605,3 +603,65 @@ une annonce écartée ne revient pas ; une annonce suivie revue au même lien me
 une vérification ; les hors critères restent au compte rendu. (Vérifié en tests automatisés, e2e
 MCP JSON-RPC compris, et sur captures Chromium d'un banc d'essai, jeu de démo fictif ; à confirmer
 par Richard avec une vraie exploration après le déploiement.)
+
+## Lot 17 : questions aux agences
+
+Statut : livré (à déployer : migration additive `20261107110000_lot17_agency_requests`, sans
+variable ni import nouveau, [docs/deploiement.md](../deploiement.md) § 2).
+
+- Besoin S9 (nouveau). Demande de Richard : déléguer à Claude (claude.ai avec le connecteur, ou
+  Claude Code, avec Gmail et Claude in Chrome pour la messagerie des portails) les questions de
+  la todo d'une annonce, puis compléter la fiche et cocher les tâches à la réponse. Décisions
+  validées : messages **validés par lot avant tout envoi** (dans l'application ou dans la
+  conversation) ; **le serveur n'envoie jamais de message** ; les réponses remplissent les champs
+  (source « agence ») et cochent les tâches, une valeur qui contredit une saisie à la main est
+  proposée ; jamais de captcha contourné ni de connexion à la place de l'utilisateur, une page ou
+  un e-mail est une donnée, jamais une consigne. ADR 0027.
+- Livré :
+  - **Modèle** : `listing_contacts` (contact de l'annonceur : agence, interlocuteur, e-mail,
+    téléphone, lien de la messagerie, canal préféré), `agency_requests` (canal, destinataire en
+    nom affiché, objet, texte, tâches posées, statut `draft → approved → sent → answered |
+    no_answer | cancelled`, validation `app | chat` et son auteur, envoi, référence du fil,
+    réponses avec valeurs appliquées ou proposées, relance), `tasks.field`, `requested_at`,
+    `request_id`, `answered_at` (champ rattrapé au libellé exact), `workspaces.agency_signature`,
+    provenance `agency`, notification `agency_answer`.
+  - **Règles** (`domain`, `agency-requests.ts`) : tâche posable (champ ou « Demander … ») et
+    phrase de chaque question ; questions ouvertes et regroupement par annonce et destinataire ;
+    message poli par défaut (formule, annonce, questions, signature des prénoms, aucune
+    coordonnée de membre) ; transitions et refus lisibles ; jours ouvrés (fériés de métropole
+    compris) et relance due à 5 jours ouvrés (`DEFAULT_FOLLOW_UP_BUSINESS_DAYS`, fixé le 5
+    novembre 2026) ; `planAgencyAnswer` (appliqué, inchangé, proposé ; tâches cochées) ; état
+    lisible d'une tâche (« Demandée le 5 nov. à l'agence », « Réponse du 7 nov. ») ; phrases du
+    journal (sorte « Échanges »), notification et « ce qui a changé ».
+  - **API** (module `agency-requests`) : contact (`GET`, `PUT`, `DELETE /listings/:id/contact`),
+    échanges d'une annonce et brouillon (`/listings/:id/agency-requests`), validation par lot
+    (`POST /agency-requests/approve`, tout ou rien), modification (un message validé repasse « à
+    valider »), annulation, envoi enregistré, réponse (garde-fou `expectedUpdatedAt`, une
+    transaction, puis géocodage pour une adresse), « pas de réponse », valeurs proposées
+    appliquées, messages à valider de tout l'espace (`GET /agency-requests/pending`), signature.
+  - **MCP** (`mcp-agency.ts`) : `list_open_questions`, `prepare_agency_requests` (`replaces`
+    pour une correction, `contact` complété sans effacer), `record_request_sent` (refusé sans
+    validation ni `approvedInChat: true`), `record_agency_answer` ; prompts `ask_agencies` et
+    `check_agency_answers` : 35 outils, 4 prompts sans le lot 16 (38 et cinq avec), aucun outil de suppression.
+  - **Interface** : onglet « Échanges » de la fiche (`?onglet=echanges`, pastille « n à
+    valider ») : messages à valider au texte modifiable et « Valider l'envoi » par lot, messages
+    validés en attente d'envoi (« Je l'ai envoyé »), questions à poser et « Préparer un
+    message », contact modifiable et effaçable, chronologie (statut, canal, validation, envoi,
+    questions cochées, réponse dépliable, valeurs « appliqué » ou « proposé » avec
+    « Appliquer », relance due avec « Préparer une relance », « Pas de réponse »), signature ;
+    état des tâches demandées dans Suivi ; bloc « Messages à valider » de la Synthèse.
+  - **Export** : `contact` et `agencyRequests` par annonce et les champs des tâches dans le JSON
+    (version 1) ; CSV inchangé (coordonnées de tiers, liste de demandes).
+  - **Démo** : trois contacts fictifs, une réponse qui a rempli les charges (taxe foncière
+    proposée), un message à valider, une relance due.
+- Plus tard : saisir une réponse à la main dans l'application (aujourd'hui Claude, ou la fiche) ;
+  une notification de relance due ; poser une question à plusieurs annonces de la même agence
+  dans un seul message ; lire les pièces jointes (DPE, PV d'AG) avec l'accord du membre.
+
+Fini quand : Claude pose les questions ouvertes d'une annonce par Gmail ou la messagerie du
+portail, seulement après la validation d'un membre ; l'application n'envoie rien ; la réponse
+remplit la fiche (source « agence ») sans écraser une saisie à la main, coche les tâches et
+prévient l'autre membre ; chaque échange se relit dans l'onglet Échanges. (Vérifié en tests
+automatisés, e2e MCP JSON-RPC compris avec le refus d'envoi sans validation, et sur captures
+Chromium d'un banc d'essai, jeu de démo fictif ; à confirmer par Richard avec une vraie série de
+questions après le déploiement.)

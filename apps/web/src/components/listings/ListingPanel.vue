@@ -57,6 +57,8 @@
   import JournalSection from '@/components/activity/JournalSection.vue'
   import ListingChanges from '@/components/activity/ListingChanges.vue'
   import VisitsSection from '@/components/visits/VisitsSection.vue'
+  import ExchangesSection from '@/components/agency/ExchangesSection.vue'
+  import { useListingExchanges } from '@/composables/useAgencyRequests'
 
   const props = defineProps<{
     id: string
@@ -177,6 +179,14 @@
 
   const openTasks = computed(
     () => item.value?.tasks.filter(t => !t.done).length ?? 0
+  )
+
+  // Lot 17 : les échanges avec l'annonceur (état des tâches demandées,
+  // messages à valider sur l'onglet Échanges).
+  const exchanges = useListingExchanges(id)
+  const agencyRequests = computed(() => exchanges.data.value?.requests ?? [])
+  const pendingMessages = computed(
+    () => agencyRequests.value.filter(r => r.status === 'draft').length
   )
 
   /** « Modifier la fiche » : l'onglet Financer et louer, formulaire ouvert. */
@@ -458,7 +468,11 @@
         </p>
       </header>
 
-      <ListingTabs v-model="tab" :open-tasks="openTasks" />
+      <ListingTabs
+        v-model="tab"
+        :open-tasks="openTasks"
+        :pending-messages="pendingMessages"
+      />
 
       <p
         v-if="failure"
@@ -620,7 +634,7 @@
           </section>
         </template>
 
-        <template v-else>
+        <template v-else-if="tab === 'suivi'">
           <ChecksSection
             :listing-id="item.listing.id"
             :status="item.listing.status"
@@ -650,6 +664,7 @@
           <TasksSection
             :tasks="item.tasks"
             :members="members"
+            :requests="agencyRequests"
             @add="
               label =>
                 run(
@@ -686,6 +701,10 @@
             @set-status="status => changeStatus({ status, reason: null })"
           />
           <JournalSection :listing-id="item.listing.id" />
+        </template>
+
+        <template v-else>
+          <ExchangesSection :listing-id="item.listing.id" :members="members" />
         </template>
       </div>
     </div>

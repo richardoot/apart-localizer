@@ -202,12 +202,14 @@ const item: CandidateTriage = {
 
 describe('MCP lot 16 : exploration par les critères', () => {
   it('déclare trois outils et un prompt de plus', () => {
-    expect(MCP_TOOL_NAMES.slice(-3)).toEqual([
+    // Les quatre outils du lot 17 suivent.
+    const start = MCP_TOOL_NAMES.indexOf('get_search_brief')
+    expect(MCP_TOOL_NAMES.slice(start, start + 3)).toEqual([
       'get_search_brief',
       'triage_candidates',
       'record_exploration',
     ])
-    expect(MCP_TOOL_NAMES).toHaveLength(34)
+    expect(MCP_TOOL_NAMES).toHaveLength(38)
     expect(MCP_PROMPT_NAMES).toContain('explore_listings')
   })
 

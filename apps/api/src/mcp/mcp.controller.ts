@@ -35,6 +35,8 @@ import {
   registerExplorationPrompts,
   registerExplorationTools,
 } from './mcp-exploration'
+import { AgencyRequestsService } from '../agency-requests/agency-requests.service'
+import { registerAgencyPrompts, registerAgencyTools } from './mcp-agency'
 import { McpAuthGuard } from './mcp-auth.guard'
 import type { McpAuthenticatedRequest } from './mcp-auth.guard'
 import { registerPrompts, registerResources, registerTools } from './mcp-tools'
@@ -71,6 +73,7 @@ export class McpController {
     private readonly visits: VisitsService,
     private readonly whatsNew: WhatsNewService,
     private readonly checks: ListingChecksService,
+    private readonly agency: AgencyRequestsService,
     private readonly exploration: ExplorationsService
   ) {}
 
@@ -118,15 +121,19 @@ export class McpController {
       whatsNew: this.whatsNew,
       checks: this.checks,
       exploration: this.exploration,
+      agency: this.agency,
     }
     registerTools(server, context)
     // Lot 15 : vérification des annonces sur le portail.
     registerCheckTools(server, context)
     // Lot 16 : exploration des portails par les critères.
     registerExplorationTools(server, context)
+    // Lot 17 : questions aux agences.
+    registerAgencyTools(server, context)
     registerPrompts(server)
     registerCheckPrompts(server)
     registerExplorationPrompts(server)
+    registerAgencyPrompts(server)
     registerResources(server)
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

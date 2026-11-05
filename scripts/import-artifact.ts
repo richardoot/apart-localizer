@@ -22,6 +22,7 @@ import { cliArgs } from './lib/cli.js'
 import { config as loadEnv } from 'dotenv'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
+import { taskFieldForLabel } from '@apart/contracts'
 import { Prisma, PrismaClient } from '../apps/api/src/generated/prisma/index.js'
 import { GeoService } from '../apps/api/src/geo/geo.service.js'
 import type { PrismaService } from '../apps/api/src/prisma/prisma.service.js'
@@ -315,6 +316,8 @@ async function importListing(
             done: task.done,
             doneAt: task.done ? new Date(item.updatedAt ?? Date.now()) : null,
             origin: task.origin,
+            // Lot 17 : le champ de la fiche que la tâche demande, s'il est sûr.
+            field: taskFieldForLabel(task.label),
             position,
           })),
         },

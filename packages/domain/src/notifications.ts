@@ -111,6 +111,9 @@ export function notificationTypeOf(
         ? 'listing_checked'
         : null
     }
+    case 'agency_request.answered':
+      // Lot 17 : réponse de l'annonceur enregistrée (champs complétés).
+      return 'agency_answer'
     default:
       return null
   }
@@ -215,6 +218,11 @@ export function notificationsForActivity(
       body = `${str(event.after, 'summary') ?? 'Annonce vérifiée sur le portail'} (vérifiée par ${who}).`
       break
     }
+    case 'agency_answer': {
+      heading = `Réponse de l'agence : ${title}`
+      body = `${str(event.after, 'summary') ?? 'Réponse enregistrée'} (enregistrée par ${who}).`
+      break
+    }
     case 'member_joined': {
       const name =
         (event.actorMemberId
@@ -244,7 +252,9 @@ export function notificationsForActivity(
           ? '/espace'
           : type === 'listing_checked' && url
             ? `${url}?onglet=suivi`
-            : url,
+            : type === 'agency_answer' && url
+              ? `${url}?onglet=echanges`
+              : url,
     listingId: event.listingId,
   }))
 }

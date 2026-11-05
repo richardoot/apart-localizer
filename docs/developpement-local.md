@@ -135,8 +135,12 @@ hors du dépôt. Un nouveau fichier part du `.env.example` correspondant.
   « [Exemple] », avec quatre brouillons à valider — dans les critères, à la marge, à confirmer, un
   doublon probable du T2 des Chartrons —, deux annonces déjà suivies revues au même lien, dont une
   baisse de prix appliquée par une vérification, deux déjà écartées, trois hors critères et
-  Logic-Immo bloqué) ; le journal et les notifications qu'il fait naître. Les dates sont relatives
-  au jour du seed : il y a toujours des « nouvelles » et une visite à venir.
+  Logic-Immo bloqué) ; des questions aux agences (lot 17 : trois contacts fictifs « Agence [Exemple] »
+  en `exemple.invalid`, une demande envoyée par Claude dont la réponse a rempli les charges, coché les
+  tâches et laissé la taxe foncière « proposée », un message à valider sur le T2 de Mérignac, une
+  relance due sur le T2 des Chartrons) ; le journal et les notifications qu'il fait naître. Les dates
+  sont relatives au jour du seed : il y a toujours des « nouvelles », une visite à venir et une
+  relance due.
 - **`artifact`** : l'import de `data/private/artifact-export/` (vos annonces). Sans ce dossier,
   `stack:up` le dit et s'arrête. Les e-mails des membres viennent de `--richard-email` et
   `--chloe-email`, ou de `data/private/import.env` (ignoré par git) :
@@ -244,6 +248,13 @@ npx @modelcontextprotocol/inspector@2.13.0
 Transport « Streamable HTTP », URL `http://localhost:3000/mcp`, puis le flux OAuth de
 l'inspecteur (il s'enregistre seul) ou l'en-tête `Authorization: Bearer $TOKEN` (non rejoué ici :
 l'inspecteur se sert du SDK MCP, qui demande les `scopes_supported` de la ressource, `email`).
+
+**Questions aux agences (lot 17)** : en local, ne laissez jamais Claude envoyer un vrai message.
+Avec le jeu `demo`, `list_open_questions` rend le message à valider du T2 de Mérignac et la
+relance due des Chartrons ; `record_request_sent` sans validation répond « Ce message n'est pas
+validé » ; validez dans l'onglet « Échanges » (ou passez `approvedInChat: true`) pour enregistrer
+un envoi fictif, sans rien envoyer (`threadRef` fictif). Les adresses du jeu sont en
+`exemple.invalid` : aucun e-mail ne peut partir.
 
 **claude.ai** ne peut pas joindre `localhost` : ses serveurs appellent l'URL du connecteur depuis
 Internet. Il faut une URL publique en https pour l'API **et** pour Supabase (un tunnel, avec

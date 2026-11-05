@@ -20,6 +20,7 @@ import {
   ExplorationLineSchema,
   ExplorationSummarySchema,
 } from './exploration.js'
+import { AgencyRequestSchema, ListingContactSchema } from './agency-requests.js'
 
 /**
  * Export des données de l'espace (portabilité, étude du besoin § 5) : CSV
@@ -92,6 +93,17 @@ export const ExportListingSchema = z.object({
   criteriaFit: ListingCriteriaFitSchema.describe(
     'Adéquation aux critères actifs à l’export (lot 14) : niveau, raisons, détail par critère'
   ),
+  contact: ListingContactSchema.nullable()
+    .default(null)
+    .describe(
+      "Lot 17 : contact de l'annonceur (agence, interlocuteur, e-mail, téléphone, messagerie) ; null s'il n'y en a pas ou dans un export antérieur"
+    ),
+  agencyRequests: z
+    .array(AgencyRequestSchema)
+    .default([])
+    .describe(
+      "Lot 17 : demandes à l'annonceur (messages, validation, envoi, réponses), de la plus récente à la plus ancienne (absent dans un export antérieur)"
+    ),
 })
 export type ExportListing = z.infer<typeof ExportListingSchema>
 

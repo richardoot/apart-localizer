@@ -5,6 +5,7 @@ import {
   CriteriaFitOriginSchema,
   ListingOpenDataContextSchema,
   ListingPlacementSchema,
+  ListingQuestionFieldSchema,
   ListingSchema,
   OfferSchema,
   OpinionSchema,
@@ -101,6 +102,8 @@ export function toOpinionDto(opinion: Opinion): OpinionDto {
 }
 
 export function toTaskDto(task: Task): TaskDto {
+  // Lot 17 : un champ inconnu (colonne texte) se lit comme « aucun champ ».
+  const field = ListingQuestionFieldSchema.safeParse(task.field)
   return TaskSchema.parse({
     id: task.id,
     listingId: task.listingId,
@@ -111,6 +114,10 @@ export function toTaskDto(task: Task): TaskDto {
     origin: task.origin,
     position: task.position,
     createdAt: task.createdAt.toISOString(),
+    field: field.success ? field.data : null,
+    requestedAt: task.requestedAt?.toISOString() ?? null,
+    requestId: task.requestId,
+    answeredAt: task.answeredAt?.toISOString() ?? null,
   })
 }
 

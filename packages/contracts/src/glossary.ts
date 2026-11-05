@@ -150,7 +150,7 @@ export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
     key: 'provenance',
     term: 'Provenance et « ≈ »',
     definition:
-      'Chaque champ sait d’où il vient : annonce, membre, IA (avec confiance et extrait), données ouvertes, ou estimé. Une valeur estimée faute de saisie s’affiche avec « ≈ ».',
+      'Chaque champ sait d’où il vient : annonce, membre, IA (avec confiance et extrait), données ouvertes, estimé, ou agence (réponse de l’annonceur à une question, datée, avec un extrait). Une valeur estimée faute de saisie s’affiche avec « ≈ ».',
   },
   {
     key: 'occupancy_cost',
