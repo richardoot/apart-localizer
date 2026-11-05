@@ -229,7 +229,7 @@ describe('describeActivity', () => {
     ],
     [
       { action: 'listing.enriched', after: { tram: null } },
-      'données ouvertes mises à jour (tram, plafond, marché)',
+      'données ouvertes mises à jour (tram, plafond, marché, quartier, équipements)',
       0,
     ],
     [

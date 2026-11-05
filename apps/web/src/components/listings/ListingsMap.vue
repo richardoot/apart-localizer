@@ -12,11 +12,21 @@
   import { DEFAULT_LAYER_TOGGLES } from '@/composables/useMapLayers'
   import { circlePolygon } from '@/lib/geo-circle'
   import {
+    ATHLETICS_LAYERS,
     CRITERIA_LAYERS,
+    DRIVE_LAYERS,
+    FITNESS_LAYERS,
+    NEIGHBOURHOOD_HIT_LAYER,
+    NEIGHBOURHOOD_HOVER_LAYERS,
+    NEIGHBOURHOOD_HOVER_SOURCE,
+    NEIGHBOURHOOD_LAYERS,
     POPUP_LAYER_IDS,
     RENT_ZONE_COLORS,
     RENT_ZONE_LAYERS,
+    SURROUNDINGS_ATTRIBUTIONS,
+    bindNeighbourhoodHover,
     layerFeaturePopupHtml,
+    neighbourhoodPopupHtml,
     perimeterLayers,
     pointLayer,
     upsertGeoJsonLayer,
@@ -34,6 +44,7 @@
     RADIUS_STEPS,
   } from '@/lib/map-style'
   import BaseMapSwitcher from '@/components/map/BaseMapSwitcher.vue'
+  import SurroundingsLegend from '@/components/map/SurroundingsLegend.vue'
 
   const props = withDefaults(
     defineProps<{
@@ -58,6 +69,10 @@
     { key: 'bus', label: 'Arrêts de bus' },
     { key: 'dvf', label: 'Ventes DVF (3 ans)' },
     { key: 'rentZones', label: 'Zones d’encadrement' },
+    { key: 'neighbourhoods', label: 'Quartiers' },
+    { key: 'athletics', label: 'Pistes d’athlétisme' },
+    { key: 'drives', label: 'Supermarchés drive' },
+    { key: 'fitness', label: 'Fitness Park' },
   ]
 
   function toggle(key: keyof MapLayerToggles, event: Event): void {
@@ -77,6 +92,20 @@
       'rent-zones',
       on.rentZones ? data?.rentZones : null,
       RENT_ZONE_LAYERS
+    )
+    upsertGeoJsonLayer(
+      map,
+      'neighbourhoods',
+      on.neighbourhoods ? data?.neighbourhoods : null,
+      NEIGHBOURHOOD_LAYERS,
+      SURROUNDINGS_ATTRIBUTIONS.neighbourhoods
+    )
+    if (!on.neighbourhoods) hoverLabel.value = null
+    upsertGeoJsonLayer(
+      map,
+      NEIGHBOURHOOD_HOVER_SOURCE,
+      null,
+      NEIGHBOURHOOD_HOVER_LAYERS
     )
     upsertGeoJsonLayer(
       map,
@@ -102,7 +131,32 @@
       on.tram ? data?.tram : null,
       pointLayer('tram-stops-points', '#dc2626', 4)
     )
+    upsertGeoJsonLayer(
+      map,
+      'athletics',
+      on.athletics ? data?.athletics : null,
+      ATHLETICS_LAYERS,
+      SURROUNDINGS_ATTRIBUTIONS.athletics
+    )
+    upsertGeoJsonLayer(
+      map,
+      'fitness',
+      on.fitness ? data?.fitness : null,
+      FITNESS_LAYERS,
+      SURROUNDINGS_ATTRIBUTIONS.osm
+    )
+    upsertGeoJsonLayer(
+      map,
+      'drives',
+      on.drives ? data?.drives : null,
+      DRIVE_LAYERS,
+      SURROUNDINGS_ATTRIBUTIONS.osm
+    )
   }
+
+  /** Le nom du quartier survolé, près du pointeur (lot 11). */
+  const hoverLabel = ref<string | null>(null)
+  const hoverPoint = ref<{ x: number; y: number } | null>(null)
 
   function emitBounds(): void {
     const bounds = map?.getBounds()
@@ -255,6 +309,16 @@
       emitBounds()
     })
     created.on('moveend', emitBounds)
+    bindNeighbourhoodHover(created, {
+      features: () =>
+        props.toggles.neighbourhoods
+          ? (props.layers?.neighbourhoods ?? null)
+          : null,
+      onHover: (label, point) => {
+        hoverLabel.value = label
+        hoverPoint.value = point
+      },
+    })
     created.on('click', event => {
       // Un arrêt ou une vente sous le clic : sa fiche, sans déplacer le point.
       const hit = ready.value
@@ -268,6 +332,20 @@
           .setHTML(layerFeaturePopupHtml(hit))
           .addTo(created)
         return
+      }
+      // Le quartier sous le clic (utile sans survol, sur un téléphone) ; le
+      // clic place aussi le point du filtre, comme sans la couche.
+      const area =
+        ready.value && props.toggles.neighbourhoods
+          ? created.queryRenderedFeatures(event.point, {
+              layers: [NEIGHBOURHOOD_HIT_LAYER],
+            })[0]
+          : undefined
+      if (area) {
+        new maplibregl.Popup({ offset: 8, closeButton: false })
+          .setLngLat(event.lngLat)
+          .setHTML(neighbourhoodPopupHtml(area.properties))
+          .addTo(created)
       }
       setCenter(event.lngLat.lng, event.lngLat.lat)
     })
@@ -357,6 +435,7 @@
         />
         {{ layer.label }}
       </label>
+      <SurroundingsLegend :toggles="toggles" />
       <span
         v-if="toggles.rentZones"
         class="flex items-center gap-2 text-muted"
@@ -387,6 +466,17 @@
         :model-value="baseMap"
         @update:model-value="setBaseMap"
       />
+      <div
+        v-if="hoverLabel && hoverPoint"
+        class="pointer-events-none absolute z-10 rounded-md bg-surface px-2 py-1 text-xs font-medium text-fg shadow"
+        :style="{
+          left: `${hoverPoint.x + 12}px`,
+          top: `${hoverPoint.y + 12}px`,
+        }"
+        data-testid="neighbourhood-hover"
+      >
+        {{ hoverLabel }}
+      </div>
     </div>
   </div>
 </template>

@@ -331,8 +331,21 @@ describe('MCP (e2e)', () => {
         listing: { id: string }
         evaluation: { metrics: { totalCost: number } }
         tasks: unknown[]
+        context: {
+          surroundings: {
+            neighbourhood: { status: string }
+            supermarkets: { status: string }
+          }
+        }
       }
       expect(item.listing.id).toBe(id)
+      // Lot 11 : quartier et équipements dans `context`, « non disponible »
+      // tant que les sources ne sont pas importées.
+      expect(item.context.surroundings.neighbourhood.status).toBe('unavailable')
+      expect(item.context.surroundings.supermarkets.status).toBe('unavailable')
+      expect(result.content[0]?.text).toContain(
+        'Quartier : non disponible (source non importée)'
+      )
       expect(item.evaluation.metrics.totalCost).toBe(220_000)
       expect(item.tasks).toHaveLength(DEFAULT_TASKS.length)
 

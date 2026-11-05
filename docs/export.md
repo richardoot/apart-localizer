@@ -44,7 +44,8 @@ non finis (rendement d'une annonce sans coût) valent `null`. Une modification i
 format change `version`. Le lot 9 n'ajoute que des champs, la version reste 1 :
 `indicators.metrics.furnitureValue`, et dans `indicators.targetPrice` le coût tout compris
 maximal de chaque critère (`criteria[].maxTotalCost`) et l'annonce évaluée au prix cible
-(`atTarget`).
+(`atTarget`). Le lot 11 non plus : l'instantané `listing.openDataContext` gagne `surroundings`
+(quartier et équipements les plus proches, `null` tant qu'il n'a pas été calculé).
 
 ```text
 {

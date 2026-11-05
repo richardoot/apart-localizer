@@ -132,6 +132,37 @@ les comparables passent « à vérifier » ou « indisponible ». Le DPE (ADEME)
 isochrones (Géoplateforme) sont appelés à la demande, sans clé, avec un cache dans
 `reference_data`.
 
+### Équipements et quartiers (lot 11)
+
+Migration `20261105120000_lot11_amenities_neighbourhoods` : purement additive (tables
+`amenities` et `neighbourhoods`, trois types énumérés, index GiST), aucune table existante
+touchée ; appliquée par `prisma:deploy` comme les autres (ou par `build:vercel`). Ensuite, depuis
+un poste, avec la connexion directe et dans cet ordre (chaque commande d'abord en `--dry-run`
+pour lire les comptes) :
+
+```bash
+# 1. Contours des quartiers (datahub de Bordeaux Métropole + WFS IRIS de la Géoplateforme)
+pnpm import:neighbourhoods -- --download --database-url '<connexion directe>'
+# 2. Pistes d'athlétisme (Data ES + Overpass) et salles Fitness Park (Overpass)
+pnpm import:sports-facilities -- --download --database-url '<connexion directe>'
+# 3. Supermarchés avec drive (Overpass)
+pnpm import:supermarkets -- --download --database-url '<connexion directe>'
+# 4. Rattrapage du contexte des annonces existantes (quartier et équipements proches)
+pnpm refresh:surroundings -- --dry-run --database-url '<connexion directe>'
+pnpm refresh:surroundings -- --database-url '<connexion directe>'
+```
+
+`--download` lit les sources en ligne (URL et requêtes dans [open-data.md](open-data.md)) ; sans
+lui, les scripts lisent les fichiers de `data/opendata/` (`quartiers/`, `iris/`, `res/`,
+`osm/`). Overpass est un service public partagé : en cas de refus (429, 504), attendre quelques
+minutes et relancer, ou télécharger la réponse une fois (`--print-query` pour la requête des
+supermarchés) et passer `--file`. Les imports sont idempotents (chaque source remplace ses
+lignes) ; le rattrapage ne réécrit que la clé `surroundings` de l'instantané des annonces dont
+le résultat change, avec une ligne de journal `listing.enriched` (canal `system`), et ne touche
+plus rien à la deuxième passe. Une annonce créée ou dont l'adresse change ensuite reçoit son
+quartier et ses équipements à l'enregistrement. Sans ces imports, la fiche affiche « non
+disponible ».
+
 ## 3. Projet Vercel : API
 
 Projet `apart-localizer-backend` relié au dépôt GitHub, **Root Directory** `apps/api`, framework
@@ -345,3 +376,8 @@ partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « C
       rejoignent un espace.
 - [ ] Export CSV ouvert dans Excel ou LibreOffice (accents et colonnes justes), export JSON
       gardé comme sauvegarde.
+- [ ] Lot 11 : migration `20261105120000_lot11_amenities_neighbourhoods` appliquée ; imports
+      `import:neighbourhoods`, `import:sports-facilities`, `import:supermarkets` faits (§ 2),
+      `GET /opendata/status` vérifié (équipements par genre, contours par nature) ;
+      `refresh:surroundings` passé ; onglet Quartier d'une annonce : quartier, piste, drives,
+      Fitness Park ; couches de la carte allumées sur les trois fonds.

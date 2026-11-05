@@ -252,6 +252,34 @@ enum TransitMode {
   @@schema("app")
 }
 
+/// Genre d'un équipement de proximité importé (lot 11).
+enum AmenityKind {
+  athletics_track
+  supermarket_drive
+  fitness_park
+
+  @@schema("app")
+}
+
+/// Drive d'un supermarché : signalé explicitement par la source, ou donnée
+/// ambiguë à vérifier. Un magasin sans aucun signal n'est pas importé.
+enum DriveStatus {
+  yes
+  to_verify
+
+  @@schema("app")
+}
+
+/// Nature d'un contour de quartier (lot 11) : quartier officiel d'une
+/// commune, IRIS de l'INSEE à défaut, ou commune entière.
+enum NeighbourhoodKind {
+  quartier
+  iris
+  commune
+
+  @@schema("app")
+}
+
 // ---------------------------------------------------------------------------
 // Espace de travail et membres
 // ---------------------------------------------------------------------------
@@ -978,6 +1006,75 @@ model RentControlZone {
   @@unique([territory, irisCode])
   @@index([territory, zone])
   @@map("rent_control_zones")
+  @@schema("app")
+}
+
+/// Équipements de proximité (lot 11) : pistes d'athlétisme (recensement des
+/// équipements sportifs du ministère des Sports), supermarchés avec drive et
+/// salles Fitness Park (OpenStreetMap). Une ligne par objet de la source ;
+/// l'import remplace toutes les lignes d'un couple (genre, source) dans une
+/// transaction. `details` porte les attributs propres au genre (nature,
+/// couverture, longueur, accès, preuve du drive), validés par
+/// `AmenityDetailsSchema` à la lecture.
+model Amenity {
+  id              String                                 @id @default(uuid())
+  kind            AmenityKind
+  /// Source : `res` (ministère des Sports) ou `osm` (OpenStreetMap).
+  source          String
+  /// Identifiant dans la source (numéro d'équipement RES, `node/123` OSM).
+  externalId      String                                 @map("external_id")
+  name            String
+  /// Enseigne telle que la source la nomme (« Carrefour Market »).
+  brand           String?
+  /// Groupe d'enseigne : carrefour, auchan, intermarche ou other.
+  brandGroup      String?                                @map("brand_group")
+  drive           DriveStatus?
+  address         String?
+  commune         String?
+  inseeCode       String?                                @map("insee_code")
+  details         Json                                   @default("{}")
+  latitude        Float
+  longitude       Float
+  geom            Unsupported("geography(Point, 4326)")?
+  /// Date de mise à jour de l'objet dans la source, quand elle la donne.
+  sourceUpdatedAt DateTime?                              @map("source_updated_at") @db.Date
+  importedAt      DateTime                               @default(now()) @map("imported_at") @db.Timestamptz(6)
+
+  @@unique([kind, source, externalId])
+  @@index([kind, brandGroup])
+  @@map("amenities")
+  @@schema("app")
+}
+
+/// Contours des quartiers de Bordeaux Métropole (lot 11) : quartiers
+/// officiels là où la commune en publie, IRIS de l'INSEE ailleurs, commune
+/// entière pour une commune non découpée. `source` dit d'où vient chaque
+/// contour ; l'import remplace tout le territoire dans une transaction.
+model Neighbourhood {
+  id         String                                        @id @default(uuid())
+  territory  String
+  kind       NeighbourhoodKind
+  /// Identifiant dans la source (code IRIS, identifiant du quartier).
+  code       String
+  name       String
+  /// Quartier plus large qui le contient (quartier administratif d'un
+  /// secteur de vie de Bordeaux), si la source le donne.
+  parent     String?
+  commune    String
+  inseeCode  String                                        @map("insee_code")
+  source     String
+  geom       Unsupported("geography(MultiPolygon, 4326)")?
+  /// Ce que la carte dessine : le contour entier, ou pour l'IRIS d'une
+  /// commune à quartiers officiels la seule part hors de ces quartiers
+  /// (morceaux d'au moins 1 ha une fois rognés de 25 m : pas les liserés),
+  /// null si rien n'est à dessiner. Calculé par
+  /// l'import (module geo).
+  mapGeom    Unsupported("geography(MultiPolygon, 4326)")? @map("map_geom")
+  importedAt DateTime                                      @default(now()) @map("imported_at") @db.Timestamptz(6)
+
+  @@unique([territory, code])
+  @@index([territory, inseeCode])
+  @@map("neighbourhoods")
   @@schema("app")
 }
 

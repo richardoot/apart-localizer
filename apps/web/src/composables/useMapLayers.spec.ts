@@ -22,6 +22,8 @@ const apiMock = vi.hoisted(() => ({
     transitStops: vi.fn(),
     rentControlZones: vi.fn(),
     dvf: vi.fn(),
+    amenities: vi.fn(),
+    neighbourhoods: vi.fn(),
   },
 }))
 
@@ -41,6 +43,10 @@ describe('useMapLayers', () => {
     )
     apiMock.opendata.rentControlZones.mockResolvedValue(collection('zones'))
     apiMock.opendata.dvf.mockResolvedValue(collection('dvf'))
+    apiMock.opendata.amenities.mockImplementation((kind: string) =>
+      Promise.resolve(collection(kind))
+    )
+    apiMock.opendata.neighbourhoods.mockResolvedValue(collection('quartiers'))
   })
 
   it('ne charge une couche que lorsqu’elle est allumée ; DVF suit l’emprise', async () => {
@@ -57,6 +63,10 @@ describe('useMapLayers', () => {
       bus: null,
       rentZones: null,
       dvf: null,
+      athletics: null,
+      drives: null,
+      fitness: null,
+      neighbourhoods: null,
     })
 
     toggles.value = {
@@ -82,6 +92,41 @@ describe('useMapLayers', () => {
     bbox.value = [-0.6, 44.8, -0.55, 44.85]
     await flushPromises()
     expect(apiMock.opendata.dvf).toHaveBeenCalledTimes(2)
+    unmount()
+  })
+
+  it('lot 11 : équipements par genre et contours, entiers, une fois chacun', async () => {
+    const toggles = ref<Partial<MapLayerToggles>>({ athletics: true })
+    const { result, unmount } = withQuery(() => useMapLayers(toggles, null))
+    await flushPromises()
+    expect(apiMock.opendata.amenities).toHaveBeenCalledWith('athletics_track')
+    expect(apiMock.opendata.amenities).toHaveBeenCalledTimes(1)
+    expect(apiMock.opendata.neighbourhoods).not.toHaveBeenCalled()
+    expect(result.value.athletics?.features[0]?.properties.name).toBe(
+      'athletics_track'
+    )
+    toggles.value = {
+      athletics: true,
+      drives: true,
+      fitness: true,
+      neighbourhoods: true,
+    }
+    await flushPromises()
+    expect(apiMock.opendata.amenities).toHaveBeenCalledWith('supermarket_drive')
+    expect(apiMock.opendata.amenities).toHaveBeenCalledWith('fitness_park')
+    expect(apiMock.opendata.neighbourhoods).toHaveBeenCalledWith()
+    expect(result.value.drives?.features[0]?.properties.name).toBe(
+      'supermarket_drive'
+    )
+    expect(result.value.neighbourhoods?.features[0]?.properties.name).toBe(
+      'quartiers'
+    )
+    // Éteindre puis rallumer ne recharge pas (couches gardées en cache).
+    toggles.value = { athletics: false }
+    await flushPromises()
+    toggles.value = { athletics: true }
+    await flushPromises()
+    expect(apiMock.opendata.amenities).toHaveBeenCalledTimes(3)
     unmount()
   })
 })

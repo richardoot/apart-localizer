@@ -233,7 +233,12 @@ describe('openDataPlan', () => {
       'import-dvf.ts',
     ])
     expect(plan.steps[2]?.args).toEqual(['--year', '2023', '--year', '2024'])
-    expect(plan.skipped).toEqual([])
+    // Seules les sources du lot 11, absentes ici, sont sautées.
+    expect(plan.skipped.map(line => line.split(' :')[0])).toEqual([
+      'quartiers',
+      'équipements sportifs',
+      'drives',
+    ])
   })
 
   it('saute une source incomplète en le disant', () => {
@@ -243,7 +248,50 @@ describe('openDataPlan', () => {
       dvf: [],
     })
     expect(plan.steps).toEqual([])
-    expect(plan.skipped).toHaveLength(3)
+    expect(plan.skipped).toHaveLength(6)
+  })
+
+  it('lot 11 : quartiers, équipements, drives, puis rattrapage des annonces', () => {
+    const plan = openDataPlan({
+      encadrement: [],
+      tbm: [],
+      dvf: [],
+      quartiers: ['se_quart_s.geojson', 'se_quartvie_s.geojson'],
+      iris: ['bm-contours_iris-2026.geojson'],
+      res: ['bm-athletisme.json'],
+      osm: ['athletics-tracks.json', 'fitness-park.json', 'supermarkets.json'],
+    })
+    expect(plan.steps.map(s => [s.script, s.args])).toEqual([
+      ['import-neighbourhoods.ts', []],
+      ['import-sports-facilities.ts', []],
+      ['import-supermarkets.ts', []],
+      ['refresh-surroundings.ts', []],
+    ])
+    const partial = openDataPlan({
+      encadrement: [],
+      tbm: [],
+      dvf: [],
+      quartiers: ['se_quart_s.geojson'],
+      iris: ['bm-contours_iris-2026.geojson'],
+      res: ['bm-athletisme.json'],
+      osm: [],
+    })
+    expect(partial.steps.map(s => [s.script, s.args])).toEqual([
+      ['import-neighbourhoods.ts', ['--no-secteurs']],
+      ['import-sports-facilities.ts', ['--only', 'tracks', '--no-osm-tracks']],
+      ['refresh-surroundings.ts', []],
+    ])
+    expect(partial.skipped.at(-1)).toContain('drives')
+    const fitnessOnly = openDataPlan({
+      encadrement: [],
+      tbm: [],
+      dvf: [],
+      osm: ['fitness-park.json'],
+    })
+    expect(fitnessOnly.steps[0]).toMatchObject({
+      label: 'Fitness Park',
+      args: ['--only', 'fitness'],
+    })
   })
 })
 

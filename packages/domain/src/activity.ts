@@ -365,7 +365,9 @@ export function describeActivity(
         ].filter(c => c.before !== c.after)
       )
     case 'listing.enriched':
-      return describe('données ouvertes mises à jour (tram, plafond, marché)')
+      return describe(
+        'données ouvertes mises à jour (tram, plafond, marché, quartier, équipements)'
+      )
     case 'listing.dpe_verified':
       return describe(
         'a retenu le DPE vérifié auprès de l’ADEME',

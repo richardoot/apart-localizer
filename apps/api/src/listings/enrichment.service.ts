@@ -15,13 +15,18 @@ import type {
   Point,
   RentControlLookup,
 } from '@apart/contracts'
-import { REFERENCE_RENT_KEY, dpeValidity } from '@apart/domain'
+import {
+  REFERENCE_RENT_KEY,
+  dpeValidity,
+  surroundingsDigest,
+} from '@apart/domain'
 import { ActivityService } from '../activity/activity.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
 import { DpeService } from '../opendata/dpe.service'
 import { GeocodingService } from '../opendata/geocoding.service'
 import { MarketService } from '../opendata/market.service'
 import { RentControlService } from '../opendata/rent-control.service'
+import { SurroundingsService } from '../opendata/surroundings.service'
 import { TransitService } from '../opendata/transit.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { Prisma } from '../generated/prisma'
@@ -60,7 +65,8 @@ function inCoOwnership(listing: ListingDto): boolean | null {
 
 /**
  * Enrichissement d'une annonce par les données ouvertes (lot 4) : arrêt de
- * tram le plus proche, plafond d'encadrement (appliqué à la phase 2 avec la
+ * tram le plus proche, quartier et équipements proches (lot 11), plafond
+ * d'encadrement (appliqué à la phase 2 avec la
  * provenance `open_data` tant que le membre ne l'a pas saisi lui-même),
  * prix médian DVF (nourrit le critère « marché » du prix cible), DPE vérifié
  * auprès de l'ADEME. Rien n'est calculé ici : tout vient de `domain` à
@@ -78,7 +84,8 @@ export class ListingEnrichmentService {
     private readonly market: MarketService,
     private readonly transit: TransitService,
     private readonly dpe: DpeService,
-    private readonly geocoding: GeocodingService
+    private readonly geocoding: GeocodingService,
+    private readonly surroundings: SurroundingsService
   ) {}
 
   private async load(member: Member, id: string): Promise<ListingDto> {
@@ -155,10 +162,11 @@ export class ListingEnrichmentService {
     const computedAt = now.toISOString()
     const listing = await this.load(member, id)
     const point = listing.location.point
-    const [transit, rent, market] = await Promise.all([
+    const [transit, rent, market, surroundings] = await Promise.all([
       this.transit.at(point),
       this.rentFor(member, listing, now),
       this.marketFor(listing, now),
+      this.surroundings.at(point, listing.location.precision, now),
     ])
     let dpeResult: DpeSearchResult | null = listing.openDataContext?.dpe ?? null
     let dpeApplied: DpeCandidate | null = null
@@ -196,6 +204,7 @@ export class ListingEnrichmentService {
         computedAt,
       },
       dpe: dpeResult,
+      surroundings,
     }
 
     // Écriture relue dans sa transaction : une modification faite pendant les
@@ -300,6 +309,7 @@ export class ListingEnrichmentService {
               count: snapshot.market?.count ?? 0,
               radiusMeters: market.radiusMeters,
             },
+            surroundings: surroundingsDigest(surroundings),
             dpe: options.dpe
               ? {
                   status: dpeResult?.status ?? null,
@@ -324,10 +334,15 @@ export class ListingEnrichmentService {
   async context(member: Member, id: string): Promise<ListingContext> {
     const now = new Date()
     const listing = await this.load(member, id)
-    const [transit, rentControl, market] = await Promise.all([
+    const [transit, rentControl, market, surroundings] = await Promise.all([
       this.transit.at(listing.location.point),
       this.rentFor(member, listing, now),
       this.marketFor(listing, now),
+      this.surroundings.at(
+        listing.location.point,
+        listing.location.precision,
+        now
+      ),
     ])
     return {
       listingId: listing.id,
@@ -346,6 +361,7 @@ export class ListingEnrichmentService {
         search: listing.openDataContext?.dpe ?? null,
       },
       market,
+      surroundings,
       computedAt: now.toISOString(),
     }
   }
@@ -397,6 +413,7 @@ export class ListingEnrichmentService {
       market: listing.openDataContext?.market ?? null,
       rentControl: listing.openDataContext?.rentControl ?? null,
       transit: listing.openDataContext?.transit ?? null,
+      surroundings: listing.openDataContext?.surroundings ?? null,
       dpe: { ...search, status: 'verified', message: evidence },
     }
     await this.prisma.$transaction(async tx => {

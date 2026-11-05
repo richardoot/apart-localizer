@@ -3,18 +3,22 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
-État au 4 novembre 2026 : **les lots 0 à 10 sont livrés** côté code, tests et documentation ; les
+État au 5 novembre 2026 : **les lots 0 à 11 sont livrés** côté code, tests et documentation ; les
 lots 0 à 7 sont déployés (Vercel et Supabase cloud), le lot 8 (invitations) attend son
 déploiement (migration additive `20261104120000_lot8_invitations`), le lot 9 (lisibilité de la
-fiche, sans migration) le sien, et le lot 10 (fonds de carte, sans migration ni variable
-nouvelle) aussi. Restent les actions
+fiche, sans migration) le sien, le lot 10 (fonds de carte, sans migration ni variable
+nouvelle) aussi, et le lot 11 (équipements et quartiers) le sien : migration additive
+`20261105120000_lot11_amenities_neighbourhoods`, trois imports puis le rattrapage du contexte
+des annonces ([docs/deploiement.md](../deploiement.md) § 2). Restent les actions
 d'exploitation (Supabase cloud, Vercel, clés et connecteur :
 [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard » dans chaque lot, et
 les critères « Fini quand » qui demandent le déploiement ou un usage réel (lot 1 : déploiement et
 mobile de Chloé ; lot 2 : dix essais d'extraction ; lot 6 : push et partage sur les vrais
 téléphones ; lot 8 : une vraie troisième adresse Google ; lot 9 : une lecture de fiche par
 Richard et Chloé, sur ordinateur et sur téléphone ; lot 10 : un périmètre dessiné par Richard
-sur la photo aérienne, sur le site déployé), à constater après la mise en ligne.
+sur la photo aérienne, sur le site déployé ; lot 11 : les imports faits sur la base de
+production et l'onglet Quartier des annonces réelles relu par Richard), à constater après la
+mise en ligne.
 
 ## Lot 0 : socle
 
@@ -275,3 +279,55 @@ photo aérienne ; le choix du fond est retenu d'une visite à l'autre sur le mê
 couches de contexte, le rayon, le périmètre et le dessin en cours restent affichés après un
 changement de fond. (Vérifié en tests automatisés et sur captures Chromium d'un banc d'essai,
 tuiles réelles ; à confirmer par Richard sur le site déployé, sur ordinateur et sur téléphone.)
+
+## Lot 11 : équipements et quartiers
+
+Statut : livré (à déployer : migration additive
+`20261105120000_lot11_amenities_neighbourhoods`, trois imports et le rattrapage du contexte des
+annonces, [docs/deploiement.md](../deploiement.md) § 2).
+
+- Besoins D8 à D11 et G9. Demande de Richard : en plus des arrêts de tram et de bus, voir sur la
+  carte les pistes d'athlétisme, les supermarchés avec drive (préférence Carrefour, Auchan,
+  Intermarché), les salles Fitness Park et les contours de tous les quartiers de la métropole,
+  puis les retrouver dans l'onglet Quartier de chaque annonce. ADR 0021.
+- Livré :
+  - **Sources vérifiées** (URL, licence, date et volumes dans docs/open-data.md) : pistes du
+    recensement des équipements sportifs (Data ES, ministère des Sports, Licence Ouverte 2.0 :
+    77 pistes sur 24 communes, stades, pistes isolées et pistes 2 à 4 couloirs, les aires de saut
+    et de lancer écartées), complétées par 7 pistes OpenStreetMap qu'aucune fiche ne décrit ;
+    supermarchés avec drive d'OpenStreetMap (ODbL : 25, dont 21 signalés et 4 « à vérifier » ;
+    Carrefour 3, Auchan 4, Intermarché 2) ; 6 salles Fitness Park d'OpenStreetMap, vérifiées une
+    à une ; contours : 30 secteurs de vie de Bordeaux, 67 quartiers officiels de sept autres
+    communes, IRIS de l'IGN-INSEE (édition 2026) ailleurs, cinq communes entières.
+  - **Modèle** : tables `amenities` et `neighbourhoods` (PostGIS, GiST), écrites par le module
+    `geo` ; scripts `import:sports-facilities`, `import:supermarkets`, `import:neighbourhoods`
+    (`--help`, `--dry-run`, `--download`, fichiers locaux, remplacement par source, idempotents)
+    et `refresh:surroundings` (rattrapage des annonces existantes).
+  - **Règles** (`domain`) : enseigne et enseignes préférées, drive signalé ou « à vérifier »,
+    jamais supposé ; quartier qui contient le point (quartier officiel, puis IRIS, puis commune ;
+    « à vérifier » pour une localisation approchée ou une adresse à la rue en limite) ; drive
+    le plus proche de chaque enseigne préférée et toutes enseignes (signalé d'abord).
+  - **Fiche** : onglet Quartier (quartier et sa source, piste la plus proche et sa nature, drives
+    par enseigne, Fitness Park, distances « à vol d'oiseau » calculées par PostGIS) et résumé
+    Quartier de la Synthèse ; valeurs dans l'instantané `open_data_context.surroundings`
+    (création, changement d'adresse, rattrapage) et dans `context` de `get_listing` (MCP) ;
+    « non disponible » sans import.
+  - **Cartes** : couches Quartiers, Pistes d'athlétisme, Supermarchés drive, Fitness Park sur la
+    carte des annonces ; sur la carte du quartier de la fiche, les plus proches d'office, les
+    couches complètes à la demande, contour du quartier de l'annonce mis en avant, cadrage sur
+    l'annonce et ses équipements proches. Enseignes préférées en disque plein, autres en cercle
+    creux, « à vérifier » plus pâle ; légende ; nom du quartier au survol et au clic ; fenêtres
+    avec nom, enseigne, drive, nature, adresse et source ; attributions ; couches recopiées au
+    changement de fond.
+- Plus tard : ces équipements comme filtres des critères de recherche (« drive à moins de
+  2 km ») ou dans le verdict ; des temps de trajet (isochrones Géoplateforme, approchés) plutôt
+  que des distances à vol d'oiseau ; d'autres équipements (piscines, écoles, parcs) ; des
+  quartiers officiels pour les vingt autres communes quand elles en publieront ; une source plus
+  complète pour les drives des hypermarchés (OpenStreetMap ne signale pas tous les drives).
+
+Fini quand : chaque annonce localisée montre son quartier (avec sa provenance), la piste
+d'athlétisme, les drives par enseigne et la salle Fitness Park les plus proches, ou « non
+disponible » ; les quatre couches s'allument sur la carte des annonces et la carte du quartier,
+lisibles sur les trois fonds ; les imports et le rattrapage tournent sur la production sans
+rien casser. (Vérifié en tests automatisés, sur une base jetable avec les vraies données et sur
+captures Chromium d'un banc d'essai ; à confirmer par Richard sur le site déployé.)

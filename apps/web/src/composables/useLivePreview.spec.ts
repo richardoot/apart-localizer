@@ -83,6 +83,7 @@ describe('aperçu en direct', () => {
         computedAt: '2026-11-03T10:00:00.000Z',
       },
       dpe: null,
+      surroundings: null,
       rentControl: null,
       transit: null,
     }
@@ -113,6 +114,7 @@ describe('aperçu en direct', () => {
     const context = {
       market: null,
       dpe: null,
+      surroundings: null,
       transit: null,
       rentControl: {
         status: 'ok' as const,

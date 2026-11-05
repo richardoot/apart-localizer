@@ -5,7 +5,9 @@ annonce localisée reçoit l'arrêt de tram le plus proche, le plafond de loyer 
 (commune de Bordeaux), un DPE vérifié auprès de l'ADEME et l'ancrage marché des ventes DVF
 comparables ; les critères de recherche se dessinent sur la carte ou se calculent en isochrone ;
 au lot 5, la checklist réglementaire lit les risques Géorisques à l'adresse ; au lot 10, les
-cartes proposent le plan et la photo aérienne de l'IGN en plus du plan OpenStreetMap.
+cartes proposent le plan et la photo aérienne de l'IGN en plus du plan OpenStreetMap ; au lot 11,
+chaque annonce reçoit son quartier, la piste d'athlétisme, les supermarchés avec drive et la salle
+Fitness Park les plus proches, et les cartes en montrent les couches.
 Rien n'est inventé : une donnée ambiguë, périmée ou absente rend l'état « à vérifier » avec sa
 raison.
 
@@ -13,8 +15,9 @@ Code : `apps/api/src/opendata/` (un connecteur par source, `fetch` injectable, c
 `ReferenceData`), `apps/api/src/geo/` (tout le SQL PostGIS : zones, arrêts, ventes, périmètres),
 `packages/domain/src/` (`rent-reference.ts`, `market.ts`, `dpe.ts`, `criteria.ts` : les calculs),
 `apps/api/src/listings/enrichment.service.ts` (orchestration), `scripts/` (imports). Décisions :
-ADR [0010](decisions/0010-criteres-alertes-et-isochrones.md) et
-[0011](decisions/0011-donnees-ouvertes-encadrement-dvf-dpe-tbm.md).
+ADR [0010](decisions/0010-criteres-alertes-et-isochrones.md),
+[0011](decisions/0011-donnees-ouvertes-encadrement-dvf-dpe-tbm.md) et, pour le lot 11,
+[0021](decisions/0021-equipements-et-quartiers.md).
 
 ## Sources
 
@@ -99,6 +102,83 @@ par le même géocodeur que les annonces (`GeocodingService`, cache `reference_d
 `geocode`) et rend `found` (point, libellé, précision, commune), `not_found` ou `unavailable` ;
 rien n'est enregistré sur une annonce ni sur un critère, rien n'est écrit au journal.
 
+### Équipements et quartiers (lot 11, besoins D8 à D11)
+
+Consultés, téléchargés et vérifiés le 5 novembre 2026 (métadonnées des jeux lues par leur API,
+fiche CSW de l'IGN, wiki OpenStreetMap, Wikidata). Fichiers locaux dans `data/opendata/` (ignoré
+par git). Code : `scripts/lib/sports.ts`, `supermarkets.ts`, `neighbourhoods.ts`, `osm.ts`
+(lecture des sources), `packages/domain/src/surroundings.ts` (règles),
+`apps/api/src/geo/geo.service.ts` (tables `amenities` et `neighbourhoods`),
+`apps/api/src/opendata/surroundings.service.ts` (lecture pour une annonce). ADR
+[0021](decisions/0021-equipements-et-quartiers.md).
+
+| Donnée                                         | Fichier local                            | Source (URL)                                                                                                                                                                                                                                                                                                            | Producteur, licence                                                                                              | Relevé le 5 novembre 2026                                                                                                                                                                               |
+| ---------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Équipements d'athlétisme (Data ES)             | `res/bm-athletisme.json` (ou `.geojson`) | `https://equipements.sports.gouv.fr/api/explore/v2.1/catalog/datasets/data-es/exports/json?where=epci_code='243300316' and equip_type_famille="Equipement d'athlétisme"` (jeu `data-es`, fiche data.gouv.fr « Recensement des équipements sportifs, espaces et sites de pratiques »)                                    | Ministère des Sports, « LICENCE OUVERTE 2.0 » (métadonnées du jeu)                                               | jeu modifié le 4 novembre 2026 (mise à jour quotidienne) ; 334 287 fiches en France, 116 équipements d'athlétisme dans la métropole (24 communes)                                                       |
+| Pistes d'athlétisme OpenStreetMap (complément) | `osm/athletics-tracks.json`              | Overpass `https://overpass-api.de/api/interpreter`, requête `OSM_TRACKS_QUERY` (`scripts/lib/sports.ts`) : `nwr["leisure"="track"]["sport"~"athletics"]` dans les 28 communes                                                                                                                                           | © contributeurs OpenStreetMap, ODbL                                                                              | base OSM du 5 novembre 2026 00:29 UTC ; 57 pistes `leisure=track` + `sport=athletics`                                                                                                                   |
+| Supermarchés avec drive                        | `osm/supermarkets.json`                  | Overpass, requête `SUPERMARKETS_QUERY` (`pnpm import:supermarkets -- --print-query`) : `shop` ∈ supermarket, convenience, outpost, department_store, et voies `highway=service` + `service=drive-through` nommées                                                                                                       | © contributeurs OpenStreetMap, ODbL                                                                              | base OSM du 5 novembre 2026 00:30 UTC ; 457 commerces alimentaires lus                                                                                                                                  |
+| Salles Fitness Park                            | `osm/fitness-park.json`                  | Overpass, requête `OSM_FITNESS_QUERY` : `leisure` fitness_centre ou sports_centre nommés « Fitness Park », `brand` « Fitness Park », `brand:wikidata=Q102351191`                                                                                                                                                        | © contributeurs OpenStreetMap, ODbL ; marque Q102351191 (« Fitness Park, chaîne de clubs de fitness », Wikidata) | 6 clubs ; le recensement des équipements sportifs n'en compte aucun en Gironde                                                                                                                          |
+| Quartiers des communes                         | `quartiers/se_quart_s.geojson`           | `https://datahub.bordeaux-metropole.fr/api/explore/v2.1/catalog/datasets/se_quart_s/exports/geojson` (« Quartier des communes »)                                                                                                                                                                                        | Bordeaux Métropole, Licence Ouverte (métadonnées du jeu)                                                         | modifié le 4 novembre 2026 ; 75 quartiers, huit communes (Bordeaux 8, Bègles 10, Cenon 3, Martignas-sur-Jalle 5, Mérignac 10, Pessac 17, Le Taillan-Médoc 6, Talence 16) ; « en cours de construction » |
+| Secteurs de vie de Bordeaux                    | `quartiers/se_quartvie_s.geojson`        | `https://datahub.bordeaux-metropole.fr/api/explore/v2.1/catalog/datasets/se_quartvie_s/exports/geojson` (« Secteurs de vie de la ville de Bordeaux »)                                                                                                                                                                   | Ville de Bordeaux, Licence Ouverte (métadonnées du jeu)                                                          | modifié le 4 novembre 2026 ; 30 secteurs (recréés en septembre 2026), chacun rattaché à l'un des huit quartiers                                                                                         |
+| Contours IRIS                                  | `iris/bm-contours_iris-2026.geojson`     | WFS de la Géoplateforme, couche `STATISTICALUNITS.IRIS:contours_iris` : `https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=STATISTICALUNITS.IRIS:contours_iris&OUTPUTFORMAT=application/json&SRSNAME=EPSG:4326&COUNT=1000&CQL_FILTER=code_insee IN ('33003',…)` (les 28 codes INSEE) | IGN et INSEE, « Licence Ouverte / Open License » (fiche CSW `IGNF_CONTOURS-IRIS`)                                | édition 2026 ; 277 IRIS dans la métropole (dont 5 « commune entière », type Z) ; identiques (codes, noms, types) au jeu `se_iri24_s` du datahub, géographie 2024                                        |
+
+Le jeu `fv_commu_s` (limites des communes, datahub) a servi au contrôle de couverture, il n'est
+pas importé.
+
+**Règles** (ADR 0021) :
+
+- **Pistes** : types 1001 « Stade d’athlétisme », 1004 « Piste d'athlétisme isolée », 1005
+  « Piste d'athlétisme 2 à 4 couloirs » (codes `equip_type_code`) ; les aires de saut (1003) et
+  de lancer (1002) ne sont pas des pistes. Champs repris : `equip_numero` (identifiant),
+  `inst_nom` (nom), `equip_type_name` (nature), `equip_nature` (« Découvert », « Intérieur » :
+  couverte ou non), `equip_piste_long` (longueur de l'anneau, stades) sinon `equip_long`,
+  `equip_piste_nb` (couloirs, vide dans la métropole), `equip_sol`, `equip_acc_libre` (« accès
+  libre ») et `equip_utilisateur_filter` (publics : 84 équipements sur 116 réservés aux
+  scolaires), `inst_adresse`, `inst_cp`, `new_name`, `new_code`, `equip_coordonnees`.
+  `equip_maj_date` n'est gardée qu'à partir du 1er avril 2025 (112 fiches sur 116 portent le
+  31 mars 2025, date que la fiche du jeu demande d'ignorer). Complément OpenStreetMap : une piste
+  est déjà décrite si `ref:FR:sport_equip` reprend le numéro d'un équipement d'athlétisme du
+  recensement (20 cas) ou si une piste du recensement est à moins de 200 m (30 cas) ; les autres
+  (7) sont importées, avec `lanes`, `length`, `surface`, `covered`/`indoor`, `access`.
+- **Drive** (`driveSignalOfTags`) : signalé si `drive_through=only` ou « drive » dans `name`,
+  `brand`, `official_name`, `short_name` ; à vérifier si `drive_through=yes`,
+  `click_and_collect=yes|only`, `branch` « Drive » sans « drive » dans le nom, `shop=outpost` sans
+  autre signal, ou un supermarché (pas une supérette) à moins de 400 m d'une voie
+  `service=drive-through` dont le nom porte « drive » et son enseigne (pas un « McDrive ») ; sinon
+  pas importé. Sur les données du 5 novembre 2026, aucun objet n'a `click_and_collect`,
+  `service:drive` ou `drive`. Le wiki dit `shop=outpost` « principalement utilisé pour retirer des
+  articles commandés en ligne (appelé Drive ou Click & Collect en France) »
+  ([FR:Tag:shop=outpost](https://wiki.openstreetmap.org/wiki/FR:Tag:shop%3Doutpost)) et
+  `drive_through` « service au volant… également nommé en français drive »
+  ([FR:Key:drive_through](https://wiki.openstreetmap.org/wiki/FR:Key:drive_through)), l'anglais le
+  réservant au service sans quitter son véhicule : d'où « à vérifier » pour `yes`. La Name
+  Suggestion Index (version 8.0.20261101) recommande `drive_through=only` pour « Auchan Drive »,
+  « E.Leclerc Drive » (`shop=outpost`) et « Intermarché Drive ». Groupe d'enseigne
+  (`supermarketBrandGroup`) : « carrefour », « auchan » ou « intermarche » dans l'enseigne, sinon
+  le nom (Market, City, Contact, Express, Hyper, Super, Drive… compris) ; les autres enseignes
+  restent affichées, en cercle creux.
+- **Fitness Park** (`isFitnessPark`) : `brand:wikidata=Q102351191`, sinon « Fitness Park » dans
+  `brand`, `name` ou `operator` ; un autre identifiant Wikidata écarte l'objet. Les six clubs
+  trouvés ont tous `operator=Fitness Park` et une adresse électronique `@fitnesspark.fr` ; la
+  page publique des clubs de Gironde (fitnesspark.fr, consultée sans automatisation) en liste
+  cinq, la page du club du Bouscat existe aussi. Les noms sont repris tels quels (« Bordeaux -
+  Chartons », sic).
+- **Quartiers** : secteurs de vie à Bordeaux (nom `libelle`, parent `nom`), quartiers de
+  `se_quart_s` dans les sept autres communes qui en ont (fiches `valide=False` écartées ; toutes
+  valides le 5 novembre 2026), IRIS ailleurs (« IRIS <nom_iris> »), commune entière pour un IRIS
+  de type Z (Ambès, Bouliac, Saint-Aubin-de-Médoc, Saint-Louis-de-Montferrand,
+  Saint-Vincent-de-Paul). Couverture des quartiers officiels mesurée dans PostGIS contre
+  `fv_commu_s` : 100 % à Bègles, Cenon, Le Taillan-Médoc, 99,9 % à Bordeaux, Mérignac, Pessac,
+  95,4 % à Talence et 67,4 % à Martignas-sur-Jalle ; les IRIS de ces communes sont donc importés
+  aussi, pour le quartier d'un point hors des quartiers officiels, et la carte n'en dessine que la
+  part hors des quartiers qui garde 1 ha une fois rognée de 25 m (IRIS Nord de
+  Martignas-sur-Jalle, 8,6 km² ; IRIS Médoquine-Haut-Brion de Talence, 0,38 km²).
+- **Annonce** : quartier qui contient le point (quartier, puis IRIS, puis commune), « à vérifier »
+  pour une localisation au centre de la commune ou au quartier du géocodeur, deux contours de même
+  nature, ou une adresse à la rue à moins de 30 m d'un autre contour de même nature ; piste et
+  Fitness Park les plus proches, drive le plus proche de chaque enseigne préférée et toutes
+  enseignes (signalé d'abord), à vol d'oiseau, 20 km au plus.
+
 ## Imports
 
 Chaque script a `--help`, `--dry-run` (lit, filtre et contrôle sans rien écrire) et
@@ -114,14 +194,24 @@ pnpm import:dvf -- --year 2024 --year 2023          # fichiers locaux data/opend
 pnpm import:dvf -- --year 2025 --download           # lu en flux depuis files.data.gouv.fr
 pnpm import:dvf -- --url https://.../33.csv.gz --file autre.csv
 pnpm geocode:missing -- --dry-run        # annonces sans point, ou au centroïde avec une adresse
+# Lot 11, dans cet ordre (fichiers de data/opendata/, ou --download pour lire les sources en ligne)
+pnpm import:neighbourhoods               # quartiers officiels, secteurs de vie, IRIS, communes entières
+pnpm import:sports-facilities            # pistes (Data ES + complément OSM) et Fitness Park (OSM)
+pnpm import:sports-facilities -- --only fitness --download
+pnpm import:supermarkets                 # drives OSM ; --print-query affiche la requête Overpass
+pnpm refresh:surroundings -- --dry-run   # rattrapage du quartier et des équipements des annonces
 ```
 
-| Import                 | Ce qui est écrit                                                                                                                                                                                                                                                                                                                                             | Volume et durée en local (3 novembre 2026, base Supabase 54322)                                                                                                                                                                                                                                                                             |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `import:rent-control`  | `rent_control_zones` (MultiPolygon, index GiST), remplacement complet du territoire `bordeaux` ; `reference_data` sorte `rent_reference`, clé `bordeaux:<date d'application>` (la table de l'arrêté, sa source, son empreinte, le résultat du contrôle croisé), le tout dans une transaction. Refus si un libellé, une valeur ou une zone ne correspond pas. | 88 secteurs, 1 arrêté (128 loyers) ; 0,4 s d'écriture, 2,0 s au total                                                                                                                                                                                                                                                                       |
-| `import:transit-stops` | `transit_stops` (upsert par réseau et identifiant, arrêts disparus supprimés sauf `--no-prune`) : arrêts actifs de la métropole hors arrêts fictifs, mode tram ou bus, lignes                                                                                                                                                                                | 1 106 arrêts (279 tram, 827 bus), 1 102 avec au moins une ligne, tous les arrêts de tram en ont une ; 1,0 s d'écriture, 1,8 s au total                                                                                                                                                                                                      |
-| `import:dvf`           | `dvf_sales` (les années du fichier sont remplacées en entier dans une transaction, lots de 500) : mutations d'un seul appartement sans autre local (dépendances comprises dans le prix), ventes et VEFA, géolocalisées, surface ≥ 9 m², 500 à 20 000 €/m²                                                                                                    | 2024 : 82 927 lignes lues, 13 765 mutations de la métropole, 5 837 ventes retenues (27 communes) ; écartées : 7 541 sans appartement, 261 à plusieurs appartements, 55 avec une maison ou un local, 34 non géolocalisées, 22 implausibles, 13 d'autres natures, 2 sans valeur foncière ; 0,3 s de lecture, 0,5 s d'écriture, 1,6 s au total |
-| `geocode:missing`      | point, adresse normalisée, BAN, INSEE en provenance `open_data`, journal `listing.geocoded` (canal `system`)                                                                                                                                                                                                                                                 | lancé en `--dry-run --no-geocode` sur les 29 annonces réelles : aucune à corriger                                                                                                                                                                                                                                                           |
+| Import                     | Ce qui est écrit                                                                                                                                                                                                                                                                                                                                             | Volume et durée en local (3 novembre 2026, base Supabase 54322)                                                                                                                                                                                                                                                                                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `import:rent-control`      | `rent_control_zones` (MultiPolygon, index GiST), remplacement complet du territoire `bordeaux` ; `reference_data` sorte `rent_reference`, clé `bordeaux:<date d'application>` (la table de l'arrêté, sa source, son empreinte, le résultat du contrôle croisé), le tout dans une transaction. Refus si un libellé, une valeur ou une zone ne correspond pas. | 88 secteurs, 1 arrêté (128 loyers) ; 0,4 s d'écriture, 2,0 s au total                                                                                                                                                                                                                                                                                                                                  |
+| `import:transit-stops`     | `transit_stops` (upsert par réseau et identifiant, arrêts disparus supprimés sauf `--no-prune`) : arrêts actifs de la métropole hors arrêts fictifs, mode tram ou bus, lignes                                                                                                                                                                                | 1 106 arrêts (279 tram, 827 bus), 1 102 avec au moins une ligne, tous les arrêts de tram en ont une ; 1,0 s d'écriture, 1,8 s au total                                                                                                                                                                                                                                                                 |
+| `import:dvf`               | `dvf_sales` (les années du fichier sont remplacées en entier dans une transaction, lots de 500) : mutations d'un seul appartement sans autre local (dépendances comprises dans le prix), ventes et VEFA, géolocalisées, surface ≥ 9 m², 500 à 20 000 €/m²                                                                                                    | 2024 : 82 927 lignes lues, 13 765 mutations de la métropole, 5 837 ventes retenues (27 communes) ; écartées : 7 541 sans appartement, 261 à plusieurs appartements, 55 avec une maison ou un local, 34 non géolocalisées, 22 implausibles, 13 d'autres natures, 2 sans valeur foncière ; 0,3 s de lecture, 0,5 s d'écriture, 1,6 s au total                                                            |
+| `geocode:missing`          | point, adresse normalisée, BAN, INSEE en provenance `open_data`, journal `listing.geocoded` (canal `system`)                                                                                                                                                                                                                                                 | lancé en `--dry-run --no-geocode` sur les 29 annonces réelles : aucune à corriger                                                                                                                                                                                                                                                                                                                      |
+| `import:neighbourhoods`    | `neighbourhoods` (MultiPolygon, GiST) : tout le territoire `bordeaux_metropole` remplacé dans une transaction, qui calcule aussi la part dessinée (`map_geom`) ; provenance par contour                                                                                                                                                                      | 5 novembre 2026, base jetable sur le serveur de test : 374 contours (30 secteurs de vie, 67 quartiers officiels, 272 IRIS, 5 communes entières), 202 dessinés sur la carte (97 quartiers, 98 IRIS, 2 parts d'IRIS hors quartiers, 5 communes) ; 0,5 à 0,8 s ; couche entière simplifiée à 5 m : 0,22 Mo de géométrie                                                                                   |
+| `import:sports-facilities` | `amenities` genre `athletics_track` (sources `res` et `osm`) et `fitness_park` (`osm`), chaque source remplacée dans une transaction                                                                                                                                                                                                                         | 77 pistes du recensement (26 stades, 50 pistes isolées, 1 piste 2 à 4 couloirs ; 39 aires écartées), 7 pistes OpenStreetMap en complément, 6 Fitness Park ; 0,14 s                                                                                                                                                                                                                                     |
+| `import:supermarkets`      | `amenities` genre `supermarket_drive` (source `osm`), remplacée dans une transaction                                                                                                                                                                                                                                                                         | 25 drives sur 457 commerces alimentaires : 21 signalés (11 points E.Leclerc Drive, 4 Auchan Drive, 3 Chronodrive, 1 Carrefour Drive, 1 Intermarché Drive, 1 épicerie « Le Drive tout nu »), 4 à vérifier (deux Carrefour près d'une voie « Carrefour Drive », un Intermarché `drive_through=yes`, un Super U `branch=Drive`) ; par enseigne : Carrefour 3, Auchan 4, Intermarché 2, autres 16 ; 0,15 s |
+| `refresh:surroundings`     | la clé `surroundings` de `open_data_context` des annonces dont le résultat change, journal `listing.enriched` (canal `system`)                                                                                                                                                                                                                               | idempotent : une seconde passe ne réécrit rien (vérifié en test e2e)                                                                                                                                                                                                                                                                                                                                   |
 
 Relancer un import ne crée pas de doublon (vérifié le 3 novembre 2026 : mêmes comptes après une
 seconde exécution des trois imports). La fiche du jeu décrit `id_mutation` comme
@@ -131,16 +221,19 @@ Les commandes acceptent les options avec ou sans le séparateur `--` de pnpm.
 
 ## Fréquence de rafraîchissement
 
-| Donnée                  | Rythme de la source                                         | À faire                                                                                                                                                                                            |
-| ----------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Arrêté de l'encadrement | annuel (juin ou juillet, application au 15 juillet)         | télécharger le nouveau classeur, mettre à jour le référentiel CSV ou passer `--valid-from`, relancer `import:rent-control` ; surveiller la prolongation au-delà du 24 novembre 2026                |
-| Zonage                  | rare (inchangé de 2022 à 2026)                              | relancer l'import si la DDTM publie un nouveau zonage                                                                                                                                              |
-| Arrêts TBM              | quotidien (jeu modifié chaque nuit)                         | trimestriel suffit, ou à chaque changement de réseau (nouvelle ligne de tram)                                                                                                                      |
-| DVF                     | semestriel (avril et octobre), décalage de six mois à un an | importer chaque nouvelle année ; la fenêtre des comparables (trois ans) avance d'elle-même                                                                                                         |
-| DPE ADEME               | hebdomadaire                                                | rien : appel à la demande, cache de sept jours                                                                                                                                                     |
-| Isochrones              | graphe routier mis à jour régulièrement                     | rien : une isochrone est figée à l'enregistrement ; la recalculer en renvoyant ses paramètres (`update_search_criteria`)                                                                           |
-| Géorisques              | au fil des procédures (PPR, arrêtés)                        | rien : appel à la demande, cache de trente jours                                                                                                                                                   |
-| Règles réglementaires   | lois et décrets (calendrier DPE, encadrement, diagnostics)  | mettre à jour `DEFAULT_REGULATORY_RULES` (version, date, sources) ou déposer une table en `reference_data` (sorte `regulatory_rules`, clé `current`) ; surveiller la prolongation de l'encadrement |
+| Donnée                                       | Rythme de la source                                                  | À faire                                                                                                                                                                                            |
+| -------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Arrêté de l'encadrement                      | annuel (juin ou juillet, application au 15 juillet)                  | télécharger le nouveau classeur, mettre à jour le référentiel CSV ou passer `--valid-from`, relancer `import:rent-control` ; surveiller la prolongation au-delà du 24 novembre 2026                |
+| Zonage                                       | rare (inchangé de 2022 à 2026)                                       | relancer l'import si la DDTM publie un nouveau zonage                                                                                                                                              |
+| Arrêts TBM                                   | quotidien (jeu modifié chaque nuit)                                  | trimestriel suffit, ou à chaque changement de réseau (nouvelle ligne de tram)                                                                                                                      |
+| DVF                                          | semestriel (avril et octobre), décalage de six mois à un an          | importer chaque nouvelle année ; la fenêtre des comparables (trois ans) avance d'elle-même                                                                                                         |
+| DPE ADEME                                    | hebdomadaire                                                         | rien : appel à la demande, cache de sept jours                                                                                                                                                     |
+| Isochrones                                   | graphe routier mis à jour régulièrement                              | rien : une isochrone est figée à l'enregistrement ; la recalculer en renvoyant ses paramètres (`update_search_criteria`)                                                                           |
+| Géorisques                                   | au fil des procédures (PPR, arrêtés)                                 | rien : appel à la demande, cache de trente jours                                                                                                                                                   |
+| Règles réglementaires                        | lois et décrets (calendrier DPE, encadrement, diagnostics)           | mettre à jour `DEFAULT_REGULATORY_RULES` (version, date, sources) ou déposer une table en `reference_data` (sorte `regulatory_rules`, clé `current`) ; surveiller la prolongation de l'encadrement |
+| Équipements sportifs (Data ES)               | quotidien                                                            | trimestriel suffit : `import:sports-facilities --download`, puis `refresh:surroundings`                                                                                                            |
+| OpenStreetMap (drives, Fitness Park, pistes) | en continu                                                           | trimestriel, ou après une correction faite dans OpenStreetMap (un drive manquant) : imports `--download`, puis `refresh:surroundings`                                                              |
+| Quartiers et IRIS                            | rare (secteurs de vie recréés en septembre 2026 ; IRIS chaque année) | relancer `import:neighbourhoods --download` à chaque nouveau découpage ou nouvelle édition IRIS (`--iris-edition`), puis `refresh:surroundings`                                                    |
 
 Après un import, les annonces gardent leur instantané (`open_data_context`) jusqu'à la prochaine
 modification ; `POST /listings/:id/geocode` (bouton « Relancer le géocodage » de la fiche) le
@@ -205,3 +298,19 @@ sont toujours calculés à la lecture.
   donne les aléas de ce point-là) ; le plan d'exposition au bruit de l'aérodrome de
   Bordeaux-Mérignac n'en fait pas partie (diagnostic bruit « à vérifier » à Mérignac) ; l'état des
   risques annexé au bail reste à établir à la date du bail.
+- Lot 11, drives : OpenStreetMap ne signale qu'une partie des drives (aucune étiquette sur la
+  plupart des hypermarchés, qui en ont pourtant souvent un) ; « aucun drive à moins de 20 km »
+  veut dire « aucun drive signalé dans la donnée ». Un drive manquant se corrige dans
+  OpenStreetMap puis par un nouvel import ; aucun site d'enseigne n'est lu.
+- Lot 11, pistes : l'accès du recensement décrit des publics (souvent « Scolaires,
+  universités ») plus qu'une ouverture au public ; une piste de lycée peut être fermée hors
+  temps scolaire. Une piste OpenStreetMap ajoutée en complément n'a souvent ni nom ni commune.
+- Lot 11, quartiers : les quartiers officiels de Bordeaux Métropole sont dits « en cours de
+  construction » par le producteur ; leurs tracés diffèrent un peu des IRIS (liserés de quelques
+  mètres le long des limites communales). Un point dans un tel liseré reçoit l'IRIS ; une
+  adresse à la rue en limite est « à vérifier ».
+- Lot 11, distances : à vol d'oiseau (PostGIS, sur la sphère), pas des temps de trajet ; un
+  équipement de l'autre côté de la Garonne peut être proche à vol d'oiseau et loin par la route.
+- Lot 11 : après un import, les annonces gardent leur instantané jusqu'au rattrapage
+  (`refresh:surroundings`) ou à leur prochaine modification d'adresse ; le bloc Contexte de la
+  fiche et `get_listing` recalculent à la lecture.

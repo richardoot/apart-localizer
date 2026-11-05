@@ -1,0 +1,97 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "gid": 1,
+        "nom": "Quartier fictif de Bordeaux",
+        "insee": "33063",
+        "valide": "True"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-0.6, 44.8],
+            [-0.58, 44.8],
+            [-0.58, 44.82],
+            [-0.6, 44.8]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "gid": 2,
+        "nom": "Quartier fictif de Talence",
+        "insee": "33522",
+        "valide": "True"
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [-0.6, 44.79],
+              [-0.58, 44.79],
+              [-0.58, 44.8],
+              [-0.6, 44.79]
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "gid": 3,
+        "nom": "Quartier non valide",
+        "insee": "33522",
+        "valide": "False"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-0.61, 44.79],
+            [-0.6, 44.79],
+            [-0.6, 44.8],
+            [-0.61, 44.79]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "gid": 4,
+        "nom": "Quartier hors métropole",
+        "insee": "33999",
+        "valide": "True"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-0.9, 44.6],
+            [-0.89, 44.6],
+            [-0.89, 44.61],
+            [-0.9, 44.6]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "gid": 5,
+        "nom": "Quartier sans contour",
+        "insee": "33522",
+        "valide": "True"
+      },
+      "geometry": null
+    }
+  ]
+}

@@ -160,7 +160,12 @@ Chaque source est un connecteur isolé dans le module `opendata` avec cache en b
 - DVF : import des fichiers ouverts DGFiP pour la Gironde dans `DvfSale` (PostGIS), plutôt
   qu'une API tierce ;
 - Géorisques (lot 5) : rapport « risques près de chez moi » de l'API v1, sans jeton, au point de
-  l'annonce, mis en cache trente jours, intégré à la checklist réglementaire (ADR 0013).
+  l'annonce, mis en cache trente jours, intégré à la checklist réglementaire (ADR 0013) ;
+- équipements et quartiers (lot 11) : imports dans `Amenity` (pistes d'athlétisme du
+  recensement des équipements sportifs et d'OpenStreetMap, supermarchés avec drive et salles
+  Fitness Park d'OpenStreetMap) et `Neighbourhood` (quartiers de Bordeaux Métropole, secteurs de
+  vie de Bordeaux, Contours IRIS de l'IGN) ; plus proches et quartier calculés en PostGIS
+  (ADR 0021).
 
 Mise en œuvre au lot 4 : [docs/open-data.md](../open-data.md) (sources, licences, dates, imports
 et règles) et ADR 0010, 0011 (isochrone à vélo approchée, zonage de l'encadrement dans une table

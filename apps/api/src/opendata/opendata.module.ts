@@ -7,6 +7,7 @@ import { MarketService } from './market.service'
 import { OpendataController } from './opendata.controller'
 import { ReferenceCacheService } from './reference-cache.service'
 import { RentControlService } from './rent-control.service'
+import { SurroundingsService } from './surroundings.service'
 import { TransitService } from './transit.service'
 
 /**
@@ -14,7 +15,8 @@ import { TransitService } from './transit.service'
  * cache en base (`ReferenceData`) : géocodage et isochrones IGN, DPE ADEME,
  * risques Géorisques ;
  * et les données importées par les scripts (arrêts TBM, zonage et arrêtés
- * de l'encadrement, ventes DVF), lues par le module geo.
+ * de l'encadrement, ventes DVF ; lot 11 : équipements et quartiers), lues
+ * par le module geo.
  */
 @Module({
   controllers: [OpendataController],
@@ -27,6 +29,7 @@ import { TransitService } from './transit.service'
     MarketService,
     TransitService,
     GeorisquesService,
+    SurroundingsService,
   ],
   exports: [
     GeocodingService,
@@ -37,6 +40,7 @@ import { TransitService } from './transit.service'
     MarketService,
     TransitService,
     GeorisquesService,
+    SurroundingsService,
   ],
 })
 export class OpendataModule {}

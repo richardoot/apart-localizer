@@ -20,6 +20,10 @@ import {
   McpUpdateSearchCriteriaInputSchema,
   ISOCHRONE_MODE_LABELS,
   OPEN_DATA_STATUS_LABELS,
+  DRIVE_STATUS_LABELS,
+  NEIGHBOURHOOD_KIND_LABELS,
+  PREFERRED_SUPERMARKET_BRANDS,
+  SUPERMARKET_BRAND_LABELS,
   PERIMETER_TYPE_LABELS,
   RENT_EPOCH_LABELS,
   McpEvaluateListingInputSchema,
@@ -61,8 +65,10 @@ import type {
   ListingContext,
   MarketContext,
   MarketContextReport,
+  NearbyAmenity,
   RentControlLookup,
   SearchCriteriaSummary,
+  Surroundings,
   TransitContext,
   DuplicateCandidate,
   EvaluatedListing,
@@ -383,6 +389,64 @@ export function describeMarket(market: MarketContext): string {
     .join(' · ')
 }
 
+/** Une distance à vol d'oiseau, en mètres ou en kilomètres. */
+function crowFlies(meters: number): string {
+  return meters < 1000
+    ? `${Math.round(meters)} m`
+    : `${(meters / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km`
+}
+
+/** Un équipement proche en quelques mots : nom, nature, drive, distance. */
+function describeAmenity(amenity: NearbyAmenity): string {
+  const d = amenity.details
+  const nature = [
+    d.facilityType,
+    d.covered === true ? 'couverte' : d.covered === false ? 'découverte' : null,
+    d.lengthMeters ? `${d.lengthMeters} m` : null,
+    amenity.drive ? DRIVE_STATUS_LABELS[amenity.drive].toLowerCase() : null,
+  ].filter(Boolean)
+  return `${amenity.name}${nature.length ? ` (${nature.join(', ')})` : ''}${amenity.commune ? `, ${amenity.commune}` : ''} à ${crowFlies(amenity.distanceMeters)} à vol d’oiseau`
+}
+
+/** Une valeur absente : « non disponible » sans import, sinon la raison. */
+function missing(lookup: { status: string; reasons: string[] }): string {
+  return lookup.status === 'unavailable'
+    ? 'non disponible (source non importée)'
+    : lookup.reasons.join(' ') || 'non disponible'
+}
+
+/** Quartier et équipements proches (lot 11) en quelques lignes. */
+export function describeSurroundings(s: Surroundings): string[] {
+  const n = s.neighbourhood
+  const lines = [
+    n.value
+      ? `Quartier (${OPEN_DATA_STATUS_LABELS[n.status]}) : ${n.value.name}, ${n.value.commune} (${NEIGHBOURHOOD_KIND_LABELS[n.value.kind].toLowerCase()} ; source : ${n.value.source})${n.reasons.length ? ` — ${n.reasons.join(' ')}` : ''}`
+      : `Quartier : ${missing(n)}`,
+  ]
+  const one = (label: string, lookup: Surroundings['athleticsTrack']) =>
+    lookup.nearest
+      ? `${label} : ${describeAmenity(lookup.nearest)}`
+      : `${label} : ${missing(lookup)}`
+  lines.push(one('Piste d’athlétisme la plus proche', s.athleticsTrack))
+  const drives = s.supermarkets
+  if (drives.status === 'ok') {
+    const parts = PREFERRED_SUPERMARKET_BRANDS.map(brand => {
+      const found = drives.preferred[brand]
+      return `${SUPERMARKET_BRAND_LABELS[brand]} : ${found ? describeAmenity(found) : 'aucun dans le rayon'}`
+    })
+    lines.push(`Drives des enseignes préférées : ${parts.join(' ; ')}`)
+    lines.push(
+      drives.nearest
+        ? `Drive le plus proche toutes enseignes : ${describeAmenity(drives.nearest)}`
+        : `Drive le plus proche : aucun à moins de ${crowFlies(s.searchRadiusMeters)}`
+    )
+  } else {
+    lines.push(`Drives : ${missing(drives)}`)
+  }
+  lines.push(one('Salle Fitness Park la plus proche', s.fitnessPark))
+  return lines
+}
+
 /** Le bloc « Contexte » d'une fiche en quelques lignes. */
 export function describeContext(context: ListingContext): string {
   return [
@@ -391,6 +455,7 @@ export function describeContext(context: ListingContext): string {
     `  - ${describeRentControl(context.rentControl)}`,
     `  - DPE ${context.dpe.verified ? 'vérifié auprès de l’ADEME' : 'non vérifié'} : ${context.dpe.validity.messages.join(' ')}${context.dpe.search && !context.dpe.verified && context.dpe.search.candidates.length ? ` (${context.dpe.search.candidates.length} DPE candidat(s) à l'ADEME, à valider dans l'application)` : ''}`,
     `  - ${describeMarket(context.market)}`,
+    ...describeSurroundings(context.surroundings).map(line => `  - ${line}`),
   ].join('\n')
 }
 
@@ -705,7 +770,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       description:
         'Une annonce complète : tous ses champs et leur provenance, ses indicateurs calculés, le détail des contrôles de louabilité (phase 2), ' +
         "le prix cible par critère, les avis des membres, les tâches (avec leurs identifiants), l'historique des prix, les critères de recherche dans lesquels elle est entrée, " +
-        "et son contexte de données ouvertes (`context`) : arrêt de tram le plus proche (distance, ligne), plafond d'encadrement (Bordeaux), DPE vérifié auprès de l'ADEME et sa validité, comparables DVF datés.",
+        "et son contexte de données ouvertes (`context`) : arrêt de tram le plus proche (distance, ligne), plafond d'encadrement (Bordeaux), DPE vérifié auprès de l'ADEME et sa validité, comparables DVF datés ; " +
+        'et (lot 11) son quartier (quartier officiel, IRIS ou commune, avec sa source), la piste d’athlétisme, le drive le plus proche de chaque enseigne préférée (Carrefour, Auchan, Intermarché) et toutes enseignes, et la salle Fitness Park les plus proches, distances à vol d’oiseau (« non disponible » si la source n’est pas importée).',
       inputSchema: McpGetListingInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },

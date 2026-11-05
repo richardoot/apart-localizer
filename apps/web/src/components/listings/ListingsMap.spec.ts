@@ -134,6 +134,10 @@ describe('ListingsMap (MapLibre mocké)', () => {
           bus: false,
           dvf: false,
           rentZones: false,
+          athletics: false,
+          drives: false,
+          fitness: false,
+          neighbourhoods: false,
         },
       },
       attachTo: document.body,
@@ -155,6 +159,10 @@ describe('ListingsMap (MapLibre mocké)', () => {
         bus: false,
         dvf: false,
         rentZones: false,
+        athletics: false,
+        drives: false,
+        fitness: false,
+        neighbourhoods: false,
       },
     })
     expect((tram?.data as { features: unknown[] }).features).toHaveLength(1)
@@ -183,6 +191,10 @@ describe('ListingsMap (MapLibre mocké)', () => {
           bus: false,
           dvf: true,
           rentZones: true,
+          athletics: false,
+          drives: false,
+          fitness: false,
+          neighbourhoods: false,
         },
       },
       attachTo: document.body,
@@ -239,6 +251,10 @@ describe('ListingsMap (MapLibre mocké)', () => {
       bus: false,
       dvf: false,
       rentZones: false,
+      athletics: false,
+      drives: false,
+      fitness: false,
+      neighbourhoods: false,
     }
     const wrapper = mount(ListingsMap, {
       props: {
@@ -297,6 +313,181 @@ describe('ListingsMap (MapLibre mocké)', () => {
     await nextTick()
     expect(mapLibreMock.maps[1]?.options.style).toBe(IGN_PLAN_STYLE_URL)
     other.unmount()
+    wrapper.unmount()
+  })
+
+  it('lot 11 : pistes, drives, Fitness Park et quartiers ; légende, fenêtres, survol', async () => {
+    const pointAt = (
+      properties: Record<string, string | number | boolean | null>
+    ) => ({
+      type: 'FeatureCollection' as const,
+      features: [
+        {
+          type: 'Feature' as const,
+          geometry: {
+            type: 'Point' as const,
+            coordinates: [-0.58, 44.84] as [number, number],
+          },
+          properties,
+        },
+      ],
+    })
+    const area = {
+      type: 'FeatureCollection' as const,
+      features: [
+        {
+          type: 'Feature' as const,
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: [
+              [
+                [-0.6, 44.8],
+                [-0.5, 44.8],
+                [-0.5, 44.9],
+                [-0.6, 44.8],
+              ] as [number, number][],
+            ],
+          },
+          properties: {
+            name: 'Secteur fictif',
+            code: 'S1',
+            kind: 'quartier',
+            parent: 'Quartier parent fictif',
+            commune: 'Bordeaux',
+            source: 'Source fictive',
+            partial: false,
+          },
+        },
+      ],
+    }
+    const off = {
+      criteria: true,
+      tram: false,
+      bus: false,
+      dvf: false,
+      rentZones: false,
+      athletics: false,
+      drives: false,
+      fitness: false,
+      neighbourhoods: false,
+    }
+    const layers = {
+      criteria: null,
+      tram: null,
+      bus: null,
+      dvf: null,
+      rentZones: null,
+      athletics: pointAt({ kind: 'athletics_track', name: 'Stade fictif' }),
+      drives: pointAt({
+        kind: 'supermarket_drive',
+        name: 'Drive fictif',
+        brandGroup: 'other',
+        drive: 'to_verify',
+      }),
+      fitness: pointAt({ kind: 'fitness_park', name: 'Fitness Park fictif' }),
+      neighbourhoods: area,
+    }
+    const wrapper = mount(ListingsMap, {
+      props: {
+        items: [placed],
+        near: undefined,
+        colorBy: 'verdict',
+        layers,
+        toggles: off,
+      },
+      attachTo: document.body,
+    })
+    await nextTick()
+    const map = mapLibreMock.maps[0]
+    map?.emit('load')
+    const data = (id: string) =>
+      (map?.sources.get(id)?.data as { features: unknown[] }).features
+    for (const id of ['athletics', 'drives', 'fitness', 'neighbourhoods'])
+      expect(data(id)).toHaveLength(0)
+    expect(wrapper.find('[data-testid="surroundings-legend"]').exists()).toBe(
+      false
+    )
+    await wrapper.get('input[data-layer="drives"]').setValue(true)
+    expect(wrapper.emitted('update:toggles')?.[0]?.[0]).toMatchObject({
+      drives: true,
+    })
+    await wrapper.setProps({
+      toggles: {
+        ...off,
+        athletics: true,
+        drives: true,
+        fitness: true,
+        neighbourhoods: true,
+      },
+    })
+    for (const id of ['athletics', 'drives', 'fitness', 'neighbourhoods'])
+      expect(data(id)).toHaveLength(1)
+    // Les drives : deux couches d'une source, les enseignes préférées à part.
+    const ids = (map?.layers ?? []).map(l => (l as { id: string }).id)
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'drives-other-points',
+        'drives-preferred-points',
+        'neighbourhoods-line',
+        'neighbourhood-hover-line',
+      ])
+    )
+    // Les contours passent sous les points.
+    expect(ids.indexOf('neighbourhoods-line')).toBeLessThan(
+      ids.indexOf('tram-stops-points')
+    )
+    const legend = wrapper.get('[data-testid="surroundings-legend"]').text()
+    expect(legend).toContain('drive Carrefour, Auchan, Intermarché')
+    expect(legend).toContain('autre enseigne')
+    expect(legend).toContain('Fitness Park')
+    expect(legend).toContain('quartiers')
+
+    // Un clic sur un drive ouvre sa fenêtre sans déplacer le point.
+    if (map) {
+      map.rendered = [
+        {
+          layer: { id: 'drives-other-points' },
+          properties: layers.drives.features[0]?.properties,
+        },
+      ]
+    }
+    map?.emit('click', { lngLat: { lng: -0.58, lat: 44.84 }, point: [1, 1] })
+    expect(wrapper.emitted('update:near')).toBeUndefined()
+    expect(mapLibreMock.popups.at(-1)?.html).toContain('Drive à vérifier')
+    // Un clic sur un quartier : son nom, et le point du filtre comme avant.
+    if (map) {
+      map.rendered = [
+        {
+          layer: { id: 'neighbourhoods-fill' },
+          properties: area.features[0]?.properties,
+        },
+      ]
+    }
+    map?.emit('click', { lngLat: { lng: -0.58, lat: 44.84 }, point: [1, 1] })
+    expect(mapLibreMock.popups.at(-1)?.html).toContain(
+      'Quartier Quartier parent fictif'
+    )
+    expect(wrapper.emitted('update:near')).toHaveLength(1)
+
+    // Survol : le nom près du pointeur ; couche éteinte, plus rien.
+    map?.emit('mousemove:neighbourhoods-fill', {
+      point: { x: 5, y: 6 },
+      features: [{ properties: { code: 'S1' } }],
+    })
+    await nextTick()
+    expect(wrapper.get('[data-testid="neighbourhood-hover"]').text()).toBe(
+      'Secteur fictif (Bordeaux)'
+    )
+    map?.emit('mousemove:neighbourhoods-fill', {
+      point: { x: 5, y: 6 },
+      features: [{ properties: { code: 'inconnu' } }],
+    })
+    await nextTick()
+    expect(wrapper.find('[data-testid="neighbourhood-hover"]').exists()).toBe(
+      false
+    )
+    await wrapper.setProps({ toggles: off })
+    expect(data('neighbourhoods')).toHaveLength(0)
     wrapper.unmount()
   })
 })

@@ -1,5 +1,6 @@
 import { listingFiltersToQuery } from '@apart/contracts'
 import type {
+  AmenityKind,
   ActivityChannel,
   ActivityKind,
   ActivityPage,
@@ -397,6 +398,16 @@ export const api = {
     dvf: (bbox: readonly [number, number, number, number]) =>
       apiFetch<LayerFeatureCollection>(
         `/opendata/layers/dvf?bbox=${bbox.map(v => v.toFixed(5)).join(',')}`
+      ),
+    /** Lot 11 : un genre d'équipement (pistes, drives, Fitness Park), couche entière. */
+    amenities: (kind: AmenityKind) =>
+      apiFetch<LayerFeatureCollection>(
+        `/opendata/layers/amenities?kind=${kind}`
+      ),
+    /** Lot 11 : contours des quartiers (toute la métropole, ou une emprise). */
+    neighbourhoods: (bbox?: readonly [number, number, number, number]) =>
+      apiFetch<LayerFeatureCollection>(
+        `/opendata/layers/neighbourhoods${bbox ? `?bbox=${bbox.map(v => v.toFixed(4)).join(',')}` : ''}`
       ),
     marketContext: (request: MarketContextRequest) =>
       apiFetch<MarketContextReport>('/market-context', {

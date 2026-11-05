@@ -276,6 +276,10 @@ dès le départ.
 | D5 | DVF (demandes de valeurs foncières, DGFiP) importé pour la Gironde dans la base du projet | Prix au m² des ventes comparables, ancrage du prix cible | L |
 | D6 | Géorisques | Risques à l'adresse (inondation, argiles, radon) dans la checklist | L |
 | D7 | Isochrones IGN Géoplateforme | Périmètre « n minutes à pied, à vélo ou en voiture depuis un point », figé en polygone à l'enregistrement ; le vélo est approché par une distance sur le réseau piéton et « en transport » reste à venir, la Géoplateforme n'ayant ni profil vélo ni transports en commun (ADR 0010) | L |
+| D8 | Recensement des équipements sportifs (Data ES, ministère des Sports), complété par OpenStreetMap | Piste d'athlétisme la plus proche de chaque annonce (nom, distance à vol d'oiseau, nature : stade, piste isolée, couverte ou non, longueur, publics accueillis) (lot 11, ADR 0021) | L |
+| D9 | OpenStreetMap (Overpass) | Supermarchés avec drive : le plus proche de chaque enseigne préférée (Carrefour, Auchan, Intermarché, toutes déclinaisons) et le plus proche toutes enseignes ; drive signalé par la donnée ou « à vérifier », jamais supposé ; aucune lecture des sites des enseignes (lot 11, ADR 0021) | L |
+| D10 | OpenStreetMap (Overpass) | Salle Fitness Park la plus proche, chaque club vérifié (marque, nom, exploitant) (lot 11, ADR 0021) | L |
+| D11 | Quartiers de Bordeaux Métropole et de la Ville de Bordeaux, Contours IRIS IGN-INSEE | Quartier de chaque annonce, pour toute la métropole : quartier officiel (secteur de vie à Bordeaux) là où la commune en publie, IRIS ailleurs, commune entière pour une commune non découpée, avec la provenance de chaque contour (lot 11, ADR 0021) | L |
 
 Les sources ouvertes changent d'adresse et de format : chaque connecteur est isolé derrière une
 interface, avec un cache en base et un marquage de la date de récupération.
@@ -292,6 +296,7 @@ interface, avec un cache en base et un marquage de la date de récupération.
 | G6 | Alerte : une nouvelle annonce qui entre dans un critère est marquée et comptée dans la synthèse ; une annonce ajoutée par le MCP est confrontée aux critères à la création | S |
 | G7 | Couches de contexte sur la carte : arrêts de tram et bus, ventes DVF récentes, zone d'encadrement | L |
 | G8 | Voir les rues et les bâtiments, surtout pour dessiner un périmètre : choix du fond (plan OpenStreetMap, plan IGN, photo aérienne IGN avec les noms de rues) commun aux cartes et retenu par appareil, couches et dessin conservés au changement de fond, carte de dessin cadrée de près et recentrée sur une adresse (lot 10, ADR 0020) | S |
+| G9 | Couches d'équipements et de quartiers, sur la carte des annonces et la carte du quartier de la fiche : pistes d'athlétisme, supermarchés drive (enseignes préférées distinguées par la forme et la légende), salles Fitness Park, contours des quartiers (nom au survol et au clic) ; fenêtres avec nom, enseigne, adresse et source ; lisibles sur les trois fonds (lot 11, ADR 0021) | L |
 
 Le filtrage géographique se fait en base (PostGIS) et jamais dans le navigateur, pour que la
 liste, la carte, le MCP et les alertes donnent le même résultat. Sur mobile, le point et rayon et
@@ -394,8 +399,18 @@ Métropole depuis le fichier de la Gironde).
 **RentControlZone** : territoire, zone de l'encadrement, secteur IRIS, code INSEE, multipolygone
 PostGIS (zonage de Bordeaux, ADR 0011).
 
+**Amenity** (lot 11) : genre (piste d'athlétisme, supermarché avec drive, salle Fitness Park),
+source (`res`, `osm`) et identifiant dans la source, nom, enseigne et groupe d'enseigne, drive
+(signalé ou à vérifier), adresse, commune, attributs propres au genre (nature, couverture,
+longueur, couloirs, revêtement, publics, preuve du drive), point PostGIS (ADR 0021).
+
+**Neighbourhood** (lot 11) : territoire, nature (quartier officiel, IRIS, commune entière), code
+dans la source, nom, quartier parent, commune, code INSEE, provenance, multipolygone PostGIS et
+part dessinée sur la carte (ADR 0021).
+
 Le **Listing** porte aussi le numéro de son DPE et un instantané des données ouvertes (arrêt de
-tram, médiane DVF, état du plafond, dernière recherche DPE) qui alimente le critère « marché ».
+tram, médiane DVF, état du plafond, dernière recherche DPE ; lot 11 : quartier et équipements
+les plus proches) qui alimente le critère « marché ».
 
 **ReferenceData** : loyers de référence par arrêté (date d'application, zone, pièces, époque,
 meublé), table des règles réglementaires datées (sorte `regulatory_rules`, lot 5 ; défaut dans

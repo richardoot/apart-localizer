@@ -307,9 +307,15 @@ pnpm import:rent-control                 # zonage et arrêté de l'encadrement (
 pnpm import:transit-stops                # arrêts TBM et leurs lignes
 pnpm import:dvf -- --year 2024           # ventes d'appartements de Bordeaux Métropole
 pnpm geocode:missing -- --dry-run        # annonces à géocoder (sans point, ou au centroïde)
+pnpm import:neighbourhoods               # quartiers de la métropole (officiels, secteurs de vie, IRIS)
+pnpm import:sports-facilities            # pistes d'athlétisme et salles Fitness Park
+pnpm import:supermarkets                 # supermarchés avec drive (OpenStreetMap)
+pnpm refresh:surroundings -- --dry-run   # quartier et équipements des annonces existantes
 ```
 
-Chaque script accepte `--help`, `--dry-run` et `--database-url`. Le DPE (ADEME), le géocodage,
+Chaque script accepte `--help`, `--dry-run` et `--database-url` ; les imports du lot 11 lisent
+aussi leurs sources en ligne avec `--download` (Overpass, Data ES, datahub de Bordeaux
+Métropole, Géoplateforme). Le DPE (ADEME), le géocodage,
 les isochrones (Géoplateforme) et le rapport de risques Géorisques sont appelés à la demande par
 l'API, avec un cache en base ; `ISOCHRONE_URL`, `ADEME_DPE_URL` et `GEORISQUES_URL` changent
 leur adresse.

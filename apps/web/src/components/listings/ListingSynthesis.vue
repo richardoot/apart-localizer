@@ -22,7 +22,8 @@
    * L'onglet Synthèse de la fiche (lot 9) : les deux bases de calcul
    * expliquées, trois blocs (« Combien négocier ? » sur le prix, « Combien ça
    * coûte ? » et « Est-ce rentable ? » tout compris), le pont « Et au prix
-   * cible ? », puis les résumés louabilité, suivi et quartier qui mènent aux
+   * cible ? », puis les résumés louabilité, suivi et quartier (lot 11 :
+   * quartier et équipements proches) qui mènent aux
    * autres onglets. Les valeurs viennent de l'évaluation (serveur) ou de
    * l'aperçu en direct, la lecture de `domain` (`readingOf`).
    */
@@ -60,6 +61,28 @@
   const marketMedian = computed(
     () => props.item.listing.openDataContext?.market?.medianPricePerM2 ?? null
   )
+  /** Lot 11 : quartier et équipements de l'instantané (à vol d'oiseau). */
+  const surroundings = computed(
+    () => props.item.listing.openDataContext?.surroundings ?? null
+  )
+  const equipment = computed(() => {
+    const s = surroundings.value
+    if (!s) return null
+    const part = (
+      label: string,
+      lookup: { status: string; nearest: { distanceMeters: number } | null }
+    ): string =>
+      lookup.nearest
+        ? `${label} à ${formatDistance(lookup.nearest.distanceMeters)}`
+        : lookup.status === 'unavailable'
+          ? `${label} non disponible`
+          : `${label} : aucun proche`
+    return [
+      part('piste', s.athleticsTrack),
+      part('drive', s.supermarkets),
+      part('Fitness Park', s.fitnessPark),
+    ].join(' · ')
+  })
 
   const linkClass =
     'inline-flex min-h-11 items-center justify-self-start text-sm font-semibold text-accent underline-offset-2 hover:underline'
@@ -194,6 +217,29 @@
           >
           <template v-else>marché DVF inconnu</template>
         </p>
+        <p class="text-sm" data-testid="summary-neighbourhood">
+          <template v-if="surroundings?.neighbourhood.value"
+            >Quartier {{ surroundings.neighbourhood.value.name
+            }}<template
+              v-if="
+                surroundings.neighbourhood.value.commune !==
+                surroundings.neighbourhood.value.name
+              "
+            >
+              ({{ surroundings.neighbourhood.value.commune }})</template
+            ><template v-if="surroundings.neighbourhood.status === 'to_verify'">
+              · à vérifier</template
+            ></template
+          >
+          <template v-else>Quartier : non disponible</template>
+        </p>
+        <p
+          v-if="equipment"
+          class="text-xs text-muted"
+          data-testid="summary-equipment"
+        >
+          {{ equipment }} (à vol d’oiseau)
+        </p>
         <p
           v-if="evaluation && marketMedian !== null"
           class="text-xs text-muted"
@@ -206,7 +252,7 @@
           :class="linkClass"
           @click="emit('go', 'quartier')"
         >
-          Contexte, carte, ventes, risques →
+          Contexte, équipements, carte, risques →
         </button>
       </section>
     </div>

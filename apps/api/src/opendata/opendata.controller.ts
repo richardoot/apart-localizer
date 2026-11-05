@@ -1,10 +1,12 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { ZodResponse } from 'nestjs-zod'
+import { NEIGHBOURHOOD_TERRITORY } from '@apart/contracts'
 import { marketWindow } from '@apart/domain'
 import { SupabaseGuard } from '../auth/guards/supabase.guard'
 import { GeoService } from '../geo/geo.service'
 import {
+  AmenityLayerQueryDto,
   BboxQueryDto,
   GeocodeLookupDto,
   GeocodeQueryDto,
@@ -24,7 +26,8 @@ const METROPOLE_BBOX: [number, number, number, number] = [
 ]
 
 /**
- * Couches de carte (arrêts TBM, zonage de l'encadrement, ventes DVF), état
+ * Couches de carte (arrêts TBM, zonage de l'encadrement, ventes DVF ; lot
+ * 11 : équipements et contours des quartiers), état
  * des imports et recherche d'adresse pour recentrer une carte. Lecture
  * seule ; le SQL est dans le module geo, le géocodeur dans GeocodingService.
  */
@@ -98,19 +101,42 @@ export class OpendataController {
     )
   }
 
+  @Get('layers/amenities')
+  @ApiOperation({
+    summary:
+      'Lot 11 : équipements d’un genre en GeoJSON (kind = athletics_track, supermarket_drive ou fitness_park), avec nom, enseigne, drive, adresse et source',
+  })
+  @ZodResponse({ status: 200, type: LayerDto })
+  amenities(@Query() query: AmenityLayerQueryDto): Promise<LayerDto> {
+    return this.geo.amenitiesGeoJson(query.kind)
+  }
+
+  @Get('layers/neighbourhoods')
+  @ApiOperation({
+    summary:
+      'Lot 11 : contours des quartiers de Bordeaux Métropole (quartiers officiels, IRIS, communes) en GeoJSON simplifié, dans une emprise facultative (bbox=ouest,sud,est,nord)',
+  })
+  @ZodResponse({ status: 200, type: LayerDto })
+  neighbourhoods(@Query() query: BboxQueryDto): Promise<LayerDto> {
+    return this.geo.neighbourhoodsGeoJson(NEIGHBOURHOOD_TERRITORY, query.bbox)
+  }
+
   @Get('status')
   @ApiOperation({
     summary:
-      'État des imports open data : secteurs et arrêtés de l’encadrement, arrêts par mode, ventes DVF par année',
+      'État des imports open data : secteurs et arrêtés de l’encadrement, arrêts par mode, ventes DVF par année, équipements et quartiers (lot 11)',
   })
   @ZodResponse({ status: 200, type: OpenDataStatusDto })
   async status(): Promise<OpenDataStatusDto> {
-    const [zones, tables, transitStops, dvf] = await Promise.all([
-      this.geo.rentControlZoneCount(RENT_CONTROL_TERRITORY),
-      this.rentControl.tables(),
-      this.geo.transitStopCounts(),
-      this.geo.dvfYears(),
-    ])
+    const [zones, tables, transitStops, dvf, amenities, neighbourhoods] =
+      await Promise.all([
+        this.geo.rentControlZoneCount(RENT_CONTROL_TERRITORY),
+        this.rentControl.tables(),
+        this.geo.transitStopCounts(),
+        this.geo.dvfYears(),
+        this.geo.amenityCounts(),
+        this.geo.neighbourhoodCounts(NEIGHBOURHOOD_TERRITORY),
+      ])
     return {
       rentControl: {
         zones,
@@ -123,6 +149,8 @@ export class OpendataController {
       },
       transitStops,
       dvf,
+      amenities,
+      neighbourhoods,
     }
   }
 }

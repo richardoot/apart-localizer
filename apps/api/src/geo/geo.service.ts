@@ -1,13 +1,27 @@
 import { Injectable } from '@nestjs/common'
 import { z } from 'zod'
+import {
+  AmenityDetailsSchema,
+  AmenityKindSchema,
+  AmenitySourceSchema,
+  DriveStatusSchema,
+  NeighbourhoodKindSchema,
+  SupermarketBrandGroupSchema,
+} from '@apart/contracts'
 import type {
+  AmenityDetails,
+  AmenityKind,
+  AmenitySource,
   CriteriaFilters,
+  DriveStatus,
   LayerFeatureCollection,
   LocationPrecision,
+  NeighbourhoodKind,
   PerimeterType,
   Point,
   PointRadius,
   Polygon,
+  SupermarketBrandGroup,
   TransitMode,
 } from '@apart/contracts'
 import { PrismaService } from '../prisma/prisma.service'
@@ -555,6 +569,316 @@ export class GeoService {
     return CountRows.parse(rows)[0]?.count ?? 0
   }
 
+  // -------------------------------------------------------------------------
+  // Équipements de proximité (lot 11) : pistes, drives, Fitness Park
+  // -------------------------------------------------------------------------
+
+  /**
+   * Remplace les équipements d'un genre venus d'une source, dans une
+   * transaction : les lignes absentes du fichier disparaissent, les autres
+   * sont réécrites (import idempotent). Un import vide ne supprime rien, sauf
+   * `allowEmpty` (un complément qui n'ajoute plus rien, source bien lue).
+   */
+  async replaceAmenities(
+    kind: AmenityKind,
+    source: AmenitySource,
+    rows: readonly AmenityRow[],
+    options: { batchSize?: number; allowEmpty?: boolean } = {}
+  ): Promise<{ written: number; removed: number }> {
+    if (rows.length === 0 && !options.allowEmpty) {
+      return { written: 0, removed: 0 }
+    }
+    const size = options.batchSize ?? 500
+    return this.prisma.$transaction(
+      async tx => {
+        const removed = await tx.$executeRaw`
+          DELETE FROM "app"."amenities" WHERE "kind" = ${kind}::"app"."AmenityKind" AND "source" = ${source}`
+        let written = 0
+        for (let i = 0; i < rows.length; i += size) {
+          const values = rows.slice(i, i + size).map(
+            row => Prisma.sql`(gen_random_uuid()::text, ${kind}::"app"."AmenityKind", ${source}, ${row.externalId},
+              ${row.name}, ${row.brand}, ${row.brandGroup}, ${row.drive}::"app"."DriveStatus",
+              ${row.address}, ${row.commune}, ${row.inseeCode},
+              ${JSON.stringify(AmenityDetailsSchema.parse(row.details ?? {}))}::jsonb,
+              ${row.latitude}::double precision, ${row.longitude}::double precision,
+              ST_SetSRID(ST_MakePoint(${row.longitude}::double precision, ${row.latitude}::double precision), 4326)::geography,
+              ${row.sourceUpdatedAt}::date, now())`
+          )
+          written += await tx.$executeRaw`
+            INSERT INTO "app"."amenities" ("id", "kind", "source", "external_id", "name", "brand", "brand_group",
+              "drive", "address", "commune", "insee_code", "details", "latitude", "longitude", "geom",
+              "source_updated_at", "imported_at")
+            VALUES ${Prisma.join(values)}`
+        }
+        return { written, removed }
+      },
+      { timeout: 120_000, maxWait: 10_000 }
+    )
+  }
+
+  /**
+   * Les équipements d'un genre autour d'un point, du plus proche au plus
+   * lointain, dans une distance maximale (à vol d'oiseau, sur la sphère).
+   */
+  async amenitiesNear(
+    point: Point,
+    kind: AmenityKind,
+    maxMeters: number,
+    limit = 1
+  ): Promise<AmenityHit[]> {
+    const [longitude, latitude] = point.coordinates
+    const target = Prisma.sql`ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography`
+    const rows = await this.prisma.$queryRaw`
+      SELECT "kind"::text AS "kind", "source", "external_id", "name", "brand", "brand_group",
+             "drive"::text AS "drive", "address", "commune", "details", "longitude", "latitude",
+             ST_Distance("geom", ${target}) AS "distance_meters"
+      FROM "app"."amenities"
+      WHERE "kind" = ${kind}::"app"."AmenityKind"
+        AND "geom" IS NOT NULL
+        AND ST_DWithin("geom", ${target}, ${maxMeters})
+      ORDER BY "geom" <-> ${target}, "name"
+      LIMIT ${limit}`
+    return AmenityHitRows.parse(rows)
+  }
+
+  /**
+   * Le plus proche équipement d'un genre pour chaque couple (groupe
+   * d'enseigne, drive), dans une distance maximale : de quoi choisir le drive
+   * le plus proche de chaque enseigne sans tout lire.
+   */
+  async nearestAmenityPerBrand(
+    point: Point,
+    kind: AmenityKind,
+    maxMeters: number
+  ): Promise<AmenityHit[]> {
+    const [longitude, latitude] = point.coordinates
+    const target = Prisma.sql`ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography`
+    const rows = await this.prisma.$queryRaw`
+      SELECT * FROM (
+        SELECT DISTINCT ON ("brand_group", "drive")
+               "kind"::text AS "kind", "source", "external_id", "name", "brand", "brand_group",
+               "drive"::text AS "drive", "address", "commune", "details", "longitude", "latitude",
+               ST_Distance("geom", ${target}) AS "distance_meters"
+        FROM "app"."amenities"
+        WHERE "kind" = ${kind}::"app"."AmenityKind"
+          AND "geom" IS NOT NULL
+          AND ST_DWithin("geom", ${target}, ${maxMeters})
+        ORDER BY "brand_group", "drive", ST_Distance("geom", ${target}), "name"
+      ) nearest
+      ORDER BY "distance_meters", "name"`
+    return AmenityHitRows.parse(rows)
+  }
+
+  /** Les équipements d'un genre en GeoJSON, pour la couche de carte. */
+  async amenitiesGeoJson(kind: AmenityKind): Promise<LayerFeatureCollection> {
+    const rows = await this.prisma.$queryRaw`
+      SELECT "kind"::text AS "kind", "source", "external_id", "name", "brand", "brand_group",
+             "drive"::text AS "drive", "address", "commune", "details", "longitude", "latitude",
+             0::float8 AS "distance_meters"
+      FROM "app"."amenities"
+      WHERE "kind" = ${kind}::"app"."AmenityKind"
+      ORDER BY "name", "external_id"`
+    return {
+      type: 'FeatureCollection',
+      features: AmenityHitRows.parse(rows).map(row => ({
+        type: 'Feature',
+        id: `${row.source}:${row.external_id}`,
+        geometry: { type: 'Point', coordinates: [row.longitude, row.latitude] },
+        properties: {
+          kind: row.kind,
+          name: row.name,
+          brand: row.brand,
+          brandGroup: row.brand_group,
+          drive: row.drive,
+          address: row.address,
+          commune: row.commune,
+          source: row.source,
+          facilityType: row.details.facilityType,
+          covered: row.details.covered,
+          lengthMeters: row.details.lengthMeters,
+          access: row.details.access.length
+            ? row.details.access.join(', ')
+            : null,
+        },
+      })),
+    }
+  }
+
+  /** Nombre d'équipements importés par genre (santé des imports, « non disponible »). */
+  async amenityCounts(): Promise<Record<AmenityKind, number>> {
+    const rows = await this.prisma.$queryRaw`
+      SELECT "kind"::text AS "mode", COUNT(*)::int AS "count"
+      FROM "app"."amenities" GROUP BY "kind"`
+    const counts = Object.fromEntries(
+      CountByKeyRows.parse(rows).map(row => [row.mode, row.count])
+    )
+    return {
+      athletics_track: counts.athletics_track ?? 0,
+      supermarket_drive: counts.supermarket_drive ?? 0,
+      fitness_park: counts.fitness_park ?? 0,
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Quartiers (lot 11)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Remplace les contours d'un territoire, dans une transaction : tout le
+   * territoire est réécrit (quartiers officiels, IRIS, communes entières),
+   * les contours absents de l'import disparaissent. Un import vide ne
+   * supprime rien.
+   */
+  async replaceNeighbourhoods(
+    territory: string,
+    rows: readonly NeighbourhoodRow[]
+  ): Promise<{ written: number; removed: number }> {
+    if (rows.length === 0) return { written: 0, removed: 0 }
+    return this.prisma.$transaction(
+      async tx => {
+        const removed = await tx.$executeRaw`
+          DELETE FROM "app"."neighbourhoods" WHERE "territory" = ${territory}`
+        let written = 0
+        for (const row of rows) {
+          written += await tx.$executeRaw`
+            INSERT INTO "app"."neighbourhoods" ("id", "territory", "kind", "code", "name", "parent", "commune", "insee_code", "source", "geom", "imported_at")
+            VALUES (gen_random_uuid()::text, ${territory}, ${row.kind}::"app"."NeighbourhoodKind", ${row.code}, ${row.name}, ${row.parent},
+                    ${row.commune}, ${row.inseeCode}, ${row.source},
+                    ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(row.geometry)}), 4326)), 3))::geography,
+                    now())`
+        }
+        await this.computeNeighbourhoodMapGeometries(tx, territory)
+        return { written, removed }
+      },
+      { timeout: 120_000, maxWait: 10_000 }
+    )
+  }
+
+  /**
+   * Ce que la carte dessine (`map_geom`) : le contour entier d'un quartier
+   * officiel, d'un IRIS ou d'une commune entière ; pour l'IRIS d'une commune
+   * qui a des quartiers officiels, la seule part hors de ces quartiers, en
+   * morceaux qui gardent au moins `MAP_GAP_MIN_CORE_SQUARE_METERS` une fois
+   * rognés de `MAP_GAP_CORE_METERS` sur leur pourtour (les liserés dus aux
+   * écarts de tracé entre sources ne sont pas dessinés, ils servent encore au
+   * quartier d'un point).
+   */
+  private async computeNeighbourhoodMapGeometries(
+    tx: Pick<Prisma.TransactionClient, '$executeRaw'>,
+    territory: string
+  ): Promise<void> {
+    await tx.$executeRaw`
+      UPDATE "app"."neighbourhoods" n SET "map_geom" = n."geom"
+      WHERE n."territory" = ${territory}
+        AND (n."kind" <> 'iris' OR n."insee_code" NOT IN (
+          SELECT "insee_code" FROM "app"."neighbourhoods"
+          WHERE "territory" = ${territory} AND "kind" = 'quartier'))`
+    await tx.$executeRaw`
+      UPDATE "app"."neighbourhoods" n SET "map_geom" = gaps."geom"
+      FROM (
+        SELECT parts."id", ST_Multi(ST_Union(parts."part"))::geography AS "geom"
+        FROM (
+          SELECT i."id",
+                 (ST_Dump(ST_CollectionExtract(ST_Difference(i."geom"::geometry, q."geom"), 3))).geom AS "part"
+          FROM "app"."neighbourhoods" i
+          JOIN (
+            SELECT "insee_code", ST_Union("geom"::geometry) AS "geom"
+            FROM "app"."neighbourhoods"
+            WHERE "territory" = ${territory} AND "kind" = 'quartier'
+            GROUP BY "insee_code"
+          ) q ON q."insee_code" = i."insee_code"
+          WHERE i."territory" = ${territory} AND i."kind" = 'iris'
+        ) parts
+        WHERE ST_Area(ST_Buffer(parts."part"::geography, -${MAP_GAP_CORE_METERS}::double precision)) >= ${MAP_GAP_MIN_CORE_SQUARE_METERS}
+        GROUP BY parts."id"
+      ) gaps
+      WHERE n."id" = gaps."id"`
+  }
+
+  /**
+   * Les contours qui contiennent le point (distance 0) ou passent à moins de
+   * `toleranceMeters`, du plus proche au plus lointain.
+   */
+  async neighbourhoodsNear(
+    point: Point,
+    toleranceMeters: number,
+    territory: string
+  ): Promise<NeighbourhoodHitRow[]> {
+    const [longitude, latitude] = point.coordinates
+    const target = Prisma.sql`ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography`
+    const rows = await this.prisma.$queryRaw`
+      SELECT "kind"::text AS "kind", "code", "name", "parent", "commune", "insee_code", "source",
+             CASE WHEN ST_Intersects("geom", ${target}) THEN 0::float8
+                  ELSE ST_Distance("geom", ${target}) END AS "distance_meters"
+      FROM "app"."neighbourhoods"
+      WHERE "territory" = ${territory}
+        AND "geom" IS NOT NULL
+        AND ST_DWithin("geom", ${target}, ${toleranceMeters})
+      ORDER BY "distance_meters" ASC, "name" ASC`
+    return NeighbourhoodHitRows.parse(rows)
+  }
+
+  /**
+   * Les contours d'un territoire en GeoJSON (couche de carte), simplifiés à
+   * 5 m environ, dans une emprise si elle est donnée : le découpage retenu,
+   * quartiers officiels là où la commune en a, IRIS (ou commune entière)
+   * ailleurs ; les IRIS d'une commune à quartiers, gardés pour combler un
+   * interstice, ne sont pas dessinés.
+   */
+  async neighbourhoodsGeoJson(
+    territory: string,
+    bbox?: readonly [number, number, number, number]
+  ): Promise<LayerFeatureCollection> {
+    const inBbox = bbox
+      ? Prisma.sql`AND ST_Intersects("map_geom", ST_MakeEnvelope(${bbox[0]}, ${bbox[1]}, ${bbox[2]}, ${bbox[3]}, 4326)::geography)`
+      : Prisma.empty
+    const rows = await this.prisma.$queryRaw`
+      SELECT "kind"::text AS "kind", "code", "name", "parent", "commune", "insee_code", "source",
+             NOT ST_Equals("map_geom"::geometry, "geom"::geometry) AS "partial",
+             ST_AsGeoJSON(ST_SimplifyPreserveTopology("map_geom"::geometry, 0.00005), 6) AS "geometry"
+      FROM "app"."neighbourhoods"
+      WHERE "territory" = ${territory} AND "map_geom" IS NOT NULL
+        ${inBbox}
+      ORDER BY "insee_code", "code"`
+    return {
+      type: 'FeatureCollection',
+      features: NeighbourhoodLayerRows.parse(rows).map(row => ({
+        type: 'Feature',
+        id: row.code,
+        geometry: JSON.parse(
+          row.geometry
+        ) as LayerFeatureCollection['features'][number]['geometry'],
+        properties: {
+          name: row.name,
+          kind: row.kind,
+          code: row.code,
+          parent: row.parent,
+          commune: row.commune,
+          inseeCode: row.insee_code,
+          source: row.source,
+          partial: row.partial,
+        },
+      })),
+    }
+  }
+
+  /** Nombre de contours importés pour un territoire, et par nature. */
+  async neighbourhoodCounts(
+    territory: string
+  ): Promise<Record<NeighbourhoodKind, number>> {
+    const rows = await this.prisma.$queryRaw`
+      SELECT "kind"::text AS "mode", COUNT(*)::int AS "count"
+      FROM "app"."neighbourhoods" WHERE "territory" = ${territory} GROUP BY "kind"`
+    const counts = Object.fromEntries(
+      CountByKeyRows.parse(rows).map(row => [row.mode, row.count])
+    )
+    return {
+      quartier: counts.quartier ?? 0,
+      iris: counts.iris ?? 0,
+      commune: counts.commune ?? 0,
+    }
+  }
+
   /** Distance en mètres entre deux points, calculée par PostGIS (pour les tests et le MCP). */
   async distanceMeters(a: Point, b: Point): Promise<number> {
     const rows = await this.prisma.$queryRaw`
@@ -696,6 +1020,90 @@ const RentZoneLayerRows = z.array(
     geometry: z.string(),
   })
 )
+
+/** Un équipement à importer (un objet de la source). */
+export interface AmenityRow {
+  externalId: string
+  name: string
+  brand: string | null
+  brandGroup: SupermarketBrandGroup | null
+  drive: DriveStatus | null
+  address: string | null
+  commune: string | null
+  inseeCode: string | null
+  details: Partial<AmenityDetails>
+  longitude: number
+  latitude: number
+  /** Date de mise à jour dans la source (AAAA-MM-JJ), si connue. */
+  sourceUpdatedAt: string | null
+}
+
+const AmenityHitRows = z.array(
+  z.object({
+    kind: AmenityKindSchema,
+    source: AmenitySourceSchema,
+    external_id: z.string(),
+    name: z.string(),
+    brand: z.string().nullable(),
+    brand_group: SupermarketBrandGroupSchema.nullable(),
+    drive: DriveStatusSchema.nullable(),
+    address: z.string().nullable(),
+    commune: z.string().nullable(),
+    details: AmenityDetailsSchema,
+    longitude: z.number(),
+    latitude: z.number(),
+    distance_meters: z.number(),
+  })
+)
+export type AmenityHit = z.infer<typeof AmenityHitRows>[number]
+
+/** Un contour de quartier à importer. */
+export interface NeighbourhoodRow {
+  kind: NeighbourhoodKind
+  code: string
+  name: string
+  parent: string | null
+  commune: string
+  inseeCode: string
+  source: string
+  geometry: { type: 'MultiPolygon' | 'Polygon'; coordinates: unknown }
+}
+
+const NeighbourhoodHitRows = z.array(
+  z.object({
+    kind: NeighbourhoodKindSchema,
+    code: z.string(),
+    name: z.string(),
+    parent: z.string().nullable(),
+    commune: z.string(),
+    insee_code: z.string(),
+    source: z.string(),
+    distance_meters: z.number(),
+  })
+)
+export type NeighbourhoodHitRow = z.infer<typeof NeighbourhoodHitRows>[number]
+
+const NeighbourhoodLayerRows = z.array(
+  z.object({
+    kind: z.string(),
+    code: z.string(),
+    name: z.string(),
+    parent: z.string().nullable(),
+    commune: z.string(),
+    insee_code: z.string(),
+    source: z.string(),
+    partial: z.boolean(),
+    geometry: z.string(),
+  })
+)
+
+/**
+ * Un morceau d'IRIS hors des quartiers officiels n'est dessiné que s'il garde
+ * au moins 1 ha une fois rogné de 25 m : un liseré de moins de 50 m de large
+ * (écart de tracé entre deux sources) ne l'est pas.
+ */
+export const MAP_GAP_CORE_METERS = 25
+export const MAP_GAP_MIN_CORE_SQUARE_METERS = 10_000
 
 const PolygonCheckRows = z.array(
   z.object({ valid: z.boolean(), reason: z.string(), area: z.number() })

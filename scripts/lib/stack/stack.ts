@@ -561,6 +561,10 @@ export class Stack {
         encadrement: dir('encadrement'),
         tbm: dir('tbm'),
         dvf: dir('dvf'),
+        quartiers: dir('quartiers'),
+        iris: dir('iris'),
+        res: dir('res'),
+        osm: dir('osm'),
       })
       for (const skipped of plan.skipped) this.deps.log(`  sauté : ${skipped}`)
       for (const step of plan.steps) {

@@ -1,0 +1,47 @@
+{
+  "version": 0.6,
+  "generator": "fixture fictive",
+  "osm3s": {
+    "timestamp_osm_base": "2030-01-01T00:00:00Z",
+    "copyright": "Données inventées pour les tests."
+  },
+  "elements": [
+    {
+      "type": "node",
+      "id": 30,
+      "lat": 44.83,
+      "lon": -0.66,
+      "tags": {
+        "leisure": "fitness_centre",
+        "name": "Fitness Park",
+        "branch": "Ville fictive",
+        "brand": "Fitness Park",
+        "brand:wikidata": "Q102351191",
+        "addr:housenumber": "9",
+        "addr:street": "Avenue Fictive"
+      }
+    },
+    {
+      "type": "node",
+      "id": 31,
+      "lat": 44.79,
+      "lon": -0.53,
+      "tags": {
+        "leisure": "fitness_centre",
+        "name": "Fitness Park Quartier fictif",
+        "operator": "Fitness Park"
+      }
+    },
+    {
+      "type": "node",
+      "id": 32,
+      "lat": 44.8,
+      "lon": -0.6,
+      "tags": {
+        "leisure": "fitness_centre",
+        "name": "Fitness Park Imitation",
+        "brand:wikidata": "Q1"
+      }
+    }
+  ]
+}

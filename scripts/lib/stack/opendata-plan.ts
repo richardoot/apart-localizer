@@ -8,6 +8,11 @@ export interface OpenDataFiles {
   encadrement: string[]
   tbm: string[]
   dvf: string[]
+  /** Lot 11 : quartiers (se_quart_s, se_quartvie_s), IRIS, recensement sportif, OpenStreetMap. */
+  quartiers?: string[]
+  iris?: string[]
+  res?: string[]
+  osm?: string[]
 }
 
 export interface OpenDataStep {
@@ -73,5 +78,65 @@ export function openDataPlan(files: OpenDataFiles): OpenDataPlan {
   } else {
     skipped.push('DVF : aucun fichier 33-AAAA.csv.gz dans data/opendata/dvf/')
   }
+
+  // Lot 11 : noms de fichiers par défaut des scripts (docs/open-data.md).
+  const quartiers = new Set(files.quartiers ?? [])
+  const iris = new Set(files.iris ?? [])
+  const res = new Set(files.res ?? [])
+  const osm = new Set(files.osm ?? [])
+  const lot11 = steps.length
+  if (quartiers.has('se_quart_s.geojson') && iris.has(IRIS_FILE)) {
+    steps.push({
+      label: 'quartiers',
+      script: 'import-neighbourhoods.ts',
+      args: quartiers.has('se_quartvie_s.geojson') ? [] : ['--no-secteurs'],
+    })
+  } else {
+    skipped.push(
+      `quartiers : il faut quartiers/se_quart_s.geojson et iris/${IRIS_FILE} dans data/opendata/`
+    )
+  }
+  const tracks = res.has('bm-athletisme.json')
+  const fitness = osm.has('fitness-park.json')
+  if (tracks || fitness) {
+    steps.push({
+      label:
+        tracks && fitness
+          ? 'pistes et Fitness Park'
+          : tracks
+            ? 'pistes'
+            : 'Fitness Park',
+      script: 'import-sports-facilities.ts',
+      args: [
+        ...(tracks && fitness ? [] : ['--only', tracks ? 'tracks' : 'fitness']),
+        ...(tracks && !osm.has('athletics-tracks.json')
+          ? ['--no-osm-tracks']
+          : []),
+      ],
+    })
+  } else {
+    skipped.push(
+      'équipements sportifs : il faut res/bm-athletisme.json ou osm/fitness-park.json dans data/opendata/'
+    )
+  }
+  if (osm.has('supermarkets.json')) {
+    steps.push({
+      label: 'supermarchés avec drive',
+      script: 'import-supermarkets.ts',
+      args: [],
+    })
+  } else {
+    skipped.push('drives : il faut osm/supermarkets.json dans data/opendata/')
+  }
+  if (steps.length > lot11) {
+    steps.push({
+      label: 'quartier et équipements des annonces',
+      script: 'refresh-surroundings.ts',
+      args: [],
+    })
+  }
   return { steps, skipped }
 }
+
+/** Le fichier des Contours IRIS attendu par `import-neighbourhoods` (édition 2026). */
+export const IRIS_FILE = 'bm-contours_iris-2026.geojson'

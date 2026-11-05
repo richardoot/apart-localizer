@@ -23,9 +23,11 @@
   import { CHECK_LEVEL_CLASSES } from '@/lib/labels'
   import ContextMap from './ContextMap.vue'
   import DpeBadge from './DpeBadge.vue'
+  import SurroundingsDetails from './SurroundingsDetails.vue'
 
   /**
    * Le bloc « Contexte » de la fiche (lot 4) : arrêt de tram le plus proche,
+   * quartier et équipements proches (lot 11),
    * DPE vérifié auprès de l'ADEME (candidats à valider), plafond
    * d'encadrement, comparables DVF datés et carte miniature. Tout vient du
    * serveur (données ouvertes importées, `domain`) ; rien n'est calculé ici.
@@ -126,6 +128,8 @@
           {{ formatDistance(context.transit.nearestStop.distanceMeters) }}
         </p>
       </div>
+
+      <SurroundingsDetails :surroundings="context.surroundings" />
 
       <div class="grid gap-1 text-sm" data-testid="dpe">
         <h4 class="flex items-center gap-2 text-xs font-medium text-muted">
@@ -333,7 +337,9 @@
       <p class="text-xs text-muted">
         Sources : arrêts TBM (Bordeaux Métropole), DVF géolocalisées (Etalab,
         DGFiP), arrêté préfectoral de l’encadrement (Gironde), observatoire DPE
-        (ADEME).
+        (ADEME), équipements sportifs (ministère des Sports), © contributeurs
+        OpenStreetMap (ODbL), contours des quartiers (source indiquée sous le
+        quartier).
       </p>
     </template>
     <p

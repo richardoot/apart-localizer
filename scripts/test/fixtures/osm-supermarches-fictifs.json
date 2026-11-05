@@ -1,0 +1,134 @@
+{
+  "version": 0.6,
+  "generator": "fixture fictive",
+  "osm3s": {
+    "timestamp_osm_base": "2030-01-01T00:00:00Z",
+    "copyright": "Données inventées pour les tests."
+  },
+  "elements": [
+    {
+      "type": "node",
+      "id": 10,
+      "lat": 44.84,
+      "lon": -0.58,
+      "tags": {
+        "shop": "outpost",
+        "name": "E.Leclerc Drive",
+        "branch": "Relais fictif",
+        "brand": "E.Leclerc Drive",
+        "drive_through": "only"
+      }
+    },
+    {
+      "type": "way",
+      "id": 11,
+      "center": { "lat": 44.85, "lon": -0.6 },
+      "tags": {
+        "shop": "supermarket",
+        "name": "Auchan Drive",
+        "brand": "Auchan Drive",
+        "drive_through": "only",
+        "addr:housenumber": "3",
+        "addr:street": "Rue Fictive",
+        "addr:postcode": "33000",
+        "addr:city": "Bordeaux"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12,
+      "lat": 44.8,
+      "lon": -0.55,
+      "tags": {
+        "shop": "supermarket",
+        "name": "Carrefour",
+        "brand": "Carrefour"
+      }
+    },
+    {
+      "type": "way",
+      "id": 13,
+      "center": { "lat": 44.8008, "lon": -0.5505 },
+      "tags": {
+        "highway": "service",
+        "service": "drive-through",
+        "name": "Carrefour Drive"
+      }
+    },
+    {
+      "type": "way",
+      "id": 14,
+      "center": { "lat": 44.81, "lon": -0.57 },
+      "tags": {
+        "highway": "service",
+        "service": "drive-through",
+        "name": "McDrive"
+      }
+    },
+    {
+      "type": "way",
+      "id": 15,
+      "center": { "lat": 44.82, "lon": -0.62 },
+      "tags": {
+        "shop": "supermarket",
+        "name": "Intermarché",
+        "brand": "Intermarché",
+        "drive_through": "yes"
+      }
+    },
+    {
+      "type": "node",
+      "id": 16,
+      "lat": 44.8001,
+      "lon": -0.5501,
+      "tags": {
+        "shop": "convenience",
+        "name": "Carrefour City",
+        "brand": "Carrefour City"
+      }
+    },
+    {
+      "type": "node",
+      "id": 17,
+      "lat": 44.83,
+      "lon": -0.63,
+      "tags": { "shop": "supermarket", "name": "Super U", "branch": "Drive" }
+    },
+    {
+      "type": "node",
+      "id": 18,
+      "lat": 44.83,
+      "lon": -0.64,
+      "tags": { "shop": "supermarket", "drive_through": "only" }
+    },
+    {
+      "type": "node",
+      "id": 19,
+      "lat": 44.83,
+      "lon": -0.65,
+      "tags": { "shop": "bakery", "name": "Boulangerie Drive fictive" }
+    },
+    {
+      "type": "node",
+      "id": 20,
+      "lat": 44.83,
+      "lon": -0.66,
+      "tags": {
+        "shop": "supermarket",
+        "name": "Lidl",
+        "brand": "Lidl"
+      }
+    },
+    {
+      "type": "node",
+      "id": 21,
+      "lat": 44.9,
+      "lon": -0.5,
+      "tags": {
+        "shop": "supermarket",
+        "name": "Carrefour Market",
+        "brand": "Carrefour Market"
+      }
+    }
+  ]
+}

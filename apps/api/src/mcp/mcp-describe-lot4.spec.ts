@@ -14,6 +14,7 @@ import {
   describeRentControl,
   describeTransit,
 } from './mcp-tools'
+import { surroundingsOf } from '@apart/domain'
 
 const rent: RentControlLookup = {
   status: 'ok',
@@ -169,9 +170,25 @@ describe('réponses MCP du lot 4', () => {
         },
       },
       market,
+      surroundings: surroundingsOf({
+        point: null,
+        precision: null,
+        sources: {
+          neighbourhoods: 0,
+          athleticsTracks: 0,
+          supermarketDrives: 0,
+          fitnessParks: 0,
+        },
+        neighbourhoodHits: [],
+        nearestTrack: null,
+        nearestFitnessPark: null,
+        supermarketCandidates: [],
+        computedAt: '2026-11-03T10:00:00.000Z',
+      }),
       computedAt: '2026-11-03T10:00:00.000Z',
     })
     expect(text).toContain('DPE non vérifié')
+    expect(text).toContain('Quartier : Annonce sans point')
     expect(text).toContain('1 DPE candidat(s)')
     expect(
       describeMarketReport({

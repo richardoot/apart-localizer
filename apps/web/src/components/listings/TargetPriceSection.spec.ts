@@ -145,6 +145,7 @@ describe('TargetCriteriaTable (lot 9)', () => {
           computedAt: '2026-11-03T10:00:00.000Z',
         },
         dpe: null,
+        surroundings: null,
         rentControl: null,
         transit: null,
       },

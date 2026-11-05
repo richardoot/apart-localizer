@@ -1,0 +1,65 @@
+{
+  "version": 0.6,
+  "generator": "fixture fictive",
+  "osm3s": {
+    "timestamp_osm_base": "2030-01-01T00:00:00Z",
+    "copyright": "Données inventées pour les tests."
+  },
+  "elements": [
+    {
+      "type": "way",
+      "id": 1,
+      "center": { "lat": 44.84, "lon": -0.62 },
+      "tags": {
+        "leisure": "track",
+        "sport": "athletics",
+        "ref:FR:sport_equip": "E003I330630003"
+      }
+    },
+    {
+      "type": "way",
+      "id": 2,
+      "center": { "lat": 44.8604, "lon": -0.5803 },
+      "tags": { "leisure": "track", "sport": "athletics;running" }
+    },
+    {
+      "type": "relation",
+      "id": 3,
+      "center": { "lat": 44.9, "lon": -0.5 },
+      "tags": {
+        "leisure": "track",
+        "sport": "athletics",
+        "name": "Piste fictive du Parc",
+        "lanes": "6",
+        "length": "400",
+        "surface": "tartan",
+        "access": "yes",
+        "addr:street": "Allée Fictive",
+        "addr:city": "Commune fictive"
+      }
+    },
+    {
+      "type": "way",
+      "id": 4,
+      "center": { "lat": 44.95, "lon": -0.55 },
+      "tags": {
+        "leisure": "track",
+        "sport": "athletics",
+        "indoor": "yes",
+        "access": "school_only"
+      }
+    },
+    {
+      "type": "way",
+      "id": 5,
+      "center": { "lat": 44.96, "lon": -0.56 },
+      "tags": { "leisure": "pitch", "sport": "athletics" }
+    },
+    {
+      "type": "way",
+      "id": 6,
+      "tags": { "leisure": "track", "sport": "athletics" }
+    },
+    { "type": "count", "id": 0, "tags": { "total": "6" } }
+  ]
+}

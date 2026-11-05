@@ -1,0 +1,50 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "gid": 7,
+        "libelle": "Secteur fictif des Quais",
+        "nom": "Quartier fictif de Bordeaux",
+        "insee": "33063",
+        "rs_se_quart_s": "1"
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [-0.6, 44.8],
+              [-0.59, 44.8],
+              [-0.59, 44.81],
+              [-0.6, 44.8]
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "gid": 8,
+        "libelle": null,
+        "nom": "Quartier fictif de Bordeaux",
+        "insee": "33063"
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [-0.59, 44.8],
+              [-0.58, 44.8],
+              [-0.58, 44.81],
+              [-0.59, 44.8]
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

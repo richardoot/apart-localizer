@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
-import { fakeContext } from '@/test/criteria-fixtures'
+import {
+  fakeAmenity,
+  fakeContext,
+  fakeSurroundings,
+} from '@/test/criteria-fixtures'
 import { fakeEvaluated } from '@/test/fixtures'
 import { mapLibreMock } from '@/test/setup'
 
@@ -11,6 +15,14 @@ const apiMock = vi.hoisted(() => ({
     searchDpe: vi.fn(),
     verifyDpe: vi.fn(),
     regeocode: vi.fn(),
+  },
+  opendata: {
+    amenities: vi.fn(() =>
+      Promise.resolve({ type: 'FeatureCollection', features: [] })
+    ),
+    neighbourhoods: vi.fn(() =>
+      Promise.resolve({ type: 'FeatureCollection', features: [] })
+    ),
   },
 }))
 
@@ -111,6 +123,87 @@ describe('ContextSection', () => {
     expect(wrapper.text()).toContain('Aucun arrêt de tram')
     expect(mapLibreMock.maps).toHaveLength(0)
     apiMock.listings.verifyDpe.mockRejectedValueOnce(new Error('x'))
+    wrapper.unmount()
+  })
+
+  it('lot 11 : quartier, piste, drives par enseigne, Fitness Park non disponible', async () => {
+    const wrapper = mountSection()
+    await flushPromises()
+    const n = wrapper.get('[data-testid="surroundings-neighbourhood"]').text()
+    expect(n).toContain('Quartier fictif')
+    expect(n).toContain('quartier Grand quartier fictif, Bordeaux')
+    expect(n).toContain('Source du contour : Source fictive des quartiers')
+    const track = wrapper.get('[data-testid="surroundings-track"]').text()
+    expect(track).toMatch(/Stade fictif\s+à 1,3\s?km/)
+    expect(track).toContain(
+      'découverte · 400 m · 6 couloirs · Clubs, Scolaires'
+    )
+    const drives = wrapper.get('[data-testid="surroundings-drives"]')
+    expect(drives.get('[data-brand="carrefour"]').text()).toMatch(
+      /Carrefour Drive fictif à 1,8\s?km/
+    )
+    expect(drives.get('[data-brand="auchan"]').text()).toContain(
+      'aucun drive à moins de 20 km'
+    )
+    expect(drives.get('[data-brand="intermarche"]').text()).toContain(
+      'Drive à vérifier'
+    )
+    expect(drives.get('[data-brand="any"]').text()).toContain(
+      'Drive fictif à 900 m'
+    )
+    expect(wrapper.get('[data-testid="surroundings-fitness"]').text()).toBe(
+      'Fitness Park : non disponible'
+    )
+    expect(wrapper.text()).toContain('Distances à vol d’oiseau')
+    wrapper.unmount()
+  })
+
+  it('lot 11 : sources non importées, sans point', async () => {
+    const missing = {
+      status: 'not_applicable' as const,
+      nearest: null,
+      reasons: ['Annonce sans point : saisissez une adresse ou une commune.'],
+    }
+    apiMock.listings.context.mockResolvedValueOnce(
+      fakeContext({
+        point: null,
+        surroundings: fakeSurroundings({
+          neighbourhood: {
+            status: 'unavailable',
+            value: null,
+            reasons: ['Contours des quartiers non importés : non disponible.'],
+          },
+          athleticsTrack: missing,
+          supermarkets: {
+            ...missing,
+            preferred: { carrefour: null, auchan: null, intermarche: null },
+          },
+          fitnessPark: {
+            status: 'ok',
+            nearest: fakeAmenity({
+              kind: 'fitness_park',
+              name: 'Fitness Park fictif',
+              address: '9 avenue Fictive',
+            }),
+            reasons: [],
+          },
+        }),
+      })
+    )
+    const wrapper = mountSection()
+    await flushPromises()
+    expect(
+      wrapper.get('[data-testid="surroundings-neighbourhood"]').text()
+    ).toBe('Quartier : non disponible')
+    expect(wrapper.get('[data-testid="surroundings-track"]').text()).toContain(
+      'Annonce sans point'
+    )
+    expect(wrapper.get('[data-testid="surroundings-drives"]').text()).toContain(
+      'Annonce sans point'
+    )
+    expect(
+      wrapper.get('[data-testid="surroundings-fitness"]').text()
+    ).toContain('9 avenue Fictive')
     wrapper.unmount()
   })
 })

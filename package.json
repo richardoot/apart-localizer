@@ -32,7 +32,11 @@
     "import:rent-control": "pnpm --filter @apart/scripts import:rent-control",
     "import:transit-stops": "pnpm --filter @apart/scripts import:transit-stops",
     "import:dvf": "pnpm --filter @apart/scripts import:dvf",
-    "geocode:missing": "pnpm --filter @apart/scripts geocode:missing"
+    "geocode:missing": "pnpm --filter @apart/scripts geocode:missing",
+    "import:sports-facilities": "pnpm --filter @apart/scripts import:sports-facilities",
+    "import:supermarkets": "pnpm --filter @apart/scripts import:supermarkets",
+    "import:neighbourhoods": "pnpm --filter @apart/scripts import:neighbourhoods",
+    "refresh:surroundings": "pnpm --filter @apart/scripts refresh:surroundings"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

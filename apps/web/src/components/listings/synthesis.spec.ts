@@ -9,6 +9,7 @@ import { AssumptionsSchema, DEFAULT_ASSUMPTIONS } from '@apart/contracts'
 import { compute, financialsFromListing, targetPrice } from '@apart/domain'
 import { readingOf } from '@/composables/useListingReading'
 import { fakeEvaluated, fakeTask, fakeTargetPriceReport } from '@/test/fixtures'
+import { fakeSurroundings } from '@/test/criteria-fixtures'
 import AtTargetPanel from './AtTargetPanel.vue'
 import CostBasisBadge from './CostBasisBadge.vue'
 import CostSummary from './CostSummary.vue'
@@ -449,6 +450,7 @@ describe('ListingSynthesis', () => {
             computedAt: '2026-11-03T10:00:00.000Z',
           },
           dpe: null,
+          surroundings: null,
           rentControl: null,
           transit: {
             nearestTram: {
@@ -540,7 +542,72 @@ describe('ListingSynthesis', () => {
     expect(wrapper.get('[data-testid="summary-area"]').text()).toContain(
       'Tram : à vérifier · marché DVF inconnu'
     )
+    expect(wrapper.get('[data-testid="summary-neighbourhood"]').text()).toBe(
+      'Quartier : non disponible'
+    )
+    expect(wrapper.find('[data-testid="summary-equipment"]').exists()).toBe(
+      false
+    )
     expect(wrapper.find('[data-testid="live-badge"]').exists()).toBe(false)
+  })
+
+  it('lot 11 : le quartier et les équipements proches de l’instantané', () => {
+    const surroundings = fakeSurroundings()
+    const item = fakeEvaluated({
+      openDataContext: {
+        market: null,
+        dpe: null,
+        rentControl: null,
+        transit: null,
+        surroundings,
+      },
+    })
+    const mountWith = (value: typeof surroundings) =>
+      mount(ListingSynthesis, {
+        props: {
+          item: fakeEvaluated({
+            openDataContext: {
+              ...(item.listing.openDataContext as NonNullable<
+                typeof item.listing.openDataContext
+              >),
+              surroundings: value,
+            },
+          }),
+          evaluation: null,
+          targetPrice: null,
+          negotiation: null,
+          assumptions: null,
+        },
+      })
+    const wrapper = mountWith(surroundings)
+    expect(wrapper.get('[data-testid="summary-neighbourhood"]').text()).toBe(
+      'Quartier Quartier fictif (Bordeaux)'
+    )
+    expect(wrapper.get('[data-testid="summary-equipment"]').text()).toMatch(
+      /piste à 1,3\s?km · drive à 900 m · Fitness Park non disponible \(à vol d’oiseau\)/
+    )
+    const doubtful = mountWith(
+      fakeSurroundings({
+        neighbourhood: {
+          ...surroundings.neighbourhood,
+          status: 'to_verify',
+          value: {
+            ...(surroundings.neighbourhood.value as NonNullable<
+              typeof surroundings.neighbourhood.value
+            >),
+            name: 'Bordeaux',
+            kind: 'commune',
+          },
+        },
+        athleticsTrack: { status: 'ok', nearest: null, reasons: [] },
+      })
+    )
+    expect(doubtful.get('[data-testid="summary-neighbourhood"]').text()).toBe(
+      'Quartier Bordeaux · à vérifier'
+    )
+    expect(doubtful.get('[data-testid="summary-equipment"]').text()).toContain(
+      'piste : aucun proche'
+    )
   })
 
   it('louabilité : compte les points bloquants, d’attention et à vérifier', () => {

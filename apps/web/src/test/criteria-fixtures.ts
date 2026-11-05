@@ -1,5 +1,10 @@
 import { CriteriaFiltersSchema } from '@apart/contracts'
-import type { ListingContext, SearchCriteriaSummary } from '@apart/contracts'
+import type {
+  ListingContext,
+  NearbyAmenity,
+  SearchCriteriaSummary,
+  Surroundings,
+} from '@apart/contracts'
 
 const now = '2026-11-03T10:00:00.000Z'
 
@@ -34,6 +39,122 @@ export function fakeCriteria(
     listingCount: 3,
     newCount: 1,
     approximateCount: 1,
+    ...over,
+  }
+}
+
+/** Un équipement fictif proche de l'annonce. */
+export function fakeAmenity(over: Partial<NearbyAmenity> = {}): NearbyAmenity {
+  return {
+    kind: 'supermarket_drive',
+    name: 'Drive fictif',
+    brand: null,
+    brandGroup: 'other',
+    drive: 'yes',
+    address: null,
+    commune: 'Bordeaux',
+    distanceMeters: 900,
+    point: { type: 'Point', coordinates: [-0.585, 44.845] },
+    source: 'osm',
+    externalId: 'node/1',
+    details: {
+      facilityType: null,
+      covered: null,
+      lengthMeters: null,
+      lanes: null,
+      surfaceType: null,
+      access: [],
+      driveEvidence: 'name=Drive fictif',
+      sourceUrl: null,
+    },
+    ...over,
+  }
+}
+
+/** Quartier et équipements fictifs (lot 11). */
+export function fakeSurroundings(
+  over: Partial<Surroundings> = {}
+): Surroundings {
+  return {
+    neighbourhood: {
+      status: 'ok',
+      value: {
+        name: 'Quartier fictif',
+        kind: 'quartier',
+        code: 'Q1',
+        parent: 'Grand quartier fictif',
+        commune: 'Bordeaux',
+        inseeCode: '33063',
+        source: 'Source fictive des quartiers',
+      },
+      reasons: [],
+    },
+    athleticsTrack: {
+      status: 'ok',
+      nearest: fakeAmenity({
+        kind: 'athletics_track',
+        name: 'Stade fictif',
+        brandGroup: null,
+        drive: null,
+        distanceMeters: 1250,
+        source: 'res',
+        externalId: 'E1',
+        point: { type: 'Point', coordinates: [-0.57, 44.835] },
+        details: {
+          facilityType: 'Anneau d’athlétisme fictif',
+          covered: false,
+          lengthMeters: 400,
+          lanes: 6,
+          surfaceType: null,
+          access: ['Clubs', 'Scolaires'],
+          driveEvidence: null,
+          sourceUrl: null,
+        },
+      }),
+      reasons: [],
+    },
+    supermarkets: {
+      status: 'ok',
+      preferred: {
+        carrefour: fakeAmenity({
+          name: 'Carrefour Drive fictif',
+          brand: 'Carrefour Drive',
+          brandGroup: 'carrefour',
+          distanceMeters: 1800,
+          externalId: 'node/2',
+          point: { type: 'Point', coordinates: [-0.59, 44.85] },
+        }),
+        auchan: null,
+        intermarche: fakeAmenity({
+          name: 'Intermarché fictif',
+          brand: 'Intermarché Super',
+          brandGroup: 'intermarche',
+          drive: 'to_verify',
+          distanceMeters: 2600,
+          externalId: 'way/3',
+          point: { type: 'Point', coordinates: [-0.6, 44.83] },
+          details: {
+            facilityType: null,
+            covered: null,
+            lengthMeters: null,
+            lanes: null,
+            surfaceType: null,
+            access: [],
+            driveEvidence: 'drive_through=yes',
+            sourceUrl: null,
+          },
+        }),
+      },
+      nearest: fakeAmenity(),
+      reasons: ['Aucun drive Auchan à moins de 20 km à vol d’oiseau.'],
+    },
+    fitnessPark: {
+      status: 'unavailable',
+      nearest: null,
+      reasons: ['Salles Fitness Park : source non importée, non disponible.'],
+    },
+    searchRadiusMeters: 20_000,
+    computedAt: now,
     ...over,
   }
 }
@@ -156,6 +277,7 @@ export function fakeContext(
       reasons: ["Données DVF disponibles jusqu'en 2024."],
       dataYears: [2024],
     },
+    surroundings: fakeSurroundings(),
     computedAt: now,
     ...over,
   }

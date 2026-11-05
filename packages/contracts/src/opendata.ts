@@ -8,6 +8,7 @@ import {
   TransitModeSchema,
 } from './enums.js'
 import { PointSchema, PositionSchema } from './geojson.js'
+import { SurroundingsSchema } from './surroundings.js'
 
 /**
  * Données ouvertes (lot 4, besoins D1 à D7, L2, L3, N4) : arrêts TBM, DPE de
@@ -400,6 +401,11 @@ export const ListingOpenDataContextSchema = z.object({
     })
     .nullable()
     .default(null),
+  surroundings: SurroundingsSchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 11 : quartier et équipements les plus proches (piste d’athlétisme, drives, Fitness Park), à vol d’oiseau ; null si jamais calculé'
+    ),
 })
 export type ListingOpenDataContext = z.infer<
   typeof ListingOpenDataContextSchema
@@ -420,6 +426,9 @@ export const ListingContextSchema = z.object({
     search: DpeSearchResultSchema.nullable(),
   }),
   market: MarketContextSchema,
+  surroundings: SurroundingsSchema.describe(
+    'Lot 11 : quartier, piste d’athlétisme, drives et Fitness Park les plus proches (à vol d’oiseau)'
+  ),
   computedAt: z.string().datetime(),
 })
 export type ListingContext = z.infer<typeof ListingContextSchema>

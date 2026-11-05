@@ -213,6 +213,7 @@ describe('données ouvertes (lot 4)', () => {
       dpe: null,
       rentControl: null,
       transit: null,
+      surroundings: null,
     })
   })
 

@@ -139,7 +139,10 @@ hors du dépôt. Un nouveau fichier part du `.env.example` correspondant.
 
 - **`--opendata`** : lance l'import de l'encadrement, des arrêts TBM et des ventes DVF dont les
   fichiers sont dans `data/opendata/` ([open-data.md](open-data.md)) ; une source absente est
-  sautée. Le plan des imports est testé ; les imports eux-mêmes n'ont pas été relancés pour ce lot
+  sautée. Lot 11 : aussi les quartiers (`quartiers/`, `iris/`), les pistes et Fitness Park
+  (`res/`, `osm/`) et les drives (`osm/supermarkets.json`), puis le rattrapage du quartier et des
+  équipements des annonces (`refresh:surroundings`). Sans ces fichiers, l'onglet Quartier affiche
+  « non disponible » ; `--download` sur chaque import les lit en ligne à la place. Le plan des imports est testé ; les imports eux-mêmes n'ont pas été relancés pour ce lot
   (les données ouvertes étaient déjà en base).
 
 ## Se connecter en local
