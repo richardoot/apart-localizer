@@ -22,7 +22,8 @@
    * liste avec les compteurs (annonces gardées, nouveautés pour moi, et
    * lot 14 : annonces par niveau d'adéquation et marge de tolérance),
    * création, modification, archivage, suppression ; « Voir les annonces »
-   * ouvre la liste filtrée par le critère.
+   * ouvre la liste filtrée par le critère ; lot 16 : « Ce que Claude
+   * cherche » ouvre le brief de l'exploration des portails.
    */
   const showArchived = ref(false)
   const { data, isPending, error } = useSearchCriteriaList(showArchived)
@@ -201,6 +202,13 @@
             class="rounded-lg border border-accent px-3 py-1"
           >
             Voir les annonces
+          </RouterLink>
+          <RouterLink
+            :to="{ name: 'criteria-brief', params: { id: c.id } }"
+            class="rounded-lg border border-line px-3 py-1"
+            data-action="brief"
+          >
+            Ce que Claude cherche
           </RouterLink>
           <button
             type="button"

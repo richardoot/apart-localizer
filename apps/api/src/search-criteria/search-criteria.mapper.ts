@@ -1,6 +1,7 @@
 import {
   PerimeterSchema,
   SearchCriteriaSchema,
+  criteriaPortalsOf,
   criteriaToleranceOf,
 } from '@apart/contracts'
 import type { Perimeter, SearchCriteria } from '@apart/contracts'
@@ -40,6 +41,7 @@ export function toSearchCriteriaDto(row: SearchCriteriaRow): SearchCriteria {
     tolerance: criteriaToleranceOf(row.tolerance),
     perimeterType: row.perimeterType,
     perimeter: perimeterOf(row),
+    portals: criteriaPortalsOf(row.portals),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   })

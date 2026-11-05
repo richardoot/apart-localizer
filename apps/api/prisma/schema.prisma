@@ -231,12 +231,16 @@ enum DraftStatus {
   pending
   accepted
   dismissed
+  /// Reconnu comme une annonce déjà suivie (lot 16) : sa fiche a été mise à jour.
+  merged
 
   @@schema("app")
 }
 
 enum DraftOrigin {
   email
+  /// Exploration des portails par Claude (lot 16).
+  exploration
 
   @@schema("app")
 }
@@ -244,6 +248,8 @@ enum DraftOrigin {
 enum DraftExtractor {
   ai
   parser
+  /// Claude, sur la page du portail (lot 16).
+  claude
 
   @@schema("app")
 }
@@ -323,6 +329,7 @@ model Workspace {
   listingDrafts  ListingDraft[]
   visitPhotos    VisitPhoto[]
   listingChecks  ListingCheck[]
+  explorations   Exploration[]
 
   @@map("workspaces")
   @@schema("app")
@@ -386,6 +393,7 @@ model Member {
   pushSubscriptions PushSubscription[]
   decidedDrafts     ListingDraft[]     @relation("DraftDecider")
   listingChecks     ListingCheck[]     @relation("ListingCheckAuthor")
+  explorations      Exploration[]      @relation("ExplorationAuthor")
   invitedBy         Member?            @relation("MemberInviter", fields: [invitedById], references: [id], onDelete: SetNull)
   invitees          Member[]           @relation("MemberInviter")
   removedBy         Member?            @relation("MemberRemover", fields: [removedById], references: [id], onDelete: SetNull)
@@ -554,6 +562,7 @@ model Listing {
   linkedChecks    ListingCheck[]   @relation("ListingCheckLinked")
   republishedFrom Listing?         @relation("ListingRepublication", fields: [republishedFromId], references: [id], onDelete: SetNull)
   republishedAs   Listing?         @relation("ListingRepublication")
+  explorationLines ExplorationCandidate[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, commune])
@@ -852,6 +861,7 @@ model ListingCheck {
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   author        Member?   @relation("ListingCheckAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   linkedListing Listing?  @relation("ListingCheckLinked", fields: [linkedListingId], references: [id], onDelete: SetNull)
+  mergedDrafts  ListingDraft[]
 
   @@index([listingId, checkedAt(sort: Desc)])
   @@index([workspaceId, checkedAt(sort: Desc)])
@@ -939,9 +949,10 @@ model PushSubscription {
   @@schema("app")
 }
 
-/// Une annonce reçue (alerte e-mail transférée) à valider : la fiche
-/// pré-remplie (JSON validé par ListingInputSchema), les doublons probables
-/// à la réception, puis la décision d'un membre.
+/// Une annonce reçue (alerte e-mail transférée) ou trouvée par Claude en
+/// explorant les portails (lot 16) à valider : la fiche pré-remplie (JSON
+/// validé par ListingInputSchema), les doublons probables à la réception,
+/// puis la décision d'un membre.
 model ListingDraft {
   id           String         @id @default(uuid())
   workspaceId  String         @map("workspace_id")
@@ -960,11 +971,30 @@ model ListingDraft {
   listingId    String?        @map("listing_id")
   createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  decidedBy Member?   @relation("DraftDecider", fields: [decidedById], references: [id], onDelete: SetNull)
-  listing   Listing?  @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  // Lot 16 : exploration des portails par Claude.
+  explorationId     String?            @map("exploration_id")
+  portal            ExplorationPortal?
+  /// Ce que Claude a lu, 500 caractères au plus, téléphones et e-mails masqués.
+  excerpt           String?
+  /// Raison de l'écart (facultative) : un brouillon écarté n'est jamais reproposé.
+  dismissReason     String?            @map("dismiss_reason")
+  /// « C'en est une autre » : les doublons probables ne sont plus proposés.
+  distinctAt        DateTime?          @map("distinct_at") @db.Timestamptz(6)
+  /// « C'est la même » : la vérification enregistrée sur l'annonce suivie.
+  mergedCheckId     String?            @map("merged_check_id")
+  /// Comment le repère a été placé à la lecture (JSON validé par
+  /// ListingPlacementSchema), pour l'adéquation calculée à la lecture.
+  locationPlacement Json?              @map("location_placement")
+
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  decidedBy   Member?       @relation("DraftDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  listing     Listing?      @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  exploration Exploration?  @relation(fields: [explorationId], references: [id], onDelete: SetNull)
+  mergedCheck ListingCheck? @relation(fields: [mergedCheckId], references: [id], onDelete: SetNull)
+  lines       ExplorationCandidate[]
 
   @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, url])
   @@map("listing_drafts")
   @@schema("app")
 }
@@ -984,6 +1014,9 @@ model SearchCriteria {
   /// Marge de tolérance (lot 14), JSON validé par CriteriaToleranceSchema ;
   /// un champ absent prend la valeur par défaut.
   tolerance   Json    @default("{}")
+  /// Portails que Claude parcourt pour ce critère (lot 16), JSON : liste
+  /// d'identifiants (CriteriaPortalsSchema) ; null = tous.
+  portals     Json?
 
   perimeterType    PerimeterType?                           @map("perimeter_type")
   /// Point et rayon
@@ -1219,5 +1252,106 @@ model ReferenceData {
 
   @@unique([kind, key])
   @@map("reference_data")
+  @@schema("app")
+}
+
+// ---------------------------------------------------------------------------
+// Exploration par les critères (lot 16, ADR 0026)
+// ---------------------------------------------------------------------------
+
+/// Portail où Claude a lu une annonce.
+enum ExplorationPortal {
+  leboncoin
+  seloger
+  bienici
+  pap
+  logicimmo
+  other
+
+  @@schema("app")
+}
+
+/// Résultat du tri d'une annonce lue : nouvelle (brouillon), doublon
+/// probable (brouillon à trancher), déjà suivie (vérification), déjà
+/// écartée, hors critères (ligne du compte rendu seulement).
+enum ExplorationOutcome {
+  new
+  duplicate_probable
+  known
+  dismissed
+  out
+
+  @@schema("app")
+}
+
+/// Une exploration des portails par Claude, dans le navigateur de
+/// l'utilisateur : ce qu'il a lu, trié de nouveau par le serveur. Le serveur
+/// ne télécharge jamais une page. `run_key` rend l'enregistrement idempotent.
+model Exploration {
+  id          String          @id @default(uuid())
+  workspaceId String          @map("workspace_id")
+  /// Le membre pour qui Claude a exploré.
+  authorId    String?         @map("author_id")
+  channel     ActivityChannel @default(mcp)
+  runKey      String          @map("run_key")
+  startedAt   DateTime        @map("started_at") @db.Timestamptz(6)
+  finishedAt  DateTime        @map("finished_at") @db.Timestamptz(6)
+  /// Les critères explorés : [{ id, name }].
+  criteria    Json            @default("[]")
+  /// Le bilan de chaque portail (ExplorationPortalRunSchema).
+  portals     Json            @default("[]")
+  /// Les compteurs (ExplorationCountsSchema).
+  counts      Json            @default("{}")
+  summary     String
+  /// Les raisons des hors critères, regroupées.
+  outDigest   String?         @map("out_digest")
+  notes       String?
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  author    Member?                @relation("ExplorationAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  lines     ExplorationCandidate[]
+  drafts    ListingDraft[]
+
+  @@unique([workspaceId, runKey])
+  @@index([workspaceId, finishedAt(sort: Desc)])
+  @@map("explorations")
+  @@schema("app")
+}
+
+/// Une ligne du compte rendu : une annonce lue et ce qu'il en est advenu.
+/// Une annonce hors critères n'existe qu'ici (ni annonce ni brouillon).
+model ExplorationCandidate {
+  id            String              @id @default(uuid())
+  explorationId String              @map("exploration_id")
+  position      Int
+  url           String
+  /// Le lien réduit à ce qui identifie l'annonce (normalizeListingUrl).
+  normalizedUrl String?             @map("normalized_url")
+  portal        ExplorationPortal
+  title         String
+  price         Decimal?            @db.Decimal(12, 2)
+  surface       Decimal?            @db.Decimal(8, 2)
+  rooms         Int?
+  commune       String?
+  district      String?
+  outcome       ExplorationOutcome
+  /// La phrase du compte rendu (« Même lien : prix … → …, appliqué »).
+  why           String
+  /// Raisons chiffrées de l'adéquation (JSON : tableau de textes).
+  reasons       Json                @default("[]")
+  level         CriteriaFitLevel?
+  listingId     String?             @map("listing_id")
+  draftId       String?             @map("draft_id")
+  /// Extrait lu, 500 caractères au plus, téléphones et e-mails masqués.
+  excerpt       String?
+
+  exploration Exploration   @relation(fields: [explorationId], references: [id], onDelete: Cascade)
+  listing     Listing?      @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  draft       ListingDraft? @relation(fields: [draftId], references: [id], onDelete: SetNull)
+
+  @@index([explorationId, position])
+  @@index([normalizedUrl])
+  @@map("exploration_candidates")
   @@schema("app")
 }

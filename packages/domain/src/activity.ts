@@ -285,6 +285,13 @@ function num(record: unknown, key: string): number | null {
     ? (record[key] as number)
     : null
 }
+/** « trouvée par Claude », « reçue par e-mail ». */
+function draftOrigin(after: unknown): string {
+  return text(after, 'origin') === 'exploration'
+    ? 'trouvée par Claude'
+    : 'reçue par e-mail'
+}
+
 function quoted(value: string | null): string {
   return value ? ` « ${truncate(value, 80)} »` : ''
 }
@@ -573,9 +580,34 @@ export function describeActivity(
       )
     }
     case 'draft.accepted':
-      return describe('a validé une annonce reçue par e-mail')
-    case 'draft.dismissed':
-      return describe('a écarté une annonce reçue par e-mail')
+      return describe(`a ajouté à la liste une annonce ${draftOrigin(after)}`)
+    case 'draft.dismissed': {
+      const reason = text(after, 'reason')
+      return describe(
+        `a écarté une annonce ${draftOrigin(after)}${reason ? ` : « ${reason} »` : ''}`
+      )
+    }
+    // Lot 16 : brouillons nés d'une exploration des portails par Claude.
+    case 'draft.restored':
+      return describe(`a remis « à valider » une annonce ${draftOrigin(after)}`)
+    case 'draft.merged':
+      return describe(
+        `a reconnu une annonce déjà suivie dans une annonce ${draftOrigin(after)}${quoted(text(after, 'listingTitle'))}${text(after, 'summary') ? ` : ${text(after, 'summary')}` : ''}`
+      )
+    case 'draft.distinct':
+      return describe(
+        `a jugé distincte une annonce ${draftOrigin(after)} (ce n’est pas un doublon)`
+      )
+    case 'exploration.recorded': {
+      const portals =
+        isRecord(after) && Array.isArray(after.portals)
+          ? after.portals.filter((p): p is string => typeof p === 'string')
+          : []
+      const summary = text(after, 'summary')
+      return describe(
+        `a exploré les portails${portals.length ? ` (${portals.join(', ')})` : ''}${summary ? ` : ${summary}` : ''}`
+      )
+    }
     case 'member.invited': {
       const expires = text(after, 'expiresAt')
       const renewed = isRecord(after) && after.renewed === true

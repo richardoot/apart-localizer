@@ -68,7 +68,13 @@ critère dans `searchCriteria` (la marge par défaut pour un critère antérieur
 `listing.lastCheckedAt`, `listing.lastSeenOnlineAt` et `listing.republishedFromId` (`null` par
 défaut), et `checks` par annonce (les vérifications sur le portail, de la plus récente à la plus
 ancienne ; une liste vide quand un export antérieur n'en a pas) ; l'extrait-preuve d'une
-vérification est court (500 caractères), téléphones et adresses e-mail masqués.
+vérification est court (500 caractères), téléphones et adresses e-mail masqués. Le lot 16 non
+plus : `explorations` (les explorations des portails par Claude, de la plus récente à la plus
+ancienne : membre, canal, dates, critères, bilan par portail, compteurs, résumé, notes, et les
+lignes du compte rendu — lien, portail, titre, prix, surface, pièces, commune, quartier, résultat,
+raison, niveau d'adéquation, annonce et brouillon liés, extrait court masqué ; une liste vide
+quand un export antérieur n'en a pas) et `portals` de chaque critère (portails cochés, tous par
+défaut). Les brouillons « à valider » ne sont pas exportés. Le CSV est inchangé.
 
 ```text
 {
@@ -91,8 +97,9 @@ vérification est court (500 caractères), téléphones et adresses e-mail masqu
     checks: ListingCheck[],                 // lot 15 : date, auteur, canal, résultat, écarts, extrait
     criteriaFit: ListingCriteriaFit         // lot 14 : adéquation aux critères actifs
   }],
-  searchCriteria: SearchCriteria[],         // filtres, marge de tolérance et périmètre GeoJSON
-  scenarios: Scenario[]                     // de l'espace et des annonces exportées
+  searchCriteria: SearchCriteria[],         // filtres, marge de tolérance, périmètre GeoJSON, portails (lot 16)
+  scenarios: Scenario[],                    // de l'espace et des annonces exportées
+  explorations: Exploration[]               // lot 16 : explorations des portails et lignes du compte rendu
 }
 ```
 

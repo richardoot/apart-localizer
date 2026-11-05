@@ -16,6 +16,10 @@ import { RentComparableSchema } from './rent-market.js'
 import { SearchCriteriaSchema } from './search-criteria.js'
 import { ScenarioSchema } from './study.js'
 import { VisitSchema } from './visits.js'
+import {
+  ExplorationLineSchema,
+  ExplorationSummarySchema,
+} from './exploration.js'
 
 /**
  * Export des données de l'espace (portabilité, étude du besoin § 5) : CSV
@@ -91,6 +95,12 @@ export const ExportListingSchema = z.object({
 })
 export type ExportListing = z.infer<typeof ExportListingSchema>
 
+/** Lot 16 : une exploration exportée, avec les lignes de son compte rendu (extraits courts, masqués). */
+export const ExportExplorationSchema = ExplorationSummarySchema.extend({
+  lines: z.array(ExplorationLineSchema),
+})
+export type ExportExploration = z.infer<typeof ExportExplorationSchema>
+
 export const ExportDocumentSchema = z.object({
   format: z.literal(EXPORT_FORMAT_ID),
   version: z.literal(EXPORT_FORMAT_VERSION),
@@ -115,5 +125,11 @@ export const ExportDocumentSchema = z.object({
   listings: z.array(ExportListingSchema),
   searchCriteria: z.array(SearchCriteriaSchema),
   scenarios: z.array(ScenarioSchema),
+  explorations: z
+    .array(ExportExplorationSchema)
+    .default([])
+    .describe(
+      'Lot 16 : explorations des portails par Claude, de la plus récente à la plus ancienne, avec leurs lignes (absent dans un export antérieur)'
+    ),
 })
 export type ExportDocument = z.infer<typeof ExportDocumentSchema>

@@ -18,8 +18,15 @@ import type { LocationQueryRaw } from 'vue-router'
 
 export type ListingView = 'table' | 'cards' | 'map'
 
-/** Lot 14 : l'onglet de la liste, « Dans les critères » ou « Hors critères ». */
-export type FitTab = 'main' | 'out'
+/**
+ * L'onglet de la liste : « Dans les critères » ou « Hors critères » (lot 14),
+ * ou « À valider » (lot 16 : brouillons reçus par e-mail ou trouvés par
+ * Claude, `?vue=a-valider`).
+ */
+export type FitTab = 'main' | 'out' | 'drafts'
+
+/** Lot 16 : le paramètre de l'onglet « À valider ». */
+export const DRAFTS_TAB_QUERY = { vue: 'a-valider' } as const
 
 /** L'onglet d'un filtre `fit` : « Hors critères » dès que le niveau out est demandé. */
 export function fitTabOf(fit: readonly CriteriaFitLevel[] | undefined): FitTab {
@@ -80,6 +87,11 @@ export function filtersFromQuery(query: Query): FilterState {
   return rest
 }
 
+/** Lot 16 : l'onglet « À valider » est ouvert (`?vue=a-valider`). */
+export function inboxFromQuery(query: Query): boolean {
+  return firstValue(query.vue) === DRAFTS_TAB_QUERY.vue
+}
+
 export function viewFromQuery(query: Query): ListingView {
   const view = firstValue(query.view)
   return LISTING_VIEWS.includes(view as ListingView)
@@ -90,10 +102,12 @@ export function viewFromQuery(query: Query): ListingView {
 /** L'inverse : la chaîne de requête de la page, vue comprise, défauts omis. */
 export function queryFromFilters(
   filters: FilterState,
-  view: ListingView
+  view: ListingView,
+  inbox = false
 ): LocationQueryRaw {
   const query: LocationQueryRaw = listingFiltersToQuery(filters)
   if (view !== 'table') query.view = view
+  if (inbox) query.vue = DRAFTS_TAB_QUERY.vue
   return query
 }
 
@@ -105,6 +119,8 @@ export function queryFromFilters(
 export const useFiltersStore = defineStore('filters', () => {
   const filters = ref<FilterState>(filtersFromQuery({}))
   const view = ref<ListingView>('table')
+  /** Lot 16 : l'onglet « À valider » est ouvert. */
+  const inbox = ref(false)
 
   const activeCount = computed(() => {
     const f = filters.value
@@ -150,10 +166,20 @@ export const useFiltersStore = defineStore('filters', () => {
     patch({ near })
   }
 
-  const fitTab = computed<FitTab>(() => fitTabOf(filters.value.fit))
+  const fitTab = computed<FitTab>(() =>
+    inbox.value ? 'drafts' : fitTabOf(filters.value.fit)
+  )
 
-  /** Lot 14 : change d'onglet ; « Hors critères » = le niveau out seulement. */
+  /**
+   * Lot 14 : change d'onglet ; « Hors critères » = le niveau out seulement.
+   * Lot 16 : « À valider » garde les filtres de la liste pour le retour.
+   */
   function setFitTab(tab: FitTab): void {
+    if (tab === 'drafts') {
+      inbox.value = true
+      return
+    }
+    inbox.value = false
     patch({ fit: tab === 'out' ? ['out'] : undefined })
   }
 
@@ -175,13 +201,17 @@ export const useFiltersStore = defineStore('filters', () => {
   function loadFromQuery(query: Query): void {
     filters.value = filtersFromQuery(query)
     view.value = viewFromQuery(query)
+    inbox.value = inboxFromQuery(query)
   }
 
-  const routeQuery = computed(() => queryFromFilters(filters.value, view.value))
+  const routeQuery = computed(() =>
+    queryFromFilters(filters.value, view.value, inbox.value)
+  )
 
   return {
     filters,
     view,
+    inbox,
     activeCount,
     routeQuery,
     apiFilters,

@@ -9,8 +9,18 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
-/** Lot 14 : l'adéquation renvoyée par la liste, réglée par test. */
-const listState = vi.hoisted(() => ({ fit: null as unknown }))
+/** Lot 14 : l'adéquation renvoyée par la liste, réglée par test ; lot 16 : les brouillons. */
+const listState = vi.hoisted(() => ({
+  fit: null as unknown,
+  drafts: [] as unknown[],
+}))
+
+vi.mock('@/composables/useDrafts', async () => {
+  const { computed } = await import('vue')
+  return {
+    useDrafts: () => ({ data: computed(() => listState.drafts) }),
+  }
+})
 
 vi.mock('@/composables/useListings', () => ({
   useListingAreas: () => ({ data: ref(null) }),
@@ -87,6 +97,9 @@ async function mountAt(path: string) {
         ExportMenu: Empty,
         ListingCreatePanel: Empty,
         ViewSwitch: Empty,
+        DraftsTab: {
+          render: () => h('div', { 'data-testid': 'drafts-tab-stub' }),
+        },
       },
     },
   })
@@ -98,6 +111,56 @@ describe('ListingsPage : onglet de la fiche dans l’URL', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     listState.fit = null
+    listState.drafts = []
+  })
+
+  it('lot 16 : l’onglet « À valider » compte les brouillons, vit dans l’URL et remplace la liste', async () => {
+    listState.fit = {
+      activeCriteria: [
+        { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', name: 'Caudéran fictif' },
+      ],
+      counts: { in: 2, to_confirm: 0, margin: 0, out: 1 },
+      kept: 0,
+      criteriaId: null,
+    }
+    listState.drafts = [{ id: 'a' }, { id: 'b' }]
+    const { router, wrapper } = await mountAt('/annonces?status=to_visit')
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs.map(t => t.text())).toEqual([
+      'Dans les critères · 2',
+      'Hors critères · 1',
+      'À valider 2',
+    ])
+    expect(wrapper.find('[data-testid="drafts-tab-stub"]').exists()).toBe(false)
+    await tabs[2]?.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({
+      status: 'to_visit',
+      vue: 'a-valider',
+    })
+    expect(wrapper.find('[data-testid="drafts-tab-stub"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="legend-price"]').exists()).toBe(false)
+    // Revenir à la liste garde les filtres et quitte l'onglet.
+    await wrapper.findAll('[role="tab"]')[0]?.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({ status: 'to_visit' })
+  })
+
+  it('lot 16 : sans critère actif, « À valider » s’ouvre depuis l’URL', async () => {
+    listState.fit = {
+      activeCriteria: [],
+      counts: { in: 3, to_confirm: 0, margin: 0, out: 0 },
+      kept: 0,
+      criteriaId: null,
+    }
+    listState.drafts = [{ id: 'a' }]
+    const { wrapper } = await mountAt('/annonces?vue=a-valider')
+    expect(wrapper.findAll('[role="tab"]').map(t => t.text())).toEqual([
+      'Toutes les annonces · 3',
+      'À valider 1',
+    ])
+    expect(wrapper.find('[data-testid="drafts-tab-stub"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="fit-no-criteria"]').exists()).toBe(false)
   })
 
   it('lot 14 : critères comparés, onglets comptés ; « Hors critères » dans l’URL', async () => {

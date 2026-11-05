@@ -8,6 +8,7 @@ import { SearchCriteriaModule } from '../search-criteria/search-criteria.module'
 import { StudyModule } from '../study/study.module'
 import { VisitsModule } from '../visits/visits.module'
 import { WhatsNewModule } from '../whats-new/whats-new.module'
+import { ExplorationModule } from '../exploration/exploration.module'
 import { McpAuthGuard } from './mcp-auth.guard'
 import { McpController } from './mcp.controller'
 import { OAuthDiscoveryService } from './oauth-discovery.service'
@@ -28,6 +29,7 @@ import { WellKnownController } from './well-known.controller'
     StudyModule,
     VisitsModule,
     WhatsNewModule,
+    ExplorationModule,
   ],
   controllers: [McpController, WellKnownController],
   providers: [McpAuthGuard, OAuthDiscoveryService],

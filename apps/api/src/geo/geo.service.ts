@@ -344,6 +344,75 @@ export class GeoService {
     return CriteriaFitMeasureRows.parse(rows)
   }
 
+  /**
+   * Lot 16 : les mêmes mesures pour des annonces pas enregistrées (annonces
+   * lues par Claude sur un portail, brouillons « À valider ») : chaque
+   * annonce passe par une ligne virtuelle `l` (repère, précision, zone du
+   * placement), mesurée contre les critères enregistrés par la même
+   * expression que les annonces. Sans réseau.
+   */
+  async criteriaFitMeasuresForPoints(
+    workspaceId: string,
+    criteriaIds: readonly string[],
+    points: readonly CandidateGeo[]
+  ): Promise<CriteriaFitMeasureRow[]> {
+    if (criteriaIds.length === 0 || points.length === 0) return []
+    const rows = points.map(p => {
+      const [longitude, latitude] = p.point?.coordinates ?? [null, null]
+      return Prisma.sql`SELECT ${p.key}::text AS "id",
+        CASE WHEN ${longitude}::double precision IS NULL THEN NULL::geography
+             ELSE ST_SetSRID(ST_MakePoint(${longitude}::double precision, ${latitude}::double precision), 4326)::geography END AS "geom",
+        ${p.precision}::"app"."LocationPrecision" AS "location_precision",
+        ${areaSql(p.area)}::geography AS "location_area"`
+    })
+    const result = await this.prisma.$queryRaw`
+      WITH c AS (
+        SELECT sc."id", sc."perimeter_type", sc."center_longitude", sc."center_latitude",
+               sc."radius_meters", sc."perimeter"
+        FROM "app"."search_criteria" sc
+        WHERE sc."workspace_id" = ${workspaceId} AND sc."id" IN (${Prisma.join([...criteriaIds])})
+      ),
+      l AS (${Prisma.join(rows, ' UNION ALL ')}),
+      ${TRAM_DISTANCES}
+      SELECT ${CRITERIA_FIT_MEASURES}
+      FROM l JOIN lt ON lt."id" = l."id" CROSS JOIN c`
+    return CriteriaFitMeasureRows.parse(result)
+  }
+
+  /**
+   * Lot 16 : les contours (quartiers officiels, IRIS, communes entières) qui
+   * recoupent le périmètre d'un critère élargi de sa marge, avec la part de
+   * chaque contour dans le périmètre (zones du brief). Vide sans périmètre
+   * ou sans contour importé.
+   */
+  async criteriaZones(
+    workspaceId: string,
+    criteriaId: string,
+    marginMeters: number,
+    territory: string
+  ): Promise<CriteriaZoneRow[]> {
+    const rows = await this.prisma.$queryRaw`
+      WITH c AS (
+        SELECT CASE
+                 WHEN sc."perimeter_type" = 'point_radius'
+                   THEN ST_Buffer(ST_SetSRID(ST_MakePoint(sc."center_longitude", sc."center_latitude"), 4326)::geography, sc."radius_meters", 'quad_segs=16')
+                 ELSE sc."perimeter"
+               END AS "shape"
+        FROM "app"."search_criteria" sc
+        WHERE sc."id" = ${criteriaId} AND sc."workspace_id" = ${workspaceId}
+      )
+      SELECT n."kind"::text AS "kind", n."code", n."name", n."commune", n."insee_code",
+             ST_Area(ST_Intersection(n."geom"::geometry, c."shape"::geometry)::geography)
+               / NULLIF(ST_Area(n."geom"), 0) AS "share"
+      FROM c
+      JOIN "app"."neighbourhoods" n
+        ON n."territory" = ${territory} AND n."geom" IS NOT NULL
+       AND ST_DWithin(n."geom", c."shape", ${marginMeters})
+      WHERE c."shape" IS NOT NULL
+      ORDER BY n."commune", "share" DESC NULLS LAST, n."name"`
+    return CriteriaZoneRows.parse(rows)
+  }
+
   /** Validité d'un polygone dessiné (anneau qui se recoupe...) et sa surface en m². */
   async checkPolygon(
     polygon: Polygon
@@ -1365,6 +1434,28 @@ const CriteriaFitMeasureRows = z.array(
 export type CriteriaFitMeasureRow = z.infer<
   typeof CriteriaFitMeasureRows
 >[number]
+
+/** Lot 16 : une annonce pas enregistrée, à mesurer contre les critères. */
+export interface CandidateGeo {
+  /** Identifiant de la ligne virtuelle (rendu dans `listing_id`). */
+  key: string
+  point: Point | null
+  precision: LocationPrecision | null
+  area: ListingAreaRef | null
+}
+
+const CriteriaZoneRows = z.array(
+  z.object({
+    kind: NeighbourhoodKindSchema,
+    code: z.string(),
+    name: z.string(),
+    commune: z.string(),
+    insee_code: z.string(),
+    share: z.number().nullable(),
+  })
+)
+/** Un contour qui recoupe le périmètre d'un critère élargi de sa marge. */
+export type CriteriaZoneRow = z.infer<typeof CriteriaZoneRows>[number]
 
 /** Un critère pas encore enregistré : type de périmètre et géométrie. */
 export interface CriteriaGeoDraft {

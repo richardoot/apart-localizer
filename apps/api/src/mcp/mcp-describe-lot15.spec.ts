@@ -51,11 +51,15 @@ const preview: ListingCheckPreview = {
 
 describe('MCP lot 15 : suivi des mises à jour', () => {
   it('déclare check_listing, apply_listing_check et le prompt review_listings', () => {
-    expect(MCP_TOOL_NAMES.slice(-2)).toEqual([
+    const start = MCP_TOOL_NAMES.indexOf('check_listing')
+    expect(MCP_TOOL_NAMES.slice(start, start + 2)).toEqual([
       'check_listing',
       'apply_listing_check',
     ])
-    expect(MCP_PROMPT_NAMES).toEqual(['analyze_listing', 'review_listings'])
+    expect(MCP_PROMPT_NAMES.slice(0, 2)).toEqual([
+      'analyze_listing',
+      'review_listings',
+    ])
   })
 
   it('décrit une vérification à blanc : écarts, ce qui serait écrit, garde-fous', () => {

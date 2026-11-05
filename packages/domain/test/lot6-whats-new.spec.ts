@@ -505,7 +505,7 @@ describe('notifications', () => {
     expect(drafts[0]).toMatchObject({
       title: '2 annonce(s) reçue(s) par e-mail',
       body: 'À valider : « Alerte SeLoger ».',
-      url: '/?brouillons=1',
+      url: '/annonces?vue=a-valider',
     })
     expect(
       notificationsForActivity(

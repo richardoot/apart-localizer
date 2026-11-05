@@ -34,6 +34,18 @@ elles sont protégées.
   coordonnées d'un agent ou d'un vendeur ; les avant et après d'une description sont tronqués et
   masqués de même. Les vérifications sont lisibles par les membres de l'espace, au journal et dans
   l'export ; elles partent avec l'annonce (cascade).
+- **Explorations des portails (lot 16, ADR 0026)** : Claude lit les pages de recherche et
+  d'annonces dans le navigateur de l'utilisateur ; le serveur ne télécharge aucune page et ne suit
+  aucun lien (les liens de recherche sont fabriqués sans réseau). Une exploration garde le membre
+  pour qui Claude a exploré, les dates, les critères, le bilan par portail (« bloqué » compris) et,
+  par annonce lue, une ligne du compte rendu : lien, portail, titre, prix, surface, pièces,
+  commune, quartier, résultat du tri, raison et un extrait **court** (500 caractères au plus) dont
+  les téléphones et adresses e-mail sont masqués à l'écriture (`sanitizeEvidence`). Les
+  **coordonnées des annonceurs** (agent, vendeur) ne sont ni demandées à Claude ni stockées : le
+  prompt lui demande de ne pas les relever, et ce qui passerait dans un extrait est masqué ; la
+  description d'un brouillon (2 000 caractères au plus) est masquée de même. Une annonce hors
+  critères n'existe que comme cette ligne. Explorations, lignes et brouillons sont lisibles par les
+  membres de l'espace, au journal et dans l'export JSON ; ils partent avec l'espace (cascade).
 - **Fonds de carte (lot 10, ADR 0020)** : le fond choisi est retenu dans le `localStorage` du
   navigateur, sous la clé `apart-localizer-base-map:<identifiant de la personne>` (l'UUID
   Supabase, déjà présent dans la session stockée par le même navigateur) ; la valeur n'est que
@@ -74,7 +86,7 @@ elles sont protégées.
 
 - **Accès et portabilité** : export JSON complet (docs/export.md).
 - **Effacement** : supprimer un espace (en base, `DELETE` sur `app.workspaces`) supprime en
-  cascade annonces, visites, notifications, abonnements et brouillons ; les objets du dossier de
+  cascade annonces, visites, notifications, abonnements, brouillons et explorations ; les objets du dossier de
   l'espace dans le bucket se suppriment depuis le tableau de bord Supabase (Storage → dossier de
   l'espace). Retirer un membre dans l'application coupe son accès mais garde sa ligne (nom et
   adresse) pour l'historique ; pour effacer aussi cette ligne, la supprimer en base

@@ -14,6 +14,7 @@ import {
   DEFAULT_CRITERIA_TOLERANCE,
 } from './criteria-fit.js'
 import { PointRadiusSchema, PointSchema, PolygonSchema } from './geojson.js'
+import { CriteriaPortalsSchema, SearchPortalSchema } from './portals.js'
 import { withoutDefaults } from './zod-utils.js'
 
 /**
@@ -217,6 +218,11 @@ export const SearchCriteriaInputSchema = z.object({
   tolerance: CriteriaToleranceSchema.default(() => ({
     ...DEFAULT_CRITERIA_TOLERANCE,
   })),
+  portals: CriteriaPortalsSchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 16 : portails que Claude parcourt pour ce critère (leboncoin, seloger, bienici, pap, logicimmo) ; null = tous'
+    ),
 })
 export type SearchCriteriaInput = z.infer<typeof SearchCriteriaInputSchema>
 export type SearchCriteriaInputRaw = z.input<typeof SearchCriteriaInputSchema>
@@ -258,6 +264,12 @@ export const SearchCriteriaSchema = z.object({
   tolerance: CriteriaToleranceSchema,
   perimeterType: PerimeterTypeSchema.nullable(),
   perimeter: PerimeterSchema.nullable(),
+  portals: z
+    .array(SearchPortalSchema)
+    .default(() => [...SearchPortalSchema.options])
+    .describe(
+      'Lot 16 : portails cochés pour l’exploration par Claude (tous par défaut)'
+    ),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 })

@@ -194,6 +194,18 @@ intérieur de sa commune (contours importés) ; une annonce sans commune reste �
 le déploiement du web, la première visite recharge la page une fois pour passer à la nouvelle
 version (service worker, ADR 0022).
 
+### Exploration par les critères (lot 16)
+
+Migration `20261107100000_lot16_exploration` : purement additive (tables `explorations` et
+`exploration_candidates` ; énumérations `ExplorationPortal` et `ExplorationOutcome` ; valeurs
+`exploration` de `DraftOrigin`, `merged` de `DraftStatus`, `claude` de `DraftExtractor` ; colonnes
+facultatives de `listing_drafts` et `search_criteria.portals`, NULL = tous les portails), aucune
+donnée réécrite ; appliquée par `prisma:deploy` (ou `build:vercel`). Ni variable, ni import, ni
+rattrapage. Le connecteur claude.ai découvre les trois outils et le prompt « Explorer les
+portails » à sa prochaine lecture de `tools/list` (nouvelle conversation ; le reconnecter s'ils
+n'apparaissent pas). L'exploration se lance depuis claude.ai avec Claude in Chrome actif, dans le
+navigateur de l'utilisateur : le serveur ne joint aucun portail.
+
 ### Suivi des mises à jour des annonces (lot 15)
 
 Migration `20261106110000_lot15_listing_checks` : purement additive (colonnes facultatives
@@ -461,6 +473,11 @@ partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « C
       carte : repères pleins, creux et pointillés, contour du quartier au survol ; onglet
       Quartier : distances « ≈ » et « Préciser l'adresse » ; filtre « Repère » ; après le
       déploiement du web, la page se recharge une seule fois.
+- [ ] Lot 16 : migration `20261107100000_lot16_exploration` appliquée ; page Critères :
+      « Ce que Claude cherche » d'un critère (seuils marge comprise, portails cochés, « Ouvrir la
+      recherche ») ; dans claude.ai, prompt « Explorer les portails » essayé sur un ou deux
+      portails ; onglet « À valider » de la liste : ajouter, écarter avec une raison, « C'est la
+      même » sur un doublon ; compte rendu de l'exploration, portail bloqué compris.
 - [ ] Lot 15 : migration `20261106110000_lot15_listing_checks` appliquée ; onglet Suivi d'une
       annonce : section « Mises à jour », « Vue en ligne aujourd'hui » et « Plus en ligne »
       (statut proposé, appliqué seulement sur accord) ; liste : « À revérifier » et le filtre ;

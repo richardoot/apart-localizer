@@ -19,7 +19,7 @@ export const NotificationTypeSchema = z
     'listing_checked',
   ])
   .describe(
-    "Type : nouvelle annonce (par l'autre membre ou par le MCP), changement de statut, tâche assignée, annonce entrée dans un critère, réponse à une offre, annonces reçues par e-mail, arrivée d'un membre invité (pour les propriétaires), mise à jour trouvée en vérifiant une annonce sur le portail (prix, charges, plus en ligne, republiée ; lot 15)"
+    "Type : nouvelle annonce (par l'autre membre ou par le MCP), changement de statut, tâche assignée, annonce entrée dans un critère, réponse à une offre, annonces à valider (reçues par e-mail, ou trouvées par Claude en explorant les portails, lot 16), arrivée d'un membre invité (pour les propriétaires), mise à jour trouvée en vérifiant une annonce sur le portail (prix, charges, plus en ligne, republiée ; lot 15)"
   )
 export type NotificationType = z.infer<typeof NotificationTypeSchema>
 
@@ -29,7 +29,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   task_assigned: 'Tâche assignée',
   criteria_matched: 'Annonce entrée dans un critère',
   offer_response: 'Réponse à une offre',
-  drafts_received: 'Annonces reçues par e-mail',
+  drafts_received: 'Annonces à valider (alerte e-mail, exploration de Claude)',
   member_joined: "Arrivée d'un membre dans l'espace",
   listing_checked: "Mise à jour d'une annonce (vérification sur le portail)",
 }

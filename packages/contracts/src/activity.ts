@@ -32,10 +32,11 @@ export const ActivityKindSchema = z
     'draft',
     'member',
     'check',
+    'exploration',
     'other',
   ])
   .describe(
-    "Sorte d'événement : annonce, statut, prix, tâche, avis, offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon reçu, membres de l'espace (invitations, arrivées, retraits, rôles), vérification sur le portail (lot 15), autre"
+    "Sorte d'événement : annonce, statut, prix, tâche, avis, offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon à valider, membres de l'espace (invitations, arrivées, retraits, rôles), vérification sur le portail (lot 15), exploration des portails par Claude (lot 16), autre"
   )
 export type ActivityKind = z.infer<typeof ActivityKindSchema>
 
@@ -51,9 +52,10 @@ export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
   ai: 'IA',
   assumptions: 'Hypothèses',
   study: 'Étude',
-  draft: 'Brouillon reçu',
+  draft: 'Brouillon à valider',
   member: 'Membres',
   check: 'Vérification',
+  exploration: 'Exploration',
   other: 'Autre',
 }
 
@@ -79,6 +81,7 @@ export const ACTIVITY_KIND_RULES: Record<
   study: { prefixes: ['scenario', 'rent_comparable'] },
   draft: { prefixes: ['draft'] },
   member: { prefixes: ['member', 'workspace'] },
+  exploration: { prefixes: ['exploration'] },
 }
 
 /** La sorte d'une action (`listing.status_changed` → `status`). */

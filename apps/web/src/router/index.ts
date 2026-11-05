@@ -67,6 +67,20 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Critères', requiresAuth: true },
   },
   {
+    // Lot 16 : le compte rendu d'une exploration des portails par Claude.
+    path: '/criteres/explorations/:id',
+    name: 'exploration',
+    component: () => import('@/views/ExplorationPage.vue'),
+    meta: { title: 'Compte rendu d’exploration', requiresAuth: true },
+  },
+  {
+    // Lot 16 : ce que Claude cherche pour un critère (brief, portails).
+    path: '/criteres/:id',
+    name: 'criteria-brief',
+    component: () => import('@/views/CriteriaBriefPage.vue'),
+    meta: { title: 'Ce que Claude cherche', requiresAuth: true },
+  },
+  {
     path: '/hypotheses',
     name: 'assumptions',
     component: () => import('@/views/AssumptionsPage.vue'),

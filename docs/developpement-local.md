@@ -130,9 +130,13 @@ hors du dépôt. Un nouveau fichier part du `.env.example` correspondant.
   confirmer, à la marge, hors critères, dont une gardée pour son offre) ; comparables de loyer ;
   deux scénarios ; une alerte e-mail à valider ; des vérifications sur le portail (lot 15 : prix
   trouvé, inchangée, plus en ligne, republiée, page inaccessible) et une republication rattachée
-  (le T3 de Cenon et sa première annonce) ; le journal et les notifications qu'il fait naître. Les
-  dates sont
-  relatives au jour du seed : il y a toujours des « nouvelles » et une visite à venir.
+  (le T3 de Cenon et sa première annonce) ; deux explorations fictives des portails (lot 16 :
+  l'ancienne, dont le brouillon a été écarté avec sa raison, et celle de la veille, marquée
+  « [Exemple] », avec quatre brouillons à valider — dans les critères, à la marge, à confirmer, un
+  doublon probable du T2 des Chartrons —, deux annonces déjà suivies revues au même lien, dont une
+  baisse de prix appliquée par une vérification, deux déjà écartées, trois hors critères et
+  Logic-Immo bloqué) ; le journal et les notifications qu'il fait naître. Les dates sont relatives
+  au jour du seed : il y a toujours des « nouvelles » et une visite à venir.
 - **`artifact`** : l'import de `data/private/artifact-export/` (vos annonces). Sans ce dossier,
   `stack:up` le dit et s'arrête. Les e-mails des membres viennent de `--richard-email` et
   `--chloe-email`, ou de `data/private/import.env` (ignoré par git) :
@@ -248,6 +252,15 @@ ou plus simplement le déploiement ([déploiement](deploiement.md), § 5).
 
 Portées : GoTrue ne délivre que des portées OpenID ; la découverte annonce `email` et un jeton
 OAuth vaut lecture et écriture, sans suppression possible ([mcp.md](mcp.md), ADR 0017).
+
+**Exploration par les critères (lot 16)** : avec le jeu `demo`, `get_search_brief` rend les trois
+critères et leurs liens de recherche ; `triage_candidates` puis `record_exploration` se testent
+avec des annonces fictives (liens `exemple.invalid` ou chemins inventés, `runKey` au choix) :
+aucune page de portail n'est ouverte par l'API, seul Claude (ou vous) ouvre les liens dans le
+navigateur. Les brouillons arrivent dans l'onglet « À valider » de la page Annonces
+(`/annonces?vue=a-valider`), le compte rendu sous la page Critères
+(`/criteres/explorations/<id>`). Le prompt `explore_listings` se lit avec `prompts/get` dans
+l'inspecteur ; sans portail réel, on ne fait que le relire.
 
 ## Tester le partage et le push
 

@@ -316,6 +316,7 @@ describe('réponses MCP du lot 4', () => {
           approximation: null,
         },
       },
+      portals: ['leboncoin', 'seloger', 'bienici', 'pap', 'logicimmo'],
       createdAt: '2026-11-03T10:00:00.000Z',
       updatedAt: '2026-11-03T10:00:00.000Z',
       listingCount: 3,

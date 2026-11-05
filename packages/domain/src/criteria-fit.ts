@@ -91,7 +91,12 @@ export interface CriteriaFitCandidate {
   rooms: number | null
   dpeClass: DpeClass | null
   commune: string | null
-  verdict: Verdict
+  /**
+   * Le verdict sous les hypothèses en vigueur ; null quand il ne peut pas se
+   * calculer (annonce lue sur un portail sans loyer visé, lot 16) : un
+   * filtre de verdict rend alors « à confirmer », jamais « hors critères ».
+   */
+  verdict: Verdict | null
 }
 
 /** Un critère tel que l'adéquation le lit. */
@@ -652,11 +657,22 @@ function dpeCheck(
 }
 
 function verdictCheck(
-  verdict: Verdict,
+  verdict: Verdict | null,
   verdicts: readonly Verdict[]
 ): CriteriaFitCheck {
   const wanted = verdicts.map(v => VERDICT_LABELS[v].toLowerCase()).join(', ')
   const label = `Verdict : ${wanted}`
+  if (verdict === null) {
+    return check({
+      key: 'verdict',
+      level: 'to_confirm',
+      label,
+      value: 'inconnu',
+      detail:
+        'Le verdict se calcule avec le loyer visé, à saisir dans la fiche.',
+      reason: 'verdict inconnu : loyer visé à saisir',
+    })
+  }
   const value = VERDICT_LABELS[verdict]
   if (verdicts.includes(verdict)) {
     return check({

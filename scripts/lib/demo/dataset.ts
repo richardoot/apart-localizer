@@ -44,6 +44,8 @@ import {
   sanitizeEvidence,
 } from '@apart/domain'
 import { DEMO_ACCOUNTS, DEMO_WORKSPACE_NAME } from './accounts.js'
+import { buildDemoExplorations } from './exploration.js'
+import type { DemoExploration, DemoExplorationDraft } from './exploration.js'
 import { DEMO_WORKSPACE_ID, demoId } from './ids.js'
 
 /**
@@ -190,6 +192,8 @@ export interface DemoDraft {
   url: string
 }
 
+export type { DemoExploration, DemoExplorationDraft } from './exploration.js'
+
 export interface DemoActivity {
   id: string
   at: string
@@ -216,6 +220,9 @@ export interface DemoDataset {
   drafts: DemoDraft[]
   /** Le journal hors entrées dans les critères (calculées par PostGIS à l'écriture). */
   activity: DemoActivity[]
+  /** Lot 16 : explorations fictives et brouillons qu'elles ont déposés. */
+  explorations: DemoExploration[]
+  explorationDrafts: DemoExplorationDraft[]
 }
 
 // ---------------------------------------------------------------------------
@@ -553,7 +560,11 @@ const SPECS: ListingSpec[] = [
     point: [-0.6455, 44.839],
     precision: 'exact',
     source: 'leboncoin',
-    prices: [[4, 158_000]],
+    // Lot 16 : le prix baissé, trouvé hier par l'exploration (même lien).
+    prices: [
+      [4, 158_000],
+      [1, 152_000],
+    ],
     surface: 47,
     rooms: 2,
     bedrooms: 1,
@@ -1107,6 +1118,32 @@ export function buildDemoDataset(now: Date = new Date()): DemoDataset {
     after: { created: 1, subject: drafts[0]?.emailSubject },
   })
 
+  // Lot 16 : une ancienne exploration et celle d'hier, avec leurs brouillons.
+  const listingRef = (key: string) => {
+    const l = byKey.get(key)
+    if (!l) throw new Error(`Annonce de démo inconnue : ${key}`)
+    return {
+      id: l.id,
+      title: l.input.title,
+      status: l.input.status,
+      price: l.input.price,
+      surface: l.input.surface,
+      commune: l.input.location.commune,
+      url: l.input.url,
+    }
+  }
+  const criteriaRef = (key: string) => {
+    const c = criteria.find(x => x.key === key)
+    if (!c) throw new Error(`Critère de démo inconnu : ${key}`)
+    return { id: c.id, name: c.input.name }
+  }
+  const { explorations, drafts: explorationDrafts } = buildDemoExplorations({
+    at,
+    listing: listingRef,
+    criteria: { centre: criteriaRef('centre'), tramB: criteriaRef('tram-b') },
+    log,
+  })
+
   activity.sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id))
   return {
     workspace: {
@@ -1121,6 +1158,8 @@ export function buildDemoDataset(now: Date = new Date()): DemoDataset {
     scenarios,
     drafts,
     activity,
+    explorations,
+    explorationDrafts,
   }
 }
 
@@ -1591,6 +1630,27 @@ const CHECKS: Record<string, DemoCheckSpec[]> = {
       channel: 'mcp',
       observed: {},
       outcome: 'inaccessible',
+    },
+  ],
+  // Lot 16 : deux annonces suivies revues hier par l'exploration (même lien).
+  'merignac-t2': [
+    {
+      days: 1,
+      by: 'demo',
+      channel: 'mcp',
+      observed: { online: true, price: 152_000, surface: 47, rooms: 2 },
+      evidence:
+        'Vue sur Leboncoin pendant une exploration : Prix : 152 000 €, 47 m², 2 pièces (exemple fictif)',
+    },
+  ],
+  'begles-t3': [
+    {
+      days: 1,
+      by: 'demo',
+      channel: 'mcp',
+      observed: { online: true, price: 175_000, surface: 58, rooms: 3 },
+      evidence:
+        'Vue sur SeLoger pendant une exploration : Prix : 175 000 €, 58 m², 3 pièces (exemple fictif)',
     },
   ],
   // La chronologie complète : inchangée, prix, plus en ligne, republiée.

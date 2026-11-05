@@ -24,6 +24,7 @@ import { WhatsNewModule } from './whats-new/whats-new.module'
 import { InboundModule } from './inbound/inbound.module'
 import { ExportModule } from './export/export.module'
 import { McpModule } from './mcp/mcp.module'
+import { ExplorationModule } from './exploration/exploration.module'
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { McpModule } from './mcp/mcp.module'
     InboundModule,
     ExportModule,
     McpModule,
+    ExplorationModule,
   ],
   providers: [
     // Every @Body() and @Query() DTO is a createZodDto(schema): the pipe

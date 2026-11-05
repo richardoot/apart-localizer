@@ -76,8 +76,8 @@ const me: WorkspaceMe = {
 }
 
 describe('MCP lot 8', () => {
-  it('déclare list_members à la suite des outils du lot 6 (trente et un outils avec le lot 15)', () => {
-    expect(MCP_TOOL_NAMES).toHaveLength(31)
+  it('déclare list_members à la suite des outils du lot 6 (trente-quatre outils avec les lots 15 et 16)', () => {
+    expect(MCP_TOOL_NAMES).toHaveLength(34)
     expect(MCP_TOOL_NAMES[28]).toBe('list_members')
   })
 

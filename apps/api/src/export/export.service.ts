@@ -22,6 +22,10 @@ import { toListingCheckDto } from '../listings/listing.mapper'
 import { toSearchCriteriaDto } from '../search-criteria/search-criteria.mapper'
 import { toRentComparableDto, toScenarioDto } from '../study/study.mapper'
 import { VisitsService } from '../visits/visits.service'
+import {
+  explorationDetailInclude,
+  toExplorationDetail,
+} from '../exploration/exploration.mapper'
 import { MEMBER_ORDER } from '../workspace/member-order'
 import type { Member } from '../generated/prisma'
 import { LISTING_CSV_COLUMNS, listingCsvRow, toCsv } from './csv'
@@ -129,6 +133,7 @@ export class ExportService {
       scenarios,
       comparables,
       checks,
+      explorations,
     ] = await Promise.all([
       this.prisma.workspace.findUniqueOrThrow({
         where: { id: member.workspaceId },
@@ -165,6 +170,12 @@ export class ExportService {
         include: {
           linkedListing: { select: { id: true, title: true, status: true } },
         },
+      }),
+      // Lot 16 : les explorations des portails par Claude, avec leurs lignes.
+      this.prisma.exploration.findMany({
+        where: { workspaceId: member.workspaceId },
+        orderBy: { finishedAt: 'desc' },
+        include: explorationDetailInclude,
       }),
     ])
     const byListing = <T extends { listingId: string }>(rows: T[]) => {
@@ -211,6 +222,7 @@ export class ExportService {
       })),
       searchCriteria: criteria.map(toSearchCriteriaDto),
       scenarios: scenarios.map(toScenarioDto),
+      explorations: explorations.map(toExplorationDetail),
     })
   }
 }

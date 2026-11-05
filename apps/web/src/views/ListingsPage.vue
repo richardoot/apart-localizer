@@ -4,6 +4,7 @@
   import type { CriteriaMatchChanges, PointRadius } from '@apart/contracts'
   import { criteriaChangesMessage } from '@/lib/criteria'
   import CostBasisBadge from '@/components/listings/CostBasisBadge.vue'
+  import DraftsTab from '@/components/drafts/DraftsTab.vue'
   import FiltersBar from '@/components/listings/FiltersBar.vue'
   import FitTabs from '@/components/listings/FitTabs.vue'
   import ListingCards from '@/components/listings/ListingCards.vue'
@@ -13,6 +14,7 @@
   import ListingsTable from '@/components/listings/ListingsTable.vue'
   import ExportMenu from '@/components/listings/ExportMenu.vue'
   import ViewSwitch from '@/components/listings/ViewSwitch.vue'
+  import { useDrafts } from '@/composables/useDrafts'
   import { useListingAreas, useListingList } from '@/composables/useListings'
   import {
     DEFAULT_LAYER_TOGGLES,
@@ -83,6 +85,10 @@
   const fit = computed(() => data.value?.fit ?? null)
   const activeCriteria = computed(() => fit.value?.activeCriteria ?? [])
   const outTab = computed(() => store.fitTab === 'out')
+  /** Lot 16 : l'onglet « À valider » (brouillons e-mail et explorations de Claude). */
+  const draftsTab = computed(() => store.fitTab === 'drafts')
+  const { data: pendingDrafts } = useDrafts()
+  const draftCount = computed(() => pendingDrafts.value?.length ?? 0)
   const communes = computed(() => {
     const set = new Set<string>()
     for (const item of items.value) {
@@ -199,12 +205,13 @@
       </div>
     </header>
 
-    <FiltersBar :communes="communes" :criteria="criteria" />
+    <FiltersBar v-if="!draftsTab" :communes="communes" :criteria="criteria" />
 
-    <FitTabs :fit="fit" />
+    <FitTabs :fit="fit" :drafts="draftCount" />
 
+    <DraftsTab v-if="draftsTab" />
     <p
-      v-if="error"
+      v-else-if="error"
       role="alert"
       class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
     >
@@ -241,12 +248,18 @@
       />
     </template>
 
-    <p v-if="outTab && activeCriteria.length" class="text-xs text-muted">
+    <p
+      v-if="outTab && activeCriteria.length && !draftsTab"
+      class="text-xs text-muted"
+    >
       Les annonces écartées ou vendues restent gouvernées par le filtre de
       statut, comme avant.
     </p>
 
-    <p class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+    <p
+      v-if="!draftsTab"
+      class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted"
+    >
       <span
         ><span class="rounded-full bg-good-soft px-2 text-good">Cible</span>
         rendement brut ≥ seuil, effort ≤ maximum, DPE A à D</span

@@ -17,11 +17,17 @@ import { fitChangeFromListing } from './whats-new.js'
  *    l'écran ;
  *  - une tâche assignée ne notifie que le membre assigné ;
  *  - une écriture du système (alerte e-mail reçue) notifie tous les membres ;
+ *  - une exploration des portails par Claude (lot 16) qui dépose des
+ *    brouillons notifie les autres membres : le membre pour qui Claude a
+ *    exploré a vu le résumé dans la conversation ;
  *  - l'arrivée d'un membre invité (invitation acceptée) ne notifie que les
  *    propriétaires (lot 8) ; la première connexion d'un membre pré-créé
  *    (import) est journalisée sans notification.
  * Les préférences par type et par canal s'appliquent ensuite, côté API.
  */
+
+/** Lot 16 : l'onglet « À valider » de la page Annonces. */
+export const DRAFTS_INBOX_URL = '/annonces?vue=a-valider'
 
 export interface NotificationEvent extends ActivityRecord {
   listingId: string | null
@@ -86,6 +92,11 @@ export function notificationTypeOf(
     }
     case 'draft.received':
       return Number(field(event.after, 'created') ?? 0) > 0
+        ? 'drafts_received'
+        : null
+    case 'exploration.recorded':
+      // Lot 16 : seulement quand l'exploration a déposé des brouillons.
+      return Number(field(event.after, 'draftsCreated') ?? 0) > 0
         ? 'drafts_received'
         : null
     case 'member.joined':
@@ -186,6 +197,13 @@ export function notificationsForActivity(
       break
     }
     case 'drafts_received': {
+      if (event.action === 'exploration.recorded') {
+        const count = Number(field(event.after, 'draftsCreated') ?? 0)
+        const summary = str(event.after, 'summary')
+        heading = `Claude a trouvé ${count} annonce${count > 1 ? 's' : ''} à valider`
+        body = `${who} a exploré les portails${summary ? ` (${summary})` : ''}. Rien n’est ajouté à la liste sans votre choix.`
+        break
+      }
       const count = Number(field(event.after, 'created') ?? 0)
       const subject = str(event.after, 'subject')
       heading = `${count} annonce(s) reçue(s) par e-mail`
@@ -221,7 +239,7 @@ export function notificationsForActivity(
     body,
     url:
       type === 'drafts_received'
-        ? '/?brouillons=1'
+        ? DRAFTS_INBOX_URL
         : type === 'member_joined'
           ? '/espace'
           : type === 'listing_checked' && url

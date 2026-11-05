@@ -38,6 +38,7 @@ export function fakeCriteria(
     tolerance: { ...DEFAULT_CRITERIA_TOLERANCE },
     perimeterType: 'polygon',
     perimeter: { type: 'polygon', polygon: SQUARE },
+    portals: ['leboncoin', 'seloger', 'bienici', 'pap', 'logicimmo'],
     createdAt: now,
     updatedAt: now,
     listingCount: 3,

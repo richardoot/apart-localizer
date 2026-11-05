@@ -7,7 +7,11 @@
     ListingDraft,
     ListingInput,
   } from '@apart/contracts'
-  import { listingSourceFromUrl, missingListingFields } from '@apart/contracts'
+  import {
+    EXPLORATION_PORTAL_LABELS,
+    listingSourceFromUrl,
+    missingListingFields,
+  } from '@apart/contracts'
   import SidePanel from '@/components/ui/SidePanel.vue'
   import { describeUsage } from '@/composables/useExtraction'
   import { useListingMutations } from '@/composables/useListings'
@@ -155,7 +159,9 @@
           model:
             loaded.extractedBy === 'ai'
               ? 'IA (alerte e-mail)'
-              : 'analyseur simple',
+              : loaded.extractedBy === 'claude'
+                ? 'lu sur la page par Claude'
+                : 'analyseur simple',
           inputTokens: 0,
           outputTokens: 0,
           cacheReadInputTokens: 0,
@@ -165,7 +171,10 @@
         },
         persisted: false,
       })
-      notice.value = `Reçue par e-mail${loaded.emailSubject ? ` (« ${loaded.emailSubject} »)` : ''} : vérifiez la fiche avant d'enregistrer.`
+      notice.value =
+        loaded.origin === 'exploration'
+          ? `Trouvée par Claude${loaded.portal ? ` sur ${EXPLORATION_PORTAL_LABELS[loaded.portal]}` : ''} : vérifiez la fiche avant d'enregistrer.`
+          : `Reçue par e-mail${loaded.emailSubject ? ` (« ${loaded.emailSubject} »)` : ''} : vérifiez la fiche avant d'enregistrer.`
     } catch (err) {
       failure.value =
         err instanceof ApiError ? err.message : 'Brouillon introuvable.'
@@ -296,7 +305,9 @@
               <strong>{{
                 draft?.extractedBy === 'parser'
                   ? 'Fiche pré-remplie par l’analyseur simple.'
-                  : "Fiche pré-remplie par l'IA."
+                  : draft?.extractedBy === 'claude'
+                    ? 'Fiche pré-remplie avec ce que Claude a lu sur la page.'
+                    : "Fiche pré-remplie par l'IA."
               }}</strong>
               Vérifiez chaque champ : les pastilles disent d'où vient la valeur
               et avec quelle confiance ; survolez-les pour lire l'extrait. Un

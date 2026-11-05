@@ -426,7 +426,10 @@ describe('describeActivity', () => {
       { action: 'draft.received', after: {} },
       '0 annonce(s) reçue(s) par e-mail',
     ],
-    [{ action: 'draft.accepted' }, 'a validé une annonce reçue par e-mail'],
+    [
+      { action: 'draft.accepted' },
+      'a ajouté à la liste une annonce reçue par e-mail',
+    ],
     [{ action: 'draft.dismissed' }, 'a écarté une annonce reçue par e-mail'],
     [{ action: 'mystery.thing', after: { a: 1 } }, 'mystery.thing', 1],
   ]

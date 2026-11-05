@@ -13,8 +13,15 @@ import type {
   ListingCheckPreviewRequestInput,
   ListingCheckWriteResult,
   ListingDraft,
+  ListingDraftAcceptResult,
+  ListingDraftBatchAccept,
+  ListingDraftBatchAcceptResult,
   ListingDraftDecision,
+  ListingDraftMerge,
   ListingDraftStatus,
+  ExplorationDetail,
+  ExplorationSummary,
+  SearchBrief,
   Notification,
   NotificationPage,
   NotificationPreferencesUpdate,
@@ -613,7 +620,7 @@ export const api = {
       }),
   },
 
-  /** Lot 6 : annonces reçues par e-mail, à valider. */
+  /** Lot 6 : annonces reçues par e-mail, à valider ; lot 16 : trouvées par Claude. */
   drafts: {
     list: (status: ListingDraftStatus = 'pending') =>
       apiFetch<ListingDraft[]>(`/listing-drafts?status=${status}`),
@@ -623,6 +630,39 @@ export const api = {
         method: 'PATCH',
         json: decision,
       }),
+    /** « Ajouter à la liste » sans repasser par le formulaire. */
+    accept: (id: string) =>
+      apiFetch<ListingDraftAcceptResult>(`/listing-drafts/${id}/accept`, {
+        method: 'POST',
+      }),
+    /** « Ajouter celles « dans les critères » ». */
+    acceptInCriteria: (request: ListingDraftBatchAccept = {}) =>
+      apiFetch<ListingDraftBatchAcceptResult>(
+        '/listing-drafts/accept-in-criteria',
+        { method: 'POST', json: request }
+      ),
+    /** « C'est la même : mettre à jour la fiche ». */
+    merge: (id: string, request: ListingDraftMerge) =>
+      apiFetch<ListingDraft>(`/listing-drafts/${id}/merge`, {
+        method: 'POST',
+        json: request,
+      }),
+    /** « C'en est une autre ». */
+    distinct: (id: string) =>
+      apiFetch<ListingDraft>(`/listing-drafts/${id}/distinct`, {
+        method: 'POST',
+      }),
+  },
+
+  /** Lot 16 : explorations des portails par Claude et brief des critères. */
+  explorations: {
+    list: (limit = 20, criteriaId?: string) =>
+      apiFetch<ExplorationSummary[]>(
+        `/explorations${queryString({ limit: String(limit), ...(criteriaId ? { criteriaId } : {}) })}`
+      ),
+    get: (id: string) => apiFetch<ExplorationDetail>(`/explorations/${id}`),
+    brief: (criteriaId: string) =>
+      apiFetch<SearchBrief>(`/search-criteria/${criteriaId}/brief`),
   },
 
   /** Lot 6 : export CSV ou JSON de l'espace ou de la sélection. */

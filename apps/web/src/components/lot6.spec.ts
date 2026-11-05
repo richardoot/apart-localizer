@@ -365,41 +365,44 @@ describe('WhatsNewBanner et DraftsInbox', () => {
     wrapper.unmount()
   })
 
-  it('liste les brouillons reçus : valider ouvre la fiche, écarter décide', async () => {
-    apiMock.drafts.list.mockResolvedValue([
-      {
-        id: 'd1',
-        extractedBy: 'parser',
-        listing: {
-          title: 'T2 Bègles',
-          price: 165000,
-          location: { commune: 'Bègles' },
-        },
-        duplicates: [{}],
-        receivedAt: new Date().toISOString(),
+  it('résume les annonces à valider (e-mail et Claude) et renvoie vers l’onglet « À valider »', async () => {
+    const draft = (id: string, over: Record<string, unknown> = {}) => ({
+      id,
+      origin: 'email',
+      status: 'pending',
+      extractedBy: 'parser',
+      portal: null,
+      distinct: false,
+      listing: {
+        title: `T2 Bègles ${id}`,
+        price: 165000,
+        publishedAt: null,
+        location: { commune: 'Bègles' },
       },
+      duplicates: [],
+      receivedAt: new Date().toISOString(),
+      ...over,
+    })
+    apiMock.drafts.list.mockResolvedValue([
+      draft('d1', { duplicates: [{ listingId: 'x', reasons: [] }] }),
+      draft('d2', { origin: 'exploration', portal: 'leboncoin' }),
+      draft('d3'),
+      draft('d4'),
     ])
-    apiMock.drafts.decide.mockResolvedValue({})
     const wrapper = withClient(DraftsInbox)
     await flushPromises()
     const text =
       document.body.querySelector('[data-testid="drafts"]')?.textContent ?? ''
-    expect(text).toContain('T2 Bègles')
-    expect(text).toContain('analyseur simple')
+    expect(text).toContain('À valider')
+    expect(text).toContain('T2 Bègles d1')
+    expect(text).toContain('E-mail')
+    expect(text).toContain('Leboncoin')
     expect(text).toContain('doublon probable')
-    const [validate, dismiss] = [
-      ...document.body.querySelectorAll('[data-testid="drafts"] button'),
-    ] as HTMLElement[]
-    validate?.click()
-    expect(routerPush).toHaveBeenCalledWith({
-      name: 'listing-new',
-      query: { brouillon: 'd1' },
-    })
-    dismiss?.click()
-    await flushPromises()
-    expect(apiMock.drafts.decide).toHaveBeenCalledWith('d1', {
-      status: 'dismissed',
-    })
+    expect(text).not.toContain('T2 Bègles d4')
+    expect(text).toContain('Et 1 autre(s).')
+    expect(
+      document.body.querySelector('[data-testid="drafts-open"]')
+    ).not.toBeNull()
     wrapper.unmount()
   })
 })

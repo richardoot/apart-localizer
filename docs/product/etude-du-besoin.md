@@ -152,6 +152,7 @@ Priorité : **M** (MVP, parité avec l'artefact plus le MCP), **S** (suivant), *
 | C7 | Champs manquants transformés automatiquement en tâches | S |
 | C8 | Historique des prix et des modifications de l'annonce source (baisse de prix, retrait) | S |
 | C9 | Partage depuis le mobile (PWA share target) et transfert d'alertes e-mail | L |
+| C10 | Exploration des portails à partir des critères actifs (lot 16) : Claude cherche dans le navigateur de l'utilisateur, l'application trie (déjà suivie = vérification, écartée jamais reproposée, hors critères en simple ligne de compte rendu) et dépose le reste en brouillons « à valider » ; rien n'est ajouté sans un membre | S |
 
 Point de vigilance : pas de scraping automatisé des portails (conditions d'utilisation, anti-bot).
 Le canal principal est Claude qui lit la page dans le navigateur de l'utilisateur et appelle le
@@ -241,6 +242,8 @@ Lecture :
 | `get_compliance` | Checklist réglementaire datée à la date de mise en location, risques Géorisques à l'adresse |
 | `list_visits` | Visites d'une annonce : date, état, participants, compte rendu, points positifs et négatifs, note, nombre de photos (lot 6) |
 | `whats_new` | Ce qui a changé pour le membre depuis sa dernière visite : nouvelles annonces, prix, statuts, avis et tâches de l'autre membre, entrées dans un critère et sorties vers « hors critères » (lots 6 et 14) |
+| `get_search_brief` | Ce que Claude cherche : critères actifs marges comprises, zones, portails cochés et liens de recherche fabriqués sans réseau, annonces déjà suivies et écartées, dernière exploration (lot 16) |
+| `triage_candidates` | Trie des annonces lues sur les portails sans rien écrire : déjà suivie, déjà écartée, hors critères, doublon probable, nouvelle, avec l'adéquation (lot 16) |
 | `check_listing` | Compare la page d'une annonce lue par Claude (ou son texte) à la fiche : écarts classés (appliqués, proposés, notés), résultat, statut proposé, republications probables ; rien n'est écrit (lot 15) |
 
 Écriture (toutes réversibles, aucune suppression) :
@@ -258,6 +261,7 @@ Lecture :
 | `create_search_criteria`, `update_search_criteria` | Critères de recherche : filtres, marge de tolérance (lot 14) et périmètre en GeoJSON (point et rayon, polygone) ou paramètres d'isochrone |
 | `add_rent_comparable` | Une annonce de location comparable saisie (loyer, surface, meublé, date, source) ; répond avec la médiane à jour |
 | `add_visit` | Une visite faite ou planifiée (date, participants, compte rendu, points positifs et négatifs, note, tâche de préparation), sans photo ; renvoie le statut proposé sans l'appliquer (lot 6) |
+| `record_exploration` | Enregistre une exploration : le serveur retrie, crée le compte rendu et les brouillons « à valider » (jamais une annonce), applique les vérifications des annonces déjà suivies ; idempotent par `runKey` (lot 16) |
 | `apply_listing_check` | Enregistre une vérification : faits lus appliqués (prix par l'historique), dates de vérification, republication rattachée, extrait-preuve ; renvoie le statut proposé sans l'appliquer (lot 15) |
 
 Ressources et prompts : le schéma d'annonce en JSON Schema (`apart://schema/listing`), le

@@ -121,6 +121,7 @@ import type { RentComparablesService } from '../study/rent-comparables.service'
 import type { ComplianceService } from '../study/compliance.service'
 import type { VisitsService } from '../visits/visits.service'
 import type { WhatsNewService } from '../whats-new/whats-new.service'
+import type { ExplorationsService } from '../exploration/explorations.service'
 import { answer, dataResult, refusal, writeRefusal } from './tool-results'
 
 /** Ce dont les outils ont besoin : le membre, ses portées, les services métier. */
@@ -146,6 +147,8 @@ export interface McpToolContext {
   whatsNew: WhatsNewService
   /** Lot 15 : vérifications des annonces sur le portail. */
   checks: ListingChecksService
+  /** Lot 16 : exploration des portails par les critères. */
+  exploration: ExplorationsService
 }
 
 const CHANNEL = 'mcp' as const
@@ -156,7 +159,8 @@ const CHANNEL = 'mcp' as const
  * hypothèses), lot 4 (critères de recherche, contexte de marché), lot 5
  * (scénarios, projection, conformité, comparables de loyer), lot 6
  * (visites, « ce qui a changé »), lot 8 (membres, en lecture seule), lot 15
- * (vérification des annonces sur le portail, `mcp-checks.ts`).
+ * (vérification des annonces sur le portail, `mcp-checks.ts`), lot 16
+ * (exploration des portails par les critères, `mcp-exploration.ts`).
  */
 export const MCP_TOOL_NAMES = [
   'list_listings',
@@ -190,10 +194,20 @@ export const MCP_TOOL_NAMES = [
   'list_members',
   'check_listing',
   'apply_listing_check',
+  'get_search_brief',
+  'triage_candidates',
+  'record_exploration',
 ] as const
 
-/** Les prompts du connecteur ; `review_listings` (lot 15) est dans `mcp-checks.ts`. */
-export const MCP_PROMPT_NAMES = ['analyze_listing', 'review_listings'] as const
+/**
+ * Les prompts du connecteur ; `review_listings` (lot 15) est dans
+ * `mcp-checks.ts`, `explore_listings` (lot 16) dans `mcp-exploration.ts`.
+ */
+export const MCP_PROMPT_NAMES = [
+  'analyze_listing',
+  'review_listings',
+  'explore_listings',
+] as const
 
 /** Les ressources du connecteur : schéma d'annonce et glossaire. */
 export const MCP_RESOURCE_URIS = [

@@ -3,13 +3,15 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
-État au 5 novembre 2026 : **les lots 0 à 15 sont livrés** côté code, tests et documentation ; les
+État au 5 novembre 2026 : **les lots 0 à 16 sont livrés** côté code, tests et documentation ; les
 lots 0 à 13 sont déployés (Vercel et Supabase cloud ; imports du lot 11, `import:places` et
 `relocate:listings` du lot 12 faits en production). Le lot 14 (adéquation aux critères) attend
 son déploiement : migration additive `20261106100000_lot14_criteria_fit`, puis
 `refresh:criteria-fit` en simulation et en vrai ([docs/deploiement.md](../deploiement.md) § 2) ;
 le lot 15 (suivi des mises à jour des annonces) le sien : migration additive
-`20261106110000_lot15_listing_checks`, sans variable ni import nouveau. Restent les actions
+`20261106110000_lot15_listing_checks`, sans variable ni import nouveau ; le lot 16 (exploration
+par les critères) le sien : migration additive `20261107100000_lot16_exploration`, sans variable
+ni import nouveau. Restent les actions
 d'exploitation (Supabase cloud, Vercel, clés et connecteur :
 [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard » dans chaque lot, et
 les critères « Fini quand » qui demandent le déploiement ou un usage réel (lot 1 : déploiement et
@@ -19,7 +21,9 @@ Richard et Chloé, sur ordinateur et sur téléphone ; lot 10 : un périmètre d
 sur la photo aérienne, sur le site déployé ; lot 11 : les imports faits sur la base de
 production et l'onglet Quartier des annonces réelles relu par Richard ; lot 12 : le
 rattrapage relu en simulation puis passé sur la production, et les quartiers retenus relus par
-Richard ; lot 14 : les critères de Richard créés sur le site déployé et les deux onglets relus),
+Richard ; lot 14 : les critères de Richard créés sur le site déployé et les deux onglets relus ;
+lot 16 : une vraie exploration lancée depuis claude.ai dans le navigateur de Richard et l'onglet
+« À valider » relu à deux),
 à constater après la mise en ligne.
 
 ## Lot 0 : socle
@@ -535,3 +539,69 @@ hors critères n'est jamais perdue et revient d'elle-même ; la liste, l'aperçu
 et le rattrapage disent la même chose. (Vérifié en tests automatisés, sur une base jetable avec
 les vraies données ouvertes et des annonces fictives, et sur captures Chromium ; à confirmer par
 Richard sur le site déployé avec ses critères.)
+
+## Lot 16 : exploration par les critères
+
+Statut : livré (à déployer : migration additive `20261107100000_lot16_exploration`, sans variable
+ni import nouveau, [docs/deploiement.md](../deploiement.md) § 2).
+
+- Besoin C10 (nouveau), précise C3, C6, C9 et G3. Demande de Richard et Chloé : que Claude
+  explore les portails (Leboncoin, SeLoger, Bien'ici, PAP, Logic-Immo) à partir des critères
+  actifs, et que l'application trie ce qu'il trouve. Aucun scraping : Claude lit les pages dans
+  le navigateur de l'utilisateur (Claude in Chrome) ; le serveur ne télécharge rien et fabrique
+  seulement les liens de recherche. Maquette validée (onglet « À valider », déroulé dans
+  claude.ai, « Ce que Claude cherche », compte rendu, mobile 390 px). ADR 0026.
+- Livré :
+  - **Règles** : Claude n'ajoute jamais une annonce : toute annonce gardée devient un brouillon
+    « À valider » (origine `exploration`), même « dans les critères » ; écartée = jamais
+    reproposée (même lien normalisé, ou doublon probable d'une annonce ou d'un brouillon écartés),
+    raison gardée ; hors critères même avec la marge = une ligne du compte rendu seulement (lien,
+    portail, titre, prix, raison), remontée par la prochaine exploration si un critère s'élargit ;
+    même lien qu'une annonce suivie = une vérification du lot 15 (faits appliqués, rien de plus) ;
+    doublon probable sous un autre lien = brouillon à trancher, jamais fusionné d'office ; portail
+    bloqué (captcha, vérification anti-robot, connexion) = arrêt sans contournement, noté
+    « bloqué » ; exploration à la demande.
+  - **Modèle** : tables `explorations` (membre, canal, début et fin, critères, bilan par portail,
+    compteurs, résumé ; `run_key` unique par espace) et `exploration_candidates` (une ligne par
+    annonce lue, extrait de 500 caractères au plus, masqué) ; `listing_drafts` : origine
+    `exploration`, état `merged`, lecteur `claude`, exploration, portail, extrait, raison de l'écart,
+    « c'en est une autre », vérification liée, placement du repère ; `search_criteria.portals`
+    (portails cochés, tous par défaut).
+  - **`domain`** (`exploration.ts`) : `normalizeListingUrl`, `portalFromUrl`, brief
+    (`searchBrief`, seuils élargis de la marge, zones, lignes, `portalSearchUrls` sans réseau d'après
+    `PORTAL_SEARCH_TEMPLATES`, daté du 5 novembre 2026 : Leboncoin pré-rempli, les autres portails
+    « filtres à saisir »), fiche d'un brouillon, `triageCandidate`, compteurs, phrases, bilan par
+    portail et résumé des hors critères ; verdict inconnu sans loyer visé = « à confirmer ».
+  - **API** : `GET /explorations`, `GET /explorations/:id`, `GET /explorations/brief`,
+    `GET /search-criteria/:id/brief` ; brouillons : liste avec l'adéquation calculée à la lecture,
+    `POST /listing-drafts/:id/accept` (« Ajouter à la liste »), `POST /listing-drafts/accept-in-criteria`,
+    écart avec raison et annulation (`PATCH`), `POST /listing-drafts/:id/merge` (« C'est la même »,
+    vérification lot 15), `POST /listing-drafts/:id/distinct` ; adéquation d'une annonce pas
+    enregistrée par le chemin du lot 14 (placement du lot 12 en cache, mesures PostGIS d'une ligne
+    virtuelle) ; zones du brief par PostGIS ; journal `exploration.recorded`, `draft.merged`,
+    `draft.restored`, `draft.distinct` ; notification « Claude a trouvé N annonces à valider » pour
+    l'autre membre (préférence des annonces à valider).
+  - **MCP** : `get_search_brief`, `triage_candidates` (lecture), `record_exploration` (écriture :
+    le serveur retrie, `runKey` idempotent), prompt `explore_listings` : 34 outils, trois prompts.
+  - **Interface** : onglet « À valider » de la page Annonces (`?vue=a-valider`, compteur) pour tous
+    les brouillons, e-mail compris : portail, adéquation, raison, doublon probable et ses deux
+    boutons, « Lu sur la page par Claude », Ajouter, Modifier avant d'ajouter, Écarter (raison
+    facultative, Annuler), Ouvrir sur le portail, bandeau de la dernière exploration et « Ajouter
+    celles « dans les critères » » ; « Ce que Claude cherche » d'un critère (`/criteres/:id` :
+    brief, portails à cocher, « Ouvrir la recherche », demande à copier, dernières explorations) ;
+    compte rendu (`/criteres/explorations/:id`, bilan par portail, filtre `?resultat=`) ; la boîte
+    de la Synthèse renvoie vers l'onglet ; cartes soignées à 390 px.
+  - **Export** : `explorations` dans le JSON (version 1, `[]` par défaut) ; CSV inchangé.
+  - **Démo** : deux explorations fictives « [Exemple] » (brouillons des quatre sortes, un doublon,
+    une annonce suivie au prix baissé, des hors critères, Logic-Immo bloqué, un brouillon écarté).
+- Plus tard : une exploration planifiée (rappel par notification) ; des paramètres de recherche
+  vérifiés pour SeLoger, Bien'ici, PAP et Logic-Immo ; la mise à jour d'un brouillon revu ; les
+  doublons entre brouillons d'une même exploration.
+
+Fini quand : depuis claude.ai, « Explore les nouvelles annonces pour nos critères » parcourt les
+portails cochés dans le navigateur de Richard, s'arrête sans contourner un portail qui bloque, et
+n'ajoute rien à la liste ; chaque annonce trouvée attend dans « À valider » avec son adéquation ;
+une annonce écartée ne revient pas ; une annonce suivie revue au même lien met sa fiche à jour par
+une vérification ; les hors critères restent au compte rendu. (Vérifié en tests automatisés, e2e
+MCP JSON-RPC compris, et sur captures Chromium d'un banc d'essai, jeu de démo fictif ; à confirmer
+par Richard avec une vraie exploration après le déploiement.)

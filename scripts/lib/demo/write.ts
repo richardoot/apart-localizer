@@ -3,6 +3,7 @@ import type { CriteriaFitCounts, Point } from '@apart/contracts'
 import {
   activityActorName,
   bestFit,
+  normalizeListingUrl,
   notificationsForActivity,
 } from '@apart/domain'
 import { Prisma } from '../../../apps/api/src/generated/prisma/index.js'
@@ -34,8 +35,9 @@ import { demoId } from './ids.js'
  *    hypothèses, annonces et tout ce qui s'y rattache, points et périmètre
  *    par le module geo de l'API (le SQL géographique n'est écrit que là),
  *    adéquation aux critères (lot 14 : mesures PostGIS et décision de
- *    `domain` par le service de l'API, dans la transaction), journal et
- *    notifications (règles de `domain`) ;
+ *    `domain` par le service de l'API, dans la transaction), lot 16 :
+ *    explorations fictives, leurs brouillons et les lignes de leur compte
+ *    rendu, journal et notifications (règles de `domain`) ;
  * 4. vérifie que les autres espaces n'ont pas bougé, sinon annule tout.
  */
 
@@ -54,6 +56,9 @@ export interface DemoSeedReport {
   criteriaMatches: number
   /** Lot 14 : lignes d'adéquation par niveau (critère × annonce). */
   criteriaFit: CriteriaFitCounts
+  /** Lot 16 : explorations fictives, et brouillons « À valider » (e-mail et explorations). */
+  explorations: number
+  drafts: number
   activity: number
   notifications: number
   /** Les autres espaces, avant et après (identiques, sinon la transaction est annulée). */
@@ -337,6 +342,74 @@ export async function writeDemoDataset(
         })),
       })
 
+      // Lot 16 : les explorations fictives, leurs brouillons et leurs lignes.
+      await tx.exploration.createMany({
+        data: dataset.explorations.map(e => ({
+          id: e.id,
+          workspaceId,
+          authorId: idOf(e.by),
+          channel: 'mcp' as const,
+          runKey: e.runKey,
+          startedAt: new Date(e.startedAt),
+          finishedAt: new Date(e.finishedAt),
+          criteria: json(e.criteria),
+          portals: json(e.portals),
+          counts: json(e.counts),
+          summary: e.summary,
+          outDigest: e.outDigest,
+          createdAt: new Date(e.finishedAt),
+        })),
+      })
+      await tx.listingDraft.createMany({
+        data: dataset.explorationDrafts.map(d => ({
+          id: d.id,
+          workspaceId,
+          origin: 'exploration' as const,
+          status: d.status,
+          extractedBy: 'claude' as const,
+          input: json(d.input),
+          duplicates: json(d.duplicates),
+          warnings: json(d.warnings),
+          url: d.url,
+          receivedAt: new Date(d.receivedAt),
+          createdAt: new Date(d.receivedAt),
+          explorationId: d.explorationId,
+          portal: d.portal,
+          excerpt: d.excerpt,
+          dismissReason: d.dismissReason,
+          decidedById: d.decidedBy ? idOf(d.decidedBy) : null,
+          decidedAt: d.decidedAt ? new Date(d.decidedAt) : null,
+        })),
+      })
+      const listingIdByKey = new Map(dataset.listings.map(l => [l.key, l.id]))
+      await tx.explorationCandidate.createMany({
+        data: dataset.explorations.flatMap(e =>
+          e.lines.map(line => ({
+            id: demoId(`exploration-line:${e.id}:${line.position}`),
+            explorationId: e.id,
+            position: line.position,
+            url: line.url,
+            normalizedUrl: normalizeListingUrl(line.url),
+            portal: line.portal,
+            title: line.title,
+            price: dec(line.price),
+            surface: dec(line.surface),
+            rooms: line.rooms,
+            commune: line.commune,
+            district: line.district,
+            outcome: line.outcome,
+            why: line.why,
+            reasons: json(line.reasons),
+            level: line.level,
+            listingId: line.listingKey
+              ? (listingIdByKey.get(line.listingKey) ?? null)
+              : null,
+            draftId: line.draftId,
+            excerpt: line.excerpt,
+          }))
+        ),
+      })
+
       // Journal, puis les notifications qu'il fait naître (règles de `domain`).
       const activity = [...dataset.activity, ...matchActivity].sort(
         (a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id)
@@ -419,6 +492,8 @@ export async function writeDemoDataset(
         criteria: dataset.criteria.length,
         criteriaMatches,
         criteriaFit,
+        explorations: dataset.explorations.length,
+        drafts: dataset.drafts.length + dataset.explorationDrafts.length,
         activity: activity.length,
         notifications: notifications.length,
         otherWorkspaces: after,

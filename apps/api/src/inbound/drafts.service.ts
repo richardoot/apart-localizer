@@ -6,30 +6,62 @@ import {
 } from '@nestjs/common'
 import {
   DuplicateCandidateSchema,
+  EXPLORATION_PORTAL_LABELS,
+  ListingCheckInputSchema,
   ListingDraftSchema,
   ListingInputSchema,
 } from '@apart/contracts'
 import type {
+  ListingCriteriaFit,
   ListingDraft,
+  ListingDraftAcceptResult,
+  ListingDraftBatchAccept,
+  ListingDraftBatchAcceptResult,
   ListingDraftDecision,
+  ListingDraftMerge,
   ListingDraftStatus,
+  ListingInput,
+  ListingObserved,
 } from '@apart/contracts'
+import { formatEuros } from '@apart/domain'
 import { z } from 'zod'
 import { ActivityService } from '../activity/activity.service'
+import { CandidateFitService } from '../exploration/candidate-fit.service'
+import { ListingChecksService } from '../listings/listing-checks.service'
+import { ListingsService } from '../listings/listings.service'
+import { placementOf } from '../listings/listing.mapper'
 import { PrismaService } from '../prisma/prisma.service'
+import type { Prisma } from '../generated/prisma'
 import type { ListingDraft as DraftRow, Member } from '../generated/prisma'
 
-export function toDraftDto(row: DraftRow): ListingDraft {
+/** Ce qu'une lecture de brouillon charge avec lui : la vérification d'un brouillon reconnu. */
+const draftInclude = {
+  mergedCheck: { select: { id: true, summary: true } },
+} as const
+
+type DraftRowWithCheck = Prisma.ListingDraftGetPayload<{
+  include: typeof draftInclude
+}>
+
+/** La fiche d'un brouillon ; illisible : une fiche vide à compléter. */
+function draftInput(row: Pick<DraftRow, 'input'>): ListingInput {
   const listing = ListingInputSchema.safeParse(row.input)
+  return listing.success
+    ? listing.data
+    : ListingInputSchema.parse({ title: 'Annonce reçue', price: 0 })
+}
+
+export function toDraftDto(
+  row: DraftRow & { mergedCheck?: { id: string; summary: string } | null },
+  fit: ListingCriteriaFit | null = null
+): ListingDraft {
   return ListingDraftSchema.parse({
     id: row.id,
     workspaceId: row.workspaceId,
     origin: row.origin,
     status: row.status,
     extractedBy: row.extractedBy,
-    listing: listing.success
-      ? listing.data
-      : ListingInputSchema.parse({ title: 'Annonce reçue', price: 0 }),
+    listing: draftInput(row),
     duplicates: z
       .array(DuplicateCandidateSchema)
       .catch([])
@@ -43,47 +75,117 @@ export function toDraftDto(row: DraftRow): ListingDraft {
     decidedById: row.decidedById,
     listingId: row.listingId,
     createdAt: row.createdAt.toISOString(),
+    explorationId: row.explorationId,
+    portal: row.portal,
+    excerpt: row.excerpt,
+    dismissReason: row.dismissReason,
+    distinct: row.distinctAt !== null,
+    merge:
+      row.status === 'merged'
+        ? {
+            checkId: row.mergedCheck?.id ?? row.mergedCheckId,
+            summary: row.mergedCheck?.summary ?? 'Fiche mise à jour',
+          }
+        : null,
+    fit,
   })
 }
 
+/** Les faits lus d'un brouillon, pour la vérification de l'annonce suivie qui est la même. */
+export function observedFromDraft(input: ListingInput): ListingObserved {
+  const read = (key: string): boolean => key in input.fieldSources
+  const observed: ListingObserved = {}
+  if (read('price') && input.price > 0) observed.price = input.price
+  if (read('surface') && input.surface !== null)
+    observed.surface = input.surface
+  if (read('rooms') && input.rooms !== null) observed.rooms = input.rooms
+  if (read('dpeClass') && input.dpeClass !== null)
+    observed.dpeClass = input.dpeClass
+  if (read('annualCharges') && input.annualCharges !== null)
+    observed.annualCharges = input.annualCharges
+  if (read('propertyTax') && input.propertyTax !== null)
+    observed.propertyTax = input.propertyTax
+  return observed
+}
+
+/** « trouvée par Claude », « reçue par e-mail » : l'origine dans le journal. */
+const originOf = (row: Pick<DraftRow, 'origin'>) => row.origin
+
 /**
- * Les brouillons reçus : la liste « à valider », la validation (le membre a
- * créé l'annonce depuis la fiche pré-remplie) ou l'écartement. Journalisé.
+ * Les brouillons « À valider » (alertes e-mail, lot 6 ; explorations de
+ * Claude, lot 16) : la liste avec l'adéquation calculée à la lecture,
+ * l'ajout direct à la liste (« Ajouter à la liste ») ou par le formulaire
+ * pré-rempli (validation avec l'annonce créée), l'écart avec une raison
+ * facultative (jamais reproposé) et son annulation, « c'est la même »
+ * (vérification lot 15 de l'annonce suivie, brouillon `merged`) et « c'en
+ * est une autre ». Chaque écriture est journalisée.
  */
 @Injectable()
 export class DraftsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly activity: ActivityService
+    private readonly activity: ActivityService,
+    private readonly listings: ListingsService,
+    private readonly checks: ListingChecksService,
+    private readonly fit: CandidateFitService
   ) {}
 
   async list(
     member: Member,
-    status: ListingDraftStatus
+    status: ListingDraftStatus,
+    explorationId?: string
   ): Promise<ListingDraft[]> {
     const rows = await this.prisma.listingDraft.findMany({
-      where: { workspaceId: member.workspaceId, status },
+      where: {
+        workspaceId: member.workspaceId,
+        status,
+        ...(explorationId ? { explorationId } : {}),
+      },
+      include: draftInclude,
       orderBy: { receivedAt: 'desc' },
       take: 100,
     })
-    return rows.map(toDraftDto)
+    const fits =
+      status === 'pending' ? await this.fits(member, rows) : new Map()
+    return rows.map(row => toDraftDto(row, fits.get(row.id) ?? null))
   }
 
   async get(member: Member, id: string): Promise<ListingDraft> {
-    return toDraftDto(await this.row(member, id))
+    const row = await this.row(member, id)
+    const fits =
+      row.status === 'pending' ? await this.fits(member, [row]) : new Map()
+    return toDraftDto(row, fits.get(row.id) ?? null)
   }
 
+  /** L'adéquation des brouillons, calculée à la lecture, sans réseau. */
+  private async fits(
+    member: Member,
+    rows: readonly DraftRow[]
+  ): Promise<Map<string, ListingCriteriaFit>> {
+    const items = await Promise.all(
+      rows.map(async row => {
+        const located = await this.fit.offlineLocation(
+          draftInput(row),
+          placementOf(row.locationPlacement)
+        )
+        return { key: row.id, listing: located.listing, area: located.area }
+      })
+    )
+    return this.fit.fits(member.workspaceId, items)
+  }
+
+  /**
+   * Valide (le formulaire a créé l'annonce), écarte (raison facultative) ou
+   * remet « à valider » un brouillon écarté.
+   */
   async decide(
     member: Member,
     id: string,
     decision: ListingDraftDecision
   ): Promise<ListingDraft> {
     const row = await this.row(member, id)
-    if (row.status !== 'pending') {
-      throw new ConflictException(
-        `Ce brouillon est déjà ${row.status === 'accepted' ? 'validé' : 'écarté'}.`
-      )
-    }
+    if (decision.status === 'pending') return this.restore(member, row)
+    this.assertPending(row)
     const createdId =
       decision.status === 'accepted' ? (decision.listingId ?? null) : null
     if (decision.status === 'accepted') {
@@ -95,16 +197,22 @@ export class DraftsService {
         throw new BadRequestException("L'annonce créée est introuvable")
       }
     }
+    const reason =
+      decision.status === 'dismissed' && decision.reason
+        ? decision.reason
+        : null
     const saved = await this.prisma.$transaction(async tx => {
-      const updated = await tx.listingDraft.update({
-        where: { id },
+      const written = await tx.listingDraft.updateMany({
+        where: { id, status: 'pending' },
         data: {
           status: decision.status,
           decidedAt: new Date(),
           decidedById: member.id,
           listingId: createdId,
+          dismissReason: reason,
         },
       })
+      if (written.count === 0) throw this.alreadyDecided()
       await this.activity.record(
         {
           workspaceId: member.workspaceId,
@@ -115,18 +223,282 @@ export class DraftsService {
             decision.status === 'accepted'
               ? 'draft.accepted'
               : 'draft.dismissed',
-          after: { draftId: id, url: row.url },
+          after: {
+            draftId: id,
+            url: row.url,
+            origin: originOf(row),
+            ...(reason ? { reason } : {}),
+          },
         },
         tx
       )
-      return updated
+      return tx.listingDraft.findUniqueOrThrow({
+        where: { id },
+        include: draftInclude,
+      })
     })
     return toDraftDto(saved)
   }
 
-  private async row(member: Member, id: string): Promise<DraftRow> {
+  /** « Annuler » un écart : le brouillon revient « à valider ». */
+  private async restore(
+    member: Member,
+    row: DraftRowWithCheck
+  ): Promise<ListingDraft> {
+    if (row.status !== 'dismissed') {
+      throw new ConflictException(
+        'Seul un brouillon écarté peut revenir « à valider ».'
+      )
+    }
+    await this.prisma.$transaction(async tx => {
+      const written = await tx.listingDraft.updateMany({
+        where: { id: row.id, status: 'dismissed' },
+        data: {
+          status: 'pending',
+          decidedAt: null,
+          decidedById: null,
+          dismissReason: null,
+        },
+      })
+      if (written.count === 0) throw this.alreadyDecided()
+      await this.activity.record(
+        {
+          workspaceId: member.workspaceId,
+          actorMemberId: member.id,
+          channel: 'web',
+          action: 'draft.restored',
+          after: { draftId: row.id, url: row.url, origin: originOf(row) },
+        },
+        tx
+      )
+    })
+    return this.get(member, row.id)
+  }
+
+  /**
+   * « Ajouter à la liste » sans repasser par le formulaire : l'annonce est
+   * créée depuis la fiche pré-remplie (repère replacé par le géocodeur en
+   * cache, doublons vus par le membre), puis le brouillon est validé. Le
+   * brouillon est réservé avant la création : deux clics ne créent pas deux
+   * annonces.
+   */
+  async accept(member: Member, id: string): Promise<ListingDraftAcceptResult> {
+    const row = await this.row(member, id)
+    this.assertPending(row)
+    const claimed = await this.prisma.listingDraft.updateMany({
+      where: { id, status: 'pending' },
+      data: {
+        status: 'accepted',
+        decidedAt: new Date(),
+        decidedById: member.id,
+      },
+    })
+    if (claimed.count === 0) throw this.alreadyDecided()
+    const input = draftInput(row)
+    const duplicates = z
+      .array(DuplicateCandidateSchema)
+      .catch([])
+      .parse(row.duplicates)
+    let created
+    try {
+      created = await this.listings.create(member, input, {
+        channel: 'web',
+        provenance: row.extractedBy === 'ai' ? 'ai' : 'listing',
+        ignoreDuplicates: duplicates.length > 0,
+      })
+    } catch (error) {
+      await this.prisma.listingDraft.update({
+        where: { id },
+        data: { status: 'pending', decidedAt: null, decidedById: null },
+      })
+      throw error
+    }
+    const listingId = created.listing.id
+    const saved = await this.prisma.$transaction(async tx => {
+      await this.activity.record(
+        {
+          workspaceId: member.workspaceId,
+          listingId,
+          actorMemberId: member.id,
+          channel: 'web',
+          action: 'draft.accepted',
+          after: {
+            draftId: id,
+            url: row.url,
+            origin: originOf(row),
+            direct: true,
+          },
+        },
+        tx
+      )
+      return tx.listingDraft.update({
+        where: { id },
+        data: { listingId },
+        include: draftInclude,
+      })
+    })
+    return {
+      draft: toDraftDto(saved),
+      listingId,
+      title: created.listing.title,
+    }
+  }
+
+  /**
+   * « Ajouter celles « dans les critères » » : les brouillons à valider dont
+   * l'adéquation est « dans les critères », sans doublon probable à
+   * trancher ; les autres restent à valider.
+   */
+  async acceptInCriteria(
+    member: Member,
+    request: ListingDraftBatchAccept
+  ): Promise<ListingDraftBatchAcceptResult> {
+    const drafts = await this.list(member, 'pending', request.explorationId)
+    const accepted: ListingDraftBatchAcceptResult['accepted'] = []
+    let skipped = 0
+    for (const draft of drafts) {
+      const undecided = draft.duplicates.length > 0 && !draft.distinct
+      if (draft.fit?.level !== 'in' || undecided) {
+        skipped += 1
+        continue
+      }
+      const result = await this.accept(member, draft.id)
+      accepted.push({
+        draftId: draft.id,
+        listingId: result.listingId,
+        title: result.title,
+      })
+    }
+    return { accepted, skipped }
+  }
+
+  /**
+   * « C'est la même : mettre à jour la fiche » : le brouillon est le même
+   * bien qu'une annonce suivie (un de ses doublons probables). Les faits lus
+   * s'appliquent à cette annonce par une vérification du lot 15 (rien de
+   * plus : ni statut, ni lien), le brouillon passe à « merged », lié à
+   * l'annonce et à la vérification.
+   */
+  async merge(
+    member: Member,
+    id: string,
+    request: ListingDraftMerge
+  ): Promise<ListingDraft> {
+    const row = await this.row(member, id)
+    this.assertPending(row)
+    const duplicates = z
+      .array(DuplicateCandidateSchema)
+      .catch([])
+      .parse(row.duplicates)
+    if (!duplicates.some(d => d.listingId === request.listingId)) {
+      throw new BadRequestException(
+        'Cette annonce n’est pas un doublon probable du brouillon'
+      )
+    }
+    const item = await this.listings.get(member, request.listingId)
+    const input = draftInput(row)
+    const portal = row.portal ? EXPLORATION_PORTAL_LABELS[row.portal] : null
+    const result = await this.checks.apply(
+      member,
+      request.listingId,
+      ListingCheckInputSchema.parse({
+        observed: observedFromDraft(input),
+        evidence: `Même bien vu ${portal ? `sur ${portal}` : 'dans une alerte'}${input.price > 0 ? ` : Prix : ${formatEuros(input.price)}` : ''}`,
+        ...(row.url ? { checkedUrl: row.url } : {}),
+        expectedUpdatedAt: request.expectedUpdatedAt ?? item.listing.updatedAt,
+      }),
+      'web'
+    )
+    const saved = await this.prisma.$transaction(async tx => {
+      const written = await tx.listingDraft.updateMany({
+        where: { id, status: 'pending' },
+        data: {
+          status: 'merged',
+          decidedAt: new Date(),
+          decidedById: member.id,
+          listingId: request.listingId,
+          mergedCheckId: result.check.id,
+        },
+      })
+      if (written.count === 0) throw this.alreadyDecided()
+      await this.activity.record(
+        {
+          workspaceId: member.workspaceId,
+          listingId: request.listingId,
+          actorMemberId: member.id,
+          channel: 'web',
+          action: 'draft.merged',
+          after: {
+            draftId: id,
+            url: row.url,
+            origin: originOf(row),
+            listingTitle: item.listing.title,
+            checkId: result.check.id,
+            summary: result.check.summary,
+          },
+        },
+        tx
+      )
+      return tx.listingDraft.findUniqueOrThrow({
+        where: { id },
+        include: draftInclude,
+      })
+    })
+    return toDraftDto(saved)
+  }
+
+  /** « C'en est une autre » : les doublons probables ne sont plus proposés. */
+  async distinct(member: Member, id: string): Promise<ListingDraft> {
+    const row = await this.row(member, id)
+    this.assertPending(row)
+    await this.prisma.$transaction(async tx => {
+      await tx.listingDraft.update({
+        where: { id },
+        data: { distinctAt: new Date() },
+      })
+      await this.activity.record(
+        {
+          workspaceId: member.workspaceId,
+          actorMemberId: member.id,
+          channel: 'web',
+          action: 'draft.distinct',
+          after: {
+            draftId: id,
+            url: row.url,
+            origin: originOf(row),
+            duplicates: z
+              .array(DuplicateCandidateSchema)
+              .catch([])
+              .parse(row.duplicates)
+              .map(d => d.listingId),
+          },
+        },
+        tx
+      )
+    })
+    return this.get(member, id)
+  }
+
+  private assertPending(row: DraftRow): void {
+    if (row.status !== 'pending') throw this.alreadyDecided(row.status)
+  }
+
+  private alreadyDecided(status?: ListingDraftStatus): ConflictException {
+    const label =
+      status === 'accepted'
+        ? 'validé'
+        : status === 'dismissed'
+          ? 'écarté'
+          : status === 'merged'
+            ? 'reconnu comme une annonce suivie'
+            : 'traité'
+    return new ConflictException(`Ce brouillon est déjà ${label}.`)
+  }
+
+  private async row(member: Member, id: string): Promise<DraftRowWithCheck> {
     const row = await this.prisma.listingDraft.findFirst({
       where: { id, workspaceId: member.workspaceId },
+      include: draftInclude,
     })
     if (!row) throw new NotFoundException('Brouillon introuvable')
     return row

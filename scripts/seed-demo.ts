@@ -87,7 +87,7 @@ async function main(): Promise<void> {
     console.log(
       `  espace « Démo » recréé sur ${redact(url)} : ${report.listings} annonces, ${report.members} membres, ` +
         `${report.tasks} tâches, ${report.offers} offres, ${report.visits} visites, ${report.opinions} avis, ` +
-        `${report.criteria} critères (${report.criteriaMatches} entrées), ${report.activity} lignes de journal, ` +
+        `${report.criteria} critères (${report.criteriaMatches} entrées), ${report.explorations} explorations, ${report.drafts} brouillons, ${report.activity} lignes de journal, ` +
         `${report.notifications} notifications (${elapsed(started)}).`
     )
     for (const other of report.otherWorkspaces) {

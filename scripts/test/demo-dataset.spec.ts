@@ -273,6 +273,104 @@ describe('jeu de démonstration', () => {
     }
   })
 
+  it('lot 16 : des explorations fictives, toutes les sortes de lignes, un portail bloqué', () => {
+    expect(dataset.explorations).toHaveLength(2)
+    const [old, recent] = dataset.explorations
+    expect((old?.finishedAt ?? '') < (recent?.finishedAt ?? '')).toBe(true)
+    expect(recent?.lines.map(l => l.outcome)).toEqual([
+      'new',
+      'duplicate_probable',
+      'new',
+      'new',
+      'known',
+      'known',
+      'dismissed',
+      'dismissed',
+      'out',
+      'out',
+      'out',
+    ])
+    expect(recent?.lines.slice(0, 4).map(l => l.level)).toEqual([
+      'in',
+      'in',
+      'margin',
+      'to_confirm',
+    ])
+    expect(recent?.counts).toMatchObject({
+      seen: 11,
+      toValidate: 4,
+      known: 2,
+      dismissed: 2,
+      out: 3,
+      draftsCreated: 4,
+      checksChanged: 1,
+      blockedPortals: 1,
+    })
+    expect(recent?.summary).toBe(
+      '11 annonces vues : 4 à valider, 2 déjà suivies, 2 déjà écartées, 3 hors critères ; Logic-Immo bloqué'
+    )
+    expect(recent?.portals.find(p => p.status === 'blocked')?.portal).toBe(
+      'logicimmo'
+    )
+    // La baisse de prix vue au même lien est une vérification (lot 15).
+    const merignac = dataset.listings.find(l => l.key === 'merignac-t2')
+    expect(merignac?.input.price).toBe(152_000)
+    expect(merignac?.checks.at(-1)).toMatchObject({
+      outcome: 'changed',
+      at: recent?.finishedAt,
+      channel: 'mcp',
+    })
+    expect(
+      dataset.listings.find(l => l.key === 'begles-t3')?.checks.at(-1)?.outcome
+    ).toBe('unchanged')
+    // Brouillons : quatre à valider (dont un doublon), un écarté avec sa raison.
+    const drafts = dataset.explorationDrafts
+    expect(drafts.filter(d => d.status === 'pending')).toHaveLength(4)
+    expect(drafts.find(d => d.status === 'dismissed')).toMatchObject({
+      dismissReason: 'rez-de-chaussée sur rue',
+      decidedBy: 'demo2',
+    })
+    expect(drafts.filter(d => d.duplicates.length)).toHaveLength(1)
+    for (const d of drafts) {
+      expect(ListingInputSchema.parse(d.input)).toEqual(d.input)
+      expect(d.input.title.startsWith('[Exemple]')).toBe(true)
+      expect(d.excerpt ?? '').toMatch(/^Exemple fictif/)
+    }
+    for (const e of dataset.explorations) {
+      for (const line of e.lines) {
+        expect(
+          line.title.startsWith('[Exemple]') || line.listingKey !== null
+        ).toBe(true)
+        expect(line.url).toMatch(
+          /exemple|^https:\/\/www\.leboncoin\.fr\/ad\/ventes_immobilieres\/00000001\d\d$/
+        )
+      }
+    }
+    // Sacha est prévenu de l'exploration de Camille (pas Camille).
+    const recorded = dataset.activity.filter(
+      a => a.action === 'exploration.recorded'
+    )
+    expect(recorded).toHaveLength(2)
+    const members = dataset.members.map(m => ({
+      id: m.id,
+      displayName: m.displayName,
+    }))
+    const sent = notificationsForActivity(
+      {
+        action: 'exploration.recorded',
+        channel: 'mcp',
+        actorMemberId: dataset.members[0]?.id ?? null,
+        before: null,
+        after: recorded[1]?.after,
+        listingId: null,
+      },
+      { members, listingTitle: null }
+    )
+    expect(sent.map(s => [s.recipientId, s.title])).toEqual([
+      [dataset.members[1]?.id, 'Claude a trouvé 4 annonces à valider'],
+    ])
+  })
+
   it('laisse des annonces « nouvelles » à chacun : sans vue du membre', () => {
     for (const handle of ['demo', 'demo2'] as const) {
       expect(

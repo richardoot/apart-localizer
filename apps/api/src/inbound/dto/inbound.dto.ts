@@ -2,7 +2,11 @@ import { createZodDto } from 'nestjs-zod'
 import {
   InboundEmailResultSchema,
   InboundEmailSchema,
+  ListingDraftAcceptResultSchema,
+  ListingDraftBatchAcceptResultSchema,
+  ListingDraftBatchAcceptSchema,
   ListingDraftDecisionSchema,
+  ListingDraftMergeSchema,
   ListingDraftQuerySchema,
   ListingDraftSchema,
 } from '@apart/contracts'
@@ -17,4 +21,16 @@ export class ListingDraftQueryDto extends createZodDto(
 ) {}
 export class ListingDraftDecisionDto extends createZodDto(
   ListingDraftDecisionSchema
+) {}
+export class ListingDraftMergeDto extends createZodDto(
+  ListingDraftMergeSchema
+) {}
+export class ListingDraftBatchAcceptDto extends createZodDto(
+  ListingDraftBatchAcceptSchema
+) {}
+export class ListingDraftAcceptResultDto extends createZodDto(
+  ListingDraftAcceptResultSchema
+) {}
+export class ListingDraftBatchAcceptResultDto extends createZodDto(
+  ListingDraftBatchAcceptResultSchema
 ) {}

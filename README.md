@@ -144,8 +144,8 @@ http://localhost:3000/mcp` ([développement local](docs/developpement-local.md#t
   phrases, ce que l'accès permet, « Autoriser » ou « Refuser ».
 - **Synthèse** (`/`) : bandeau **« Depuis votre dernière visite »** (nouvelles annonces,
   changements de prix et de statut, avis et tâches de l'autre membre, entrées dans un critère,
-  détail et liens, « Tout marquer comme vu »), annonces **reçues par e-mail à valider** (valider
-  ouvre la fiche pré-remplie, écarter), compteurs (nouvelles, suivies, dans la cible, meilleur brut, prix moyen au
+  détail et liens, « Tout marquer comme vu »), annonces **à valider** (reçues par e-mail ou
+  trouvées par Claude, lot 16 : lien vers l'onglet « À valider »), compteurs (nouvelles, suivies, dans la cible, meilleur brut, prix moyen au
   m², à visiter), répartition par statut, tâches ouvertes et en retard, critères de recherche
   actifs avec leurs annonces et leurs nouveautés pour moi, nouvelles annonces, meilleures
   annonces.
@@ -159,7 +159,16 @@ http://localhost:3000/mcp` ([développement local](docs/developpement-local.md#t
   vente en montre le détail). Lot 14 : deux onglets « Dans les critères » et « Hors critères »
   (dans l'URL), pastilles d'adéquation (dans les critères, à confirmer, à la marge, hors
   critères) avec leur raison ; une annonce hors critères avec une offre en cours ou une visite
-  prévue reste dans la liste.
+  prévue reste dans la liste. Lot 16 : onglet **« À valider »** (`?vue=a-valider`) pour les
+  annonces reçues par e-mail ou trouvées par Claude en explorant les portails : adéquation,
+  doublon probable à trancher (« C'est la même : mettre à jour la fiche », « C'en est une
+  autre »), Ajouter à la liste, Modifier avant d'ajouter, Écarter (raison facultative, Annuler),
+  bandeau de la dernière exploration et « Ajouter celles « dans les critères » ».
+- **Ce que Claude cherche** (`/criteres/:id`, lot 16) : le brief d'un critère (seuils marge
+  comprise, zones, annonces déjà connues), les portails à cocher et leurs liens de recherche
+  fabriqués sans réseau, la demande à copier dans claude.ai, les dernières explorations ; le
+  **compte rendu** d'une exploration (`/criteres/explorations/:id`) : bilan par portail, bloqué
+  compris, et une ligne par annonce lue, filtrable par résultat.
 - **Critères** (`/criteres`) : critères de recherche partagés avec leurs compteurs (annonces
   par niveau d'adéquation, nouveautés pour moi), création et modification (filtres, marge de
   tolérance et seuils réels, aperçu par niveau avant d'enregistrer, périmètre dessiné en

@@ -29,7 +29,12 @@ import { ComplianceService } from '../study/compliance.service'
 import { VisitsService } from '../visits/visits.service'
 import { WhatsNewService } from '../whats-new/whats-new.service'
 import { ListingChecksService } from '../listings/listing-checks.service'
+import { ExplorationsService } from '../exploration/explorations.service'
 import { registerCheckPrompts, registerCheckTools } from './mcp-checks'
+import {
+  registerExplorationPrompts,
+  registerExplorationTools,
+} from './mcp-exploration'
 import { McpAuthGuard } from './mcp-auth.guard'
 import type { McpAuthenticatedRequest } from './mcp-auth.guard'
 import { registerPrompts, registerResources, registerTools } from './mcp-tools'
@@ -65,7 +70,8 @@ export class McpController {
     private readonly compliance: ComplianceService,
     private readonly visits: VisitsService,
     private readonly whatsNew: WhatsNewService,
-    private readonly checks: ListingChecksService
+    private readonly checks: ListingChecksService,
+    private readonly exploration: ExplorationsService
   ) {}
 
   @Post()
@@ -111,12 +117,16 @@ export class McpController {
       visits: this.visits,
       whatsNew: this.whatsNew,
       checks: this.checks,
+      exploration: this.exploration,
     }
     registerTools(server, context)
     // Lot 15 : vérification des annonces sur le portail.
     registerCheckTools(server, context)
+    // Lot 16 : exploration des portails par les critères.
+    registerExplorationTools(server, context)
     registerPrompts(server)
     registerCheckPrompts(server)
+    registerExplorationPrompts(server)
     registerResources(server)
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

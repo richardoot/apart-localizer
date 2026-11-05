@@ -101,6 +101,25 @@ describe('seed de démonstration (e2e, PostGIS)', () => {
     expect(c.notifications).toBeGreaterThan(20)
     expect(c.unread).toBeGreaterThan(0)
     expect(c.visits).toBe(8)
+    // Lot 16 : deux explorations fictives, leurs lignes et leurs brouillons ;
+    // à valider : l'alerte e-mail et les quatre de la dernière exploration.
+    expect(report.explorations).toBe(2)
+    expect(report.drafts).toBe(6)
+    expect(
+      await db.prisma.exploration.count({
+        where: { workspaceId: DEMO_WORKSPACE_ID },
+      })
+    ).toBe(2)
+    expect(
+      await db.prisma.explorationCandidate.count({
+        where: { exploration: { workspaceId: DEMO_WORKSPACE_ID } },
+      })
+    ).toBe(13)
+    expect(
+      await db.prisma.listingDraft.count({
+        where: { workspaceId: DEMO_WORKSPACE_ID, status: 'pending' },
+      })
+    ).toBe(5)
     const members = await db.prisma.member.findMany({
       where: { workspaceId: DEMO_WORKSPACE_ID },
       orderBy: { handle: 'asc' },

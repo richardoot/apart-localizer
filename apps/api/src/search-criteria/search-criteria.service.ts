@@ -187,6 +187,7 @@ export class SearchCriteriaService {
           active: input.active,
           filters: input.filters as unknown as Prisma.InputJsonValue,
           tolerance: input.tolerance as unknown as Prisma.InputJsonValue,
+          portals: portalsJson(input.portals),
           ...perimeterColumns(perimeter),
         },
       })
@@ -205,6 +206,7 @@ export class SearchCriteriaService {
             active: input.active,
             filters: input.filters,
             tolerance: input.tolerance,
+            portals: input.portals,
             perimeterType: perimeter?.type ?? null,
             isochrone:
               perimeter?.type === 'isochrone' ? perimeter.params : null,
@@ -273,6 +275,9 @@ export class SearchCriteriaService {
           active,
           filters: filters as unknown as Prisma.InputJsonValue,
           tolerance: tolerance as unknown as Prisma.InputJsonValue,
+          ...(changes.portals !== undefined
+            ? { portals: portalsJson(changes.portals) }
+            : {}),
           ...(resolved !== undefined ? perimeterColumns(perimeter) : {}),
         },
       })
@@ -298,6 +303,7 @@ export class SearchCriteriaService {
             active: before.active,
             filters: before.filters,
             tolerance: before.tolerance,
+            portals: before.portals,
             perimeterType: before.perimeterType,
           },
           after: {
@@ -309,11 +315,11 @@ export class SearchCriteriaService {
         tx
       )
     })
-    const fitChanges = await this.refreshFits(
-      member,
-      channel,
-      changes.name ?? before.name
-    )
+    // Lot 16 : cocher ou décocher un portail ne change aucune adéquation.
+    const onlyPortals = Object.keys(changes).every(key => key === 'portals')
+    const fitChanges = onlyPortals
+      ? null
+      : await this.refreshFits(member, channel, changes.name ?? before.name)
     return { ...(await this.get(member, id)), fitChanges }
   }
 
@@ -507,4 +513,13 @@ function counting(
     approximate,
     examples: examples.slice(0, PREVIEW_EXAMPLES_MAX),
   }
+}
+
+/** Lot 16 : les portails cochés en colonne JSON ; null (tous) : colonne vide. */
+function portalsJson(
+  portals: readonly string[] | null | undefined
+): Prisma.InputJsonValue | typeof Prisma.DbNull {
+  return portals && portals.length
+    ? ([...portals] as unknown as Prisma.InputJsonValue)
+    : Prisma.DbNull
 }

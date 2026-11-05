@@ -21,6 +21,11 @@ import {
   ListingCheckPreviewRequestSchema,
 } from './listing-checks.js'
 import { WhatsNewQuerySchema } from './whats-new.js'
+import {
+  ExplorationRecordSchema,
+  SearchBriefQuerySchema,
+  TriageRequestSchema,
+} from './exploration.js'
 import { ProjectionRequestSchema, ScenarioOverridesSchema } from './study.js'
 import {
   SearchCriteriaInputSchema,
@@ -485,4 +490,61 @@ export const McpReviewListingsPromptArgsSchema = z.object({
 })
 export type McpReviewListingsPromptArgs = z.infer<
   typeof McpReviewListingsPromptArgsSchema
+>
+
+// ---------------------------------------------------------------------------
+// Lot 16 : exploration par les critères
+// ---------------------------------------------------------------------------
+
+/**
+ * `get_search_brief` (lecture) : ce que Claude cherche — les critères actifs
+ * marges comprises, leurs zones, les portails cochés et leurs liens de
+ * recherche fabriqués sans réseau, ce qui est déjà suivi ou écarté, la
+ * dernière exploration.
+ */
+export const McpGetSearchBriefInputSchema = SearchBriefQuerySchema
+export type McpGetSearchBriefInput = z.infer<
+  typeof McpGetSearchBriefInputSchema
+>
+
+/** `triage_candidates` (lecture, rien n'est écrit) : la décision pour chaque annonce lue. */
+export const McpTriageCandidatesInputSchema = TriageRequestSchema
+export type McpTriageCandidatesInput = z.infer<
+  typeof McpTriageCandidatesInputSchema
+>
+
+/**
+ * `record_exploration` (écriture) : le serveur retrie chaque annonce, crée
+ * l'exploration, son compte rendu et les brouillons « À valider », applique
+ * les vérifications des annonces déjà suivies ; `runKey` rend l'envoi
+ * idempotent. Aucune annonce n'est ajoutée à la liste.
+ */
+export const McpRecordExplorationInputSchema = ExplorationRecordSchema
+export type McpRecordExplorationInput = z.infer<
+  typeof McpRecordExplorationInputSchema
+>
+
+/** Arguments du prompt MCP « explorer les portails » (chaînes, par protocole). */
+export const McpExploreListingsPromptArgsSchema = z.object({
+  criteriaId: z
+    .string()
+    .optional()
+    .describe(
+      'Un seul critère (son identifiant) ; absent = tous les critères actifs'
+    ),
+  portals: z
+    .string()
+    .optional()
+    .describe(
+      'Portails à parcourir, séparés par des virgules (leboncoin, seloger, bienici, pap, logicimmo) ; absent = ceux cochés dans chaque critère'
+    ),
+  notes: z
+    .string()
+    .optional()
+    .describe(
+      'Consignes du membre (« seulement les T3 », « commence par PAP »)'
+    ),
+})
+export type McpExploreListingsPromptArgs = z.infer<
+  typeof McpExploreListingsPromptArgsSchema
 >
