@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   formatCssPercent,
   formatDate,
+  formatDay,
+  formatMonthYear,
+  formatNumber,
+  formatRateCompact,
+  formatSignedRate,
+  toFrenchInput,
   formatDistance,
   formatEuros,
   formatEurosPerM2,
@@ -69,5 +75,43 @@ describe('formats fr-FR', () => {
     expect(formatCssPercent(1.2)).toBe('100%')
     expect(formatCssPercent(-0.1)).toBe('0%')
     expect(formatCssPercent(Number.NaN)).toBe('0%')
+  })
+
+  it('lot 13 : taux compacts et signés, nombres et dates du jour', () => {
+    expect(formatRateCompact(0.3)).toBe('30 %')
+    expect(formatRateCompact(0.055)).toBe('5,5 %')
+    expect(formatRateCompact(0.0365)).toBe('3,65 %')
+    expect(formatRateCompact(0.015700000000000002)).toBe('1,57 %')
+    expect(formatRateCompact(Number.NaN)).toBe('—')
+    expect(formatSignedRate(0.01)).toBe('+1 %')
+    expect(formatSignedRate(-0.005)).toBe('−0,5 %')
+    expect(formatSignedRate(0)).toBe('0 %')
+    expect(formatSignedRate(Number.NaN)).toBe('—')
+    expect(formatNumber(0.5)).toBe('0,5')
+    expect(nbsp(formatNumber(40_000))).toBe('40 000')
+    expect(formatNumber(Number.POSITIVE_INFINITY)).toBe('—')
+    expect(formatMonthYear('2026-12-15')).toBe('déc. 2026')
+    expect(formatMonthYear('2028-01-01')).toBe('janv. 2028')
+    expect(formatMonthYear('')).toBe('—')
+    expect(formatMonthYear('2026-13-45')).toBe('—')
+    expect(formatDay('2026-12-01')).toBe('1 déc. 2026')
+    expect(formatDay(null)).toBe('—')
+    expect(formatDay('2026-02-30x')).toBe('—')
+    expect(formatDay('2026-99-99')).toBe('—')
+  })
+
+  it('lot 13 : nombres des champs à la française, relus à l’identique', () => {
+    expect(nbsp(toFrenchInput('40000', true))).toBe('40 000')
+    expect(nbsp(toFrenchInput('1050.1234567', true))).toBe('1 050,1234567')
+    expect(toFrenchInput('3.65')).toBe('3,65')
+    expect(toFrenchInput('2028')).toBe('2028')
+    expect(toFrenchInput('-0.5')).toBe('-0,5')
+    expect(toFrenchInput('')).toBe('')
+    expect(toFrenchInput('1e21')).toBe('1e21')
+    for (const value of [40_000, 0.023700000000000002, 1050.1234567, 6500]) {
+      const raw = String(value)
+      expect(parseNumberInput(toFrenchInput(raw, true))).toBe(value)
+      expect(parseNumberInput(toFrenchInput(raw))).toBe(value)
+    }
   })
 })

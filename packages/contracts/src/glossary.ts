@@ -1,13 +1,14 @@
 /**
  * Glossaire des indicateurs, une seule source pour la ressource MCP
- * `apart://glossaire` et pour l'interface (bouton « ? » de la fiche, lot 9).
+ * `apart://glossaire` et pour l'interface (bouton « ? » de la fiche, lot 9, et
+ * de la page Hypothèses, lot 13).
  * Les définitions suivent le modèle de calcul (docs/product/modele-de-calcul.md).
  */
 export interface GlossaryEntry {
   key: string
   term: string
   definition: string
-  /** La définition en une phrase, montrée par le bouton « ? » de la fiche ; à défaut, `definition`. */
+  /** La définition en une phrase, montrée par le bouton « ? » de l'interface ; à défaut, `definition`. */
   short?: string
 }
 
@@ -45,6 +46,14 @@ export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
       'Ce que la banque prélève chaque mois, crédit et assurance compris, sur le capital emprunté (coût tout compris − apport).',
   },
   {
+    key: 'loan_insurance',
+    term: 'Assurance emprunteur',
+    definition:
+      'Taux annuel appliqué au capital initial emprunté : assurance mensuelle = emprunt × taux / 12, comptée dans la mensualité (le a / 12 du facteur k), donc dans l’effort et le coût d’occupation.',
+    short:
+      'Le coût annuel de l’assurance du prêt, en pourcentage du capital emprunté, ajouté à chaque mensualité.',
+  },
+  {
     key: 'gross_yield',
     term: 'Rendement brut',
     definition:
@@ -67,6 +76,22 @@ export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
       'Résultat net d’exploitation / 12 − mensualité. Négatif = somme à sortir chaque mois une fois le bien loué.',
     short:
       'Ce qui reste chaque mois une fois le bien loué : revenu net moins mensualité ; négatif, c’est ce qu’il faut sortir de sa poche.',
+  },
+  {
+    key: 'vacancy',
+    term: 'Vacance locative',
+    definition:
+      'Mois par an sans locataire (0,5 = quinze jours) : les loyers encaissés valent loyer × (12 − vacance). Elle réduit le rendement net et l’effort ; le rendement brut n’en tient pas compte.',
+    short:
+      'Le temps moyen sans locataire chaque année, retiré des loyers encaissés pour le rendement net et l’effort.',
+  },
+  {
+    key: 'fixed_costs',
+    term: 'Frais fixes du bailleur',
+    definition:
+      'Dépenses annuelles du propriétaire une fois le bien loué, hors taxe foncière et charges de copropriété (saisies dans chaque annonce) : assurance propriétaire non occupant (PNO), cotisation foncière des entreprises (CFE) en meublé, comptable LMNP, entretien. Déduites du résultat net.',
+    short:
+      'Ce que le propriétaire paie chaque année une fois le bien loué (assurance PNO, CFE, comptable, entretien), déduit du revenu net.',
   },
   {
     key: 'rule_220',
@@ -132,6 +157,16 @@ export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
     term: 'Coût d’occupation (phase 1)',
     definition:
       'Pendant que le foyer habite le bien : mensualité + assurance + toutes les charges de copropriété + taxe foncière + entretien, comparé au loyer actuel. Coût réel = coût d’occupation − capital remboursé chaque mois (la part qui construit un patrimoine). La bascule en phase 2 est la date de mise en location.',
+    short:
+      'Ce que coûte le logement chaque mois pendant que le foyer l’habite (mensualité, charges, taxe foncière, entretien), comparé au loyer actuel.',
+  },
+  {
+    key: 'rental_phases',
+    term: 'Phases 1 et 2',
+    definition:
+      'Phase 1 : le foyer habite le bien, de l’achat à la mise en location (coût d’occupation comparé au loyer actuel). Phase 2 : le bien est loué à partir de la date de mise en location des hypothèses, ou à défaut du 1er janvier de l’année de mise en location par défaut ; l’année de phase 2 fixée dans une annonce l’emporte.',
+    short:
+      'Vous habitez d’abord le bien (phase 1), puis vous le louez à partir de la date de mise en location (phase 2).',
   },
   {
     key: 'scenario',
@@ -140,10 +175,20 @@ export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
       'Un jeu de surcharges (prix, loyer, travaux, bail, taux, apport, durée, vacance, date de mise en location, TMI, régime…) appliqué à une annonce et comparé à la base, indicateur par indicateur. Enregistrable, mais une évaluation n’écrit rien.',
   },
   {
+    key: 'marginal_tax_rate',
+    term: 'Tranche marginale d’imposition (TMI)',
+    definition:
+      'Le taux d’impôt sur le revenu qui s’applique à la dernière tranche du revenu imposable du foyer (0, 11, 30, 41 ou 45 %) ; les revenus locatifs imposables y sont taxés, plus les prélèvements sociaux. Sans TMI, l’impôt sur les loyers n’est pas estimé.',
+    short:
+      'Le taux d’impôt de la dernière tranche de revenu du foyer, auquel les loyers imposables sont taxés.',
+  },
+  {
     key: 'tax_regimes',
     term: 'Régimes fiscaux',
     definition:
       'Location vide : micro-foncier (abattement de 30 % si les loyers bruts du foyer ne dépassent pas 15 000 €) ou réel foncier (charges, intérêts, taxe foncière déduits ; déficit hors intérêts imputable sur le revenu global jusqu’à 10 700 € par an, le reste reporté dix ans). Location meublée : micro-BIC (abattement de 50 % en meublé de longue durée, plafonds selon le classement) ou LMNP réel (charges et amortissements, qui ne peuvent pas créer de déficit). Impôt = revenu imposable × TMI + prélèvements sociaux. Paramètres datés dans les hypothèses ; une estimation, pas un conseil fiscal.',
+    short:
+      'Micro-foncier ou réel en location vide, micro-BIC ou LMNP réel en meublé : le régime fixe ce qui se déduit des loyers avant l’impôt.',
   },
   {
     key: 'cash_flow_after_tax',
@@ -162,6 +207,8 @@ export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
     term: 'VAN (valeur actuelle nette)',
     definition:
       'Somme des flux actualisés au taux d’actualisation des hypothèses (par défaut le taux du crédit). Positive : le projet rapporte plus que ce taux.',
+    short:
+      'La somme des flux du projet ramenés à aujourd’hui au taux d’actualisation (par défaut celui du crédit) ; positive, le projet rapporte plus que ce taux.',
   },
   {
     key: 'net_wealth',
@@ -174,6 +221,14 @@ export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
     term: 'Plus-value immobilière',
     definition:
       'Prix de vente − frais de cession − (prix d’achat + frais d’acquisition réels ou forfait 7,5 % + travaux réels ou forfait 15 % après cinq ans − amortissements LMNP déduits). Abattements pour durée de détention : exonération d’impôt sur le revenu (19 %) après 22 ans et de prélèvements sociaux après 30 ans ; surtaxe au-delà de 50 000 €. Exonérée si le bien est la résidence principale au jour de la vente, ce qui n’est plus le cas une fois loué.',
+  },
+  {
+    key: 'rent_indexation',
+    term: 'Indexation des loyers (IRL)',
+    definition:
+      'Hausse annuelle des loyers, des charges et de la taxe foncière dans la projection. Par défaut, la variation sur un an de l’indice de référence des loyers (IRL) du 3e trimestre 2026 publiée par l’INSEE (+1,57 %).',
+    short:
+      'La hausse annuelle des loyers et des charges dans la projection, par défaut celle de l’indice de référence des loyers.',
   },
   {
     key: 'market_rent',

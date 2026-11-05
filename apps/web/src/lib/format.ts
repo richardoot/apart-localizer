@@ -19,6 +19,56 @@ export function formatRate(fraction: number): string {
     : '—'
 }
 
+/**
+ * Un taux sans zéro inutile : `30 %`, `5,5 %`, `3,65 %` (deux décimales au
+ * plus), `—` s'il n'est pas un nombre fini. Pour les résumés des hypothèses.
+ */
+export function formatRateCompact(fraction: number): string {
+  return Number.isFinite(fraction)
+    ? `${(fraction * 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`
+    : '—'
+}
+
+/** Un taux signé : `+1 %`, `−0,5 %`, `0 %`. */
+export function formatSignedRate(fraction: number): string {
+  if (!Number.isFinite(fraction)) return '—'
+  const text = formatRateCompact(Math.abs(fraction))
+  if (text === '0 %') return text
+  return `${fraction < 0 ? '−' : '+'}${text}`
+}
+
+/** Un nombre saisi relu en français : `0,5`, `40 000`, `3,65` ; trois décimales au plus. */
+export function formatNumber(value: number): string {
+  return Number.isFinite(value)
+    ? value.toLocaleString('fr-FR', { maximumFractionDigits: 3 })
+    : '—'
+}
+
+/** `déc. 2026` pour une date `AAAA-MM-JJ`, sans décalage de fuseau ; `—` si illisible. */
+export function formatMonthYear(day: string | null | undefined): string {
+  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return '—'
+  const date = new Date(`${day}T12:00:00Z`)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleDateString('fr-FR', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+/** `15 déc. 2026` pour une date `AAAA-MM-JJ`, sans décalage de fuseau ; `—` si illisible. */
+export function formatDay(day: string | null | undefined): string {
+  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return '—'
+  const date = new Date(`${day}T12:00:00Z`)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
 /** Une part de 0 à 1 en longueur CSS (`73.78%`), bornée à l'intervalle. */
 export function formatCssPercent(share: number): string {
   const bounded = Number.isFinite(share) ? Math.min(1, Math.max(0, share)) : 0
@@ -102,6 +152,22 @@ export function percentToFraction(
 ): number | null {
   const value = parseNumberInput(raw)
   return value === null ? null : value / 100
+}
+
+/**
+ * Un nombre écrit pour un champ (« 1050.5 », « 3.65 ») récrit à la française,
+ * sans arrondi : virgule décimale et, pour les montants, espaces fines entre
+ * les milliers (« 1 050,5 », « 3,65 »). `parseNumberInput` le relit à
+ * l'identique ; un texte qui n'est pas un nombre décimal est rendu tel quel.
+ */
+export function toFrenchInput(raw: string, grouping = false): string {
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(raw)
+  if (!match) return raw
+  const [, sign = '', int = '', fraction] = match
+  const grouped = grouping
+    ? int.replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f')
+    : int
+  return `${sign}${grouped}${fraction ? `,${fraction}` : ''}`
 }
 
 /** Fraction → texte en pourcentage pour un champ (« 3.65 »). */

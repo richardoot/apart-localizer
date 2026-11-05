@@ -331,3 +331,44 @@ disponible » ; les quatre couches s'allument sur la carte des annonces et la ca
 lisibles sur les trois fonds ; les imports et le rattrapage tournent sur la production sans
 rien casser. (Vérifié en tests automatisés, sur une base jetable avec les vraies données et sur
 captures Chromium d'un banc d'essai ; à confirmer par Richard sur le site déployé.)
+
+## Lot 13 : lisibilité de la page Hypothèses
+
+Statut : livré (à déployer, sans migration ni variable nouvelle).
+
+- Besoin E2 (précisé). Demande de Richard : la page Hypothèses est « très compliquée à lire » ;
+  hiérarchiser ce qui se saisit. Maquette validée (ordinateur et mobile 390 px). ADR 0023.
+- Livré : cinq sections en questions, chacune avec « Sert à : … » : **Comment financez-vous
+  l'achat ?** (apport, taux nominal hors assurance, durée, assurance ; repère « Pour 100 000 €
+  empruntés ≈ … €/mois, assurance comprise » recalculé en direct), **Qu'est-ce qu'une bonne
+  affaire pour vous ?** (une ligne par seuil, rendement brut, effort, rendement net facultatif et
+  repère 220 × loyer, avec sa case « prix cible » sur la même ligne ; la case du net reste grisée
+  sans seuil ; marge de négociation repliée avec l'échelle négociable, tendue, hors de portée et
+  les deux décotes), **Quel est votre calendrier ?** (phase 1 « Vous y habitez » : date d'achat,
+  loyer actuel, entretien ; phase 2 « Vous le louez » : date de mise en location avec l'année par
+  défaut rappelée dessous et modifiable à la demande, vacance, frais fixes ; taxe foncière et
+  charges saisies dans chaque annonce), **Frais de notaire** (barème officiel ou taux forfaitaire
+  en choix segmenté ; en barème, origine et taux effectif sur un bien à 200 000 €, détail replié :
+  droits de mutation, tranches d'émoluments, autres frais, retour au barème officiel), **Fiscalité
+  et revente** (repliée en pastilles sur ordinateur ; impôt puis revente et projection ;
+  estimations, pas un conseil fiscal ; paramètres fiscaux datés). Sommaire en colonne d'ancres sur
+  ordinateur, accordéons résumés sur mobile. Unités dans les cases, chiffres à droite et à la
+  française, clavier adapté, cases de 48 px sur mobile ; bouton « ? » sur les champs obscurs
+  (six entrées nouvelles au glossaire, donc à `apart://glossaire`). Chaque champ modifié dit
+  « modifié · avant … » ; barre collée en bas : nombre et liste des modifications, nom facultatif
+  de la version, Annuler, « Voir l'impact » (aperçu au-dessus de la barre), Enregistrer ; erreurs
+  en français au champ, reliées depuis la barre. Historique en tableau défilant, version en
+  vigueur mise en avant ; en-tête avec la version en vigueur et un lien vers l'historique.
+  `domain` : `referenceMonthlyPayment`, `notaryEffectiveRate`, `discountScale`
+  (`assumptions-reading.ts`). Schémas, API, versions et MCP inchangés ; pour une même saisie, les
+  hypothèses enregistrées sont celles d'avant (test de non-régression sur des sorties de l'ancien
+  formulaire).
+- Plus tard : le même découpage pour les hypothèses propres à une annonce (onglet « Financer et
+  louer » de la fiche) ; cocher « Marché (DVF) » dans le web si Richard le souhaite (il ne se
+  règle aujourd'hui que par le MCP) ; comparer deux versions de l'historique côte à côte.
+
+Fini quand : sur ordinateur comme sur téléphone, on comprend à quoi sert chaque groupe de
+réglages sans lire le modèle de calcul, on voit ce qu'on a changé avant d'enregistrer et son
+impact sur les annonces, et une saisie identique enregistre les mêmes hypothèses qu'avant.
+(Vérifié en tests automatisés et sur captures Chromium de la page réelle, API simulée ; à
+confirmer par Richard sur le site déployé.)
