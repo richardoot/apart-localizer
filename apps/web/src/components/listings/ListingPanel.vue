@@ -1,69 +1,51 @@
 <script setup lang="ts">
   import { computed, nextTick, ref, watch } from 'vue'
   import { useQuery } from '@tanstack/vue-query'
+  import { DialogTitle } from 'reka-ui'
   import type {
     ListingStatus,
     OfferInputRaw,
     OfferUpdate,
-    SensitivityAxis,
   } from '@apart/contracts'
-  import {
-    locationApproximation,
-    mergeAssumptions,
-    precisionBadge,
-    sellerChipText,
-  } from '@apart/domain'
+  import { todoPendingCount } from '@apart/domain'
   import SidePanel from '@/components/ui/SidePanel.vue'
+  import {
+    createListingEditor,
+    provideListingEditor,
+  } from '@/composables/useListingEditor'
   import {
     useListing,
     useListingMutations,
-    useSensitivity,
     useTargetPrice,
   } from '@/composables/useListings'
   import { useLivePreview } from '@/composables/useLivePreview'
   import { useAssumptions, useWorkspace } from '@/composables/useWorkspace'
+  import { useListingExchanges } from '@/composables/useAgencyRequests'
+  import { useVisits } from '@/composables/useVisits'
   import { ApiError, api } from '@/lib/api'
   import { criteriaChangesMessage } from '@/lib/criteria'
-  import { formatDate, formatDistance, parseNumberInput } from '@/lib/format'
-  import {
-    emptyForm,
-    formFromListing,
-    formToPatch,
-    validateForm,
-  } from '@/lib/listing-form'
-  import { DEFAULT_LISTING_TAB } from '@/lib/listing-tabs'
+  import { parseNumberInput } from '@/lib/format'
+  import { ADDRESS_FIELD_ID } from '@/lib/listing-sections'
+  import { DEFAULT_LISTING_TAB, listingTabQuestion } from '@/lib/listing-tabs'
   import type { ListingTab } from '@/lib/listing-tabs'
-  import CheckFreshnessBadge from './CheckFreshnessBadge.vue'
-  import ChecksSection from './ChecksSection.vue'
-  import ContextSection from './ContextSection.vue'
-  import DpeBadge from './DpeBadge.vue'
-  import FitBadge from './FitBadge.vue'
-  import HistorySection from './HistorySection.vue'
-  import ListingForm from './ListingForm.vue'
-  import ListingLinksSection from './ListingLinksSection.vue'
+  import ListingHeader from './ListingHeader.vue'
   import ListingSynthesis from './ListingSynthesis.vue'
   import ListingTabs from './ListingTabs.vue'
-  import MetricsPreview from './MetricsPreview.vue'
-  import NewBadge from './NewBadge.vue'
-  import OpinionsSection from './OpinionsSection.vue'
-  import PortalChips from './PortalChips.vue'
-  import PrecisionBadge from './PrecisionBadge.vue'
-  import RentalChecksList from './RentalChecksList.vue'
-  import SellerSection from './SellerSection.vue'
-  import SensitivityTable from './SensitivityTable.vue'
-  import StatusBadge from './StatusBadge.vue'
-  import StatusChanger from './StatusChanger.vue'
-  import TargetPriceSection from './TargetPriceSection.vue'
-  import TasksSection from './TasksSection.vue'
-  import VerdictPill from './VerdictPill.vue'
-  import CompliancePanel from '@/components/study/CompliancePanel.vue'
-  import StudySection from '@/components/study/StudySection.vue'
-  import JournalSection from '@/components/activity/JournalSection.vue'
-  import ListingChanges from '@/components/activity/ListingChanges.vue'
-  import VisitsSection from '@/components/visits/VisitsSection.vue'
-  import ExchangesSection from '@/components/agency/ExchangesSection.vue'
-  import { useListingExchanges } from '@/composables/useAgencyRequests'
+  import UnsavedChangesBar from './sections/UnsavedChangesBar.vue'
+  import BudgetTab from './tabs/BudgetTab.vue'
+  import HistoryTab from './tabs/HistoryTab.vue'
+  import NegotiateTab from './tabs/NegotiateTab.vue'
+  import NeighbourhoodTab from './tabs/NeighbourhoodTab.vue'
+  import PropertyTab from './tabs/PropertyTab.vue'
+  import TodoTab from './tabs/TodoTab.vue'
 
+  /**
+   * La fiche d'une annonce (lot 19, ADR 0029) : un en-tête allégé et sept
+   * onglets, chacun répond à une question (Synthèse, Le bien, Budget,
+   * Négocier, Quartier, À faire, Historique). La fiche se modifie section par
+   * section (`useListingEditor`) ; pendant une modification, les chiffres
+   * suivent l'aperçu en direct calculé par `domain`.
+   */
   const props = defineProps<{
     id: string
     /** Message à afficher à l'ouverture (critères dans lesquels l'annonce créée entre). */
@@ -71,8 +53,8 @@
   }>()
   const emit = defineEmits<{ close: [] }>()
   /**
-   * L'onglet ouvert (lot 9). La page des annonces le lie à l'URL
-   * (`?onglet=`) ; sans liaison, il vit dans le composant.
+   * L'onglet ouvert. La page des annonces le lie à l'URL (`?onglet=`) ; sans
+   * liaison, il vit dans le composant.
    */
   const tab = defineModel<ListingTab>('tab', { default: DEFAULT_LISTING_TAB })
 
@@ -82,9 +64,6 @@
   const { me, members } = useWorkspace()
   const mutations = useListingMutations()
 
-  const form = ref(emptyForm())
-  const errors = ref<Record<string, string>>({})
-  const editing = ref(false)
   const message = ref<string | null>(props.notice ?? null)
   const failure = ref<string | null>(null)
   const seenFor = ref<string | null>(null)
@@ -103,14 +82,12 @@
   const changes = computed(() => changesQuery.data.value ?? null)
   const changedFields = computed(() => changes.value?.changedFields ?? [])
 
-  // La fiche ouverte : le formulaire se cale sur l'annonce, et l'annonce
-  // devient « vue » pour le membre, une fois par ouverture, après la lecture
-  // de ce qui a changé.
+  // L'annonce devient « vue » pour le membre, une fois par ouverture, après
+  // la lecture de ce qui a changé.
   watch(
     [item, () => changesQuery.status.value],
     ([value, status]) => {
       if (!value) return
-      if (!editing.value) form.value = formFromListing(value.listing)
       if (status !== 'pending' && seenFor.value !== value.listing.id) {
         seenFor.value = value.listing.id
         mutations.markSeen.mutate(value.listing.id)
@@ -119,101 +96,149 @@
     { immediate: true }
   )
 
-  const preview = useLivePreview(
-    form,
-    assumptions,
-    computed(() => item.value?.listing.openDataContext ?? null),
-    // La provenance enregistrée ne vaut que tant que le plafond n'est pas retapé.
-    computed(() => {
-      const stored = item.value?.listing.rentalPlan?.referenceRentPerM2 ?? null
-      const typed = parseNumberInput(form.value.rentalPlan.referenceRentPerM2)
-      return typed === stored
-        ? (item.value?.listing.fieldSources ?? null)
-        : null
-    })
-  )
-  const shownEvaluation = computed(() =>
-    editing.value ? preview.value.evaluation : (item.value?.evaluation ?? null)
-  )
-  /**
-   * Les hypothèses de l'annonce (espace surchargé par l'annonce), comme le
-   * serveur les applique ; pendant l'édition, celles du formulaire.
-   */
-  const shownAssumptions = computed(() => {
-    if (editing.value) return preview.value.assumptions
-    if (!assumptions.value) return null
-    return mergeAssumptions(
-      assumptions.value,
-      item.value?.listing.assumptionsOverride ?? null
-    )
-  })
+  function report(err: unknown): void {
+    failure.value =
+      err instanceof ApiError ? err.message : "L'enregistrement a échoué."
+  }
 
-  // « À partir de quel prix ? » : le rapport du serveur (rang, historique) ;
-  // pendant l'édition, l'aperçu calculé dans le navigateur par `domain`.
+  // Lot 19 : l'édition section par section, sur un brouillon de la fiche ;
+  // l'aperçu en direct en est calculé (aucun appel réseau).
+  const editor = createListingEditor({
+    listing: computed(() => item.value?.listing ?? null),
+    changedFields,
+    preview: draft =>
+      useLivePreview(
+        draft,
+        assumptions,
+        computed(() => item.value?.listing.openDataContext ?? null),
+        // La provenance enregistrée ne vaut que tant que le plafond n'est pas retapé.
+        computed(() => {
+          const stored =
+            item.value?.listing.rentalPlan?.referenceRentPerM2 ?? null
+          const typed = parseNumberInput(
+            draft.value.rentalPlan.referenceRentPerM2
+          )
+          return typed === stored
+            ? (item.value?.listing.fieldSources ?? null)
+            : null
+        })
+      ),
+    submit: async (section, patch) => {
+      if (!item.value) throw new Error('Annonce absente')
+      failure.value = null
+      try {
+        const saved = await mutations.update.mutateAsync({
+          id: item.value.listing.id,
+          patch: { ...patch, expectedUpdatedAt: item.value.listing.updatedAt },
+        })
+        message.value = [
+          `« ${editor.titleOf(section)} » enregistré.`,
+          criteriaChangesMessage(saved.criteriaChanges),
+        ]
+          .filter(Boolean)
+          .join(' ')
+      } catch (err) {
+        report(err)
+        throw err
+      }
+    },
+    focus: fieldId => {
+      void nextTick(() => {
+        const field = document.getElementById(fieldId)
+        field?.focus?.({ preventScroll: true })
+        field?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+      })
+    },
+  })
+  provideListingEditor(editor)
+
+  const live = computed(() => editor.editing.value !== null)
+  const shownEvaluation = computed(() =>
+    live.value
+      ? editor.preview.value.evaluation
+      : (item.value?.evaluation ?? null)
+  )
+  /** Les hypothèses de l'espace (lot 19 : plus de surcharge par annonce). */
+  const shownAssumptions = computed(() => assumptions.value ?? null)
+
+  // Le rapport du serveur (rang, historique) ; pendant l'édition, l'aperçu
+  // calculé dans le navigateur par `domain`.
   const { data: targetReport } = useTargetPrice(id)
   const shownTargetPrice = computed(() =>
-    editing.value
-      ? (preview.value.evaluation?.targetPrice ?? null)
+    live.value
+      ? (editor.preview.value.evaluation?.targetPrice ?? null)
       : (targetReport.value?.targetPrice ??
         item.value?.evaluation.targetPrice ??
         null)
   )
   const shownNegotiation = computed(() =>
-    editing.value
-      ? preview.value.negotiation
+    live.value
+      ? editor.preview.value.negotiation
       : (targetReport.value?.negotiation ?? null)
   )
-  const shownNotaryFees = computed(
-    () => shownEvaluation.value?.metrics.notaryFeesDetail ?? null
-  )
 
-  // Tableau de sensibilité : axes au choix, recalculé côté serveur, avec la
-  // ligne du prix cible ; demandé seulement à l'ouverture de l'onglet Négocier.
-  const rowAxis = ref<SensitivityAxis>('price')
-  const colAxis = ref<SensitivityAxis>('rent')
-  const sensitivityRequest = computed(() => ({
-    rowAxis: rowAxis.value,
-    colAxis: colAxis.value,
-    includeTargetPrice: true,
-  }))
-  const sensitivity = useSensitivity(
-    computed(() => (tab.value === 'negocier' ? props.id : null)),
-    sensitivityRequest
-  )
-
-  const openTasks = computed(
-    () => item.value?.tasks.filter(t => !t.done).length ?? 0
-  )
-
-  // Lot 17 : les échanges avec l'annonceur (état des tâches demandées,
-  // messages à valider sur l'onglet Échanges).
+  // Lot 17 : les échanges avec l'annonceur (messages à valider, relances),
+  // et les visites : la pastille de « À faire » et les prochaines étapes.
   const exchanges = useListingExchanges(id)
   const agencyRequests = computed(() => exchanges.data.value?.requests ?? [])
-  const pendingMessages = computed(
-    () => agencyRequests.value.filter(r => r.status === 'draft').length
+  const visits = useVisits(id)
+  const visitList = computed(() => visits.data.value ?? [])
+  const todoCount = computed(() =>
+    todoPendingCount({
+      tasks: item.value?.tasks ?? [],
+      requests: agencyRequests.value,
+    })
   )
 
-  /** « Modifier la fiche » : l'onglet Financer et louer, formulaire ouvert. */
-  const formBox = ref<HTMLDetailsElement | null>(null)
-  function startEditing(): void {
-    editing.value = true
-    tab.value = 'financer'
-    void nextTick(() => {
-      formBox.value?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+  /** Changer d'onglet quitte la section en édition (confirmation si modifiée). */
+  const tabsBar = ref<HTMLElement | null>(null)
+  const tabModel = computed<ListingTab>({
+    get: () => tab.value,
+    set: next => {
+      if (next === tab.value) return
+      editor.guard(() => {
+        editor.cancel()
+        tab.value = next
+        void nextTick(keepTabsInView)
+      })
+    },
+  })
+  /** Après un changement d'onglet, le haut du panneau, sous la barre collée. */
+  function keepTabsInView(): void {
+    const bar = tabsBar.value
+    const panel = document.getElementById(`listing-panel-${tab.value}`)
+    if (!bar || !panel) return
+    if (
+      panel.getBoundingClientRect().top < bar.getBoundingClientRect().bottom
+    ) {
+      panel.scrollIntoView?.({ block: 'start' })
+    }
+  }
+  function go(next: ListingTab): void {
+    tabModel.value = next
+  }
+
+  /** Fermer la fiche : confirmation si une section est modifiée. */
+  function requestClose(): void {
+    editor.guard(() => {
+      editor.cancel()
+      emit('close')
     })
   }
 
   /**
-   * Lot 12 : « Préciser l'adresse » ouvre le formulaire sur l'adresse. À
-   * l'enregistrement, le serveur replace le repère (adresse au numéro, sinon
-   * quartier reconnu, sinon commune).
+   * « Préciser l'adresse » : l'onglet Le bien, la section de l'adresse
+   * ouverte, le champ de l'adresse atteint. À l'enregistrement, le serveur
+   * replace le repère (adresse au numéro, sinon quartier reconnu, sinon
+   * commune).
    */
   function preciseAddress(): void {
-    startEditing()
-    void nextTick(() => {
-      const field = document.getElementById('f-address')
-      field?.focus?.({ preventScroll: true })
-      field?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    editor.guard(() => {
+      if (tab.value !== 'bien') {
+        editor.cancel()
+        tab.value = 'bien'
+      }
+      void nextTick(() => editor.start('listing', ADDRESS_FIELD_ID))
     })
   }
 
@@ -224,52 +249,9 @@
       mutations.update.isPending.value ||
       mutations.setStatus.isPending.value ||
       mutations.addOffer.isPending.value ||
-      mutations.updateOffer.isPending.value
+      mutations.updateOffer.isPending.value ||
+      mutations.recordPriceChange.isPending.value
   )
-  /** Combien de champs viennent de l'IA : la fiche a été extraite, pas saisie. */
-  const aiFieldCount = computed(
-    () =>
-      Object.values(item.value?.listing.fieldSources ?? {}).filter(
-        p => p.source === 'ai'
-      ).length
-  )
-
-  function report(err: unknown): void {
-    failure.value =
-      err instanceof ApiError ? err.message : "L'enregistrement a échoué."
-  }
-
-  async function save(): Promise<void> {
-    if (!item.value) return
-    const { input, errors: issues } = validateForm(form.value)
-    errors.value = issues
-    if (!input) return
-    failure.value = null
-    try {
-      const saved = await mutations.update.mutateAsync({
-        id: item.value.listing.id,
-        patch: {
-          ...formToPatch(form.value),
-          expectedUpdatedAt: item.value.listing.updatedAt,
-        },
-      })
-      editing.value = false
-      message.value = [
-        'Annonce enregistrée.',
-        criteriaChangesMessage(saved.criteriaChanges),
-      ]
-        .filter(Boolean)
-        .join(' ')
-    } catch (err) {
-      report(err)
-    }
-  }
-
-  function cancel(): void {
-    if (item.value) form.value = formFromListing(item.value.listing)
-    errors.value = {}
-    editing.value = false
-  }
 
   async function changeStatus(change: {
     status: ListingStatus
@@ -288,10 +270,14 @@
     }
   }
 
-  const run = async (action: Promise<unknown>): Promise<void> => {
+  const run = async (
+    action: Promise<unknown>,
+    done?: string
+  ): Promise<void> => {
     failure.value = null
     try {
       await action
+      if (done) message.value = done
     } catch (err) {
       report(err)
     }
@@ -303,22 +289,19 @@
     const plan = item.value.listing.rentalPlan
     if (!plan) {
       failure.value =
-        'Ajoutez d’abord la phase 2 (mise en location) dans la fiche pour y retenir un loyer de marché.'
+        'Renseignez d’abord le loyer visé de la phase 2 pour y retenir un loyer de marché.'
       return
     }
-    failure.value = null
-    try {
-      await mutations.update.mutateAsync({
+    await run(
+      mutations.update.mutateAsync({
         id: item.value.listing.id,
         patch: {
           rentalPlan: { ...plan, marketRent: rent },
           expectedUpdatedAt: item.value.listing.updatedAt,
         },
-      })
-      message.value = 'Loyer de marché retenu dans la phase 2.'
-    } catch (err) {
-      report(err)
-    }
+      }),
+      'Loyer de marché retenu dans la phase 2.'
+    )
   }
 
   async function addOffer(input: OfferInputRaw): Promise<void> {
@@ -354,14 +337,72 @@
       report(err)
     }
   }
+
+  function recordPrice(newPrice: number): void {
+    if (!item.value) return
+    void run(
+      mutations.recordPriceChange.mutateAsync({
+        id: item.value.listing.id,
+        input: {
+          newPrice,
+          expectedPrice: item.value.listing.price,
+          source: 'listing',
+        },
+      }),
+      'Nouveau prix enregistré.'
+    )
+  }
+
+  function saveOpinion(input: { rating: number; text: string }): void {
+    if (!item.value) return
+    void run(
+      mutations.upsertOpinion.mutateAsync({ id: item.value.listing.id, input }),
+      'Avis enregistré.'
+    )
+  }
 </script>
 
 <template>
   <SidePanel
     :title="item?.listing.title ?? 'Annonce'"
     wide
-    @close="emit('close')"
+    @close="requestClose"
   >
+    <template #top>
+      <div class="contents">
+        <ListingHeader
+          v-if="item"
+          :item="item"
+          :evaluation="shownEvaluation"
+          :busy="busy"
+          @back="requestClose"
+          @status="changeStatus"
+        />
+        <header
+          v-else
+          class="flex items-center justify-between gap-3 bg-surface px-4 py-3 sm:px-5"
+        >
+          <DialogTitle as="h1" class="font-display text-lg font-bold">
+            {{ isPending ? 'Chargement de l’annonce…' : 'Annonce' }}
+          </DialogTitle>
+          <button
+            type="button"
+            class="inline-flex min-h-11 items-center rounded-lg border border-line px-3 text-sm text-muted hover:bg-surface-2"
+            @click="emit('close')"
+          >
+            Fermer
+          </button>
+        </header>
+        <div
+          v-if="item"
+          ref="tabsBar"
+          class="sticky top-0 z-[6] border-b border-line bg-surface px-4 sm:px-5"
+        >
+          <ListingTabs v-model="tabModel" :todo-count="todoCount" />
+        </div>
+      </div>
+    </template>
+
     <p v-if="isPending" class="text-sm text-muted">Chargement de l'annonce…</p>
     <p
       v-else-if="error"
@@ -370,144 +411,21 @@
     >
       {{ error.message }}
     </p>
-    <div v-else-if="item" class="grid gap-5">
-      <header class="grid gap-2">
-        <div class="flex flex-wrap items-center gap-2">
-          <StatusBadge :status="item.listing.status" />
-          <NewBadge :is-new="item.isNewForMe" />
-          <DpeBadge :dpe="item.listing.dpeClass" />
-          <VerdictPill
-            v-if="shownEvaluation"
-            :verdict="shownEvaluation.metrics.verdict"
-          />
-          <FitBadge
-            v-if="item.criteriaFit.activeCriteria > 0"
-            :level="item.criteriaFit.level"
-          />
-          <span class="text-xs text-muted">
-            {{
-              [item.listing.location.commune, item.listing.location.district]
-                .filter(Boolean)
-                .join(' · ')
-            }}
-            <template v-if="item.distanceMeters !== null">
-              · à
-              {{
-                locationApproximation(item.listing.location).approximate
-                  ? '≈ '
-                  : ''
-              }}{{ formatDistance(item.distanceMeters) }}</template
-            >
-          </span>
-          <PrecisionBadge :location="item.listing.location" />
-          <button
-            v-if="
-              !editing && precisionBadge(item.listing.location).tone !== 'exact'
-            "
-            type="button"
-            class="text-xs text-accent underline hover:text-fg"
-            data-testid="precise-address"
-            @click="preciseAddress"
-          >
-            Préciser l’adresse
-          </button>
-        </div>
-        <p class="text-xs text-muted">
-          Ajoutée le {{ formatDate(item.listing.createdAt) }} · modifiée le
-          {{ formatDate(item.listing.updatedAt) }}
-          <template v-if="item.listing.lastCheckedAt">
-            ·
-            <CheckFreshnessBadge
-              :listing="item.listing"
-              :last-outcome="item.lastCheck?.outcome ?? null"
-          /></template>
-          <template v-if="aiFieldCount > 0">
-            ·
-            <span data-testid="ai-field-count"
-              >{{ aiFieldCount }} champ(s) extraits par l'IA</span
-            ></template
-          >
-          <a
-            v-if="item.listing.url && item.links.length === 0"
-            :href="item.listing.url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="ml-2 text-accent underline"
-            >voir l'annonce</a
-          >
-        </p>
-        <div
-          v-if="item.links.length || item.listing.sellerType !== 'unknown'"
-          class="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs"
-          data-testid="listing-where"
-        >
-          <template v-if="item.links.length">
-            <span class="text-muted">Sur</span>
-            <PortalChips :links="item.links" linked />
-            <span aria-hidden="true" class="h-3.5 w-px bg-line" />
-          </template>
-          <span
-            class="rounded-md border border-line px-1.5 py-px"
-            data-testid="seller-chip"
-            >{{ sellerChipText(item.listing) }}</span
-          >
-          <span
-            v-if="item.listing.sellerReference"
-            class="rounded-md border border-line px-1.5 py-px font-mono"
-            data-testid="reference-chip"
-            >Réf. {{ item.listing.sellerReference }}</span
-          >
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <StatusChanger
-            :status="item.listing.status"
-            :busy="busy"
-            @change="changeStatus"
-          />
-          <button
-            v-if="!editing"
-            type="button"
-            class="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line px-3 py-1 text-sm hover:bg-surface-2"
-            data-testid="edit-listing"
-            @click="startEditing"
-          >
-            Modifier la fiche
-            <span
-              v-if="changedFields.length"
-              class="rounded-full bg-accent px-2 py-0.5 text-xs text-accent-fg"
-              data-testid="changed-count"
-              >{{ changedFields.length }} champ(s) modifié(s)</span
-            >
-          </button>
-          <span v-else class="text-xs text-muted" data-testid="editing-notice"
-            >Modification en cours : la synthèse montre l’aperçu en
-            direct.</span
-          >
-        </div>
-        <p
-          v-if="
-            item.listing.status === 'discarded' && item.listing.discardReason
-          "
-          class="text-xs text-muted"
-        >
-          Écartée : {{ item.listing.discardReason }}
-        </p>
-      </header>
-
-      <ListingTabs
-        v-model="tab"
-        :open-tasks="openTasks"
-        :pending-messages="pendingMessages"
-      />
-
+    <template v-else-if="item">
+      <UnsavedChangesBar />
       <p
         v-if="failure"
         role="alert"
-        class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
+        class="mb-4 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
       >
         {{ failure }}
       </p>
-      <p v-else-if="message" class="text-sm text-good" aria-live="polite">
+      <p
+        v-else-if="message"
+        class="mb-4 text-sm text-good"
+        aria-live="polite"
+        data-testid="panel-message"
+      >
         {{ message }}
       </p>
 
@@ -516,232 +434,86 @@
         role="tabpanel"
         :aria-labelledby="`listing-tab-${tab}`"
         tabindex="0"
-        class="grid gap-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+        class="grid scroll-mt-14 gap-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
         :data-panel="tab"
       >
-        <template v-if="tab === 'synthese'">
-          <ListingChanges v-if="changes" :changes="changes" />
-          <ListingSynthesis
-            :item="item"
-            :evaluation="shownEvaluation"
-            :target-price="shownTargetPrice"
-            :negotiation="shownNegotiation"
-            :assumptions="shownAssumptions"
-            :live="editing"
-            @go="next => (tab = next)"
-            @precise="preciseAddress"
-          />
-          <div class="@container">
-            <div
-              class="grid gap-4 @3xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] @3xl:items-start"
-            >
-              <ListingLinksSection :item="item" />
-              <SellerSection :item="item" @go="next => (tab = next)" />
-            </div>
-          </div>
-        </template>
+        <p class="text-sm text-muted" data-testid="tab-question">
+          {{ listingTabQuestion(tab) }}
+        </p>
 
-        <template v-else-if="tab === 'negocier'">
-          <TargetPriceSection
-            :price="shownEvaluation?.metrics.price ?? item.listing.price"
-            :target-price="shownTargetPrice"
-            :negotiation="shownNegotiation"
-            :rank="editing ? null : (targetReport?.rank ?? null)"
-            :notary-fees="shownNotaryFees"
-            :assumptions="shownAssumptions"
-            :rent="shownEvaluation?.metrics.rent ?? 0"
-            :live="editing"
-          />
-          <SensitivityTable
-            v-model:row-axis="rowAxis"
-            v-model:col-axis="colAxis"
-            :grid="sensitivity.data.value ?? null"
-            :loading="sensitivity.isFetching.value"
-          />
-          <HistorySection
-            :events="item.priceEvents"
-            :offers="item.offers"
-            :current-price="item.listing.price"
-            :suggested-status="suggestedStatus"
-            :busy="busy"
-            @record="
-              newPrice =>
-                run(
-                  mutations.recordPriceChange.mutateAsync({
-                    id: item!.listing.id,
-                    input: {
-                      newPrice,
-                      expectedPrice: item!.listing.price,
-                      source: 'listing',
-                    },
-                  })
-                )
-            "
-            @add-offer="addOffer"
-            @update-offer="updateOffer"
-            @set-status="status => changeStatus({ status, reason: null })"
-          />
-        </template>
+        <ListingSynthesis
+          v-if="tab === 'synthese'"
+          :item="item"
+          :evaluation="shownEvaluation"
+          :target-price="shownTargetPrice"
+          :negotiation="shownNegotiation"
+          :assumptions="shownAssumptions"
+          :live="live"
+          :changes="changes"
+          :requests="agencyRequests"
+          :visits="visitList"
+          :members="members"
+          :me-id="me?.id ?? null"
+          :saving-opinion="mutations.upsertOpinion.isPending.value"
+          @go="go"
+          @precise="preciseAddress"
+          @save-opinion="saveOpinion"
+        />
 
-        <template v-else-if="tab === 'financer'">
-          <RentalChecksList
-            v-if="shownEvaluation"
-            :rental="shownEvaluation.rental"
-          />
-          <StudySection
-            :item="item"
-            :assumptions="assumptions"
-            :busy="busy"
-            @retain-market-rent="retainMarketRent"
-          />
-          <details
-            ref="formBox"
-            class="rounded-xl border border-line"
-            :open="editing"
-          >
-            <summary
-              class="cursor-pointer px-4 py-3 font-display text-base font-semibold"
-              @click="editing = true"
-            >
-              Fiche et saisie : bien, travaux, phase 2, hypothèses de l’annonce
-              <span
-                v-if="changedFields.length"
-                class="ml-2 text-xs font-normal text-muted"
-                >{{ changedFields.length }} champ(s) modifié(s) mis en
-                évidence</span
-              >
-            </summary>
-            <div class="grid gap-4 px-4 pb-4">
-              <div
-                v-if="editing"
-                class="sticky top-0 z-10 -mx-1 bg-surface px-1 py-1"
-              >
-                <MetricsPreview :evaluation="shownEvaluation" compact />
-              </div>
-              <ListingForm
-                v-model="form"
-                :errors="errors"
-                :field-sources="item.listing.fieldSources"
-                :changed="changedFields"
-                hide-status
-              />
-              <div class="flex flex-wrap justify-end gap-2">
-                <button
-                  type="button"
-                  class="rounded-lg border border-line px-3 py-1.5 text-sm"
-                  @click="cancel"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="button"
-                  class="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-accent-fg disabled:opacity-60"
-                  :disabled="busy"
-                  @click="save"
-                >
-                  {{
-                    mutations.update.isPending.value
-                      ? 'Enregistrement…'
-                      : 'Enregistrer'
-                  }}
-                </button>
-              </div>
-            </div>
-          </details>
-        </template>
+        <PropertyTab v-else-if="tab === 'bien'" :item="item" @go="go" />
 
-        <template v-else-if="tab === 'quartier'">
-          <ContextSection
-            :listing-id="item.listing.id"
-            :updated-at="item.listing.updatedAt"
-            :location="item.listing.location"
-            @precise="preciseAddress"
-          />
-          <section
-            class="grid gap-3 rounded-xl border border-line p-4"
-            aria-labelledby="risks-title"
-          >
-            <h3 id="risks-title" class="font-display text-base font-semibold">
-              Risques à l’adresse
-            </h3>
-            <CompliancePanel :listing-id="item.listing.id" risks-only />
-          </section>
-        </template>
+        <BudgetTab
+          v-else-if="tab === 'budget'"
+          :item="item"
+          :evaluation="shownEvaluation"
+          :target-price="shownTargetPrice"
+          :assumptions="shownAssumptions"
+          :live="live"
+          :busy="busy"
+          @go="go"
+          @retain-market-rent="retainMarketRent"
+        />
 
-        <template v-else-if="tab === 'suivi'">
-          <ChecksSection
-            :listing-id="item.listing.id"
-            :status="item.listing.status"
-            :updated-at="item.listing.updatedAt"
-            :created-at="item.listing.createdAt"
-            :last-checked-at="item.listing.lastCheckedAt"
-            :last-seen-online-at="item.listing.lastSeenOnlineAt"
-            :url="item.listing.url"
-            :links="item.links"
-            :members="members"
-            @set-status="status => changeStatus({ status, reason: null })"
-          />
-          <OpinionsSection
-            :opinions="item.opinions"
-            :members="members"
-            :me-id="me?.id ?? null"
-            :saving="mutations.upsertOpinion.isPending.value"
-            @save="
-              input =>
-                run(
-                  mutations.upsertOpinion.mutateAsync({
-                    id: item!.listing.id,
-                    input,
-                  })
-                )
-            "
-          />
-          <TasksSection
-            :tasks="item.tasks"
-            :members="members"
-            :requests="agencyRequests"
-            @add="
-              label =>
-                run(
-                  mutations.addTask.mutateAsync({
-                    id: item!.listing.id,
-                    label,
-                  })
-                )
-            "
-            @toggle="
-              (taskId, done) =>
-                run(
-                  mutations.updateTask.mutateAsync({
-                    id: item!.listing.id,
-                    taskId,
-                    update: { done },
-                  })
-                )
-            "
-            @remove="
-              taskId =>
-                run(
-                  mutations.removeTask.mutateAsync({
-                    id: item!.listing.id,
-                    taskId,
-                  })
-                )
-            "
-          />
-          <VisitsSection
-            :listing-id="item.listing.id"
-            :members="members"
-            :me-id="me?.id ?? null"
-            @set-status="status => changeStatus({ status, reason: null })"
-          />
-          <JournalSection :listing-id="item.listing.id" />
-        </template>
+        <NegotiateTab
+          v-else-if="tab === 'negocier'"
+          :item="item"
+          :evaluation="shownEvaluation"
+          :target-price="shownTargetPrice"
+          :negotiation="shownNegotiation"
+          :rank="live ? null : (targetReport?.rank ?? null)"
+          :assumptions="shownAssumptions"
+          :live="live"
+          :busy="busy"
+          :suggested-status="suggestedStatus"
+          @go="go"
+          @record-price="recordPrice"
+          @add-offer="addOffer"
+          @update-offer="updateOffer"
+          @set-status="status => changeStatus({ status, reason: null })"
+        />
 
-        <template v-else>
-          <ExchangesSection :listing-id="item.listing.id" :members="members" />
-        </template>
+        <NeighbourhoodTab
+          v-else-if="tab === 'quartier'"
+          :item="item"
+          @precise="preciseAddress"
+          @go="go"
+        />
+
+        <TodoTab
+          v-else-if="tab === 'a-faire'"
+          :item="item"
+          :members="members"
+          :me-id="me?.id ?? null"
+          @set-status="status => changeStatus({ status, reason: null })"
+        />
+
+        <HistoryTab
+          v-else
+          :item="item"
+          :members="members"
+          @set-status="status => changeStatus({ status, reason: null })"
+        />
       </div>
-    </div>
+    </template>
   </SidePanel>
 </template>

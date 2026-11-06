@@ -1,31 +1,28 @@
 /**
- * Lot 9, lisibilité de la fiche : pastilles des deux bases, onglets, les
- * trois blocs de la synthèse, l'encart « Et au prix cible ? ». Les annonces
- * sont fictives et évaluées par le vrai paquet `domain`.
+ * Lot 9 puis lot 19, lisibilité de la fiche : pastilles des deux bases, les
+ * sept onglets, la Synthèse (« Faut-il y aller ? ») : quatre chiffres qui
+ * ouvrent leur onglet, l'adéquation en une ligne, ce qui plaît et ce qui est
+ * à surveiller, nos avis, les prochaines étapes, la dernière vérification.
+ * Les annonces sont fictives et évaluées par le vrai paquet `domain`.
  */
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { AssumptionsSchema, DEFAULT_ASSUMPTIONS } from '@apart/contracts'
-import { compute, financialsFromListing, targetPrice } from '@apart/domain'
-import { readingOf } from '@/composables/useListingReading'
-import { fakeEvaluated, fakeTask, fakeTargetPriceReport } from '@/test/fixtures'
-import { fakeSurroundings } from '@/test/criteria-fixtures'
-import AtTargetPanel from './AtTargetPanel.vue'
+import { DEFAULT_ASSUMPTIONS } from '@apart/contracts'
+import type { Visit } from '@apart/contracts'
+import {
+  MEMBERS,
+  fakeAgencyRequest,
+  fakeEvaluated,
+  fakeOpinion,
+  fakeTargetPriceReport,
+  fakeTask,
+} from '@/test/fixtures'
 import CostBasisBadge from './CostBasisBadge.vue'
-import CostSummary from './CostSummary.vue'
 import ListingSynthesis from './ListingSynthesis.vue'
 import ListingTabs from './ListingTabs.vue'
-import NegotiationSummary from './NegotiationSummary.vue'
-import ProfitabilitySummary from './ProfitabilitySummary.vue'
 
 const A = DEFAULT_ASSUMPTIONS
-/** L'exemple du modèle de calcul § 8 : 200 000 €, 45 m², 750 €, mobilier 5 000 €. */
-const example = fakeEvaluated({
-  renovation: null,
-  annualCharges: null,
-  assumptionsOverride: null,
-})
-const reading = readingOf(example.evaluation, example.evaluation.targetPrice, A)
+const n = (text: string): string => text.replace(/[\u202f\u00a0]/g, ' ')
 
 describe('CostBasisBadge', () => {
   it('« sur le prix » bordée, « tout compris » pleine ; la version compacte garde le libellé pour les lecteurs d’écran', () => {
@@ -46,19 +43,28 @@ describe('CostBasisBadge', () => {
   })
 })
 
-describe('ListingTabs', () => {
+describe('ListingTabs (lot 19 : sept questions)', () => {
   it('vrai motif d’onglets : tablist, aria-selected, un seul arrêt de tabulation, flèches, Début et Fin', async () => {
     const wrapper = mount(ListingTabs, {
-      props: { modelValue: 'synthese', openTasks: 9 },
+      props: { modelValue: 'synthese', todoCount: 3 },
       attachTo: document.body,
     })
     expect(wrapper.get('[role="tablist"]').attributes('aria-label')).toBe(
       'Sections de la fiche'
     )
     const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs).toHaveLength(6)
+    expect(tabs.map(t => t.text().replace(/\s+/g, ' ').trim())).toEqual([
+      'Synthèse',
+      'Le bien',
+      'Budget',
+      'Négocier',
+      'Quartier',
+      'À faire , 3 à traiter',
+      'Historique',
+    ])
     expect(tabs.map(t => t.attributes('tabindex'))).toEqual([
       '0',
+      '-1',
       '-1',
       '-1',
       '-1',
@@ -67,27 +73,27 @@ describe('ListingTabs', () => {
     ])
     expect(tabs[0]?.attributes('aria-selected')).toBe('true')
     expect(tabs[0]?.attributes('aria-controls')).toBe('listing-panel-synthese')
-    expect(tabs[4]?.text()).toContain('· 9 tâches')
+    expect(wrapper.get('[data-testid="todo-count"]').text()).toContain('3')
     await tabs[0]?.trigger('keydown', { key: 'ArrowRight' })
-    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['negocier'])
-    await wrapper.setProps({ modelValue: 'negocier' })
-    expect(document.activeElement?.id).toBe('listing-tab-negocier')
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['bien'])
+    await wrapper.setProps({ modelValue: 'bien' })
+    expect(document.activeElement?.id).toBe('listing-tab-bien')
     await tabs[1]?.trigger('keydown', { key: 'ArrowLeft' })
     expect(wrapper.emitted('update:modelValue')?.[1]).toEqual(['synthese'])
     await tabs[1]?.trigger('keydown', { key: 'End' })
-    expect(wrapper.emitted('update:modelValue')?.[2]).toEqual(['echanges'])
+    expect(wrapper.emitted('update:modelValue')?.[2]).toEqual(['historique'])
     await tabs[1]?.trigger('keydown', { key: 'Home' })
     expect(wrapper.emitted('update:modelValue')?.[3]).toEqual(['synthese'])
     await tabs[1]?.trigger('keydown', { key: 'a' })
     expect(wrapper.emitted('update:modelValue')).toHaveLength(4)
-    await tabs[3]?.trigger('click')
+    await tabs[4]?.trigger('click')
     expect(wrapper.emitted('update:modelValue')?.[4]).toEqual(['quartier'])
     wrapper.unmount()
   })
 
-  it('reboucle aux extrémités ; sur mobile, pastilles de 44 px qui défilent', async () => {
-    const wrapper = mount(ListingTabs, { props: { modelValue: 'echanges' } })
-    await wrapper.findAll('[role="tab"]')[5]?.trigger('keydown', {
+  it('reboucle aux extrémités ; une barre qui défile, des onglets de 44 px ; sans rien à traiter, pas de pastille', async () => {
+    const wrapper = mount(ListingTabs, { props: { modelValue: 'historique' } })
+    await wrapper.findAll('[role="tab"]')[6]?.trigger('keydown', {
       key: 'ArrowRight',
     })
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['synthese'])
@@ -95,445 +101,235 @@ describe('ListingTabs', () => {
     await first.findAll('[role="tab"]')[0]?.trigger('keydown', {
       key: 'ArrowLeft',
     })
-    expect(first.emitted('update:modelValue')?.[0]).toEqual(['echanges'])
+    expect(first.emitted('update:modelValue')?.[0]).toEqual(['historique'])
     expect(first.get('[role="tablist"]').classes()).toContain('overflow-x-auto')
     for (const tab of first.findAll('[role="tab"]'))
       expect(tab.classes()).toEqual(
-        expect.arrayContaining(['min-h-11', 'rounded-full', 'flex-none'])
+        expect.arrayContaining(['min-h-11', 'flex-none', 'whitespace-nowrap'])
       )
-    // Aucune tâche ouverte : pas de compteur.
-    expect(first.find('[data-testid="open-tasks-count"]').exists()).toBe(false)
+    expect(first.find('[data-testid="todo-count"]').exists()).toBe(false)
   })
 })
 
-describe('NegotiationSummary', () => {
-  it('« Combien négocier ? » : prix affiché, prix cible, échelle, décote classée, critère liant, offre', () => {
-    const wrapper = mount(NegotiationSummary, {
-      props: {
-        price: 200_000,
-        targetPrice: example.evaluation.targetPrice,
-        suggestedOffer: 147_000,
-        gauge: reading?.gauge ?? null,
-      },
-    })
-    expect(wrapper.text()).toContain('sur le prix')
-    expect(wrapper.get('[data-testid="summary-listed-price"]').text()).toMatch(
-      /200\s000 €/
-    )
-    expect(wrapper.get('[data-testid="summary-target-price"]').text()).toMatch(
-      /147\s56\d €/
-    )
-    const gauge = wrapper.get('[data-testid="price-gauge"]')
-    expect(gauge.attributes('aria-hidden')).toBe('true')
-    expect(gauge.get('[data-marker="target"]').attributes('style')).toMatch(
-      /left: 73\.7\d%/
-    )
-    expect(gauge.get('[data-marker="listed"]').attributes('style')).toMatch(
-      /left: 100%/
-    )
-    const discount = wrapper.get('[data-testid="summary-discount"]')
-    expect(discount.attributes('data-discount-class')).toBe('out_of_reach')
-    expect(discount.text()).toContain(
-      'Décote nécessaire 26,2 % · hors de portée'
-    )
-    expect(wrapper.text()).toContain(
-      'Fixé par le rendement brut (critère liant)'
-    )
-    expect(wrapper.get('[data-testid="summary-offer"]').text()).toMatch(
-      /147\s000 €/
-    )
-    expect(
-      wrapper.findAll('[data-term]').map(b => b.attributes('data-term'))
-    ).toEqual([
-      'target_price',
-      'discount',
-      'binding_criterion',
-      'suggested_offer',
-    ])
-  })
-
-  it('déjà dans la cible : une marge, l’échelle va jusqu’au prix cible ; sans prix cible, un message', () => {
-    const cheap = fakeEvaluated({
-      price: 120_000,
-      renovation: null,
-      assumptionsOverride: null,
-    })
-    const r = readingOf(cheap.evaluation, cheap.evaluation.targetPrice, A)
-    const wrapper = mount(NegotiationSummary, {
-      props: {
-        price: 120_000,
-        targetPrice: cheap.evaluation.targetPrice,
-        suggestedOffer: null,
-        gauge: r?.gauge ?? null,
-      },
-    })
-    expect(wrapper.get('[data-testid="summary-discount"]').text()).toContain(
-      'Marge'
-    )
-    expect(wrapper.get('[data-marker="target"]').attributes('style')).toMatch(
-      /left: 100%/
-    )
-    expect(wrapper.find('[data-testid="summary-offer"]').exists()).toBe(false)
-    const none = mount(NegotiationSummary, {
-      props: {
-        price: 200_000,
-        targetPrice: null,
-        suggestedOffer: null,
-        gauge: null,
-      },
-    })
-    expect(none.text()).toContain('Prix cible non calculable')
-    expect(none.get('[data-testid="summary-target-price"]').text()).toBe('—')
-  })
-})
-
-describe('CostSummary', () => {
-  it('« Combien ça coûte ? » : prix + notaire (taux) + travaux + mobilier = coût tout compris, puis apport, emprunt, mensualité', () => {
-    const wrapper = mount(CostSummary, {
-      props: {
-        metrics: example.evaluation.metrics,
-        assumptions: A,
-        payment: reading?.payment ?? null,
-      },
-    })
-    expect(wrapper.text()).toContain('tout compris')
-    const table = wrapper.get('[data-testid="cost-breakdown"]')
-    expect(table.get('[data-row="notary"]').text()).toMatch(
-      /\+ Notaire \(7,5 %\).*≈ 15\s000 €/
-    )
-    expect(table.get('[data-row="renovation"]').text()).toMatch(/0 €/)
-    expect(table.get('[data-row="furniture"]').text()).toMatch(/5\s000 €/)
-    expect(wrapper.get('[data-testid="total-cost"]').text()).toMatch(
-      /220\s000 €/
-    )
-    expect(wrapper.text()).toMatch(/Apport\s*− 40\s000 €/)
-    expect(wrapper.get('[data-testid="loan-amount"]').text()).toMatch(
-      /180\s000 €/
-    )
-    expect(wrapper.text()).toContain('(25 ans, 3,65 %)')
-    expect(wrapper.get('[data-testid="monthly-payment"]').text()).toMatch(
-      /931 €\/mois/
-    )
-    expect(wrapper.get('[data-testid="payment-split"]').text()).toMatch(
-      /916 € de crédit \+ 15 € d’assurance/
-    )
-  })
-
-  it('mode barème : « Notaire (barème) » ; rien emprunté, pas de détail de mensualité', () => {
-    const scale = AssumptionsSchema.parse({
-      ...A,
-      notaryMode: 'scale',
-      downPayment: 400_000,
-    })
-    const metrics = compute(financialsFromListing(example.listing), scale)
-    const wrapper = mount(CostSummary, {
-      props: {
-        metrics,
-        assumptions: scale,
-        payment:
-          readingOf({ ...example.evaluation, metrics }, null, scale)?.payment ??
-          null,
-      },
-    })
-    expect(wrapper.get('[data-row="notary"]').text()).toContain('(barème)')
-    expect(wrapper.find('[data-testid="payment-split"]').exists()).toBe(false)
-    const bare = mount(CostSummary, {
-      props: {
-        metrics: example.evaluation.metrics,
-        assumptions: null,
-        payment: null,
-      },
-    })
-    expect(bare.get('[data-row="notary"]').text()).toContain('(taux)')
-    expect(bare.text()).not.toContain('Apport')
-  })
-})
-
-describe('ProfitabilitySummary', () => {
-  it('« Est-ce rentable ? » : loyer retenu, brut et effort en échec avec leur seuil, net non retenu, verdict et raisons', () => {
-    const wrapper = mount(ProfitabilitySummary, {
-      props: {
-        metrics: example.evaluation.metrics,
-        checks: reading?.checks ?? null,
-      },
-    })
-    expect(wrapper.get('[data-testid="retained-rent"]').text()).toBe(
-      '750 €/mois'
-    )
-    const gross = wrapper.get('[data-indicator="gross_yield"]')
-    expect(gross.attributes('data-status')).toBe('fail')
-    expect(gross.classes()).toContain('bg-bad-soft')
-    expect(gross.text()).toContain('12 × loyer ÷ coût tout compris')
-    expect(wrapper.get('[data-testid="value-gross_yield"]').text()).toBe(
-      '4,09 %'
-    )
-    expect(wrapper.get('[data-testid="status-gross_yield"]').text()).toMatch(
-      /✗.*seuil ≥ 5,5 %/
-    )
-    expect(wrapper.get('[data-testid="value-effort"]').text()).toBe(
-      '−362 €/mois'
-    )
-    expect(wrapper.get('[data-testid="status-effort"]').text()).toContain(
-      'effort ≤ 150 €/mois'
-    )
-    expect(wrapper.get('[data-testid="value-net_yield"]').text()).toBe(
-      '≈ 3,1 %'
-    )
-    expect(wrapper.get('[data-testid="status-net_yield"]').text()).toBe(
-      'non retenu'
-    )
-    const verdict = wrapper.get('[data-testid="summary-verdict"]')
-    expect(verdict.text()).toContain('Hors cible')
-    expect(verdict.text()).toContain('en échec : rendement brut, effort.')
-    expect(wrapper.find('[data-testid="rent-cap"]').exists()).toBe(false)
-  })
-
-  it('« de peu », plafond d’encadrement, net retenu, loyer manquant', () => {
-    const capped = fakeEvaluated({
-      price: 165_000,
-      renovation: null,
-      assumptionsOverride: null,
-      annualCharges: null,
-      propertyTax: 700,
-      rentalPlan: {
-        year: null,
-        leaseType: 'unfurnished',
-        rentControl: 'yes',
-        referenceRentPerM2: 15,
-        targetRent: 750,
-        marketRent: null,
-        demand: 'strong',
-        coOwnershipAllowsRental: 'unknown',
-        decencyCompliant: 'unknown',
-        rentalPermitRequired: 'unknown',
+/** Une annonce de l'exemple § 8, avec un instantané de données ouvertes. */
+function example() {
+  return fakeEvaluated(
+    {
+      renovation: {
+        active: true,
+        level: 'refresh',
+        durationMonths: 1,
         notes: null,
+        items: [{ id: 'i1', label: 'Peinture', amount: 6000, position: 0 }],
       },
-    })
-    const withNet = AssumptionsSchema.parse({
-      ...A,
-      netYieldThreshold: 0.03,
-      targetCriteria: ['gross_yield', 'effort', 'net_yield'],
-    })
-    const wrapper = mount(ProfitabilitySummary, {
-      props: {
-        metrics: capped.evaluation.metrics,
-        checks:
-          readingOf(capped.evaluation, capped.evaluation.targetPrice, withNet)
-            ?.checks ?? null,
-      },
-    })
-    expect(wrapper.get('[data-testid="rent-cap"]').text()).toMatch(
-      /Loyer visé 750 €\/mois, plafond d’encadrement 675 €\/mois/
-    )
-    expect(
-      wrapper.get('[data-indicator="net_yield"]').attributes('data-status')
-    ).toMatch(/ok|fail/)
-    expect(wrapper.get('[data-testid="status-net_yield"]').text()).toContain(
-      'seuil ≥ 3,0 %'
-    )
-    const near = fakeEvaluated({
-      price: 165_000,
-      renovation: null,
-      assumptionsOverride: null,
-      annualCharges: null,
-    })
-    const nearWrapper = mount(ProfitabilitySummary, {
-      props: {
-        metrics: near.evaluation.metrics,
-        checks: readingOf(near.evaluation, null, A)?.checks ?? null,
-      },
-    })
-    expect(
-      nearWrapper
-        .get('[data-indicator="gross_yield"]')
-        .attributes('data-status')
-    ).toBe('near')
-    expect(
-      nearWrapper.get('[data-testid="status-gross_yield"]').text()
-    ).toContain('(de peu)')
-    const noRent = fakeEvaluated({ rentalPlan: null })
-    const empty = mount(ProfitabilitySummary, {
-      props: { metrics: noRent.evaluation.metrics, checks: null },
-    })
-    expect(empty.text()).toContain('Loyer visé non renseigné')
-    expect(empty.find('[data-indicator]').exists()).toBe(false)
-  })
-
-  it('verdict « à creuser » : les critères manqués de peu sont nommés', () => {
-    const unknownDpe = fakeEvaluated({
-      price: 120_000,
-      dpeClass: null,
-      renovation: null,
-      assumptionsOverride: null,
-    })
-    const wrapper = mount(ProfitabilitySummary, {
-      props: {
-        metrics: unknownDpe.evaluation.metrics,
-        checks: readingOf(unknownDpe.evaluation, null, A)?.checks ?? null,
-      },
-    })
-    expect(wrapper.get('[data-testid="summary-verdict"]').text()).toContain(
-      'de peu : DPE inconnu.'
-    )
-  })
-})
-
-describe('AtTargetPanel', () => {
-  it('« Et au prix cible ? » : prix, coût tout compris, brut et effort au prix cible, verdict', async () => {
-    const wrapper = mount(AtTargetPanel, {
-      props: {
-        targetPrice: example.evaluation.targetPrice,
-        checks: reading?.atTargetChecks ?? null,
-      },
-    })
-    expect(wrapper.get('[data-testid="at-target-price"]').text()).toMatch(
-      /147\s56\d €/
-    )
-    expect(wrapper.get('[data-testid="at-target-cost"]').text()).toMatch(
-      /163\s636 €/
-    )
-    expect(wrapper.get('[data-testid="at-target-gross"]').text()).toMatch(
-      /5,5 %\s*✓/
-    )
-    expect(wrapper.get('[data-testid="at-target-effort"]').text()).toMatch(
-      /−70 €\/mois\s*✓/
-    )
-    expect(wrapper.get('[data-testid="at-target-verdict"]').text()).toBe(
-      'À ce prix, le bien entre dans la cible.'
-    )
-    expect(wrapper.text()).toContain('sur le prix')
-    expect(wrapper.text()).toContain('tout compris')
-    await wrapper.get('[data-testid="go-negotiate"]').trigger('click')
-    expect(wrapper.emitted('negotiate')).toHaveLength(1)
-  })
-
-  it('DPE G : même au prix cible, hors cible ; DPE inconnu : à creuser ; déjà dans la cible ; sans prix cible', () => {
-    const g = fakeEvaluated({ dpeClass: 'G', assumptionsOverride: null })
-    const off = mount(AtTargetPanel, {
-      props: { targetPrice: g.evaluation.targetPrice, checks: null },
-    })
-    expect(off.get('[data-testid="at-target-verdict"]').text()).toContain(
-      'Même à ce prix, le bien reste hors cible (en échec : DPE E, F ou G).'
-    )
-    const unknown = fakeEvaluated({
-      dpeClass: null,
-      price: 120_000,
-      assumptionsOverride: null,
-    })
-    const dig = mount(AtTargetPanel, {
-      props: {
-        targetPrice: unknown.evaluation.targetPrice,
-        checks: null,
-      },
-    })
-    const text = dig.get('[data-testid="at-target-verdict"]').text()
-    expect(text).toContain('Le prix affiché est déjà sous le prix cible.')
-    expect(text).toContain('reste à creuser (de peu : DPE inconnu)')
-    const none = mount(AtTargetPanel, {
-      props: { targetPrice: null, checks: null },
-    })
-    expect(none.text()).toContain('Sans prix cible')
-  })
-})
-
-describe('ListingSynthesis', () => {
-  it('bandeau des deux bases, trois blocs empilés puis en trois colonnes, résumés qui mènent aux onglets', async () => {
-    const item = fakeEvaluated(
-      {
-        renovation: null,
-        annualCharges: null,
-        assumptionsOverride: null,
-        openDataContext: {
-          market: {
-            medianPricePerM2: 4100,
-            count: 9,
-            radiusMeters: 500,
-            computedAt: '2026-11-03T10:00:00.000Z',
+      annualCharges: 1200,
+      propertyTax: 800,
+      votedWorks: 'Ravalement [Exemple] voté en 2025',
+      lastCheckedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+      openDataContext: {
+        market: {
+          medianPricePerM2: 4100,
+          count: 9,
+          radiusMeters: 500,
+          computedAt: '2026-11-03T10:00:00.000Z',
+        },
+        dpe: null,
+        surroundings: null,
+        rentControl: null,
+        transit: {
+          nearestTram: {
+            name: '[Exemple] Forum',
+            mode: 'tram',
+            lines: ['B'],
+            distanceMeters: 350,
+            point: { type: 'Point', coordinates: [-0.59, 44.8] },
           },
-          dpe: null,
-          surroundings: null,
-          rentControl: null,
-          transit: {
-            nearestTram: {
-              name: 'Forum',
-              mode: 'tram',
-              lines: ['B'],
-              distanceMeters: 350,
-              point: { type: 'Point', coordinates: [-0.59, 44.8] },
-            },
-            computedAt: '2026-11-03T10:00:00.000Z',
-          },
+          computedAt: '2026-11-03T10:00:00.000Z',
         },
       },
-      {
-        tasks: [
-          fakeTask({ id: 'aaaaaaaa-0000-4000-8000-000000000002', position: 2 }),
-          fakeTask({
-            id: 'aaaaaaaa-0000-4000-8000-000000000001',
-            label: 'Demander le PV d’AG',
-            position: 1,
-          }),
-          fakeTask({
-            id: 'aaaaaaaa-0000-4000-8000-000000000003',
-            done: true,
-            position: 0,
-          }),
-        ],
-      }
-    )
-    const report = fakeTargetPriceReport(item)
-    const wrapper = mount(ListingSynthesis, {
-      // Lot 14 : le bloc d’adéquation a ses propres tests (CriteriaFitSection.spec).
-      global: { stubs: { CriteriaFitSection: true } },
-      props: {
-        item,
-        evaluation: item.evaluation,
-        targetPrice: item.evaluation.targetPrice,
-        negotiation: report.negotiation,
-        assumptions: A,
-        live: true,
+    },
+    {
+      tasks: [
+        fakeTask({
+          id: 'aaaaaaaa-0000-4000-8000-000000000001',
+          label: 'Vérifier la cave',
+          origin: 'manual',
+          position: 1,
+        }),
+      ],
+      opinions: [fakeOpinion({ memberId: MEMBERS[1]?.id ?? '', rating: 4 })],
+      lastCheck: {
+        id: 'cccccccc-0000-4000-8000-000000000009',
+        checkedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+        channel: 'mcp',
+        authorId: MEMBERS[0]?.id ?? null,
+        outcome: 'unchanged',
+        summary: 'Rien n’a changé.',
       },
-    })
-    const bases = wrapper.get('[data-testid="cost-bases"]')
-    expect(bases.text()).toContain('Deux bases de calcul')
-    expect(bases.text()).toContain('sur le prix se compare au prix affiché')
-    expect(bases.text()).toContain(
-      'tout compris prix + notaire + travaux + mobilier'
+    }
+  )
+}
+
+function mountSynthesis(props: Record<string, unknown> = {}) {
+  const item = example()
+  const report = fakeTargetPriceReport(item)
+  return mount(ListingSynthesis, {
+    global: { stubs: { CriteriaFitSection: true, RouterLink: true } },
+    props: {
+      item,
+      evaluation: item.evaluation,
+      targetPrice: item.evaluation.targetPrice,
+      negotiation: report.negotiation,
+      assumptions: A,
+      members: MEMBERS,
+      meId: MEMBERS[0]?.id ?? null,
+      ...props,
+    },
+  })
+}
+
+describe('ListingSynthesis (lot 19)', () => {
+  it('quatre chiffres qui ouvrent leur onglet : prix et ventes du quartier, coût tout compris, mensualité, prix cible', async () => {
+    const wrapper = mountSynthesis({ live: true })
+    const figures = wrapper.findAll('[data-figure]')
+    expect(figures.map(f => f.attributes('data-figure'))).toEqual([
+      'price',
+      'total_cost',
+      'payment',
+      'target_price',
+    ])
+    const price = n(figures[0]?.text() ?? '')
+    expect(price).toContain('Prix affiché')
+    expect(price).toContain('200 000 €')
+    // 200 000 / 45 = 4 444 €/m² pour une médiane de 4 100 : +8 %.
+    expect(price).toContain('+8 % sur les ventes du quartier')
+    expect(n(figures[1]?.text() ?? '')).toMatch(
+      /Coût tout compris.*dont notaire .*travaux 6 000 €, mobilier 5 000 €/
     )
+    expect(n(figures[2]?.text() ?? '')).toContain('25 ans, apport 40 000 €')
+    expect(figures[3]?.text()).toContain('Prix cible')
     expect(wrapper.find('[data-testid="live-badge"]').exists()).toBe(true)
-    // Empilés sur mobile, trois colonnes quand le panneau est assez large.
-    const blocks = wrapper.get('[data-testid="block-price"]').element
-      .parentElement as HTMLElement
-    expect(blocks.className).toContain('@4xl:grid-cols-3')
-    expect(blocks.className).not.toMatch(/(^| )grid-cols-3/)
-    expect(wrapper.get('[data-testid="summary-follow"]').text()).toContain(
-      '2 tâche(s) ouverte(s) · aucun avis'
-    )
-    expect(wrapper.get('[data-testid="summary-follow"]').text()).toContain(
-      'Prochaine : Demander le PV d’AG'
-    )
-    const area = wrapper.get('[data-testid="summary-area"]').text()
-    expect(area).toContain('Tram Forum à 350 m')
-    expect(area).toMatch(/marché DVF 4\s100 €\/m²/)
-    expect(area).toMatch(/L’annonce : 4\s444 €\/m²/)
-    expect(wrapper.get('[data-testid="summary-rental"]').text()).toContain(
-      'Louabilité (phase 2)'
-    )
-    const buttons = wrapper.findAll('button').filter(b => /→/.test(b.text()))
-    for (const button of buttons) await button.trigger('click')
-    expect(wrapper.emitted('go')).toEqual([
+    for (const figure of figures) await figure.trigger('click')
+    expect(wrapper.emitted('go')?.slice(0, 4)).toEqual([
       ['negocier'],
-      ['financer'],
-      ['suivi'],
-      ['quartier'],
+      ['budget'],
+      ['budget'],
+      ['negocier'],
     ])
   })
 
-  it('sans évaluation, invite à saisir ; sans données ouvertes, le quartier est à vérifier', () => {
-    const item = fakeEvaluated()
+  it('l’adéquation en une ligne, le détail se déplie', async () => {
+    const wrapper = mountSynthesis()
+    const toggle = wrapper.get('[data-testid="fit-toggle"]')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(toggle.text()).toBe('Voir le détail')
+    expect(wrapper.get('[data-testid="fit-line"]').text()).toContain(
+      'Aucun critère actif'
+    )
+    expect(wrapper.find('#fit-detail').exists()).toBe(false)
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(toggle.text()).toBe('Masquer le détail')
+    expect(wrapper.find('#fit-detail').exists()).toBe(true)
+  })
+
+  it('ce qui plaît, à surveiller : tirés des données, chacun vers son onglet', async () => {
+    const wrapper = mountSynthesis()
+    const good = wrapper.get('[data-testid="highlights-good"]')
+    expect(good.text()).toContain('Tram B à 350 m ([Exemple] Forum)')
+    const watch = wrapper.get('[data-testid="highlights-watch"]')
+    expect(n(watch.text())).toContain(
+      'Travaux avant d’emménager : 6 000 € estimés'
+    )
+    expect(watch.text()).toContain(
+      'Travaux votés : Ravalement [Exemple] voté en 2025'
+    )
+    expect(watch.findAll('li').length).toBeLessThanOrEqual(3)
+    await good.get('[data-highlight="tram"] button').trigger('click')
+    await watch.get('[data-highlight="works"] button').trigger('click')
+    expect(wrapper.emitted('go')).toEqual([['quartier'], ['bien']])
+    expect(
+      good.get('[data-highlight="tram"] button').attributes('aria-label')
+    ).toContain('voir l’onglet Quartier')
+  })
+
+  it('nos avis, les prochaines étapes et la dernière vérification', async () => {
+    const visit: Visit = {
+      id: 'eeeeeeee-0000-4000-8000-000000000001',
+      listingId: '11111111-1111-4111-8111-111111111111',
+      visitedAt: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+      status: 'planned',
+      participantIds: [],
+      report: null,
+      pros: null,
+      cons: null,
+      rating: 0,
+      prepTaskId: null,
+      createdById: null,
+      createdAt: '2026-11-03T10:00:00.000Z',
+      updatedAt: '2026-11-03T10:00:00.000Z',
+      photoCount: 0,
+      photos: [],
+    }
+    const wrapper = mountSynthesis({
+      visits: [visit],
+      requests: [
+        fakeAgencyRequest({
+          id: '99999999-0000-4999-8999-000000000001',
+          status: 'draft',
+          subject: '[Exemple] Quote-part du ravalement',
+          sentAt: null,
+        }),
+      ],
+    })
+    const opinions = wrapper.get('[data-testid="opinions"]')
+    expect(opinions.text()).toContain('Chloé')
+    expect(opinions.text()).toContain('4/5')
+    expect(opinions.text()).toContain('Lumineux')
+    expect(opinions.text()).toContain('Pas encore donné')
+    expect(opinions.get('[data-testid="opinion-edit"]').text()).toBe(
+      'Donner mon avis'
+    )
+    const steps = wrapper.get('[data-testid="next-steps"]')
+    expect(
+      steps.findAll('[data-step]').map(s => s.attributes('data-step'))
+    ).toEqual(['visit', 'draft', 'task'])
+    // Le message se dit par ses questions (ici, la taxe foncière).
+    expect(steps.text()).toContain('Message à valider : la taxe foncière')
+    expect(steps.text()).toContain('Vérifier la cave')
+    await steps.get('[data-testid="go-todo"]').trigger('click')
+    const freshness = wrapper.get('[data-testid="synthesis-freshness"]')
+    expect(freshness.text()).toContain(
+      'Vérifiée il y a 2 j par Claude (MCP, pour Richard) : Rien n’a changé.'
+    )
+    await freshness.get('[data-testid="go-history"]').trigger('click')
+    expect(wrapper.emitted('go')).toEqual([['a-faire'], ['historique']])
+  })
+
+  it('mon avis se donne sur place : note 1 à 5 (aria-pressed), un mot, enregistré', async () => {
+    const wrapper = mountSynthesis()
+    await wrapper.get('[data-testid="opinion-edit"]').trigger('click')
+    const notes = wrapper
+      .findAll('[aria-label$="sur 5"]')
+      .filter(b => b.element.tagName === 'BUTTON')
+    expect(notes).toHaveLength(5)
+    await notes[3]?.trigger('click')
+    expect(notes[3]?.attributes('aria-pressed')).toBe('true')
+    await wrapper.get('#opinion-text').setValue('  Lumineux, balcon agréable  ')
+    await wrapper.get('form[aria-label="Mon avis"]').trigger('submit')
+    expect(wrapper.emitted('saveOpinion')).toEqual([
+      [{ rating: 4, text: 'Lumineux, balcon agréable' }],
+    ])
+  })
+
+  it('sans évaluation, invite à saisir ; sans données, rien d’inventé', () => {
+    const item = fakeEvaluated({
+      renovation: null,
+      annualCharges: 900,
+      propertyTax: 700,
+    })
     const wrapper = mount(ListingSynthesis, {
-      // Lot 14 : le bloc d’adéquation a ses propres tests (CriteriaFitSection.spec).
-      global: { stubs: { CriteriaFitSection: true } },
+      global: { stubs: { CriteriaFitSection: true, RouterLink: true } },
       props: {
         item,
         evaluation: null,
@@ -543,100 +339,16 @@ describe('ListingSynthesis', () => {
       },
     })
     expect(wrapper.text()).toContain('Saisissez un prix et un loyer visé')
-    expect(wrapper.find('[data-testid="block-price"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="summary-area"]').text()).toContain(
-      'Tram : à vérifier · marché DVF inconnu'
+    expect(wrapper.find('[data-figure]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="highlights-good"]').text()).toContain(
+      'Rien à mettre en avant pour l’instant.'
     )
-    expect(wrapper.get('[data-testid="summary-neighbourhood"]').text()).toBe(
-      'Quartier : non disponible'
+    expect(wrapper.get('[data-testid="next-steps"]').text()).toContain(
+      'Demander la taxe foncière'
     )
-    expect(wrapper.find('[data-testid="summary-equipment"]').exists()).toBe(
-      false
+    expect(wrapper.get('[data-testid="synthesis-freshness"]').text()).toContain(
+      'Jamais revérifiée depuis l’ajout'
     )
     expect(wrapper.find('[data-testid="live-badge"]').exists()).toBe(false)
-  })
-
-  it('lot 11 : le quartier et les équipements proches de l’instantané', () => {
-    const surroundings = fakeSurroundings()
-    const item = fakeEvaluated({
-      openDataContext: {
-        market: null,
-        dpe: null,
-        rentControl: null,
-        transit: null,
-        surroundings,
-      },
-    })
-    const mountWith = (value: typeof surroundings) =>
-      mount(ListingSynthesis, {
-        // Lot 14 : le bloc d’adéquation a ses propres tests (CriteriaFitSection.spec).
-        global: { stubs: { CriteriaFitSection: true } },
-        props: {
-          item: fakeEvaluated({
-            openDataContext: {
-              ...(item.listing.openDataContext as NonNullable<
-                typeof item.listing.openDataContext
-              >),
-              surroundings: value,
-            },
-          }),
-          evaluation: null,
-          targetPrice: null,
-          negotiation: null,
-          assumptions: null,
-        },
-      })
-    const wrapper = mountWith(surroundings)
-    expect(wrapper.get('[data-testid="summary-neighbourhood"]').text()).toBe(
-      'Quartier Quartier fictif (Bordeaux)'
-    )
-    expect(wrapper.get('[data-testid="summary-equipment"]').text()).toMatch(
-      /piste à 1,3\s?km · drive à 900 m · Fitness Park non disponible \(à vol d’oiseau\)/
-    )
-    const doubtful = mountWith(
-      fakeSurroundings({
-        neighbourhood: {
-          ...surroundings.neighbourhood,
-          status: 'to_verify',
-          value: {
-            ...(surroundings.neighbourhood.value as NonNullable<
-              typeof surroundings.neighbourhood.value
-            >),
-            name: 'Bordeaux',
-            kind: 'commune',
-          },
-        },
-        athleticsTrack: {
-          status: 'ok',
-          nearest: null,
-          approximate: false,
-          reasons: [],
-        },
-      })
-    )
-    expect(doubtful.get('[data-testid="summary-neighbourhood"]').text()).toBe(
-      'Quartier Bordeaux · à vérifier'
-    )
-    expect(doubtful.get('[data-testid="summary-equipment"]').text()).toContain(
-      'piste : aucun proche'
-    )
-  })
-
-  it('louabilité : compte les points bloquants, d’attention et à vérifier', () => {
-    const item = fakeEvaluated({ dpeClass: 'G' })
-    const wrapper = mount(ListingSynthesis, {
-      // Lot 14 : le bloc d’adéquation a ses propres tests (CriteriaFitSection.spec).
-      global: { stubs: { CriteriaFitSection: true } },
-      props: {
-        item,
-        evaluation: item.evaluation,
-        targetPrice: targetPrice(financialsFromListing(item.listing), A),
-        negotiation: null,
-        assumptions: A,
-      },
-    })
-    expect(wrapper.get('[data-testid="summary-rental"]').text()).toMatch(
-      /[1-9] bloquant\(s\)/
-    )
   })
 })

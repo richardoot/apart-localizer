@@ -148,7 +148,7 @@
                 {{ brief.known.tracked }} annonce(s) suivie(s) et
                 {{ brief.known.dismissed }} écartée(s). Une annonce suivie revue
                 sur un portail devient une vérification : ses nouveaux faits
-                vont dans « Mises à jour ».
+                vont dans l’Historique de la fiche.
               </dd>
             </div>
           </dl>

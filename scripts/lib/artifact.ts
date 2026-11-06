@@ -9,7 +9,6 @@ import type {
   Assumptions,
   DpeClass,
   FieldProvenanceMap,
-  LeaseType,
   ListingInput,
   ListingStatus,
   RenovationLevel,
@@ -156,12 +155,6 @@ const RENOVATION_LEVEL: Record<string, RenovationLevel> = {
   renovation: 'renovation',
   lourde: 'heavy',
   energie: 'energy',
-}
-
-const LEASE_TYPE: Record<string, LeaseType> = {
-  vide: 'unfurnished',
-  meuble: 'furnished',
-  colocation: 'shared',
 }
 
 const RENT_CONTROL: Record<string, RentControl> = {
@@ -318,9 +311,10 @@ export function mapListing(externalId: string, raw: unknown): MappedListing {
             notes: a.trav_notes,
           }
         : null,
+    // Lot 19 : l'année (`p2_annee`) et le type (`p2_type`) de la phase 2 se
+    // règlent pour tout l'espace, dans les hypothèses ; ils ne s'importent
+    // plus par annonce.
     rentalPlan: {
-      year: a.p2_annee !== null ? Math.round(a.p2_annee) : null,
-      leaseType: LEASE_TYPE[a.p2_type ?? ''] ?? 'unfurnished',
       rentControl: RENT_CONTROL[a.p2_encadre ?? ''] ?? 'auto',
       referenceRentPerM2: a.p2_plafond,
       targetRent: a.loyer,

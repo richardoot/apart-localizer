@@ -1,71 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { MEMBERS, fakeEvaluated, fakeOpinion, fakeTask } from '@/test/fixtures'
+import { MEMBERS, fakeEvaluated, fakeOpinion } from '@/test/fixtures'
 import MetricsPreview from './MetricsPreview.vue'
 import OpinionsSection from './OpinionsSection.vue'
 import StatusChanger from './StatusChanger.vue'
-import TasksSection from './TasksSection.vue'
 
 const me = MEMBERS[0]?.id ?? ''
 const other = MEMBERS[1]?.id ?? ''
 
-describe('TasksSection', () => {
-  it('compte, coche, ajoute et ne supprime que les tâches manuelles', async () => {
-    const tasks = [
-      fakeTask({ id: 'aaaaaaaa-0000-4000-8000-000000000001', done: true }),
-      fakeTask({
-        id: 'aaaaaaaa-0000-4000-8000-000000000002',
-        label: "Appeler l'agence",
-        origin: 'manual',
-        assigneeId: other,
-      }),
-    ]
-    const wrapper = mount(TasksSection, { props: { tasks, members: MEMBERS } })
-    expect(wrapper.get('[data-testid="tasks-count"]').text()).toBe('1/2')
-    expect(wrapper.text()).toContain('Chloé')
-    const checkboxes = wrapper.findAll('input[type="checkbox"]')
-    await checkboxes[1]?.setValue(true)
-    expect(wrapper.emitted('toggle')).toEqual([
-      ['aaaaaaaa-0000-4000-8000-000000000002', true],
-    ])
-    expect(wrapper.findAll('[aria-label="Supprimer la tâche"]')).toHaveLength(1)
-    await wrapper.get('[aria-label="Supprimer la tâche"]').trigger('click')
-    expect(wrapper.emitted('remove')).toEqual([
-      ['aaaaaaaa-0000-4000-8000-000000000002'],
-    ])
-    await wrapper.get('[aria-label="Nouvelle tâche"]').setValue('  Visiter  ')
-    await wrapper.get('form').trigger('submit')
-    expect(wrapper.emitted('add')).toEqual([['Visiter']])
-    await wrapper.get('form').trigger('submit')
-    expect(wrapper.emitted('add')).toHaveLength(1)
-  })
-})
+// Lot 19 : les tâches sont dans la liste « À faire » (`todo/todo.spec.ts`).
 
-describe('TasksSection : tâches issues de l’IA', () => {
-  it('marque les tâches « champ manquant » et ne permet pas de les supprimer', () => {
-    const wrapper = mount(TasksSection, {
-      props: {
-        tasks: [
-          fakeTask({
-            id: 'aaaaaaaa-0000-4000-8000-000000000003',
-            label: 'Fixer le loyer visé (phase 2) à partir du marché locatif',
-            origin: 'missing_field',
-          }),
-        ],
-        members: MEMBERS,
-      },
-    })
-    expect(wrapper.get('[data-testid="task-ai"]').text()).toBe(
-      'IA · champ manquant'
-    )
-    expect(wrapper.find('[aria-label="Supprimer la tâche"]').exists()).toBe(
-      false
-    )
-  })
-})
-
-describe('OpinionsSection', () => {
-  it("montre mon avis en édition et celui de l'autre en lecture", async () => {
+describe('OpinionsSection (lot 19 : « Nos avis » de la Synthèse)', () => {
+  it('une ligne par membre : note et mot, « Pas encore donné » ; mon avis se modifie sur place', async () => {
     const wrapper = mount(OpinionsSection, {
       props: {
         opinions: [
@@ -81,25 +27,47 @@ describe('OpinionsSection', () => {
         meId: me,
       },
     })
-    expect(wrapper.text()).toContain('Chloé')
-    expect(wrapper.text()).toContain('Lumineux')
-    expect(wrapper.text()).toContain('moyenne 3/5')
-    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe(
-      'Trop loin du tram'
-    )
-    await wrapper.get('[aria-label="5 sur 5"]').trigger('click')
-    await wrapper.get('textarea').setValue('Revu : très bien')
+    const rows = wrapper.findAll('li[data-member]')
+    expect(rows.map(r => r.text())).toEqual([
+      expect.stringContaining('Richard2/5Trop loin du tram'),
+      expect.stringContaining('Chloé4/5Lumineux'),
+    ])
+    const edit = wrapper.get('[data-testid="opinion-edit"]')
+    expect(edit.text()).toBe('Modifier mon avis')
+    expect(rows[1]?.find('[data-testid="opinion-edit"]').exists()).toBe(false)
+    await edit.trigger('click')
+    expect(
+      (wrapper.get('#opinion-text').element as HTMLTextAreaElement).value
+    ).toBe('Trop loin du tram')
+    const two = wrapper.get('button[aria-label="2 sur 5"]')
+    expect(two.attributes('aria-pressed')).toBe('true')
+    await wrapper.get('button[aria-label="5 sur 5"]').trigger('click')
+    await wrapper.get('#opinion-text').setValue('Revu : très bien')
     await wrapper.get('form').trigger('submit')
     expect(wrapper.emitted('save')).toEqual([
       [{ rating: 5, text: 'Revu : très bien' }],
     ])
+    expect(wrapper.find('form').exists()).toBe(false)
   })
 
-  it("dit quand l'autre n'a pas encore donné d'avis", () => {
+  it('un avis pas encore donné ; un second clic enlève la note ; Annuler referme', async () => {
     const wrapper = mount(OpinionsSection, {
       props: { opinions: [], members: MEMBERS, meId: me },
     })
-    expect(wrapper.text()).toContain("Pas encore d'avis de l'autre membre.")
+    expect(wrapper.findAll('li[data-member]').map(r => r.text())).toEqual([
+      'RichardPas encore donnéDonner mon avis',
+      'ChloéPas encore donné',
+    ])
+    await wrapper.get('[data-testid="opinion-edit"]').trigger('click')
+    const three = wrapper.get('button[aria-label="3 sur 5"]')
+    await three.trigger('click')
+    expect(three.attributes('aria-pressed')).toBe('true')
+    await three.trigger('click')
+    expect(three.attributes('aria-pressed')).toBe('false')
+    const cancel = wrapper.findAll('button').find(b => b.text() === 'Annuler')
+    await cancel?.trigger('click')
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(wrapper.emitted('save')).toBeUndefined()
   })
 })
 
@@ -125,7 +93,6 @@ describe('StatusChanger', () => {
 describe('MetricsPreview', () => {
   it('affiche les indicateurs du § 8 avec le marqueur « ≈ » des estimations', () => {
     const item = fakeEvaluated({
-      assumptionsOverride: null,
       renovation: null,
       annualCharges: null,
     })

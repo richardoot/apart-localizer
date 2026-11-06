@@ -42,22 +42,23 @@ export class StudyService {
     private readonly assumptions: AssumptionsService
   ) {}
 
-  /** L'annonce, ses hypothèses (surcharge de l'annonce, puis scénario éventuel) et l'entrée de l'étude. */
+  /**
+   * L'annonce, ses hypothèses (celles de l'espace, puis le scénario éventuel)
+   * et l'entrée de l'étude : le type de location vient des hypothèses (lot 19).
+   */
   async context(
     member: Member,
     id: string,
     scenario?: AssumptionsOverride | null
   ): Promise<StudyContext> {
     const item = await this.listings.get(member, id)
-    const base = await this.assumptions.forListing(
-      member.workspaceId,
-      item.listing.assumptionsOverride
-    )
+    const base = await this.assumptions.currentValues(member.workspaceId)
     const at = new Date()
+    const assumptions = mergeAssumptions(base, scenario ?? null)
     return {
       item,
-      assumptions: mergeAssumptions(base, scenario ?? null),
-      input: studyInputFromListing(item.listing, at),
+      assumptions,
+      input: studyInputFromListing(item.listing, assumptions, at),
       at,
     }
   }

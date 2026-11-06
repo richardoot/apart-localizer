@@ -11,8 +11,8 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
-import type { EvaluatedListing, ListingCheck } from '@apart/contracts'
-import { MEMBERS, fakeEvaluated, fakeLink } from '@/test/fixtures'
+import type { EvaluatedListing } from '@apart/contracts'
+import { fakeEvaluated, fakeLink } from '@/test/fixtures'
 import { mapLibreMock } from '@/test/setup'
 import {
   filtersFromQuery,
@@ -35,7 +35,6 @@ vi.mock('@/lib/api', async () => {
   return { ...actual, api: apiMock }
 })
 
-import ChecksSection from './ChecksSection.vue'
 import FiltersBar from './FiltersBar.vue'
 import ListingCards from './ListingCards.vue'
 import ListingLinksSection from './ListingLinksSection.vue'
@@ -368,8 +367,9 @@ describe('Lot 18 : « Qui la vend »', () => {
     expect(wrapper.get('[data-action="copy-reference"]').text()).toBe('Copiée')
     // Rien n'a changé : pas de bouton d'enregistrement.
     expect(wrapper.find('[data-action="save-seller"]').exists()).toBe(false)
-    await wrapper.get('[data-action="go-exchanges"]').trigger('click')
-    expect(wrapper.emitted('go')).toEqual([['echanges']])
+    // Lot 19 : le contact de l'annonceur est dans l'onglet « À faire ».
+    await wrapper.get('[data-action="go-todo"]').trigger('click')
+    expect(wrapper.emitted('go')).toEqual([['a-faire']])
   })
 
   it('un particulier n’a ni agence ni référence ; enregistré avec le garde-fou', async () => {
@@ -554,97 +554,9 @@ describe('Lot 18 : pastilles, liste, filtres', () => {
   })
 })
 
-describe('Lot 18 : vérifier un lien parmi plusieurs', () => {
-  beforeEach(() => {
-    apiMock.listings.checks.mockReset()
-    apiMock.listings.applyCheck.mockReset()
-  })
-
-  const added: ListingCheck = {
-    id: 'cccccccc-cccc-4ccc-8ccc-cccccccccc01',
-    listingId: LISTING,
-    checkedAt: '2026-11-03T10:00:00.000Z',
-    authorId: MEMBERS[0]?.id ?? null,
-    channel: 'mcp',
-    outcome: 'link_added',
-    changes: [],
-    summary: 'Lien SeLoger ajouté : 219 000 €',
-    evidence: null,
-    checkedUrl: SL.url,
-    linkedListing: null,
-    suggestedStatus: null,
-    link: { id: SL.id, portal: 'seloger', url: SL.url },
-  }
-
-  function mountChecks(links = [LBC, SL, BI]) {
-    return mount(ChecksSection, {
-      props: {
-        listingId: LISTING,
-        status: 'to_study',
-        updatedAt: '2026-11-05T12:00:00.000Z',
-        createdAt: '2026-11-02T10:00:00.000Z',
-        lastCheckedAt: '2026-11-05T09:00:00.000Z',
-        lastSeenOnlineAt: '2026-11-05T09:00:00.000Z',
-        url: LBC.url,
-        links,
-        members: MEMBERS,
-      },
-      attachTo: document.body,
-      global: { plugins: plugins(), stubs },
-    })
-  }
-
-  it('« Lien ajouté » dans la chronologie, avec le portail', async () => {
-    apiMock.listings.checks.mockResolvedValue([added])
-    const wrapper = mountChecks()
-    await flushPromises()
-    const item = wrapper.get('[data-outcome="link_added"]')
-    expect(item.text()).toContain('Lien ajouté')
-    expect(item.get('[data-testid="check-portal"]').text()).toBe('sur SeLoger')
-    expect(item.text()).toContain('Lien SeLoger ajouté')
-  })
-
-  it('le lien vérifié se choisit ; « plus en ligne » ne propose rien tant qu’un autre lien l’est', async () => {
-    apiMock.listings.checks.mockResolvedValue([])
-    apiMock.listings.applyCheck.mockResolvedValue({
-      check: added,
-      listing: chartrons(),
-      suggestion: null,
-      linked: null,
-    })
-    const wrapper = mountChecks()
-    await flushPromises()
-    const select = wrapper.get('[data-testid="check-link"]')
-    expect(select.findAll('option').map(o => o.text())).toEqual([
-      'Leboncoin (lien principal)',
-      'SeLoger',
-      'Bien’ici (plus en ligne)',
-    ])
-    await select.setValue(SL.id)
-    await wrapper.get('[data-testid="check-online"]').trigger('click')
-    await flushPromises()
-    expect(apiMock.listings.applyCheck).toHaveBeenCalledWith(LISTING, {
-      observed: { online: true },
-      outcome: 'unchanged',
-      expectedUpdatedAt: '2026-11-05T12:00:00.000Z',
-      linkId: SL.id,
-      checkedUrl: SL.url,
-    })
-    expect(wrapper.text()).toContain('Lien SeLoger noté en ligne aujourd’hui.')
-    await wrapper.get('[data-testid="check-offline"]').trigger('click')
-    expect(wrapper.get('[data-testid="check-offline-form"]').text()).toContain(
-      'ne sera proposé que si plus aucun lien n’est en ligne'
-    )
-  })
-
-  it('un seul lien : comme au lot 15, sans choix', async () => {
-    apiMock.listings.checks.mockResolvedValue([added])
-    const wrapper = mountChecks([LBC])
-    await flushPromises()
-    expect(wrapper.find('[data-testid="check-link"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="check-portal"]').exists()).toBe(false)
-  })
-})
+// Lot 19 : la vérification d'un lien parmi plusieurs (choix du lien,
+// « Lien ajouté » dans la chronologie) est dans l'onglet Historique
+// (`history/history.spec.ts`).
 
 describe('Lot 18 : la bulle de la carte', () => {
   beforeEach(() => {

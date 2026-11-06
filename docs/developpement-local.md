@@ -141,7 +141,7 @@ hors du dépôt. Un nouveau fichier part du `.env.example` correspondant.
   relance due sur le T2 des Chartrons) ; une annonce sur plusieurs portails (lot 18 : le T2 des
   Chartrons, agence « [Exemple] Immobilier des Chartrons », réf. EX-2041, sur SeLoger (lien
   d'origine), Bien'ici (ajouté à la main par Sacha, plus en ligne) et Leboncoin (ajouté par
-  Claude, 5 000 € plus cher : écart noté dans « Mises à jour ») ; le T3 de Caudéran, vendu par un
+  Claude, 5 000 € plus cher : écart noté dans l'Historique) ; le T3 de Caudéran, vendu par un
   particulier, sur PAP et Leboncoin (partagé depuis le téléphone) ; le T2 de Mérignac, chez un
   mandataire (« [Exemple] Réseau des conseillers », réf. EX-3310), dont le lien Bien'ici a été rattaché d'office par l'exploration de la veille (bloc
   « Liens rattachés d'office » de l'onglet « À valider ») ; le T2 de la Bastide chez « Agence
@@ -262,7 +262,7 @@ l'inspecteur se sert du SDK MCP, qui demande les `scopes_supported` de la ressou
 **Questions aux agences (lot 17)** : en local, ne laissez jamais Claude envoyer un vrai message.
 Avec le jeu `demo`, `list_open_questions` rend le message à valider du T2 de Mérignac et la
 relance due des Chartrons ; `record_request_sent` sans validation répond « Ce message n'est pas
-validé » ; validez dans l'onglet « Échanges » (ou passez `approvedInChat: true`) pour enregistrer
+validé » ; validez dans l'onglet « À faire » de la fiche (ou passez `approvedInChat: true`) pour enregistrer
 un envoi fictif, sans rien envoyer (`threadRef` fictif). Les adresses du jeu sont en
 `exemple.invalid` : aucun e-mail ne peut partir.
 

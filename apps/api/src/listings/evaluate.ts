@@ -9,6 +9,7 @@ import {
   compute,
   financialsFromListing,
   rentalChecks,
+  rentalChecksInputFromListing,
   targetPrice,
 } from '@apart/domain'
 import type { ListingLike } from '@apart/domain'
@@ -26,7 +27,8 @@ export type EvaluableListing = ListingLike & {
 /**
  * Colle entre l'annonce et le paquet `domain` : aucune formule ici, seulement
  * l'appel des fonctions pures dans l'ordre. L'interface et le MCP font
- * exactement le même appel.
+ * exactement le même appel. Les hypothèses sont celles de l'espace, sans
+ * surcharge par annonce ; l'année de mise en location en vient (lot 19).
  */
 export function evaluateListing(
   listing: EvaluableListing,
@@ -41,17 +43,7 @@ export function evaluateListing(
   )
   const metrics = compute(financials, assumptions)
   const rental = rentalChecks(
-    {
-      dpeClass: listing.dpeClass,
-      year: listing.rentalPlan?.year ?? null,
-      marketRent: listing.rentalPlan?.marketRent ?? null,
-      demand: listing.rentalPlan?.demand ?? null,
-      coOwnershipAllowsRental:
-        listing.rentalPlan?.coOwnershipAllowsRental ?? 'unknown',
-      decencyCompliant: listing.rentalPlan?.decencyCompliant ?? 'unknown',
-      rentalPermitRequired:
-        listing.rentalPlan?.rentalPermitRequired ?? 'unknown',
-    },
+    rentalChecksInputFromListing(listing),
     metrics,
     assumptions
   )

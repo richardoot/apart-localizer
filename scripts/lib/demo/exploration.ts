@@ -555,7 +555,7 @@ export function buildDemoExplorations(ctx: Context): {
       commune: 'Mérignac',
       district: 'Centre',
       outcome: 'known',
-      why: 'Même lien : prix 158 000 € → 152 000 €, appliqué dans « Mises à jour »',
+      why: 'Même lien : prix 158 000 € → 152 000 €, appliqué, noté dans l’Historique',
       reasons: [],
       level: null,
       listingKey: 'merignac-t2',

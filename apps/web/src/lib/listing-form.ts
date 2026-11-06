@@ -2,7 +2,6 @@ import { ListingInputSchema, ListingUpdateSchema } from '@apart/contracts'
 import type {
   DpeClass,
   FeesPayer,
-  LeaseType,
   Listing,
   ListingInput,
   ListingInputRaw,
@@ -16,17 +15,18 @@ import type {
   TriState,
 } from '@apart/contracts'
 import { z } from 'zod'
-import {
-  fractionToPercentInput,
-  parseNumberInput,
-  percentToFraction,
-} from './format'
+import { parseNumberInput } from './format'
 
 /**
  * Le modèle du formulaire d'annonce : des chaînes pour les champs saisis
  * (un `<input>` parle en texte), des booléens et des énumérations ailleurs.
  * `formToInput` le traduit vers le contrat `ListingInput` (validé par Zod),
  * `formFromListing` fait l'inverse. Fonctions pures, testées à vide.
+ *
+ * Lot 19 : plus d'hypothèses surchargées par annonce, ni d'année ou de type
+ * de location de la phase 2 : ils se règlent pour tout l'espace (page
+ * Hypothèses). La fiche se modifie section par section
+ * (`listing-sections.ts`), avec ce même modèle.
  */
 export interface RenovationItemForm {
   key: string
@@ -80,8 +80,6 @@ export interface ListingForm {
     notes: string
   }
   rentalPlan: {
-    year: string
-    leaseType: LeaseType
     rentControl: RentControl
     referenceRentPerM2: string
     targetRent: string
@@ -91,13 +89,6 @@ export interface ListingForm {
     decencyCompliant: TriState
     rentalPermitRequired: TriState
     notes: string
-  }
-  /** Surcharges d'hypothèses, en texte (taux en pourcentage). */
-  overrides: {
-    downPayment: string
-    interestRatePercent: string
-    durationYears: string
-    notaryRatePercent: string
   }
 }
 
@@ -153,8 +144,6 @@ export function emptyForm(): ListingForm {
       notes: '',
     },
     rentalPlan: {
-      year: '',
-      leaseType: 'unfurnished',
       rentControl: 'auto',
       referenceRentPerM2: '',
       targetRent: '',
@@ -164,12 +153,6 @@ export function emptyForm(): ListingForm {
       decencyCompliant: 'unknown',
       rentalPermitRequired: 'unknown',
       notes: '',
-    },
-    overrides: {
-      downPayment: '',
-      interestRatePercent: '',
-      durationYears: '',
-      notaryRatePercent: '',
     },
   }
 }
@@ -218,7 +201,6 @@ type FormSource = Pick<
   | 'description'
   | 'notes'
   | 'rentalPlan'
-  | 'assumptionsOverride'
 > & {
   renovation:
     | (Omit<NonNullable<ListingInput['renovation']>, 'items'> & {
@@ -282,8 +264,6 @@ export function formFromInput(listing: FormSource): ListingForm {
   if (listing.rentalPlan) {
     const plan = listing.rentalPlan
     form.rentalPlan = {
-      year: num(plan.year),
-      leaseType: plan.leaseType,
       rentControl: plan.rentControl,
       referenceRentPerM2: num(plan.referenceRentPerM2),
       targetRent: num(plan.targetRent),
@@ -293,15 +273,6 @@ export function formFromInput(listing: FormSource): ListingForm {
       decencyCompliant: plan.decencyCompliant,
       rentalPermitRequired: plan.rentalPermitRequired,
       notes: text(plan.notes),
-    }
-  }
-  const o = listing.assumptionsOverride
-  if (o) {
-    form.overrides = {
-      downPayment: num(o.downPayment),
-      interestRatePercent: fractionToPercentInput(o.interestRate),
-      durationYears: num(o.durationYears),
-      notaryRatePercent: fractionToPercentInput(o.notaryRate),
     }
   }
   return form
@@ -317,21 +288,12 @@ export function formToRawInput(form: ListingForm): ListingInputRaw {
   const lng = parseNumberInput(form.longitude)
   const lat = parseNumberInput(form.latitude)
   const hasRental = Object.entries(form.rentalPlan).some(([key, value]) =>
-    key === 'leaseType' || key === 'rentControl'
+    key === 'rentControl'
       ? false
       : typeof value === 'string'
         ? value.trim() !== '' && value !== 'unknown'
         : false
   )
-  const overrides: Record<string, number> = {}
-  const dp = parseNumberInput(form.overrides.downPayment)
-  if (dp !== null) overrides.downPayment = dp
-  const rate = percentToFraction(form.overrides.interestRatePercent)
-  if (rate !== null) overrides.interestRate = rate
-  const years = parseNumberInput(form.overrides.durationYears)
-  if (years !== null) overrides.durationYears = years
-  const notary = percentToFraction(form.overrides.notaryRatePercent)
-  if (notary !== null) overrides.notaryRate = notary
 
   return {
     title: form.title.trim(),
@@ -396,8 +358,6 @@ export function formToRawInput(form: ListingForm): ListingInputRaw {
         : null,
     rentalPlan: hasRental
       ? {
-          year: parseNumberInput(form.rentalPlan.year),
-          leaseType: form.rentalPlan.leaseType,
           rentControl: form.rentalPlan.rentControl,
           referenceRentPerM2: parseNumberInput(
             form.rentalPlan.referenceRentPerM2
@@ -411,7 +371,6 @@ export function formToRawInput(form: ListingForm): ListingInputRaw {
           notes: orNull(form.rentalPlan.notes),
         }
       : null,
-    assumptionsOverride: Object.keys(overrides).length > 0 ? overrides : null,
   }
 }
 

@@ -25,7 +25,7 @@ export const ListingLinkWriteResultSchema = z.object({
     'Le lien ajouté ou modifié ; null après un retrait'
   ),
   check: ListingCheckSchema.nullable().describe(
-    'La vérification enregistrée dans « Mises à jour » (lien ajouté avec ce qui a été lu, prix ou état relevés) ; null sans lecture'
+    'La vérification enregistrée (onglet « Historique » de la fiche) (lien ajouté avec ce qui a été lu, prix ou état relevés) ; null sans lecture'
   ),
   listing: EvaluatedListingSchema.describe('L’annonce après l’écriture'),
   priceProposal: FichePriceProposalSchema.nullable().describe(

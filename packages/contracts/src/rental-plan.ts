@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import {
-  LeaseTypeSchema,
   RentControlSchema,
   RentalDemandSchema,
   TriStateSchema,
@@ -10,19 +9,14 @@ import {
  * Phase 2 : mise en location. Les annonces de location comparables (loyer de
  * marché, besoin L4) sont des lignes à part depuis le lot 5
  * (`RentComparable`, `/listings/:id/rent-comparables`).
+ *
+ * Lot 19 (ADR 0029) : l'année et le type de location se règlent pour tout
+ * l'espace (`rentalYear` et `leaseType` des hypothèses). Une entrée qui les
+ * envoie encore ici (`year`, `leaseType`) est acceptée et ces clés sont
+ * ignorées ; les colonnes `rental_plans.year` et `lease_type` restent en base
+ * sans être lues.
  */
 export const RentalPlanInputSchema = z.object({
-  year: z
-    .number()
-    .int()
-    .min(2000)
-    .max(2100)
-    .nullable()
-    .default(null)
-    .describe(
-      'Année de mise en location ; null = année par défaut des hypothèses'
-    ),
-  leaseType: LeaseTypeSchema.default('unfurnished'),
   rentControl: RentControlSchema.default('auto'),
   referenceRentPerM2: z
     .number()

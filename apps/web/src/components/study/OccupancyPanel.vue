@@ -3,14 +3,15 @@
   import type { Assumptions } from '@apart/contracts'
   import { occupancyReport } from '@apart/domain'
   import type { StudyInput } from '@apart/domain'
-  import StatTile from '@/components/ui/StatTile.vue'
+  import DefinitionButton from '@/components/ui/DefinitionButton.vue'
   import { formatDate, formatEuros, formatEurosPerMonth } from '@/lib/format'
 
   /**
    * Phase 1 (besoin E3) : ce que coûte le logement pendant que le foyer
    * l'habite, comparé au loyer actuel, la part de capital remboursé et la
    * date de bascule en phase 2. Calculé dans le navigateur par `domain`,
-   * comme `GET /listings/:id/occupancy`.
+   * comme `GET /listings/:id/occupancy`. Lot 19 : compacté pour l'onglet
+   * Budget (le coût en grand, son détail, la bascule), sans rien perdre.
    */
   const props = defineProps<{
     input: StudyInput
@@ -30,57 +31,94 @@
       : gap > 0
         ? `${formatEurosPerMonth(gap)} de plus que le loyer actuel`
         : `${formatEurosPerMonth(-gap)} de moins que le loyer actuel`
+
+  const row = 'border-t border-line'
 </script>
 
 <template>
   <div class="grid gap-3 text-sm" data-testid="occupancy">
-    <div class="grid gap-px overflow-hidden rounded-lg bg-line sm:grid-cols-3">
-      <StatTile
-        label="Coût d'occupation"
-        :value="formatEurosPerMonth(report.monthly.total)"
-        :hint="gapText(report.gapToCurrentRent)"
-      />
-      <StatTile
-        label="Dont capital remboursé"
-        :value="formatEurosPerMonth(report.capitalMonthly)"
-        :hint="
-          report.phase1Months > 0
-            ? `moyenne sur ${report.phase1Months} mois`
-            : 'moyenne sur les 12 premiers mois'
-        "
-      />
-      <StatTile
-        label="Coût réel"
-        :value="formatEurosPerMonth(report.realCostMonthly)"
-        :hint="gapText(report.realGapToCurrentRent)"
-      />
+    <div class="grid gap-0.5">
+      <p class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <strong
+          class="font-display text-2xl leading-tight font-bold tabular-nums"
+          data-testid="occupancy-total"
+          >{{ formatEurosPerMonth(report.monthly.total) }}</strong
+        >
+        <span class="inline-flex items-center gap-1.5 text-muted"
+          >Coût d'occupation <DefinitionButton term="occupancy_cost"
+        /></span>
+      </p>
+      <p class="text-xs text-muted" data-testid="occupancy-gap">
+        {{ gapText(report.gapToCurrentRent) }}
+      </p>
     </div>
-    <dl class="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
-      <dt class="text-muted">Crédit (hors assurance)</dt>
-      <dd class="text-right tabular-nums">
-        {{ formatEurosPerMonth(report.monthly.credit) }}
-      </dd>
-      <dt class="text-muted">Assurance emprunteur</dt>
-      <dd class="text-right tabular-nums">
-        {{ formatEurosPerMonth(report.monthly.insurance) }}
-      </dd>
-      <dt class="text-muted">Charges de copropriété (toutes)</dt>
-      <dd class="text-right tabular-nums">
-        {{ report.chargesKnown ? '' : '≈ '
-        }}{{ formatEurosPerMonth(report.monthly.charges) }}
-      </dd>
-      <dt class="text-muted">Taxe foncière</dt>
-      <dd class="text-right tabular-nums">
-        {{ report.propertyTaxEstimated ? '≈ ' : ''
-        }}{{ formatEurosPerMonth(report.monthly.propertyTax) }}
-      </dd>
-      <dt class="text-muted">Entretien</dt>
-      <dd class="text-right tabular-nums">
-        {{ report.maintenanceKnown ? '' : '≈ '
-        }}{{ formatEurosPerMonth(report.monthly.maintenance) }}
-      </dd>
-    </dl>
-    <p data-testid="switch">
+    <table class="w-full tabular-nums">
+      <caption class="sr-only">
+        Le coût d’occupation par mois
+      </caption>
+      <tbody>
+        <tr :class="row">
+          <th scope="row" class="py-1.5 text-left font-normal">
+            Crédit (hors assurance)
+          </th>
+          <td class="py-1.5 text-right">
+            {{ formatEurosPerMonth(report.monthly.credit) }}
+          </td>
+        </tr>
+        <tr :class="row">
+          <th scope="row" class="py-1.5 text-left font-normal">
+            Assurance emprunteur
+          </th>
+          <td class="py-1.5 text-right">
+            {{ formatEurosPerMonth(report.monthly.insurance) }}
+          </td>
+        </tr>
+        <tr :class="row">
+          <th scope="row" class="py-1.5 text-left font-normal">
+            Charges de copropriété (toutes)
+          </th>
+          <td class="py-1.5 text-right">
+            {{ report.chargesKnown ? '' : '≈ '
+            }}{{ formatEurosPerMonth(report.monthly.charges) }}
+          </td>
+        </tr>
+        <tr :class="row">
+          <th scope="row" class="py-1.5 text-left font-normal">
+            Taxe foncière
+            <span v-if="report.propertyTaxEstimated" class="text-xs text-warn"
+              >estimée, à confirmer</span
+            >
+          </th>
+          <td class="py-1.5 text-right">
+            {{ report.propertyTaxEstimated ? '≈ ' : ''
+            }}{{ formatEurosPerMonth(report.monthly.propertyTax) }}
+          </td>
+        </tr>
+        <tr :class="row">
+          <th scope="row" class="py-1.5 text-left font-normal">Entretien</th>
+          <td class="py-1.5 text-right">
+            {{ report.maintenanceKnown ? '' : '≈ '
+            }}{{ formatEurosPerMonth(report.monthly.maintenance) }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="text-xs text-muted" data-testid="occupancy-capital">
+      Dont
+      <strong class="text-fg">{{
+        formatEurosPerMonth(report.capitalMonthly)
+      }}</strong>
+      de capital remboursé ({{
+        report.phase1Months > 0
+          ? `moyenne sur ${report.phase1Months} mois`
+          : 'moyenne sur les 12 premiers mois'
+      }}) : coût réel
+      <strong class="text-fg">{{
+        formatEurosPerMonth(report.realCostMonthly)
+      }}</strong
+      >, {{ gapText(report.realGapToCurrentRent) }}.
+    </p>
+    <p class="text-xs" data-testid="switch">
       Achat le {{ formatDate(report.purchaseDate) }}, mise en location le
       <strong>{{ formatDate(report.rentalStartDate) }}</strong> :
       {{ report.phase1Months }} mois d'occupation. Sur cette période :

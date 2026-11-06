@@ -6,7 +6,6 @@ const UNTRACKED_KEYS: ReadonlySet<string> = new Set([
   'sourceText',
   'status',
   'discardReason',
-  'assumptionsOverride',
   'location',
 ])
 

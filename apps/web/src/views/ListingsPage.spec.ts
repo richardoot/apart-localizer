@@ -224,17 +224,38 @@ describe('ListingsPage : onglet de la fiche dans l’URL', () => {
   })
 
   it('un filtre changé garde l’onglet ; fermer la fiche l’oublie', async () => {
-    const { router, wrapper } = await mountAt(`/annonces/${ID}?onglet=suivi`)
+    const { router, wrapper } = await mountAt(`/annonces/${ID}?onglet=a-faire`)
     useFiltersStore().patch({ status: ['visited'] })
     await flushPromises()
     expect(router.currentRoute.value.query).toEqual({
       status: 'visited',
-      onglet: 'suivi',
+      onglet: 'a-faire',
     })
     wrapper.getComponent(PanelStub).vm.$emit('close')
     await flushPromises()
     expect(router.currentRoute.value.name).toBe('listings')
     expect(router.currentRoute.value.query).toEqual({ status: 'visited' })
+  })
+
+  it('lot 19 : un ancien identifiant d’onglet (lien partagé, notification, e-mail) mène au nouvel onglet et réécrit l’URL', async () => {
+    for (const [legacy, next] of [
+      ['suivi', 'a-faire'],
+      ['echanges', 'a-faire'],
+      ['financer', 'budget'],
+    ] as const) {
+      const { router, wrapper } = await mountAt(
+        `/annonces/${ID}?status=to_visit&onglet=${legacy}`
+      )
+      expect(wrapper.get('[data-testid="panel"]').attributes('data-tab')).toBe(
+        next
+      )
+      expect(router.currentRoute.value.query).toEqual({
+        status: 'to_visit',
+        onglet: next,
+      })
+      expect(router.currentRoute.value.params.id).toBe(ID)
+      wrapper.unmount()
+    }
   })
 
   it('un onglet inconnu donne la synthèse ; la légende explique les deux bases', async () => {

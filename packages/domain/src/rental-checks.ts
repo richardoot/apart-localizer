@@ -30,7 +30,11 @@ export const MARKET_RENT_WARN_RATIO = 0.08
 
 export interface RentalChecksInput {
   dpeClass: DpeClass | null
-  /** Année de mise en location ; null = année de la date de mise en location des hypothèses, sinon `rentalYear`. */
+  /**
+   * Année de mise en location fixée par un scénario ; null (toujours pour une
+   * annonce depuis le lot 19) = année de la date de mise en location des
+   * hypothèses de l'espace, sinon `rentalYear`.
+   */
   year: number | null
   marketRent: number | null
   demand: RentalDemand | null

@@ -14,7 +14,7 @@ et testées, utilisé à l'identique par l'interface, l'API et le MCP.
 | `n` | taux de frais de notaire (fraction, 7,5 % aujourd'hui) ou barème | hypothèses |
 | `T` | total des travaux (somme des postes si la section est active, sinon 0) | annonce |
 | `M` | mobilier | annonce |
-| `A` | apport | hypothèses, surchargeable |
+| `A` | apport | hypothèses (de l'espace ; plus de surcharge par annonce depuis le lot 19) |
 | `t`, `d`, `a` | taux nominal annuel, durée en années, assurance annuelle (fraction du capital) | hypothèses |
 | `S` | surface | annonce |
 | `L_v` | loyer visé HC mensuel | annonce |
@@ -33,6 +33,12 @@ et testées, utilisé à l'identique par l'interface, l'API et le MCP.
 | `g`, `i` | revalorisation annuelle du bien (`appreciationRate`, défaut 0) ; indexation annuelle des loyers, charges, taxe foncière et loyer actuel (`rentIndexationRate`, défaut 1,57 %, IRL du 3e trimestre 2026) | hypothèses |
 | `f_r` | frais de revente en fraction du prix de vente (`resaleCostsRate`, défaut 5 %, estimation) | hypothèses |
 | `τ` | tranche marginale d'imposition du foyer (`marginalTaxRate`, défaut : non renseignée) | hypothèses |
+| `b` | type de location de la phase 2 (`leaseType` : vide, meublé, colocation ; défaut vide), pour toutes les annonces de l'espace | hypothèses (lot 19) |
+
+Depuis le lot 19 (ADR 0029), toutes les annonces se calculent avec les hypothèses de l'espace :
+une annonce n'a plus d'hypothèses propres (`assumptionsOverride`, colonne gardée sans être lue),
+ni d'année ni de type de location de la phase 2 (`rental_plans.year`, `lease_type`, gardées sans
+être lues). Seul un scénario (§ 9) remplace des hypothèses, pour le calcul seulement.
 
 Toute valeur estimée est marquée `estimated` dans la provenance et affichée « ≈ ».
 
@@ -140,9 +146,12 @@ Repris de l'artefact, chacun rend `ok`, `warn`, `bad` ou `unknown` :
 Verdict : `Incompatible` dès un `bad` ; `Sous conditions` dès un `warn` ou à partir de trois
 `unknown` ; sinon `Compatible`.
 
-L'année de mise en location retenue est celle de la phase 2 de l'annonce, sinon celle de la date
-de mise en location des hypothèses (`rentalStartDate`, lot 5), sinon `rentalYear`. Sans date
-précise (cas des versions d'hypothèses antérieures), rien ne change.
+L'année de mise en location retenue est celle de la date de mise en location des hypothèses
+(`rentalStartDate`, lot 5), sinon `rentalYear`, pour toutes les annonces de l'espace (lot 19 :
+plus d'année par annonce) ; seul un scénario la change. Le type de location (`leaseType` des
+hypothèses, vide par défaut) choisit le loyer de référence meublé ou vide de l'encadrement, les
+comparables de loyer retenus et le régime fiscal par défaut ; quand l'année ou le type de l'espace
+change, le plafond posé d'office de chaque annonce est recalculé.
 
 Ajouts du lot 4 (données ouvertes, voir [open-data.md](../open-data.md) et ADR 0011) :
 
@@ -323,7 +332,8 @@ coût (hypothèse à garder en tête).
 ### 7.2 Régimes fiscaux et impôt d'une année
 
 `rentalTaxYear` : une année de location à la fois, avec ses reports. Le régime par défaut suit le
-bail : vide → micro-foncier, meublé ou colocation (supposée meublée) → micro-BIC ; un régime
+bail (le type de location des hypothèses de l'espace, lot 19) : vide → micro-foncier, meublé ou
+colocation (supposée meublée) → micro-BIC ; un régime
 demandé qui ne convient pas au bail est remplacé par son équivalent (signalé). Un régime micro
 dont le plafond de recettes est dépassé passe au réel pour l'année (signalé).
 
@@ -484,7 +494,8 @@ Un scénario est un jeu de surcharges (`ScenarioOverrides`) : champs de l'annonc
 visé, travaux, mobilier, taxe foncière, charges, bail) et hypothèses (`AssumptionsOverride` :
 taux, apport, durée, vacance, date de mise en location, TMI, régime, horizon, revalorisation…).
 `applyScenario` les applique ; une date ou une année de mise en location du scénario l'emporte
-sur l'année de la phase 2 de l'annonce. `compareScenario` calcule la base et le scénario
+sur celle des hypothèses de l'espace, et le bail du scénario (`leaseType`, ou celui de ses
+hypothèses) sur le type de location de l'espace (lot 19). `compareScenario` calcule la base et le scénario
 (financement, verdicts, prix cible, phase 1, projection) et rend les écarts indicateur par
 indicateur avec leur sens (`better` : vrai si le scénario est meilleur ; plus bas = mieux pour le
 coût, la mensualité et le coût d'occupation, plus haut = mieux pour le reste). Un scénario

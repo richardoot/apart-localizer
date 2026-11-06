@@ -28,8 +28,10 @@ describe('listing-form', () => {
     expect(form.renovation.items).toHaveLength(2)
     expect(form.renovation.items[0]?.amount).toBe('2500')
     expect(form.rentalPlan.targetRent).toBe('750')
-    expect(form.overrides.interestRatePercent).toBe('3.2')
-    expect(form.overrides.downPayment).toBe('60000')
+    // Lot 19 : ni surcharge d'hypothèses, ni année ou type de location.
+    expect(form).not.toHaveProperty('overrides')
+    expect(form.rentalPlan).not.toHaveProperty('year')
+    expect(form.rentalPlan).not.toHaveProperty('leaseType')
 
     const { input, errors } = validateForm(form)
     expect(errors).toEqual({})
@@ -39,10 +41,7 @@ describe('listing-form', () => {
     expect(input?.renovation?.items.map(i => i.amount)).toEqual([2500, null])
     expect(input?.rentalPlan?.targetRent).toBe(750)
     expect(input?.rentalPlan?.demand).toBe('strong')
-    expect(input?.assumptionsOverride).toEqual({
-      downPayment: 60_000,
-      interestRate: 0.032,
-    })
+    expect(input).not.toHaveProperty('assumptionsOverride')
   })
 
   it('lit les nombres à la française et laisse null ce qui est vide', () => {
@@ -57,7 +56,7 @@ describe('listing-form', () => {
     expect(raw.renovation).toBeNull()
     expect(raw.rentalPlan?.targetRent).toBe(520)
     expect(raw.location?.point).toBeNull()
-    expect(raw.assumptionsOverride).toBeNull()
+    expect(raw).not.toHaveProperty('assumptionsOverride')
     const { input } = validateForm(form)
     expect(input?.dpeClass).toBeNull()
   })

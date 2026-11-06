@@ -251,6 +251,74 @@ describe('VisitsSection', () => {
   })
 })
 
+describe('VisitsSection : suppressions confirmées dans la carte (lot 19)', () => {
+  it('une visite et une photo se suppriment après confirmation en ligne, jamais par window.confirm', async () => {
+    const confirm = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirm)
+    apiMock.visits.list.mockResolvedValue([
+      visit({
+        photos: [
+          {
+            ...(visit().photos[0] as Visit['photos'][number]),
+            uploadedById: RICHARD.id,
+          },
+        ],
+      }),
+    ])
+    apiMock.visits.remove.mockResolvedValue(undefined)
+    apiMock.visits.removePhoto.mockResolvedValue(undefined)
+    const wrapper = withClient(VisitsSection, {
+      listingId: LISTING,
+      members: MEMBERS,
+      meId: RICHARD.id,
+    })
+    await flushPromises()
+    const card = document.getElementById(
+      'visit-55555555-5555-4555-8555-555555555555'
+    )
+    expect(card?.getAttribute('tabindex')).toBe('-1')
+    ;(
+      document.body.querySelector(
+        '[aria-label="Supprimer la photo"]'
+      ) as HTMLElement
+    ).click()
+    await flushPromises()
+    expect(
+      document.body.querySelector('[data-testid="photo-remove-confirm"]')
+        ?.textContent
+    ).toContain('Supprimer cette photo ?')
+    ;(
+      document.body.querySelector(
+        '[data-testid="photo-remove-yes"]'
+      ) as HTMLElement
+    ).click()
+    await flushPromises()
+    expect(apiMock.visits.removePhoto).toHaveBeenCalledWith(
+      LISTING,
+      '55555555-5555-4555-8555-555555555555',
+      '66666666-6666-4666-8666-666666666666'
+    )
+    ;(
+      document.body.querySelector('[data-testid="visit-remove"]') as HTMLElement
+    ).click()
+    await flushPromises()
+    expect(apiMock.visits.remove).not.toHaveBeenCalled()
+    ;(
+      document.body.querySelector(
+        '[data-testid="visit-remove-yes"]'
+      ) as HTMLElement
+    ).click()
+    await flushPromises()
+    expect(apiMock.visits.remove).toHaveBeenCalledWith(
+      LISTING,
+      '55555555-5555-4555-8555-555555555555'
+    )
+    expect(confirm).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+    wrapper.unmount()
+  })
+})
+
 describe('NotificationBell', () => {
   it('compte les non lues, les montre, et ouvre la fiche en marquant lue', async () => {
     apiMock.notifications.list.mockResolvedValue({

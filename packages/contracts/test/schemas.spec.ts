@@ -260,7 +260,6 @@ describe('annonce', () => {
       },
     })
     expect(listing.renovation?.items[1]?.amount).toBeNull()
-    expect(listing.rentalPlan?.leaseType).toBe('unfurnished')
     expect(listing.rentalPlan?.rentControl).toBe('auto')
     expect(listing.rentalPlan?.decencyCompliant).toBe('unknown')
     expect(listing.location.precision).toBe('exact')
@@ -296,7 +295,16 @@ describe('annonce', () => {
     ).toBe(false)
     // Les comparables de loyer sont des lignes à part depuis le lot 5.
     expect('comparables' in RentalPlanInputSchema.parse({})).toBe(false)
-    expect(RentalPlanInputSchema.safeParse({ year: 1999 }).success).toBe(false)
+    // Lot 19 : l'année et le type de location sont réglés pour l'espace ;
+    // une entrée qui les envoie encore est acceptée, ces clés sont ignorées.
+    const legacy = RentalPlanInputSchema.parse({
+      year: 1999,
+      leaseType: 'furnished',
+      targetRent: 700,
+    })
+    expect(legacy).not.toHaveProperty('year')
+    expect(legacy).not.toHaveProperty('leaseType')
+    expect(legacy.targetRent).toBe(700)
   })
 })
 

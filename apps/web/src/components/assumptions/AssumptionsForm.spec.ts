@@ -377,6 +377,26 @@ describe('AssumptionsForm : calendrier, notaire, fiscalité', () => {
     expect(phase2.text()).toContain('vide = 1er janvier 2029')
   })
 
+  it('lot 19 : le type de location de l’espace se règle dans la phase 2 et s’enregistre', async () => {
+    wrapper = mountForm()
+    const select = wrapper.get('#h-lease-type')
+    expect((select.element as HTMLSelectElement).value).toBe('unfurnished')
+    expect(select.findAll('option').map(o => o.text())).toEqual([
+      'Location vide',
+      'Location meublée',
+      'Colocation',
+    ])
+    expect(wrapper.get('[data-testid="phase-2"]').text()).toContain(
+      'pour toutes les annonces'
+    )
+    await select.setValue('furnished')
+    expect(wrapper.get('a[href="#calendrier"]').text()).toContain('meublée')
+    const saved = await submit(wrapper)
+    expect(saved?.values.leaseType).toBe('furnished')
+    expect(saved?.values.rentalYear).toBe(DEFAULT_ASSUMPTIONS.rentalYear)
+    expect(saved?.values.downPayment).toBe(DEFAULT_ASSUMPTIONS.downPayment)
+  })
+
   it('frais de notaire : forfait, puis barème résumé et détail replié', async () => {
     wrapper = mountForm()
     expect(input(wrapper, '#h-notary').value).toBe('7,5')

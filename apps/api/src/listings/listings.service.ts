@@ -888,7 +888,6 @@ export class ListingsService {
     request: EvaluateRequest
   ): Promise<EvaluateResult> {
     let listing: HypotheticalListing
-    let base: Assumptions
     if (request.listingId) {
       const row = await this.findRow(member, request.listingId)
       const stored = toListingDto(row)
@@ -898,17 +897,12 @@ export class ListingsService {
         ...overrides,
         location: { ...stored.location, ...(overrides.location ?? {}) },
       })
-      base = await this.assumptions.forListing(
-        member.workspaceId,
-        listing.assumptionsOverride
-      )
     } else {
       listing = request.listing as HypotheticalListing
-      base = await this.assumptions.forListing(
-        member.workspaceId,
-        listing.assumptionsOverride
-      )
     }
+    // Lot 19 : les hypothèses de l'espace, sans surcharge par annonce ; le
+    // scénario éventuel (`assumptions`) les remplace champ par champ.
+    const base = await this.assumptions.currentValues(member.workspaceId)
     const assumptions = mergeAssumptions(base, request.assumptions ?? null)
     return {
       listing,
@@ -955,10 +949,9 @@ export class ListingsService {
     distanceMeters?: number
   ): EvaluatedListing {
     const listing = toListingDto(row)
-    const assumptions = mergeAssumptions(base, listing.assumptionsOverride)
     return EvaluatedListingSchema.parse({
       listing,
-      evaluation: evaluateListing(listing, assumptions),
+      evaluation: evaluateListing(listing, base),
       distanceMeters: distanceMeters ?? null,
       isNewForMe: !listing.views.some(view => view.memberId === member.id),
       opinions: row.opinions.map(toOpinionDto),
@@ -1235,14 +1228,9 @@ function stripStored(listing: ListingDto): Record<string, unknown> {
 
 type ScalarInput = Omit<
   Partial<ListingInput>,
-  | 'renovation'
-  | 'rentalPlan'
-  | 'location'
-  | 'fieldSources'
-  | 'assumptionsOverride'
+  'renovation' | 'rentalPlan' | 'location' | 'fieldSources'
 > & {
   fieldSources?: ListingInput['fieldSources']
-  assumptionsOverride?: ListingInput['assumptionsOverride']
   location?: ListingInput['location']
 }
 
@@ -1346,14 +1334,8 @@ function scalarData(input: ScalarInput): ScalarData {
       ? undefined
       : (input.fieldSources as Prisma.InputJsonValue)
   )
-  set(
-    'assumptionsOverride',
-    input.assumptionsOverride === undefined
-      ? undefined
-      : input.assumptionsOverride === null
-        ? Prisma.DbNull
-        : (input.assumptionsOverride as Prisma.InputJsonValue)
-  )
+  // Lot 19 : plus d'hypothèses propres à une annonce ; la colonne
+  // `assumptions_override` n'est plus écrite ni lue.
   if (input.location) Object.assign(data, locationData(input.location))
   return data
 }
@@ -1388,10 +1370,13 @@ function renovationData(input: RenovationInput) {
   }
 }
 
+/**
+ * La phase 2 d'une annonce. L'année et le type de location ne s'écrivent plus
+ * (lot 19) : ils viennent des hypothèses de l'espace ; les colonnes gardent
+ * leur valeur (défaut ou ancienne saisie) sans être lues.
+ */
 function rentalPlanData(input: RentalPlanInput) {
   return {
-    year: input.year,
-    leaseType: input.leaseType,
     rentControl: input.rentControl,
     referenceRentPerM2: dec(input.referenceRentPerM2),
     targetRent: dec(input.targetRent),

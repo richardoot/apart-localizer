@@ -59,7 +59,7 @@ no_answer` (annulable avant l'envoi ; une réponse tardive ou en complément res
   connexion à la place de l'utilisateur (prompts `ask_agencies`, `check_agency_answers`).
 - **MCP** : `list_open_questions` (lecture), `prepare_agency_requests` (brouillons groupés,
   `replaces` pour une correction, `contact` lu sur l'annonce), `record_request_sent`,
-  `record_agency_answer` ; 35 outils, 4 prompts, aucun outil de suppression.
+  `record_agency_answer` ; 38 outils et cinq prompts au lot 17 (le compte à jour est dans `docs/mcp.md`), aucun outil de suppression.
 - **Notifications et nouveautés** : `agency_answer` pour l'autre membre (vers l'onglet Échanges),
   sorte « Échanges » au journal, « Réponses des agences » dans « ce qui a changé ».
 

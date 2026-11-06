@@ -168,7 +168,7 @@ export function fakeExplorationDetail(
         3,
         'known',
         '[Exemple] T3 70 m², traversant',
-        'Même lien : prix 219 000 € → 212 000 €, appliqué dans « Mises à jour »'
+        'Même lien : prix 219 000 € → 212 000 €, appliqué, noté dans l’Historique'
       ),
       line(
         4,

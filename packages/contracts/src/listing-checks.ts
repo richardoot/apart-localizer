@@ -249,7 +249,7 @@ export const CheckedLinkSchema = z.object({
 })
 export type CheckedLink = z.infer<typeof CheckedLinkSchema>
 
-/** Une vérification enregistrée : la chronologie « Mises à jour » de la fiche. */
+/** Une vérification enregistrée : une ligne de l'Historique de la fiche. */
 export const ListingCheckSchema = z.object({
   id: z.string().uuid(),
   listingId: z.string().uuid(),

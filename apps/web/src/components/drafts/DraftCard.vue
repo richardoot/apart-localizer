@@ -299,13 +299,13 @@
         data-testid="draft-merged"
       >
         <strong>Fiche mise à jour</strong> :
-        {{ d.merge?.summary ?? 'faits appliqués' }}, noté dans « Mises à jour ».
+        {{ d.merge?.summary ?? 'faits appliqués' }}, noté dans l’Historique.
         <RouterLink
           v-if="d.listingId"
           :to="{
             name: 'listing',
             params: { id: d.listingId },
-            query: { onglet: 'suivi' },
+            query: { onglet: 'historique' },
           }"
           class="underline underline-offset-2"
           >Voir la fiche</RouterLink

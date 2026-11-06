@@ -8,12 +8,7 @@ import type {
   LocationPrecision,
   Point,
 } from '@apart/contracts'
-import {
-  NO_MEASURES,
-  criteriaFit,
-  listingCriteriaFit,
-  mergeAssumptions,
-} from '@apart/domain'
+import { NO_MEASURES, criteriaFit, listingCriteriaFit } from '@apart/domain'
 import type { CriteriaFitCandidate, CriteriaFitMeasures } from '@apart/domain'
 import { GeoService } from '../geo/geo.service'
 import type { CandidateGeo, ListingAreaRef } from '../geo/geo.service'
@@ -167,10 +162,7 @@ export function candidateOf(
   const rent = listing.rentalPlan?.targetRent ?? null
   const verdict =
     rent !== null && rent > 0
-      ? evaluateListing(
-          listing,
-          mergeAssumptions(base, listing.assumptionsOverride)
-        ).metrics.verdict
+      ? evaluateListing(listing, base).metrics.verdict
       : null
   return {
     price: listing.price,

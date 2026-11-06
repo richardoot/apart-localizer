@@ -6,7 +6,7 @@ import type { ImpactListing } from './impact'
 const listing = (
   id: string,
   price: number,
-  override: ImpactListing['assumptionsOverride'] = null
+  extra: Record<string, unknown> = {}
 ): ImpactListing => ({
   ...ListingInputSchema.parse({
     title: `Annonce ${id}`,
@@ -14,20 +14,21 @@ const listing = (
     surface: 45,
     dpeClass: 'D',
     rentalPlan: { targetRent: 750 },
+    ...extra,
   }),
   id: `00000000-0000-4000-8000-00000000000${id}`,
   title: `Annonce ${id}`,
-  assumptionsOverride: override,
 })
 
 describe('assumptionsImpact', () => {
-  it('compte les annonces dont le verdict change, avec la surcharge par annonce conservée', () => {
+  it('compte les annonces dont le verdict change, toutes aux hypothèses de l’espace (lot 19)', () => {
     const listings = [
       listing('1', 200_000),
       listing('2', 130_000),
-      // Surcharge : apport énorme, l'effort ne pèse plus ; le brut décide seul.
-      listing('3', 150_000, { downPayment: 500_000 }),
+      // Lot 19 : une ancienne surcharge par annonce est ignorée par le schéma.
+      listing('3', 125_000, { assumptionsOverride: { downPayment: 500_000 } }),
     ]
+    expect(listings[2]).not.toHaveProperty('assumptionsOverride')
     // L'exemple § 8 (brut 4,09 %, effort −362 €) passe dans la cible avec un
     // seuil à 4 % et un effort admis de 400 € ; les deux autres y sont déjà.
     const relaxed = {

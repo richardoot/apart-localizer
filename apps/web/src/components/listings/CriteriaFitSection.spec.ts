@@ -1,6 +1,7 @@
 /**
- * Lot 14 : « Correspond-elle à ce qu'on cherche ? » dans la synthèse de la
- * fiche. Données fictives ; l'API est doublée.
+ * Lot 14 puis lot 19 : le détail de l'adéquation aux critères, déplié depuis
+ * la ligne de la Synthèse (l'historique daté est dans l'onglet Historique).
+ * Données fictives ; l'API est doublée.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -21,7 +22,6 @@ vi.mock('@/lib/api', async () => {
 
 import CriteriaFitSection from './CriteriaFitSection.vue'
 
-const LISTING = '11111111-1111-4111-8111-111111111111'
 const CRITERIA = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 const OTHER = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 
@@ -92,7 +92,7 @@ async function mountSection(fit: ListingCriteriaFit) {
     defaultOptions: { queries: { retry: false } },
   })
   const wrapper = mount(CriteriaFitSection, {
-    props: { listingId: LISTING, fit },
+    props: { fit },
     global: { plugins: [router, [VueQueryPlugin, { queryClient: client }]] },
   })
   await flushPromises()
@@ -105,27 +105,11 @@ describe('CriteriaFitSection', () => {
     apiMock.searchCriteria.list.mockResolvedValue([
       fakeCriteria({ id: CRITERIA, name: 'Caudéran fictif' }),
     ])
-    apiMock.listings.criteriaFitHistory.mockResolvedValue({
-      listingId: LISTING,
-      items: [
-        {
-          at: '2026-11-05T09:00:00.000Z',
-          what: 'Entrée dans « Caudéran fictif », à confirmer',
-          why: 'Quartier à cheval sur le périmètre (repère replacé)',
-        },
-        { at: '2026-10-30T09:00:00.000Z', what: 'Enregistrée', why: '' },
-      ],
-    })
   })
 
-  it('à confirmer faute d’adresse : explication, « Préciser l’adresse », détail par critère, marges, historique', async () => {
+  it('à confirmer faute d’adresse : explication, « Préciser l’adresse », détail par critère, marges, lien vers l’historique', async () => {
     const wrapper = await mountSection(toConfirm)
-    expect(wrapper.text()).toContain('Correspond-elle à ce qu’on cherche ?')
-    expect(wrapper.text()).toContain(
-      'Meilleur niveau parmi 2 critère(s) actif(s)'
-    )
     const verdict = wrapper.get('[data-testid="fit-verdict"]')
-    expect(verdict.text()).toContain('À confirmer')
     expect(verdict.text()).toContain('pas le repère')
     await wrapper.get('[data-testid="fit-precise"]').trigger('click')
     expect(wrapper.emitted('precise')).toHaveLength(1)
@@ -142,18 +126,15 @@ describe('CriteriaFitSection', () => {
     expect(out.text()).toContain('Hors critères')
     expect(out.text()).toContain('Quartier à 3,1 km du périmètre')
     expect(out.text()).toContain('Ni filtre ni périmètre')
-    const history = wrapper.get('[data-testid="fit-history"]')
-    expect(history.text()).toContain('Entrée dans « Caudéran fictif »')
-    expect(history.text()).toContain('Enregistrée')
+    // Lot 19 : l'historique daté de l'adéquation est dans l'onglet Historique.
+    expect(wrapper.find('[data-testid="fit-history"]').exists()).toBe(false)
+    expect(apiMock.listings.criteriaFitHistory).not.toHaveBeenCalled()
     await wrapper.get('[data-testid="fit-map"]').trigger('click')
-    expect(wrapper.emitted('go')?.[0]).toEqual(['quartier'])
+    await wrapper.get('[data-testid="fit-history-link"]').trigger('click')
+    expect(wrapper.emitted('go')).toEqual([['quartier'], ['historique']])
   })
 
   it('sans critère actif : le dit, propose d’en créer un, sans « Préciser l’adresse »', async () => {
-    apiMock.listings.criteriaFitHistory.mockResolvedValue({
-      listingId: LISTING,
-      items: [],
-    })
     const wrapper = await mountSection({ ...NO_CRITERIA_FIT })
     expect(wrapper.get('[data-testid="fit-verdict"]').text()).toContain(
       'Aucun critère actif'
@@ -166,6 +147,6 @@ describe('CriteriaFitSection', () => {
         .find('router-link-stub')
         .exists()
     ).toBe(true)
-    expect(wrapper.text()).toContain('Aucun changement enregistré')
+    expect(wrapper.find('[data-criteria]').exists()).toBe(false)
   })
 })

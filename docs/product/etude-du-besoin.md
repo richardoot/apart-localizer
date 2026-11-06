@@ -8,7 +8,8 @@ Document rédigé le 2 novembre 2026 à partir de l'artefact Claude « Comparate
 locatives » utilisé aujourd'hui, et de la structure du projet `bankin-analyzer`. Mis à jour le
 3 novembre 2026 : choix NestJS + Prisma + PostGIS confirmé, critères de recherche géographiques
 ajoutés (§ 3.9) ; le 4 novembre 2026 : deux bases de calcul de la fiche, « sur le prix » et
-« tout compris » (P5, lot 9).
+« tout compris » (P5, lot 9) ; le 6 novembre 2026 : une fiche en sept onglets, un par question,
+et l'année, le type de location et les hypothèses réglés pour tout l'espace (lot 19, ADR 0029).
 
 Documents liés : [modèle de calcul](modele-de-calcul.md), [choix techniques](tech-stack.md),
 [feuille de route](roadmap.md), [décisions](../decisions/).
@@ -44,7 +45,8 @@ charges de copropriété annuelles, part non récupérable, taxe foncière, mobi
 **Travaux avant emménagement** : interrupteur, ampleur (rafraîchissement, rénovation, lourde,
 énergétique), durée estimée, postes chiffrés (peinture, sols, cuisine…), notes.
 
-**Phase 2, mise en location** : année de mise en location, type de bail, encadrement des loyers
+**Phase 2, mise en location** : année de mise en location, type de bail (dans l'application,
+réglés pour tout l'espace depuis le lot 19), encadrement des loyers
 (automatique pour Bordeaux), loyer de référence majoré au m², loyer de marché constaté, demande
 locative, règlement de copro, décence, permis de louer, notes. Un verdict « Compatible / Sous
 conditions / Incompatible » agrège des contrôles, dont le calendrier d'interdiction de location
@@ -181,7 +183,7 @@ Détail des formules dans [modele-de-calcul.md](modele-de-calcul.md).
 | # | Besoin | Prio |
 | --- | --- | --- |
 | E1 | Reprise des calculs actuels : coût total, mensualité, rendements brut et net, effort, verdict | M |
-| E2 | Hypothèses globales versionnées, surcharge par annonce (apport, travaux financés, taux négocié) | M |
+| E2 | Hypothèses globales versionnées, valables pour toutes les annonces (la surcharge par annonce, prévue d'abord, est retirée au lot 19 : aucune annonce ne s'en servait ; un taux négocié ou un autre apport passent par un scénario) | M |
 | E3 | Coût d'occupation en phase 1 (mensualité + charges + taxe foncière, comparé au loyer actuel) | S |
 | E4 | Scénarios « et si » sans enregistrement (taux, apport, loyer, durée) depuis l'écran et le MCP | S |
 | E5 | Frais de notaire par barème (droits de mutation, émoluments, débours) et honoraires d'agence à charge acquéreur distingués du net vendeur | S |
@@ -370,7 +372,8 @@ droits de mutation, émoluments par tranches, CSI, débours), vacance, frais fix
 rendement et d'effort, critères retenus pour le prix cible, seuils de décote ; au lot 5 : loyer
 actuel, entretien, dates d'achat et de mise en location, TMI, régime fiscal, nature du meublé,
 horizon, revalorisation, indexation (IRL), frais de revente, taux d'actualisation et paramètres
-fiscaux datés ; versionnées (date d'effet) ; surcharge partielle par annonce.
+fiscaux datés ; au lot 19 : type de location de la phase 2 ; versionnées (date d'effet) ; plus de
+surcharge par annonce depuis le lot 19 (colonne gardée, plus lue).
 
 **Opinion** : annonce, membre, note, texte, date.
 

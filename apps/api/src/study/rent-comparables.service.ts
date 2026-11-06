@@ -17,6 +17,7 @@ import { rentMarket } from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { ListingsService } from '../listings/listings.service'
+import { AssumptionsService } from '../assumptions/assumptions.service'
 import { Prisma } from '../generated/prisma'
 import type { Member } from '../generated/prisma'
 import { toRentComparableDto } from './study.mapper'
@@ -56,7 +57,8 @@ export class RentComparablesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
-    private readonly listings: ListingsService
+    private readonly listings: ListingsService,
+    private readonly assumptions: AssumptionsService
   ) {}
 
   async list(member: Member, listingId: string): Promise<RentComparableList> {
@@ -173,10 +175,14 @@ export class RentComparablesService {
     const item = await this.listings.get(member, listingId)
     const comparables = items ?? (await this.rows(member, listingId))
     const plan = item.listing.rentalPlan
+    // Lot 19 : meublé ou vide selon le type de location de l'espace.
+    const { leaseType } = await this.assumptions.currentValues(
+      member.workspaceId
+    )
     return rentMarket(comparables, {
       listingId,
       surface: item.listing.surface,
-      furnished: (plan?.leaseType ?? 'unfurnished') !== 'unfurnished',
+      furnished: leaseType !== 'unfurnished',
       targetRent: plan?.targetRent ?? null,
       rentCap: item.evaluation.metrics.rentCap,
       at: new Date(),

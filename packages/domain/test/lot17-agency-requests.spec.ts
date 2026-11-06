@@ -993,7 +993,7 @@ describe('journal, notifications et « ce qui a changé »', () => {
     after: { summary: 'Charges annuelles : 1 680 €' },
   }
 
-  it('prévient l’autre membre d’une réponse, vers l’onglet Échanges', () => {
+  it('prévient l’autre membre d’une réponse, vers l’onglet À faire (lot 19)', () => {
     expect(notificationTypeOf(event)).toBe('agency_answer')
     const drafts = notificationsForActivity(event, {
       members: [
@@ -1008,7 +1008,7 @@ describe('journal, notifications et « ce qui a changé »', () => {
         type: 'agency_answer',
         title: "Réponse de l'agence : T2 fictif",
         body: 'Charges annuelles : 1 680 € (enregistrée par Claude (MCP, pour Richard)).',
-        url: '/annonces/l1?onglet=echanges',
+        url: '/annonces/l1?onglet=a-faire',
         listingId: 'l1',
       },
     ])

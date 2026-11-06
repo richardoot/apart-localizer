@@ -101,35 +101,38 @@ describe('date de mise en location et d’acquisition', () => {
     expect(rentalChecks(g, metrics, later).year).toBe(2027)
   })
 
-  it('entrée de l’étude d’après une annonce', () => {
-    const input = studyInputFromListing({
-      price: 200_000,
-      surface: 45,
-      dpeClass: 'C',
-      rentalPlan: {
-        targetRent: 750,
-        year: 2029,
-        leaseType: 'furnished',
-        marketRent: 760,
-        demand: 'medium',
-        coOwnershipAllowsRental: 'yes',
-        decencyCompliant: 'yes',
-        rentalPermitRequired: 'no',
+  it('entrée de l’étude d’après une annonce et les hypothèses de l’espace (lot 19)', () => {
+    const input = studyInputFromListing(
+      {
+        price: 200_000,
+        surface: 45,
+        dpeClass: 'C',
+        rentalPlan: {
+          targetRent: 750,
+          marketRent: 760,
+          demand: 'medium',
+          coOwnershipAllowsRental: 'yes',
+          decencyCompliant: 'yes',
+          rentalPermitRequired: 'no',
+        },
       },
-    })
+      { leaseType: 'furnished' }
+    )
+    // Le type de location et l'année viennent de l'espace, jamais de l'annonce.
     expect(input.leaseType).toBe('furnished')
     expect(input.financials.targetRent).toBe(750)
     expect(input.rental).toEqual({
       dpeClass: 'C',
-      year: 2029,
+      year: null,
       marketRent: 760,
       demand: 'medium',
       coOwnershipAllowsRental: 'yes',
       decencyCompliant: 'yes',
       rentalPermitRequired: 'no',
     })
-    const bare = studyInputFromListing({ price: 100_000 })
+    const bare = studyInputFromListing({ price: 100_000 }, {})
     expect(bare.leaseType).toBe('unfurnished')
+    expect(studyInputFromListing({ price: 1 }, A).leaseType).toBe('unfurnished')
     expect(rentalChecksInputFromListing({ price: 1 })).toEqual({
       dpeClass: null,
       year: null,

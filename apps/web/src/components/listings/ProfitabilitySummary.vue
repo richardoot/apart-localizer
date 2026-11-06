@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { computed } from 'vue'
   import type { ListingMetrics } from '@apart/contracts'
   import type {
     ProfitabilityCheck,
@@ -18,18 +19,23 @@
     VERDICT_FAILURE_LABELS,
     VERDICT_NEAR_MISS_LABELS,
   } from '@/lib/labels'
-  import CostBasisBadge from './CostBasisBadge.vue'
   import VerdictPill from './VerdictPill.vue'
 
   /**
-   * « Est-ce rentable ? » (lot 9) : le loyer retenu, puis rendement brut,
-   * effort et rendement net, chacun avec sa formule en une ligne, le seuil des
-   * hypothèses et son état (`profitabilityChecks` de `domain`), enfin le
-   * verdict et ce qui le fait.
+   * Le rendement (lot 19, onglet Budget ; « Est-ce rentable ? » du lot 9),
+   * compacté : le loyer retenu, puis rendement brut, rendement net, effort
+   * mensuel en location, chacun avec son seuil et son état
+   * (`profitabilityChecks` de `domain` : ✓ atteint, ~ de peu, ✗ en échec),
+   * le TRI à l'horizon s'il est donné, enfin le verdict et ce qui le fait.
    */
-  defineProps<{
+  const props = defineProps<{
     metrics: ListingMetrics
     checks: ProfitabilityCheck[] | null
+    /** TRI à l'horizon (fraction) ; `afterTax` faux quand la TMI manque. */
+    irr?: { value: number | null; afterTax: boolean } | null
+    horizonYears?: number | null
+    /** Le scénario des chiffres (« base », « taux 3 % »). */
+    scenarioLabel?: string | null
   }>()
 
   const INDICATORS: Record<
@@ -41,17 +47,23 @@
       term: 'gross_yield',
       formula: '12 × loyer ÷ coût tout compris',
     },
-    effort: {
-      label: 'Effort mensuel',
-      term: 'effort',
-      formula: 'revenu net ÷ 12 − mensualité',
-    },
     net_yield: {
       label: 'Rendement net',
       term: 'net_yield',
       formula: 'après vacance, taxe foncière, charges et frais',
     },
+    effort: {
+      label: 'Effort mensuel en location',
+      term: 'effort',
+      formula: 'revenu net ÷ 12 − mensualité',
+    },
   }
+  const ORDER: ProfitabilityIndicator[] = ['gross_yield', 'net_yield', 'effort']
+  const ordered = computed(() =>
+    ORDER.map(key => props.checks?.find(c => c.indicator === key)).filter(
+      (c): c is ProfitabilityCheck => c !== undefined
+    )
+  )
 
   function valueOf(check: ProfitabilityCheck): string {
     return check.indicator === 'effort'
@@ -68,19 +80,9 @@
 </script>
 
 <template>
-  <section
-    class="grid content-start gap-3.5 rounded-2xl border border-line bg-surface p-4 text-sm sm:p-5"
-    aria-labelledby="summary-yield-title"
-    data-testid="block-yield"
-  >
-    <header class="flex items-center justify-between gap-2">
-      <h3 id="summary-yield-title" class="font-display text-lg font-bold">
-        Est-ce rentable ?
-      </h3>
-      <CostBasisBadge basis="all_in" />
-    </header>
-    <div class="grid gap-1">
-      <p class="flex items-baseline justify-between gap-3 tabular-nums">
+  <div class="grid gap-3 text-sm" data-testid="block-yield">
+    <div class="grid gap-0.5">
+      <p class="flex flex-wrap items-baseline gap-x-2 tabular-nums">
         <span class="text-muted">Loyer retenu (phase 2)</span>
         <strong data-testid="retained-rent">{{
           formatEurosPerMonth(metrics.rent)
@@ -101,34 +103,39 @@
       </p>
     </div>
 
-    <ul v-if="checks" class="grid gap-2.5" aria-label="Critères de rentabilité">
-      <li
-        v-for="check in checks"
+    <dl
+      v-if="ordered.length || irr"
+      class="grid gap-2 tabular-nums @xl:grid-cols-2 @4xl:grid-cols-4"
+      aria-label="Critères de rentabilité"
+    >
+      <div
+        v-for="check in ordered"
         :key="check.indicator"
-        class="grid grid-cols-[1fr_auto] items-baseline gap-x-3 gap-y-0.5 rounded-xl px-3 py-2.5 tabular-nums"
+        class="grid content-start gap-0.5 rounded-xl px-3 py-2.5"
         :class="PROFITABILITY_STATUS_CLASSES[check.status]"
         :data-indicator="check.indicator"
         :data-status="check.status"
       >
-        <span class="flex items-center gap-1.5 font-semibold">
+        <dt class="flex items-center gap-1.5 text-xs text-fg">
           {{ INDICATORS[check.indicator].label }}
           <DefinitionButton :term="INDICATORS[check.indicator].term" />
-        </span>
-        <strong
+        </dt>
+        <dd
+          class="m-0 font-display text-[22px] leading-tight font-bold"
           :class="PROFITABILITY_STATUS_TEXT[check.status]"
           :data-testid="`value-${check.indicator}`"
-          ><span
+        >
+          <span
             v-if="
               check.indicator === 'net_yield' &&
               (metrics.propertyTaxEstimated ||
                 metrics.nonRecoverableChargesEstimated)
             "
             >≈ </span
-          >{{ valueOf(check) }}</strong
-        >
-        <span class="text-xs">{{ INDICATORS[check.indicator].formula }}</span>
-        <span
-          class="text-right text-xs"
+          >{{ valueOf(check) }}
+        </dd>
+        <dd
+          class="m-0 text-xs"
           :class="
             check.status === 'not_retained'
               ? 'text-fg'
@@ -151,9 +158,37 @@
             {{ thresholdOf(check)
             }}<template v-if="check.status === 'near'"> (de peu)</template>
           </template>
-        </span>
-      </li>
-    </ul>
+        </dd>
+        <dd class="m-0 text-xs text-muted">
+          {{ INDICATORS[check.indicator].formula }}
+        </dd>
+      </div>
+      <div
+        v-if="irr"
+        class="grid content-start gap-0.5 rounded-xl bg-surface-2 px-3 py-2.5"
+        data-testid="irr"
+      >
+        <dt class="flex items-center gap-1.5 text-xs text-fg">
+          TRI {{ irr.afterTax ? 'après impôts' : 'avant impôts'
+          }}<template v-if="horizonYears"> à {{ horizonYears }} ans</template
+          ><template v-if="scenarioLabel"> · {{ scenarioLabel }}</template>
+          <DefinitionButton term="irr" />
+        </dt>
+        <!-- Un TRI négatif (on perd de l'argent) ne se dit pas en vert. -->
+        <dd
+          class="m-0 font-display text-[22px] leading-tight font-bold"
+          :class="
+            irr.value !== null && irr.value < 0 ? 'text-bad' : 'text-accent'
+          "
+          data-testid="value-irr"
+        >
+          {{ irr.value === null ? '—' : formatRate(irr.value) }}
+        </dd>
+        <dd v-if="!irr.afterTax" class="m-0 text-xs text-muted">
+          TMI à renseigner dans les hypothèses pour l’après impôts
+        </dd>
+      </div>
+    </dl>
 
     <p
       class="flex flex-wrap items-center gap-1.5 text-sm"
@@ -173,5 +208,5 @@
         }}.
       </span>
     </p>
-  </section>
+  </div>
 </template>

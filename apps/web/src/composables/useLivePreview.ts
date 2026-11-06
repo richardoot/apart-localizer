@@ -11,9 +11,9 @@ import type {
 import {
   compute,
   financialsFromListing,
-  mergeAssumptions,
   negotiationBrief,
   rentalChecks,
+  rentalChecksInputFromListing,
   targetPrice,
 } from '@apart/domain'
 import { PreviewInputSchema, formToRawInput } from '@/lib/listing-form'
@@ -30,7 +30,8 @@ export interface LivePreview {
 /**
  * L'aperçu en direct du formulaire : à chaque frappe, le formulaire devient
  * une annonce hypothétique et passe par `@apart/domain`, exactement comme
- * l'API le fera à l'enregistrement. Rien n'est appelé sur le réseau.
+ * l'API le fera à l'enregistrement, avec les hypothèses de l'espace (lot 19 :
+ * plus de surcharge par annonce). Rien n'est appelé sur le réseau.
  */
 export function previewFromForm(
   form: ListingForm,
@@ -58,7 +59,7 @@ export function previewFromForm(
     }
   }
   const listing = parsed.data
-  const assumptions = mergeAssumptions(base, listing.assumptionsOverride)
+  const assumptions = base
   // Le prix médian DVF enregistré nourrit le critère « marché », comme côté serveur.
   const financials = financialsFromListing(
     { ...listing, openDataContext, fieldSources },
@@ -67,17 +68,7 @@ export function previewFromForm(
   )
   const metrics = compute(financials, assumptions)
   const rental = rentalChecks(
-    {
-      dpeClass: listing.dpeClass,
-      year: listing.rentalPlan?.year ?? null,
-      marketRent: listing.rentalPlan?.marketRent ?? null,
-      demand: listing.rentalPlan?.demand ?? null,
-      coOwnershipAllowsRental:
-        listing.rentalPlan?.coOwnershipAllowsRental ?? 'unknown',
-      decencyCompliant: listing.rentalPlan?.decencyCompliant ?? 'unknown',
-      rentalPermitRequired:
-        listing.rentalPlan?.rentalPermitRequired ?? 'unknown',
-    },
+    rentalChecksInputFromListing(listing),
     metrics,
     assumptions
   )

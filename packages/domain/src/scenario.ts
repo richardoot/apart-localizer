@@ -70,7 +70,7 @@ export function applyScenario(
   }
   const assumptions = mergeAssumptions(a, overrides.assumptions ?? null)
   // Une date ou une année de mise en location du scénario l'emporte sur
-  // l'année de la phase 2 de l'annonce.
+  // celle des hypothèses de l'espace.
   const scenarioYear =
     overrides.assumptions?.rentalStartDate != null
       ? yearOf(overrides.assumptions.rentalStartDate)
@@ -82,7 +82,10 @@ export function applyScenario(
         scenarioYear !== null
           ? { ...input.rental, year: scenarioYear }
           : input.rental,
-      leaseType: overrides.leaseType ?? input.leaseType,
+      leaseType:
+        overrides.leaseType ??
+        overrides.assumptions?.leaseType ??
+        input.leaseType,
     },
     assumptions,
   }

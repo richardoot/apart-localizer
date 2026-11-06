@@ -9,7 +9,7 @@ import type {
   ScenarioInputRaw,
   ScenarioUpdate,
 } from '@apart/contracts'
-import { mergeAssumptions, studyInputFromListing } from '@apart/domain'
+import { studyInputFromListing } from '@apart/domain'
 import type { StudyInput } from '@apart/domain'
 import { api } from '@/lib/api'
 
@@ -22,8 +22,8 @@ export const studyKeys = {
 /**
  * L'entrée de l'étude d'une annonce, calculée dans le navigateur par
  * `domain` exactement comme l'API : l'annonce et les hypothèses de l'espace
- * surchargées par celles de l'annonce. Null tant que les hypothèses ne sont
- * pas chargées.
+ * (dont l'année et le type de location, lot 19). Null tant que les
+ * hypothèses ne sont pas chargées.
  */
 export function useStudyInput(
   listing: MaybeRef<Listing | null | undefined>,
@@ -35,8 +35,8 @@ export function useStudyInput(
       const a = unref(base)
       if (!l || !a) return null
       return {
-        input: studyInputFromListing(l),
-        assumptions: mergeAssumptions(a, l.assumptionsOverride),
+        input: studyInputFromListing(l, a),
+        assumptions: a,
       }
     }
   )

@@ -22,7 +22,6 @@ import type {
   ListingCheckOutcome,
   ListingObserved,
   ListingQuestionField,
-  LeaseType,
   ListingInput,
   ListingLinkOrigin,
   ListingPortal,
@@ -330,7 +329,6 @@ interface ListingSpec {
   annualCharges: number
   propertyTax: number
   targetRent: number
-  leaseType?: LeaseType
   demand?: RentalDemand
   furniture?: number
   renovation?: {
@@ -512,7 +510,6 @@ const SPECS: ListingSpec[] = [
     annualCharges: 700,
     propertyTax: 450,
     targetRent: 560,
-    leaseType: 'furnished',
     furniture: 3000,
     renovation: {
       level: 'renovation',
@@ -1356,8 +1353,6 @@ function buildListing(
         }
       : null,
     rentalPlan: {
-      year: 2028,
-      leaseType: spec.leaseType ?? 'unfurnished',
       targetRent: spec.targetRent,
       demand: spec.demand ?? null,
     },

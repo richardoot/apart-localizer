@@ -51,14 +51,16 @@ export class ComplianceService {
       this.georisques.report(listing.location.point),
     ])
     return complianceReport(
-      complianceInputFromListing(listing, ctx.item.evaluation.metrics),
+      complianceInputFromListing(
+        listing,
+        ctx.item.evaluation.metrics,
+        ctx.assumptions
+      ),
       rules,
       georisques,
       {
-        rentalStartDate: rentalStartDate(
-          listing.rentalPlan?.year ?? null,
-          ctx.assumptions
-        ),
+        // Lot 19 : l'année et le type de location de l'espace.
+        rentalStartDate: rentalStartDate(null, ctx.assumptions),
         at: ctx.at,
       }
     )

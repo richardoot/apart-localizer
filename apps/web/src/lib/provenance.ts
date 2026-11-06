@@ -54,7 +54,7 @@ export function confidencePercent(confidence: number | undefined): string {
 
 /** La clé de `fieldSources` d'un champ du formulaire (racine, ou `location.x`, `renovation.x`...). */
 export type FormFieldPath =
-  | Exclude<keyof ListingForm, 'renovation' | 'rentalPlan' | 'overrides'>
+  | Exclude<keyof ListingForm, 'renovation' | 'rentalPlan'>
   | `renovation.${keyof ListingForm['renovation']}`
   | `rentalPlan.${keyof ListingForm['rentalPlan']}`
 
@@ -92,8 +92,6 @@ export function changedFormPaths(
       const a = before[key] as Record<string, unknown>
       const b = after[key] as Record<string, unknown>
       for (const sub of Object.keys(b)) compare(`${key}.${sub}`, a[sub], b[sub])
-    } else if (key === 'overrides') {
-      compare('overrides', before.overrides, after.overrides)
     } else {
       compare(key, before[key], after[key])
     }

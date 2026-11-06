@@ -2,6 +2,9 @@
   import { computed } from 'vue'
   import DefinitionButton from '@/components/ui/DefinitionButton.vue'
   import { useAssumptionsDraftContext } from '@/composables/useAssumptionsDraft'
+  import { LEASE_TYPE_LABELS } from '@/lib/labels'
+  import { LEASE_TYPES } from '@/lib/assumptions-form'
+  import SelectField from './SelectField.vue'
   import UnitField from './UnitField.vue'
 
   /**
@@ -9,11 +12,17 @@
    * (date d'achat, loyer actuel, entretien) puis phase 2 « Vous le louez »
    * (date de mise en location, vacance, frais fixes). L'année de mise en
    * location par défaut est rappelée sous la date et se change à la demande.
+   * Lot 19 : l'année et le type de location valent pour toutes les annonces
+   * de l'espace (la fiche ne les règle plus).
    */
   const { form, draft, changeOf, errorOf, openPanels } =
     useAssumptionsDraftContext()
 
   const defaultYear = computed(() => draft.value.rentalYear ?? '—')
+  const LEASE_OPTIONS = LEASE_TYPES.map(value => ({
+    value,
+    label: LEASE_TYPE_LABELS[value],
+  }))
 </script>
 
 <template>
@@ -118,12 +127,20 @@
               v-model="form.rentalYear"
               label="Année de mise en location par défaut"
               inputmode="numeric"
-              hint="utilisée quand ni l'annonce ni la date ci-dessus ne fixent la mise en location"
+              hint="pour toutes les annonces, quand la date ci-dessus n'est pas renseignée"
               :change="changeOf('rentalYear')"
               :error="errorOf('rentalYear')"
             />
           </div>
         </div>
+        <SelectField
+          id="h-lease-type"
+          v-model="form.leaseType"
+          label="Type de location"
+          :options="LEASE_OPTIONS"
+          hint="pour toutes les annonces : plafond d’encadrement, loyers comparables, régime fiscal"
+          :change="changeOf('leaseType')"
+        />
         <UnitField
           id="h-vacancy"
           v-model="form.vacancyMonths"

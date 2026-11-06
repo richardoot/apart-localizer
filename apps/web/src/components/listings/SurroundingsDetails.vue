@@ -22,11 +22,21 @@
    * d'oiseau calculées par PostGIS, règles de `domain`). Une source non
    * importée s'affiche « non disponible ».
    */
-  const props = defineProps<{
-    surroundings: Surroundings
-    /** Lot 12 : d'où partent les distances quand le repère est approché. */
-    approximation?: LocationApproximation | null
-  }>()
+  const props = withDefaults(
+    defineProps<{
+      surroundings: Surroundings
+      /** Lot 12 : d'où partent les distances quand le repère est approché. */
+      approximation?: LocationApproximation | null
+      /**
+       * Lot 19 : une seule partie (tuile de l'onglet Quartier) : le quartier,
+       * les drives, ou le sport (piste et Fitness Park) ; tout par défaut.
+       */
+      part?: 'all' | 'neighbourhood' | 'drives' | 'sport'
+    }>(),
+    { approximation: null, part: 'all' }
+  )
+  const show = (part: 'neighbourhood' | 'drives' | 'sport'): boolean =>
+    props.part === 'all' || props.part === part
 
   /** « ≈ 1,2 km » depuis un repère approché (lot 12), « 1,2 km » sinon. */
   function distance(
@@ -92,14 +102,25 @@
 
 <template>
   <div class="grid gap-2 text-sm" data-testid="surroundings">
-    <h4 class="text-xs font-medium text-muted">
+    <h4 v-if="part === 'all'" class="text-xs font-medium text-muted">
       Quartier et équipements (à vol d’oiseau<template
         v-if="approximation?.approximate"
         >, ≈ depuis le {{ approximation.origin }}</template
       >)
     </h4>
+    <p
+      v-else-if="part !== 'neighbourhood' && approximation?.approximate"
+      class="text-xs text-muted"
+      data-testid="surroundings-approximate"
+    >
+      Distances ≈ depuis le {{ approximation.origin }}.
+    </p>
 
-    <div class="grid gap-0.5" data-testid="surroundings-neighbourhood">
+    <div
+      v-if="show('neighbourhood')"
+      class="grid gap-0.5"
+      data-testid="surroundings-neighbourhood"
+    >
       <p v-if="n.value">
         Quartier :
         <strong>{{ n.value.name }}</strong>
@@ -127,7 +148,11 @@
       </p>
     </div>
 
-    <div class="grid gap-0.5" data-testid="surroundings-track">
+    <div
+      v-if="show('sport')"
+      class="grid gap-0.5"
+      data-testid="surroundings-track"
+    >
       <p v-if="surroundings.athleticsTrack.nearest">
         Piste d’athlétisme la plus proche :
         <strong>{{ surroundings.athleticsTrack.nearest.name }}</strong>
@@ -152,7 +177,11 @@
       </p>
     </div>
 
-    <div class="grid gap-0.5" data-testid="surroundings-drives">
+    <div
+      v-if="show('drives')"
+      class="grid gap-0.5"
+      data-testid="surroundings-drives"
+    >
       <p class="text-xs font-medium text-muted">Supermarchés avec drive</p>
       <template v-if="drives.status === 'ok'">
         <ul class="grid gap-0.5">
@@ -204,7 +233,11 @@
       <p v-else class="text-muted">{{ missing(drives) }}</p>
     </div>
 
-    <div class="grid gap-0.5" data-testid="surroundings-fitness">
+    <div
+      v-if="show('sport')"
+      class="grid gap-0.5"
+      data-testid="surroundings-fitness"
+    >
       <p v-if="surroundings.fitnessPark.nearest">
         Fitness Park le plus proche :
         <strong>{{ surroundings.fitnessPark.nearest.name }}</strong>
@@ -226,10 +259,12 @@
       </p>
     </div>
 
-    <p class="text-xs text-muted">
+    <p v-if="part !== 'neighbourhood'" class="text-xs text-muted">
       Distances à vol d’oiseau (calculées sur la carte), pas des temps de
-      trajet. Drive : signalé par OpenStreetMap, ou « à vérifier » si la donnée
-      est ambiguë ; jamais supposé d’après l’enseigne.
+      trajet.<template v-if="show('drives')">
+        Drive : signalé par OpenStreetMap, ou « à vérifier » si la donnée est
+        ambiguë ; jamais supposé d’après l’enseigne.</template
+      >
     </p>
   </div>
 </template>

@@ -66,8 +66,19 @@
     }
   }
 
+  /**
+   * Lot 19 : une suppression se confirme dans la carte de la visite, jamais
+   * par `window.confirm`.
+   */
+  const confirming = ref<{ visitId: string; photoId: string | null } | null>(
+    null
+  )
+  const isConfirming = (visitId: string, photoId: string | null = null) =>
+    confirming.value?.visitId === visitId &&
+    confirming.value.photoId === photoId
+
   async function removeVisit(visit: Visit): Promise<void> {
-    if (!window.confirm('Supprimer cette visite et vos photos ?')) return
+    confirming.value = null
     failure.value = null
     try {
       await visits.remove.mutateAsync(visit.id)
@@ -77,7 +88,7 @@
   }
 
   async function removePhoto(visitId: string, photoId: string): Promise<void> {
-    if (!window.confirm('Supprimer cette photo ?')) return
+    confirming.value = null
     failure.value = null
     try {
       await visits.removePhoto.mutateAsync({ visitId, photoId })
@@ -269,8 +280,10 @@
     <ul v-else class="grid gap-3">
       <li
         v-for="visit in visits.data.value ?? []"
+        :id="`visit-${visit.id}`"
         :key="visit.id"
-        class="grid gap-2 rounded-xl border border-line px-3 py-3"
+        tabindex="-1"
+        class="grid scroll-mt-16 gap-2 rounded-xl border border-line bg-surface px-3 py-3 focus-visible:outline-2 focus-visible:outline-accent"
         data-testid="visit"
       >
         <div class="flex flex-wrap items-baseline gap-2">
@@ -320,14 +333,37 @@
             <button
               v-if="photo.uploadedById === meId"
               type="button"
-              class="absolute top-1 right-1 rounded-full bg-surface px-1.5 text-xs text-muted shadow hover:text-bad"
+              class="absolute top-1 right-1 inline-flex size-8 items-center justify-center rounded-full bg-surface text-xs text-muted shadow hover:text-bad"
               aria-label="Supprimer la photo"
-              @click="removePhoto(visit.id, photo.id)"
+              @click="confirming = { visitId: visit.id, photoId: photo.id }"
             >
               ✕
             </button>
           </li>
         </ul>
+        <div
+          v-if="confirming?.visitId === visit.id && confirming.photoId !== null"
+          class="flex flex-wrap items-center gap-2 rounded-lg bg-bad-soft px-3 py-2 text-sm"
+          role="alert"
+          data-testid="photo-remove-confirm"
+        >
+          <span class="flex-1">Supprimer cette photo ?</span>
+          <button
+            type="button"
+            class="inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm sm:min-h-9"
+            @click="confirming = null"
+          >
+            Garder
+          </button>
+          <button
+            type="button"
+            class="inline-flex min-h-11 items-center rounded-lg bg-bad px-3 text-sm font-medium text-surface sm:min-h-9"
+            data-testid="photo-remove-yes"
+            @click="removePhoto(visit.id, confirming.photoId)"
+          >
+            Supprimer la photo
+          </button>
+        </div>
         <div class="flex flex-wrap items-center gap-2 text-sm">
           <label
             class="cursor-pointer rounded-lg border border-line px-3 py-1 hover:bg-surface-2"
@@ -351,9 +387,33 @@
             Marquer faite
           </button>
           <button
-            v-if="visit.createdById === meId"
+            v-if="visit.createdById === meId && !isConfirming(visit.id)"
             type="button"
-            class="ml-auto text-xs text-muted hover:text-bad"
+            class="ml-auto inline-flex min-h-11 items-center text-xs text-muted hover:text-bad sm:min-h-0"
+            data-testid="visit-remove"
+            @click="confirming = { visitId: visit.id, photoId: null }"
+          >
+            Supprimer la visite
+          </button>
+        </div>
+        <div
+          v-if="isConfirming(visit.id)"
+          class="flex flex-wrap items-center gap-2 rounded-lg bg-bad-soft px-3 py-2 text-sm"
+          role="alert"
+          data-testid="visit-remove-confirm"
+        >
+          <span class="flex-1">Supprimer cette visite et vos photos ?</span>
+          <button
+            type="button"
+            class="inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm sm:min-h-9"
+            @click="confirming = null"
+          >
+            Garder
+          </button>
+          <button
+            type="button"
+            class="inline-flex min-h-11 items-center rounded-lg bg-bad px-3 text-sm font-medium text-surface sm:min-h-9"
+            data-testid="visit-remove-yes"
             @click="removeVisit(visit)"
           >
             Supprimer la visite

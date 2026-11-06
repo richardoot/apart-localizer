@@ -1454,7 +1454,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     {
       title: 'Modifier les hypothèses',
       description:
-        "Enregistre une nouvelle version des hypothèses de l'espace à partir des champs modifiés seulement (`values` : taux en fractions, apport en euros, seuils, marges, critères du prix cible, seuils de décote, mode et barème des frais de notaire…) ; les autres champs gardent leur valeur en vigueur. " +
+        "Enregistre une nouvelle version des hypothèses de l'espace à partir des champs modifiés seulement (`values` : taux en fractions, apport en euros, seuils, marges, critères du prix cible, seuils de décote, mode et barème des frais de notaire, année `rentalYear` et type `leaseType` de la mise en location…) ; les autres champs gardent leur valeur en vigueur. Toutes les annonces se calculent avec ces hypothèses (lot 19 : plus d'hypothèses propres à une annonce, ni d'année ou de type de location par annonce). " +
         '`expectedVersion` (identifiant rendu par get_assumptions) est le garde-fou optimiste : refus si une autre version a été enregistrée depuis. La réponse donne l’impact : annonces actives dont le verdict change, et (lot 14) l’adéquation aux critères recalculée quand un critère filtre le verdict (`criteriaFit`). Journalisé. Portée listings:write.',
       inputSchema: McpSetAssumptionsInputSchema,
       annotations: {

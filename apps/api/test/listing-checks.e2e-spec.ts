@@ -240,7 +240,7 @@ describe('Lot 15 : vérifications des annonces (e2e)', () => {
     expect(
       journal.body.items[0].changes.map((c: { label: string }) => c.label)
     ).toEqual(['Prix', 'Charges annuelles', 'Mise à jour sur le portail'])
-    // Chloé est prévenue, vers l'onglet Suivi.
+    // Chloé est prévenue, vers l'onglet Historique (lot 19).
     const notifications = await ctx.prisma.notification.findMany({
       where: { recipientId: chloeId, type: 'listing_checked' },
     })
@@ -253,7 +253,7 @@ describe('Lot 15 : vérifications des annonces (e2e)', () => {
     expect(notifications[0]).toMatchObject({
       type: 'listing_checked',
       title: 'Mise à jour : T2 fictif Talence',
-      url: `/annonces/${id}?onglet=suivi`,
+      url: `/annonces/${id}?onglet=historique`,
     })
     // « Ce qui a changé » pour Chloé : un changement de prix.
     const whatsNew = await api()

@@ -334,6 +334,52 @@ describe('Données ouvertes (e2e)', () => {
     expect((market.body as MarketContext).stats?.count).toBe(6)
   })
 
+  it('lot 19 : le type de location de l’espace fait le plafond, recalculé quand il change', async () => {
+    const { listing } = await create()
+    // Location vide (défaut de l'espace) : majoré fictif 13 €/m².
+    expect(listing.rentalPlan.referenceRentPerM2).toBe(13)
+    const current = await request(ctx.server)
+      .get('/assumptions')
+      .set(ctx.auth(richard))
+      .expect(200)
+    expect(current.body.values.leaseType).toBe('unfurnished')
+    await request(ctx.server)
+      .put('/assumptions')
+      .set(ctx.auth(richard))
+      .send({ values: { ...current.body.values, leaseType: 'furnished' } })
+      .expect(200)
+    // Meublé : le plafond posé d'office suit (14 €/m²), sans toucher la fiche.
+    const after = await request(ctx.server)
+      .get(`/listings/${listing.id}`)
+      .set(ctx.auth(richard))
+      .expect(200)
+    expect(after.body.listing.rentalPlan.referenceRentPerM2).toBe(14)
+    expect(after.body.evaluation.metrics.rentCap).toBe(14 * 45)
+    const context = await request(ctx.server)
+      .get(`/listings/${listing.id}/context`)
+      .set(ctx.auth(richard))
+      .expect(200)
+    expect((context.body as ListingContext).rentControl.furnished).toBe(true)
+    // Un changement qui ne touche ni l'année ni le type ne relance rien.
+    const before = await ctx.prisma.activityLog.count({
+      where: { listingId: listing.id, action: 'listing.enriched' },
+    })
+    const now = await request(ctx.server)
+      .get('/assumptions')
+      .set(ctx.auth(richard))
+      .expect(200)
+    await request(ctx.server)
+      .put('/assumptions')
+      .set(ctx.auth(richard))
+      .send({ values: { ...now.body.values, interestRate: 0.033 } })
+      .expect(200)
+    expect(
+      await ctx.prisma.activityLog.count({
+        where: { listingId: listing.id, action: 'listing.enriched' },
+      })
+    ).toBe(before)
+  })
+
   it('une saisie manuelle du loyer de référence l’emporte sur le plafond automatique', async () => {
     const { listing } = await create()
     const patched = await request(ctx.server)

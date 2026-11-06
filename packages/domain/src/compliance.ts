@@ -54,7 +54,6 @@ export interface ComplianceListingLike {
   heatingType?: string | null
   location?: { inseeCode?: string | null; commune?: string | null } | null
   rentalPlan?: {
-    leaseType?: LeaseType | null
     targetRent?: number | null
     coOwnershipAllowsRental?: TriState | null
     decencyCompliant?: TriState | null
@@ -62,10 +61,15 @@ export interface ComplianceListingLike {
   } | null
 }
 
-/** L'entrée de la checklist d'après une annonce et ses indicateurs (encadrement, plafond). */
+/**
+ * L'entrée de la checklist d'après une annonce, ses indicateurs (encadrement,
+ * plafond) et les hypothèses de l'espace : le type de location vient des
+ * hypothèses depuis le lot 19 (vide quand elles ne le disent pas).
+ */
 export function complianceInputFromListing(
   listing: ComplianceListingLike,
-  metrics: { rentControlled: boolean; rentCap: number | null }
+  metrics: { rentControlled: boolean; rentCap: number | null },
+  assumptions: { leaseType?: LeaseType | null }
 ): ComplianceInput {
   const plan = listing.rentalPlan
   return {
@@ -74,7 +78,7 @@ export function complianceInputFromListing(
     dpeClass: listing.dpeClass ?? null,
     dpeDate: listing.dpeDate ?? null,
     constructionYear: listing.constructionYear ?? null,
-    leaseType: plan?.leaseType ?? 'unfurnished',
+    leaseType: assumptions.leaseType ?? 'unfurnished',
     inseeCode: listing.location?.inseeCode ?? null,
     commune: listing.location?.commune ?? null,
     surface: listing.surface ?? null,

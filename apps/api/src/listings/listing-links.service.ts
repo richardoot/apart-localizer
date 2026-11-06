@@ -104,7 +104,7 @@ function asMember(actor: LinkActor): Member {
  * corriger le portail ou l'identifiant, retirer (jamais le dernier lien),
  * détacher un lien rattaché d'office. Le prix de la fiche devient le plus bas
  * des liens en ligne (proposé quand il a été saisi à la main), un écart entre
- * portails est noté dans « Mises à jour ». Chaque écriture est journalisée
+ * portails est noté dans l'Historique. Chaque écriture est journalisée
  * dans sa transaction ; le serveur ne joint jamais un portail.
  */
 @Injectable()

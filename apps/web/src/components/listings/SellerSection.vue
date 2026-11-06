@@ -174,10 +174,10 @@
             <button
               type="button"
               class="text-accent underline underline-offset-2"
-              data-action="go-exchanges"
-              @click="emit('go', 'echanges')"
+              data-action="go-todo"
+              @click="emit('go', 'a-faire')"
             >
-              l’onglet Échanges</button
+              l’onglet À faire</button
             >.
           </span>
         </div>

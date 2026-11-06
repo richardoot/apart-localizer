@@ -73,7 +73,7 @@ elles sont protégées.
   nom de l'agence, lu et écrit sur l'annonce depuis le lot 18, interlocuteur, e-mail, téléphone, lien de la messagerie du portail, canal
   préféré) est une donnée personnelle d'un tiers : seulement ce que l'annonce donne, saisi par un
   membre ou complété par Claude (lu sur la page de l'annonce), modifiable et effaçable dans
-  l'onglet « Échanges » de la fiche (`DELETE /listings/:id/contact`), jamais vidé ni supprimé par
+  l'onglet « À faire » de la fiche (`DELETE /listings/:id/contact` ; « Échanges » jusqu'au lot 18), jamais vidé ni supprimé par
   le MCP. Le journal d'activité n'en garde que les noms des champs changés (« a mis à jour le
   contact de l'annonceur (e-mail, téléphone) »), jamais les valeurs : effacé, il l'est vraiment.
   Une **demande** garde le nom affiché du destinataire (« Agence [Exemple] »), l'objet et le texte
@@ -133,7 +133,7 @@ elles sont protégées.
   invitation annulée, refusée ou expirée s'efface de même (elle n'a rien écrit).
 - **Rectification** : tout se modifie dans l'application ; les avis et tâches de chacun restent
   à leur auteur.
-- **Tiers (lot 17)** : le contact d'un annonceur s'efface depuis l'onglet « Échanges » de la
+- **Tiers (lot 17)** : le contact d'un annonceur s'efface depuis l'onglet « À faire » (lot 19) de la
   fiche (bouton « Effacer ») ; les demandes déjà envoyées gardent le nom affiché du destinataire
   et le texte envoyé, et partent avec l'annonce. Lot 18 : le nom de l'agence reste sur l'annonce
   (« Qui la vend », modifiable) ; l'ancienne colonne `listing_contacts.agency_name`, gelée (plus lue),

@@ -53,11 +53,19 @@ describe('HistorySection', () => {
     expect(wrapper.emitted('record')).toEqual([[185_000]])
   })
 
-  it('ajoute une offre avec canal, date et commentaire', async () => {
+  it('prépare une offre avec canal, date et commentaire', async () => {
     const wrapper = mount(HistorySection, {
       props: { events: [], offers: [], currentPrice: 200_000 },
     })
-    const form = wrapper.get('form[aria-label="Nouvelle offre"]')
+    expect(wrapper.get('h2').text()).toBe('Prix et offres')
+    expect(wrapper.text()).toContain('Aucun prix ni aucune offre enregistrés.')
+    const form = wrapper.get('form[aria-label="Préparer une offre"]')
+    // Sans entrée financière, aucun montant n'est évalué.
+    await form
+      .get('input[aria-label="Montant de l\'offre"]')
+      .setValue('150 000')
+    expect(form.find('[data-testid="offer-outcome"]').exists()).toBe(false)
+    await form.get('input[aria-label="Montant de l\'offre"]').setValue('')
     await form.trigger('submit')
     expect(form.get('[role="alert"]').text()).toContain('montant')
     await form

@@ -24,7 +24,6 @@ import {
   criteriaFit,
   criteriaFitHistory,
   fitTransition,
-  mergeAssumptions,
 } from '@apart/domain'
 import type {
   CriteriaFitCandidate,
@@ -274,11 +273,7 @@ export class CriteriaMatchService {
     }
     return rows.map(row => {
       const listing = toListingDto(row)
-      const evaluation = evaluateListing(
-        listing,
-        mergeAssumptions(base, listing.assumptionsOverride),
-        options.at
-      )
+      const evaluation = evaluateListing(listing, base, options.at)
       const item = { listing, evaluation }
       const candidate = criteriaCandidateOf(item)
       const fits = new Map<string, CriteriaFitResult>()

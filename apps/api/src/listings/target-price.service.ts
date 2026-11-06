@@ -60,10 +60,7 @@ export class TargetPriceService {
   ): Promise<TargetPriceReport> {
     const stored = await this.listings.get(member, id)
     const assumptions = mergeAssumptions(
-      await this.assumptions.forListing(
-        member.workspaceId,
-        stored.listing.assumptionsOverride
-      ),
+      await this.assumptions.currentValues(member.workspaceId),
       options.scenario ?? null
     )
     const item: EvaluatedListing = options.scenario
@@ -154,10 +151,7 @@ export class TargetPriceService {
     request: SensitivityRequest
   ): Promise<SensitivityGrid> {
     const item = await this.listings.get(member, id)
-    const assumptions = await this.assumptions.forListing(
-      member.workspaceId,
-      item.listing.assumptionsOverride
-    )
+    const assumptions = await this.assumptions.currentValues(member.workspaceId)
     return this.grid(item, assumptions, request)
   }
 

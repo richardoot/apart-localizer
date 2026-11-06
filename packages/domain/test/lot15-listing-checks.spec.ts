@@ -989,7 +989,7 @@ describe('journal, « ce qui a changé » et notifications', () => {
       recipientId: CHLOE,
       type: 'listing_checked',
       title: 'Mise à jour : T2 Talence',
-      url: `/annonces/${L1}?onglet=suivi`,
+      url: `/annonces/${L1}?onglet=historique`,
     })
     expect(n(drafts[0]?.body)).toBe(
       'Prix 215 000 € → 205 000 € · Charges annuelles 1 320 € → 1 440 € (vérifiée par Claude (MCP, pour Richard)).'

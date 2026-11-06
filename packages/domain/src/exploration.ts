@@ -792,7 +792,7 @@ export function knownLineText(
   const summary = check.summary.charAt(0).toLowerCase() + check.summary.slice(1)
   if (applied === false) return `Même lien : ${summary}, non appliqué`
   return applied
-    ? `Même lien : ${summary}, appliqué dans « Mises à jour »`
+    ? `Même lien : ${summary}, appliqué, noté dans l’Historique`
     : `Même lien : ${summary}, à appliquer (vérification)`
 }
 
@@ -1133,7 +1133,8 @@ export function portalBilan(
     const n = (outcome: ExplorationOutcome) =>
       own.filter(l => l.outcome === outcome).length
     const updated = own.filter(
-      l => l.outcome === 'known' && l.why.includes('appliqué dans')
+      // Lot 19 : « appliqué, noté dans l’Historique » ; « appliqué dans » avant.
+      l => l.outcome === 'known' && /appliqué(, noté| dans) /.test(l.why)
     ).length
     const parts = [
       n('new') ? `${n('new')} à valider` : null,

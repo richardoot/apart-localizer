@@ -287,7 +287,7 @@ export class AgencyRequestsService {
   // Lectures
   // -------------------------------------------------------------------------
 
-  /** L'onglet « Échanges » d'une annonce. */
+  /** Les échanges avec l'annonceur d'une annonce (onglet « À faire » de la fiche, lot 19). */
   async exchanges(
     member: Member,
     listingId: string

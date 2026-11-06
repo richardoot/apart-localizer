@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { CriteriaFitRefreshSummarySchema } from './criteria-fit.js'
 import {
+  LeaseTypeSchema,
   NotaryModeSchema,
   TargetCriterionSchema,
   VerdictSchema,
@@ -202,8 +203,11 @@ export const AssumptionsSchema = z.object({
     .max(2100)
     .default(2028)
     .describe(
-      'Année de mise en location par défaut (bascule phase 1 → phase 2)'
+      'Année de mise en location (bascule phase 1 → phase 2), pour toutes les annonces de l’espace depuis le lot 19'
     ),
+  leaseType: LeaseTypeSchema.default('unfurnished').describe(
+    'Type de location de la phase 2 pour toutes les annonces de l’espace : vide (défaut), meublé ou colocation (lot 19 ; une version antérieure sans ce champ se lit « vide »)'
+  ),
   currentRent: z
     .number()
     .min(0)
@@ -303,12 +307,17 @@ export type Assumptions = z.infer<typeof AssumptionsSchema>
 /** Entrée avant application des valeurs par défaut. */
 export type AssumptionsInput = z.input<typeof AssumptionsSchema>
 
-/** Surcharge partielle par annonce : apport différent, taux négocié, etc. */
+/**
+ * Surcharge partielle des hypothèses : un scénario « et si » (taux négocié,
+ * apport différent…), un aperçu, ou une mise à jour partielle de l'espace
+ * par le MCP. Depuis le lot 19, une annonce n'a plus d'hypothèses propres :
+ * toutes les annonces se calculent avec celles de l'espace.
+ */
 export const AssumptionsOverrideSchema = z
   .object(withoutDefaults(AssumptionsSchema.shape))
   .partial()
   .describe(
-    "Surcharge partielle des hypothèses pour une annonce : seuls les champs présents remplacent les hypothèses de l'espace"
+    "Surcharge partielle des hypothèses (scénario, aperçu) : seuls les champs présents remplacent les hypothèses de l'espace"
   )
 export type AssumptionsOverride = z.infer<typeof AssumptionsOverrideSchema>
 

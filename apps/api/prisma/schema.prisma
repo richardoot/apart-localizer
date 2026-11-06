@@ -572,7 +572,10 @@ model Listing {
   discardReason String?       @map("discard_reason")
   discardedAt   DateTime?     @map("discarded_at") @db.Timestamptz(6)
 
-  // Surcharge partielle des hypothèses (JSON validé par AssumptionsOverrideSchema)
+  // Surcharge partielle des hypothèses par annonce : n'est plus lue ni écrite
+  // depuis le lot 19 (ADR 0029, toutes les annonces se calculent avec les
+  // hypothèses de l'espace) ; colonne gardée pour ne rien perdre, à supprimer
+  // plus tard.
   assumptionsOverride Json? @map("assumptions_override")
 
   // Dernier enrichissement open data (JSON validé par ListingOpenDataContextSchema)
@@ -692,11 +695,16 @@ model RenovationItem {
 /// Phase 2 : mise en location. `comparables` (JSON) n'est plus lu depuis le
 /// lot 5 : les comparables de loyer sont dans `rent_comparables` (la
 /// migration du lot 5 y a recopié les éventuelles lignes) ; colonne gardée
-/// pour ne rien perdre, à supprimer plus tard.
+/// pour ne rien perdre, à supprimer plus tard. `year` et `lease_type` ne
+/// sont plus lus ni écrits depuis le lot 19 (ADR 0029) : l'année et le type
+/// de location se règlent pour tout l'espace (`rentalYear` et `leaseType`
+/// des hypothèses) ; colonnes gardées, à supprimer plus tard.
 model RentalPlan {
   id                      String        @id @default(uuid())
   listingId               String        @unique @map("listing_id")
+  /// N'est plus lue depuis le lot 19 (année de l'espace).
   year                    Int?
+  /// N'est plus lue depuis le lot 19 (type de location de l'espace).
   leaseType               LeaseType     @default(unfurnished) @map("lease_type")
   rentControl             RentControl   @default(auto) @map("rent_control")
   referenceRentPerM2      Decimal?      @map("reference_rent_per_m2") @db.Decimal(8, 2)

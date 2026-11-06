@@ -299,8 +299,6 @@ async function importListing(
         rentalPlan: input.rentalPlan
           ? {
               create: {
-                year: input.rentalPlan.year,
-                leaseType: input.rentalPlan.leaseType,
                 rentControl: input.rentalPlan.rentControl,
                 referenceRentPerM2: dec(input.rentalPlan.referenceRentPerM2),
                 targetRent: dec(input.rentalPlan.targetRent),

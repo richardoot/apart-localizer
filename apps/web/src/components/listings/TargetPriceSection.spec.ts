@@ -5,13 +5,12 @@ import { fakeEvaluated, fakeTargetPriceReport } from '@/test/fixtures'
 import TargetCriteriaTable from './TargetCriteriaTable.vue'
 import TargetPriceSection from './TargetPriceSection.vue'
 
-describe('TargetPriceSection', () => {
-  it('répond « à partir de quel prix » : prix cible, critère liant, décote classée, rang, offre suggérée', () => {
+describe('TargetPriceSection (lot 19 : le prix cible de l’onglet Négocier)', () => {
+  it('prix cible, décote classée, critère liant, rang, offre suggérée, détail par critère replié', () => {
     const item = fakeEvaluated({
       publishedAt: '2026-08-01T00:00:00.000Z',
       renovation: null,
       annualCharges: null,
-      assumptionsOverride: null,
     })
     const report = fakeTargetPriceReport(item)
     const wrapper = mount(TargetPriceSection, {
@@ -25,34 +24,34 @@ describe('TargetPriceSection', () => {
         rent: item.evaluation.metrics.rent,
       },
     })
-    expect(wrapper.text()).toContain('À partir de quel prix ?')
-    expect(wrapper.text()).toContain(
-      'le prix affiché maximal, et le coût tout compris qu’il entraîne'
-    )
+    expect(wrapper.get('h2').text()).toContain('Prix cible')
     expect(wrapper.get('[data-testid="target-price"]').text()).toMatch(
       /147\s56\d €/
     )
     expect(wrapper.text()).toContain('critère liant')
-    expect(wrapper.text()).toContain('Rendement brut')
+    expect(wrapper.text()).toContain('rendement brut')
     const pill = wrapper.get('[data-testid="discount-class"]')
     expect(pill.attributes('data-discount-class')).toBe('out_of_reach')
     expect(pill.text()).toContain('Hors de portée')
     expect(pill.text()).toContain('26,2 %')
     expect(wrapper.get('[data-testid="rank"]').text()).toContain('sur 3')
-    expect(wrapper.get('[data-criterion="gross_yield"]').classes()).toContain(
+    const details = wrapper.get('[data-testid="target-details"]')
+    expect(details.text()).toContain(
+      'le prix affiché maximal, et le coût tout compris qu’il entraîne'
+    )
+    expect(details.get('[data-criterion="gross_yield"]').classes()).toContain(
       'bg-accent-soft'
     )
-    expect(wrapper.get('[data-criterion="effort"]').text()).toMatch(
+    expect(details.get('[data-criterion="effort"]').text()).toMatch(
       /161\s8\d\d €/
     )
-    expect(wrapper.find('[data-criterion="net_yield"]').exists()).toBe(false)
+    expect(details.find('[data-criterion="net_yield"]').exists()).toBe(false)
     const offer = wrapper.get('[data-testid="suggested-offer"]')
     expect(offer.text()).toMatch(/147\s000 €/)
-    expect(offer.text()).toContain('prix cible arrondi au millier inférieur')
+    expect(offer.text()).toContain('Prix cible arrondi au millier inférieur')
     expect(offer.text()).toContain('de marge sous le prix cible')
-    expect(offer.find('[data-argument="time_on_market"]').text()).toContain(
-      'jours'
-    )
+    // Lot 19 : les arguments sont dans le bloc « Arguments » de l'onglet.
+    expect(wrapper.find('[data-argument]').exists()).toBe(false)
     expect(wrapper.text()).toContain('taux forfaitaire')
     expect(wrapper.text()).toContain('comptés dans le coût tout compris')
   })
@@ -100,7 +99,6 @@ describe('TargetCriteriaTable (lot 9)', () => {
     const item = fakeEvaluated({
       renovation: null,
       annualCharges: null,
-      assumptionsOverride: null,
     })
     const report = fakeTargetPriceReport(item)
     const wrapper = mount(TargetCriteriaTable, {

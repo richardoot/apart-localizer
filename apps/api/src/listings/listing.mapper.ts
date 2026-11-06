@@ -236,10 +236,10 @@ export function toListingDto(row: ListingRow): ListingDto {
           })),
         }
       : null,
+    // Lot 19 : `rental_plans.year` et `lease_type` ne sont plus lus (année
+    // et type de location de l'espace, dans les hypothèses).
     rentalPlan: row.rentalPlan
       ? {
-          year: row.rentalPlan.year,
-          leaseType: row.rentalPlan.leaseType,
           rentControl: row.rentalPlan.rentControl,
           referenceRentPerM2: num(row.rentalPlan.referenceRentPerM2),
           targetRent: num(row.rentalPlan.targetRent),
@@ -252,8 +252,7 @@ export function toListingDto(row: ListingRow): ListingDto {
           notes: row.rentalPlan.notes,
         }
       : null,
-    assumptionsOverride:
-      row.assumptionsOverride as ListingDto['assumptionsOverride'],
+    // Lot 19 : `listings.assumptions_override` n'est plus lu.
     fieldSources: (row.fieldSources ?? {}) as FieldProvenanceMap,
     createdById: row.createdById,
     createdAt: row.createdAt.toISOString(),

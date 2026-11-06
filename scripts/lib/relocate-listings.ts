@@ -1,10 +1,12 @@
 import {
   DEFAULT_ASSUMPTIONS,
+  LeaseTypeSchema,
   ListingOpenDataContextSchema,
   NEIGHBOURHOOD_TERRITORY,
 } from '@apart/contracts'
 import type {
   FieldProvenanceMap,
+  LeaseType,
   Listing,
   ListingOpenDataContext,
   ListingPlacement,
@@ -329,8 +331,8 @@ export async function relocateListings(
       inseeCode: listing.location.inseeCode ?? next.inseeCode,
     }
     const approximation = locationApproximation(moved)
-    const rentalYear =
-      listing.rentalPlan?.year ?? (await workspaceRentalYear(listing))
+    // Lot 19 : l'année et le type de location sont ceux de l'espace.
+    const { rentalYear, leaseType } = await workspaceRental(listing)
     const [nearby, sales, rent, around] = await Promise.all([
       transit.at(next.point, approximation),
       market.context(
@@ -353,7 +355,7 @@ export async function relocateListings(
           rooms: listing.rooms,
           constructionYear: listing.constructionYear,
           constructionPeriod: listing.constructionPeriod,
-          leaseType: listing.rentalPlan?.leaseType ?? null,
+          leaseType,
           surface: listing.surface,
           rentalYear,
           area: listingAreaRef(moved),
@@ -394,14 +396,26 @@ export async function relocateListings(
     }
   }
 
-  /** L'année de mise en location des hypothèses en vigueur de l'espace. */
-  async function workspaceRentalYear(listing: Listing): Promise<number> {
+  /** L'année et le type de mise en location des hypothèses en vigueur de l'espace. */
+  async function workspaceRental(
+    listing: Listing
+  ): Promise<{ rentalYear: number; leaseType: LeaseType }> {
     const latest = await deps.prisma.assumptionsVersion.findFirst({
       where: { workspaceId: listing.workspaceId },
       orderBy: [{ effectiveFrom: 'desc' }, { createdAt: 'desc' }],
       select: { values: true },
     })
-    const year = (latest?.values as { rentalYear?: unknown } | null)?.rentalYear
-    return typeof year === 'number' ? year : DEFAULT_ASSUMPTIONS.rentalYear
+    const values = (latest?.values ?? null) as {
+      rentalYear?: unknown
+      leaseType?: unknown
+    } | null
+    const lease = LeaseTypeSchema.safeParse(values?.leaseType)
+    return {
+      rentalYear:
+        typeof values?.rentalYear === 'number'
+          ? values.rentalYear
+          : DEFAULT_ASSUMPTIONS.rentalYear,
+      leaseType: lease.success ? lease.data : DEFAULT_ASSUMPTIONS.leaseType,
+    }
   }
 }

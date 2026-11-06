@@ -544,8 +544,9 @@ partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « C
       recherche ») ; dans claude.ai, prompt « Explorer les portails » essayé sur un ou deux
       portails ; onglet « À valider » de la liste : ajouter, écarter avec une raison, « C'est la
       même » sur un doublon ; compte rendu de l'exploration, portail bloqué compris.
-- [ ] Lot 15 : migration `20261106110000_lot15_listing_checks` appliquée ; onglet Suivi d'une
-      annonce : section « Mises à jour », « Vue en ligne aujourd'hui » et « Plus en ligne »
+- [ ] Lot 15 : migration `20261106110000_lot15_listing_checks` appliquée ; onglet Historique
+      d'une annonce (Suivi avant le lot 19) : vérifications, « Vue en ligne aujourd'hui » et
+      « Plus en ligne »
       (statut proposé, appliqué seulement sur accord) ; liste : « À revérifier » et le filtre ;
       dans claude.ai, prompt « Tournée de mise à jour » essayé sur deux ou trois annonces.
 - [ ] Lot 14 : migration `20261106100000_lot14_criteria_fit` appliquée ; `refresh:criteria-fit`
@@ -553,8 +554,8 @@ partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « C
       critères » et « Hors critères » de la liste, pastilles et raisons, une annonce au quartier
       « à confirmer » et son bloc « Correspond-elle à ce qu'on cherche ? » dans la fiche ;
       `list_listings` depuis claude.ai donne l'adéquation.
-- [ ] Lot 17 : migration `20261107110000_lot17_agency_requests` appliquée ; onglet « Échanges »
-      d'une annonce : contact saisi puis effacé, « Préparer un message », « Valider l'envoi » ;
+- [ ] Lot 17 : migration `20261107110000_lot17_agency_requests` appliquée ; onglet « À faire »
+      d'une annonce (« Échanges » avant le lot 19) : contact saisi puis effacé, « Préparer un message », « Valider l'envoi » ;
       dans claude.ai, prompt « Questions aux agences » sur une annonce (accord donné dans la
       conversation, envoi par Gmail), puis « Réponses des agences » : valeurs appliquées ou
       proposées, tâches cochées, Chloé prévenue.
@@ -568,3 +569,10 @@ partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « C
       sur une annonce d'agence (référence relevée, cherchée sur un autre portail, lien rattaché
       seulement si même agence et même référence) ; onglet « À valider » : un lien rattaché
       d'office et « Ce n'est pas la même » ; export CSV : quatre colonnes en fin de ligne.
+- [ ] Lot 19 : aucune migration ; page Hypothèses : « Type de location » (calendrier, phase 2)
+      enregistré, une annonce louée voit son plafond d'encadrement recalculé ; fiche d'une
+      annonce : les sept onglets (Synthèse, Le bien, Budget, Négocier, Quartier, À faire,
+      Historique), un ancien lien `?onglet=suivi` ou `?onglet=financer` qui retombe sur le bon
+      onglet, une section du Bien modifiée puis enregistrée (journal), « À faire » filtré sur
+      Agence, l'Historique filtré sur Prix ; sur le téléphone, la barre d'onglets qui défile ;
+      dans claude.ai, `get_listing` sans `assumptionsOverride` ni année de location par annonce.

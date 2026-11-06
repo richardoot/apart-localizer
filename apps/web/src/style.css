@@ -9,6 +9,7 @@
  *   --fg, --muted                        : texte
  *   --accent (sarcelle)                  : action et sélection
  *   --good / --warn / --bad              : verdicts et contrôles
+ *   --info / --ai (lot 19)               : pastilles « Visite » et « IA »
  *   --dpe-A … --dpe-G                    : échelle DPE
  */
 :root {
@@ -27,6 +28,10 @@
   --warn-soft: #fbecd2;
   --bad: #b4342c;
   --bad-soft: #f8e0de;
+  --info: #1d4466;
+  --info-soft: #e6eef5;
+  --ai: #3f2a72;
+  --ai-soft: #ece6f7;
   --shadow: 0 10px 40px rgba(14, 40, 36, 0.18);
   --f-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
   --f-body:
@@ -62,6 +67,10 @@
     --warn-soft: #3a2b10;
     --bad: #f2847b;
     --bad-soft: #3d1a17;
+    --info: #9cc3ea;
+    --info-soft: #16283a;
+    --ai: #c9b8f2;
+    --ai-soft: #2a2140;
     --shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
     color-scheme: dark;
   }
@@ -83,6 +92,10 @@
   --warn-soft: #3a2b10;
   --bad: #f2847b;
   --bad-soft: #3d1a17;
+  --info: #9cc3ea;
+  --info-soft: #16283a;
+  --ai: #c9b8f2;
+  --ai-soft: #2a2140;
   --shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
   color-scheme: dark;
 }
@@ -104,6 +117,10 @@
   --color-warn-soft: var(--warn-soft);
   --color-bad: var(--bad);
   --color-bad-soft: var(--bad-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-ai: var(--ai);
+  --color-ai-soft: var(--ai-soft);
   --color-dpe-a: var(--dpe-A);
   --color-dpe-b: var(--dpe-B);
   --color-dpe-c: var(--dpe-C);

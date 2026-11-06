@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { AiModule } from '../ai/ai.module'
 import { AssumptionsModule } from '../assumptions/assumptions.module'
+import { RENTAL_CONTEXT_REFRESHER } from '../assumptions/rental-context'
 import { OpendataModule } from '../opendata/opendata.module'
 import { CriteriaFitController } from './criteria-fit.controller'
 import { DuplicatesService } from './duplicates.service'
@@ -32,6 +33,12 @@ import { TargetPriceService } from './target-price.service'
     ListingEnrichmentService,
     ListingChecksService,
     ListingLinksService,
+    // Lot 19 : le recalcul du plafond quand l'année ou le type de location
+    // de l'espace change (lu par les hypothèses, sans import circulaire).
+    {
+      provide: RENTAL_CONTEXT_REFRESHER,
+      useExisting: ListingEnrichmentService,
+    },
   ],
   exports: [
     ListingsService,

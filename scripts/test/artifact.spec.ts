@@ -101,9 +101,10 @@ describe('mapListing', () => {
       { label: 'Peinture', amount: 2500 },
       { label: 'Cuisine', amount: null },
     ])
+    // Lot 19 : l'année et le type de location ne s'importent plus par annonce.
+    expect(input.rentalPlan).not.toHaveProperty('year')
+    expect(input.rentalPlan).not.toHaveProperty('leaseType')
     expect(input.rentalPlan).toMatchObject({
-      year: 2028,
-      leaseType: 'unfurnished',
       rentControl: 'auto',
       targetRent: 850,
       demand: 'strong',

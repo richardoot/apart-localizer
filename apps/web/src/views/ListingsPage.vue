@@ -23,6 +23,7 @@
   import type { MapLayerToggles } from '@/composables/useMapLayers'
   import { useSearchCriteriaList } from '@/composables/useSearchCriteria'
   import {
+    legacyTabRedirect,
     listingTabFromQuery,
     listingTabQuery,
     withoutListingTab,
@@ -46,6 +47,24 @@
       })
     },
   })
+
+  // Lot 19 : un ancien identifiant d'onglet (`?onglet=suivi`, `financer`,
+  // `echanges`) d'un lien partagé, d'une notification ou d'un e-mail mène au
+  // nouvel onglet, et l'URL se réécrit.
+  watch(
+    () => route.query,
+    query => {
+      const next = legacyTabRedirect(query)
+      if (next) {
+        void router.replace({
+          name: route.name ?? 'listing',
+          params: route.params,
+          query: next,
+        })
+      }
+    },
+    { immediate: true }
+  )
 
   // L'URL fait foi : au chargement et à chaque navigation, les filtres se
   // relisent depuis la requête ; chaque changement de filtre réécrit l'URL.

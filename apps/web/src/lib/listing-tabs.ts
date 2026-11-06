@@ -1,19 +1,36 @@
 import type { LocationQuery, LocationQueryRaw } from 'vue-router'
 
 /**
- * Les onglets de la fiche annonce (lot 9). L'onglet actif vit dans l'URL
+ * Les onglets de la fiche annonce. L'onglet actif vit dans l'URL
  * (`?onglet=negocier`), comme les filtres : le retour arrière et un lien
  * partagé rouvrent le même onglet. La synthèse, onglet par défaut, n'écrit
  * rien dans l'URL.
+ *
+ * Lot 19 (ADR 0029) : sept onglets, chacun répond à une question. Les
+ * identifiants des lots 9 à 18 (`financer`, `suivi`, `echanges`) restent
+ * lus et mènent au nouvel onglet : les liens partagés, les notifications et
+ * les e-mails déjà envoyés continuent de marcher.
  */
 export const LISTING_TABS = [
-  { id: 'synthese', label: 'Synthèse', short: 'Synthèse' },
-  { id: 'negocier', label: 'Négocier', short: 'Négocier' },
-  { id: 'financer', label: 'Financer et louer', short: 'Financer' },
-  { id: 'quartier', label: 'Quartier', short: 'Quartier' },
-  { id: 'suivi', label: 'Suivi', short: 'Suivi' },
-  // Lot 17 : les échanges avec l'annonceur (contact, messages, réponses).
-  { id: 'echanges', label: 'Échanges', short: 'Échanges' },
+  { id: 'synthese', label: 'Synthèse', question: 'Faut-il y aller ?' },
+  { id: 'bien', label: 'Le bien', question: 'Qu’est-ce qu’on achète ?' },
+  {
+    id: 'budget',
+    label: 'Budget',
+    question: 'Peut-on se le permettre, et après ?',
+  },
+  { id: 'negocier', label: 'Négocier', question: 'Combien proposer ?' },
+  { id: 'quartier', label: 'Quartier', question: 'Comment on y vit ?' },
+  {
+    id: 'a-faire',
+    label: 'À faire',
+    question: 'Qu’est-ce qu’il reste à faire ?',
+  },
+  {
+    id: 'historique',
+    label: 'Historique',
+    question: 'Que s’est-il passé ?',
+  },
 ] as const
 
 export type ListingTab = (typeof LISTING_TABS)[number]['id']
@@ -23,19 +40,57 @@ export const DEFAULT_LISTING_TAB: ListingTab = 'synthese'
 /** Le paramètre de requête de l'onglet. */
 export const LISTING_TAB_QUERY_KEY = 'onglet'
 
+/** Les anciens identifiants (lots 9 à 18) et l'onglet qui les remplace. */
+export const LEGACY_LISTING_TABS: Readonly<Record<string, ListingTab>> = {
+  financer: 'budget',
+  suivi: 'a-faire',
+  echanges: 'a-faire',
+}
+
 const TAB_IDS: readonly string[] = LISTING_TABS.map(t => t.id)
 
 export function isListingTab(value: unknown): value is ListingTab {
   return typeof value === 'string' && TAB_IDS.includes(value)
 }
 
-/** L'onglet lu dans la requête ; une valeur inconnue rend la synthèse. */
+/** La question d'un onglet, affichée en tête de son panneau. */
+export function listingTabQuestion(tab: ListingTab): string {
+  return LISTING_TABS.find(t => t.id === tab)?.question ?? ''
+}
+
+function rawTab(query: LocationQuery | LocationQueryRaw): unknown {
+  const raw = query[LISTING_TAB_QUERY_KEY]
+  return Array.isArray(raw) ? raw[0] : raw
+}
+
+/**
+ * L'onglet lu dans la requête : un ancien identifiant mène à son nouvel
+ * onglet ; une valeur inconnue rend la synthèse.
+ */
 export function listingTabFromQuery(
   query: LocationQuery | LocationQueryRaw
 ): ListingTab {
-  const raw = query[LISTING_TAB_QUERY_KEY]
-  const value = Array.isArray(raw) ? raw[0] : raw
-  return isListingTab(value) ? value : DEFAULT_LISTING_TAB
+  const value = rawTab(query)
+  if (isListingTab(value)) return value
+  if (typeof value === 'string' && value in LEGACY_LISTING_TABS) {
+    return LEGACY_LISTING_TABS[value] as ListingTab
+  }
+  return DEFAULT_LISTING_TAB
+}
+
+/**
+ * La requête à réécrire quand l'URL porte un ancien identifiant
+ * (`?onglet=suivi` → `?onglet=a-faire`), sinon null.
+ */
+export function legacyTabRedirect<T extends LocationQuery | LocationQueryRaw>(
+  query: T
+): T | null {
+  const value = rawTab(query)
+  if (typeof value !== 'string' || !(value in LEGACY_LISTING_TABS)) return null
+  return {
+    ...withoutListingTab(query),
+    ...listingTabQuery(LEGACY_LISTING_TABS[value] as ListingTab),
+  } as T
 }
 
 /** La requête sans l'onglet : ce que les filtres de la liste comparent et gardent. */

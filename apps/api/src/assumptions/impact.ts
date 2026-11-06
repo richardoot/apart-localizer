@@ -1,18 +1,11 @@
-import type {
-  Assumptions,
-  AssumptionsImpact,
-  AssumptionsOverride,
-  Verdict,
-} from '@apart/contracts'
-import { mergeAssumptions } from '@apart/domain'
+import type { Assumptions, AssumptionsImpact, Verdict } from '@apart/contracts'
 import { evaluateListing } from '../listings/evaluate'
 import type { EvaluableListing } from '../listings/evaluate'
 
-/** Ce que l'impact lit d'une annonce : ses champs financiers et sa surcharge d'hypothèses. */
+/** Ce que l'impact lit d'une annonce : ses champs financiers. */
 export type ImpactListing = EvaluableListing & {
   id: string
   title: string
-  assumptionsOverride: AssumptionsOverride | null
 }
 
 const emptyCounts = (): Record<Verdict, number> => ({
@@ -23,9 +16,9 @@ const emptyCounts = (): Record<Verdict, number> => ({
 
 /**
  * Impact d'un changement d'hypothèses sur des annonces : verdict et prix
- * cible avant et après, pour chacune, avec la surcharge propre à l'annonce
- * conservée. Pur : utilisé par `PUT /assumptions`, son aperçu et
- * `set_assumptions`.
+ * cible avant et après, pour chacune (toutes calculées avec les hypothèses de
+ * l'espace depuis le lot 19). Pur : utilisé par `PUT /assumptions`, son
+ * aperçu et `set_assumptions`.
  */
 export function assumptionsImpact(
   listings: readonly ImpactListing[],
@@ -36,14 +29,8 @@ export function assumptionsImpact(
   const byVerdictAfter = emptyCounts()
   const changes: AssumptionsImpact['changes'] = []
   for (const listing of listings) {
-    const previous = evaluateListing(
-      listing,
-      mergeAssumptions(before, listing.assumptionsOverride)
-    )
-    const next = evaluateListing(
-      listing,
-      mergeAssumptions(after, listing.assumptionsOverride)
-    )
+    const previous = evaluateListing(listing, before)
+    const next = evaluateListing(listing, after)
     byVerdictBefore[previous.metrics.verdict] += 1
     byVerdictAfter[next.metrics.verdict] += 1
     if (previous.metrics.verdict !== next.metrics.verdict) {

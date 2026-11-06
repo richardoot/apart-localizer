@@ -24,7 +24,7 @@ import { ListingChecksService } from './listing-checks.service'
 
 /**
  * Lot 15 : les vérifications d'une annonce sur le portail. Le web s'en sert
- * pour la chronologie « Mises à jour » et les boutons « Vue en ligne
+ * pour la chronologie de l'Historique et les boutons « Vue en ligne
  * aujourd'hui » et « Plus en ligne » ; le MCP passe par le même service
  * (`check_listing`, `apply_listing_check`). Le serveur ne télécharge jamais
  * la page.

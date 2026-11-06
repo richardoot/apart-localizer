@@ -495,7 +495,7 @@ describe('checklist réglementaire (L5)', () => {
 })
 
 describe('entrée de la checklist d’après une annonce', () => {
-  it('reprend la fiche et les indicateurs ; valeurs par défaut sans phase 2', async () => {
+  it('reprend la fiche, les indicateurs et le type de location de l’espace ; valeurs par défaut sans phase 2', async () => {
     const input = complianceInputFromListing(
       {
         id: '11111111-1111-4111-8111-111111111111',
@@ -507,14 +507,14 @@ describe('entrée de la checklist d’après une annonce', () => {
         heatingType: 'gaz',
         location: { inseeCode: '33063', commune: 'Bordeaux' },
         rentalPlan: {
-          leaseType: 'furnished',
           targetRent: 800,
           coOwnershipAllowsRental: 'yes',
           decencyCompliant: 'no',
           rentalPermitRequired: 'unknown',
         },
       },
-      { rentControlled: true, rentCap: 750 }
+      { rentControlled: true, rentCap: 750 },
+      { leaseType: 'furnished' }
     )
     expect(input).toMatchObject({
       listingId: '11111111-1111-4111-8111-111111111111',
@@ -525,9 +525,11 @@ describe('entrée de la checklist d’après une annonce', () => {
       rentControlled: true,
       decencyCompliant: 'no',
     })
+    // Lot 19 : le type de location vient des hypothèses, vide par défaut.
     const bare = complianceInputFromListing(
       {},
-      { rentControlled: false, rentCap: null }
+      { rentControlled: false, rentCap: null },
+      {}
     )
     expect(bare).toMatchObject({
       listingId: null,

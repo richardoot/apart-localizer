@@ -1,7 +1,6 @@
 <script setup lang="ts">
   import {
     DpeClassSchema,
-    LeaseTypeSchema,
     ListingSourceSchema,
     ListingStatusSchema,
     RenovationLevelSchema,
@@ -10,7 +9,6 @@
   import FormField from '@/components/ui/FormField.vue'
   import { formatEuros, parseNumberInput } from '@/lib/format'
   import {
-    LEASE_TYPE_LABELS,
     LISTING_STATUS_LABELS,
     RENOVATION_LEVEL_LABELS,
     SUGGESTED_COMMUNES,
@@ -70,8 +68,6 @@
     'f-ren-level': 'renovation.level',
     'f-ren-duration': 'renovation.durationMonths',
     'f-ren-notes': 'renovation.notes',
-    'f-p2-year': 'rentalPlan.year',
-    'f-p2-lease': 'rentalPlan.leaseType',
     'f-p2-control': 'rentalPlan.rentControl',
     'f-p2-ref': 'rentalPlan.referenceRentPerM2',
     'f-p2-market': 'rentalPlan.marketRent',
@@ -120,7 +116,6 @@
   const statuses = ListingStatusSchema.options
   const sources = ListingSourceSchema.options
   const dpeClasses = DpeClassSchema.options
-  const leaseTypes = LeaseTypeSchema.options
   const renovationLevels = RenovationLevelSchema.options
   const SOURCE_LABELS: Record<(typeof sources)[number], string> = {
     seloger: 'SeLoger',
@@ -667,35 +662,10 @@
       <legend class="mb-2 font-display text-base font-semibold">
         Phase 2 : mise en location
       </legend>
-      <FormField
-        label="Année de mise en location"
-        for-id="f-p2-year"
-        v-bind="meta('f-p2-year')"
-        hint="Vide = année des hypothèses"
-      >
-        <input
-          id="f-p2-year"
-          v-model="form.rentalPlan.year"
-          :class="inputClass"
-          inputmode="numeric"
-          placeholder="2028"
-        />
-      </FormField>
-      <FormField
-        label="Type de location"
-        for-id="f-p2-lease"
-        v-bind="meta('f-p2-lease')"
-      >
-        <select
-          id="f-p2-lease"
-          v-model="form.rentalPlan.leaseType"
-          :class="inputClass"
-        >
-          <option v-for="lease in leaseTypes" :key="lease" :value="lease">
-            {{ LEASE_TYPE_LABELS[lease] }}
-          </option>
-        </select>
-      </FormField>
+      <p class="text-xs text-muted sm:col-span-2">
+        L’année et le type de location se règlent pour tout l’espace, dans la
+        page Hypothèses.
+      </p>
       <FormField
         label="Encadrement des loyers"
         for-id="f-p2-control"
@@ -809,62 +779,6 @@
           v-model="form.rentalPlan.notes"
           :class="inputClass"
           placeholder="Profil de locataire visé, atouts, points faibles…"
-        />
-      </FormField>
-    </fieldset>
-
-    <fieldset class="grid gap-3 sm:grid-cols-2">
-      <legend class="mb-2 font-display text-base font-semibold">
-        Hypothèses surchargées pour cette annonce
-      </legend>
-      <p class="text-xs text-muted sm:col-span-2">
-        Vide = hypothèses de l'espace. Un apport différent, un taux négocié, une
-        durée ou des frais de notaire propres à ce bien.
-      </p>
-      <FormField label="Apport (€)" for-id="f-o-dp" v-bind="meta('f-o-dp')">
-        <input
-          id="f-o-dp"
-          v-model="form.overrides.downPayment"
-          :class="inputClass"
-          inputmode="numeric"
-        />
-      </FormField>
-      <FormField
-        label="Taux nominal (%)"
-        for-id="f-o-rate"
-        v-bind="meta('f-o-rate')"
-      >
-        <input
-          id="f-o-rate"
-          v-model="form.overrides.interestRatePercent"
-          :class="inputClass"
-          inputmode="decimal"
-          placeholder="3,65"
-        />
-      </FormField>
-      <FormField
-        label="Durée (ans)"
-        for-id="f-o-years"
-        v-bind="meta('f-o-years')"
-      >
-        <input
-          id="f-o-years"
-          v-model="form.overrides.durationYears"
-          :class="inputClass"
-          inputmode="numeric"
-        />
-      </FormField>
-      <FormField
-        label="Frais de notaire (%)"
-        for-id="f-o-notary"
-        v-bind="meta('f-o-notary')"
-      >
-        <input
-          id="f-o-notary"
-          v-model="form.overrides.notaryRatePercent"
-          :class="inputClass"
-          inputmode="decimal"
-          placeholder="7,5"
         />
       </FormField>
     </fieldset>

@@ -165,7 +165,7 @@ export class ListingChecksService {
     private readonly extraction: ExtractionService
   ) {}
 
-  /** La chronologie « Mises à jour » d'une annonce, de la plus récente à la plus ancienne. */
+  /** Les vérifications d'une annonce (chronologie de l'Historique), de la plus récente à la plus ancienne. */
   async list(member: Member, listingId: string): Promise<ListingCheck[]> {
     const listing = await this.prisma.listing.findFirst({
       where: { id: listingId, workspaceId: member.workspaceId },

@@ -101,6 +101,12 @@ d'abord ; une liste vide dans un export antérieur, où `listing.url` est alors 
 `link` de chaque vérification (le lien vérifié, `null` par défaut) et, dans les explorations, le
 compteur `attached` et le résultat « rattachée d'office » des lignes du compte rendu.
 `listing.url`, `source` et `externalId` restent ceux du lien principal.
+Le lot 19 garde aussi la version 1 : une annonce n'a plus d'hypothèses propres ni d'année ou de
+type de location de la phase 2 (ADR 0029) ; `listing.assumptionsOverride`, `rentalPlan.year` et
+`rentalPlan.leaseType` ne sont plus exportés, et les hypothèses (`assumptions.current.values`,
+`history[].values`) portent `leaseType` (`unfurnished` pour une version antérieure). Un export
+antérieur se relit avec `ExportDocumentSchema.parse` (les clés retirées sont ignorées) ; le CSV
+ne change pas.
 
 ```text
 {

@@ -1,33 +1,41 @@
 <script setup lang="ts">
-  import { computed } from 'vue'
+  import { computed, ref } from 'vue'
   import type {
+    AgencyRequest,
     Assumptions,
     EvaluatedListing,
+    ListingChanges as ListingChangesView,
     ListingEvaluation,
+    ListingQuestionField,
+    Member,
     NegotiationBrief,
     TargetPrice,
+    Visit,
   } from '@apart/contracts'
-  import DefinitionButton from '@/components/ui/DefinitionButton.vue'
-  import { readingOf } from '@/composables/useListingReading'
-  import { formatDistance, formatEurosPerM2 } from '@/lib/format'
+  import {
+    activityActorName,
+    checkFreshness,
+    listingHighlights,
+    locationApproximation,
+    nextSteps,
+  } from '@apart/domain'
+  import type { HighlightTab, NextStep } from '@apart/domain'
+  import ListingChanges from '@/components/activity/ListingChanges.vue'
   import type { ListingTab } from '@/lib/listing-tabs'
-  import AtTargetPanel from './AtTargetPanel.vue'
-  import CostBasisBadge from './CostBasisBadge.vue'
-  import CostSummary from './CostSummary.vue'
+  import { LISTING_TABS } from '@/lib/listing-tabs'
+  import { fitLine, keyFigures } from '@/lib/synthesis'
   import CriteriaFitSection from './CriteriaFitSection.vue'
-  import NegotiationSummary from './NegotiationSummary.vue'
-  import ProfitabilitySummary from './ProfitabilitySummary.vue'
-  import RentalPill from './RentalPill.vue'
+  import FitBadge from './FitBadge.vue'
+  import OpinionsSection from './OpinionsSection.vue'
 
   /**
-   * L'onglet Synthèse de la fiche (lot 9) : d'abord (lot 14) « Correspond-elle
-   * à ce qu'on cherche ? », l'adéquation aux critères actifs ; puis les deux
-   * bases de calcul expliquées, trois blocs (« Combien négocier ? » sur le prix, « Combien ça
-   * coûte ? » et « Est-ce rentable ? » tout compris), le pont « Et au prix
-   * cible ? », puis les résumés louabilité, suivi et quartier (lot 11 :
-   * quartier et équipements proches) qui mènent aux
-   * autres onglets. Les valeurs viennent de l'évaluation (serveur) ou de
-   * l'aperçu en direct, la lecture de `domain` (`readingOf`).
+   * La Synthèse (lot 19, ADR 0029) : « Faut-il y aller ? ». Quatre chiffres
+   * qui ouvrent leur onglet (prix affiché et ventes du quartier, coût tout
+   * compris, mensualité, prix cible), l'adéquation aux critères en une ligne
+   * (détail dépliable), « Ce qui plaît » et « À surveiller » (choisis par
+   * `domain` dans les données), nos avis, les prochaines étapes et la
+   * dernière vérification. Pendant une modification, les chiffres suivent
+   * l'aperçu en direct.
    */
   const props = defineProps<{
     item: EvaluatedListing
@@ -35,234 +43,288 @@
     targetPrice: TargetPrice | null
     negotiation: NegotiationBrief | null
     assumptions: Assumptions | null
-    /** Vrai pendant l'édition : valeurs de l'aperçu en direct. */
+    /** Vrai pendant une modification : valeurs de l'aperçu en direct. */
     live?: boolean
+    /** « Ce qui a changé » depuis la dernière ouverture. */
+    changes?: ListingChangesView | null
+    /** Lot 17 : les demandes à l'annonceur (messages à valider, relances). */
+    requests?: AgencyRequest[]
+    visits?: Visit[]
+    members?: Member[]
+    meId?: string | null
+    savingOpinion?: boolean
   }>()
-  const emit = defineEmits<{ go: [tab: ListingTab]; precise: [] }>()
+  const emit = defineEmits<{
+    go: [tab: ListingTab]
+    precise: []
+    saveOpinion: [input: { rating: number; text: string }]
+  }>()
 
-  const reading = computed(() =>
-    readingOf(props.evaluation, props.targetPrice, props.assumptions)
+  const listing = computed(() => props.item.listing)
+  const figures = computed(() =>
+    props.evaluation
+      ? keyFigures({
+          metrics: props.evaluation.metrics,
+          targetPrice: props.targetPrice,
+          assumptions: props.assumptions,
+          medianPricePerM2:
+            listing.value.openDataContext?.market?.medianPricePerM2 ?? null,
+        })
+      : []
   )
 
-  const openTasks = computed(() => props.item.tasks.filter(t => !t.done))
-  const nextTask = computed(
-    () =>
-      [...openTasks.value].sort((a, b) => a.position - b.position)[0] ?? null
+  const fit = computed(() => props.item.criteriaFit)
+  const fitOpen = ref(false)
+
+  /** Les champs qu'une tâche encore ouverte demande à l'annonceur. */
+  const askedFields = computed(() =>
+    props.item.tasks
+      .filter(t => !t.done && t.field !== null)
+      .map(t => t.field as ListingQuestionField)
   )
-  const rentalCounts = computed(() => {
-    const checks = props.evaluation?.rental.checks ?? []
-    return {
-      bad: checks.filter(c => c.level === 'bad').length,
-      warn: checks.filter(c => c.level === 'warn').length,
-      unknown: checks.filter(c => c.level === 'unknown').length,
+  const highlights = computed(() =>
+    listingHighlights({
+      metrics: props.evaluation?.metrics ?? null,
+      rental: props.evaluation?.rental ?? null,
+      targetPrice: props.targetPrice,
+      dpeClass: listing.value.dpeClass,
+      openData: listing.value.openDataContext,
+      votedWorks: listing.value.votedWorks,
+      proceedings: listing.value.proceedings,
+      askedFields: askedFields.value,
+      approximate: locationApproximation(listing.value.location).approximate,
+    })
+  )
+  const tabLabel = (tab: HighlightTab | ListingTab): string =>
+    LISTING_TABS.find(t => t.id === tab)?.label ?? ''
+
+  const steps = computed(() =>
+    nextSteps({
+      tasks: props.item.tasks,
+      requests: props.requests ?? [],
+      visits: props.visits ?? [],
+      now: new Date(),
+    })
+  )
+  const STEP_KINDS: Record<NextStep['kind'], { label: string; tone: string }> =
+    {
+      visit: { label: 'Visite', tone: 'bg-info-soft text-info' },
+      draft: { label: 'À valider', tone: 'bg-warn-soft text-warn' },
+      follow_up: { label: 'Relance', tone: 'bg-warn-soft text-warn' },
+      task: { label: 'Tâche', tone: 'bg-surface-2 text-fg' },
     }
-  })
-  const tram = computed(
-    () => props.item.listing.openDataContext?.transit?.nearestTram ?? null
+
+  /** La dernière vérification sur le portail, en une phrase. */
+  const freshness = computed(() =>
+    checkFreshness(
+      {
+        status: listing.value.status,
+        lastCheckedAt: listing.value.lastCheckedAt,
+        createdAt: listing.value.createdAt,
+      },
+      new Date(),
+      undefined,
+      props.item.lastCheck?.outcome ?? null
+    )
   )
-  const marketMedian = computed(
-    () => props.item.listing.openDataContext?.market?.medianPricePerM2 ?? null
-  )
-  /** Lot 11 : quartier et équipements de l'instantané (à vol d'oiseau). */
-  const surroundings = computed(
-    () => props.item.listing.openDataContext?.surroundings ?? null
-  )
-  const equipment = computed(() => {
-    const s = surroundings.value
-    if (!s) return null
-    const part = (
-      label: string,
-      lookup: { status: string; nearest: { distanceMeters: number } | null }
-    ): string =>
-      lookup.nearest
-        ? `${label} à ${formatDistance(lookup.nearest.distanceMeters)}`
-        : lookup.status === 'unavailable'
-          ? `${label} non disponible`
-          : `${label} : aucun proche`
-    return [
-      part('piste', s.athleticsTrack),
-      part('drive', s.supermarkets),
-      part('Fitness Park', s.fitnessPark),
-    ].join(' · ')
+  const checkedBy = computed(() => {
+    const check = props.item.lastCheck
+    if (!check) return null
+    const names = new Map(
+      (props.members ?? []).map(m => [m.id, { displayName: m.displayName }])
+    )
+    return activityActorName(
+      { channel: check.channel, actorMemberId: check.authorId },
+      names
+    )
   })
 
+  const card = 'rounded-2xl border border-line bg-surface p-4 sm:px-5'
   const linkClass =
-    'inline-flex min-h-11 items-center justify-self-start text-sm font-semibold text-accent underline-offset-2 hover:underline'
+    'inline-flex min-h-11 flex-none items-center text-sm text-accent underline-offset-2 hover:underline sm:min-h-0'
 </script>
 
 <template>
   <div class="@container grid gap-4" data-testid="synthesis">
-    <CriteriaFitSection
-      :listing-id="item.listing.id"
-      :fit="item.criteriaFit"
-      @precise="emit('precise')"
-      @go="next => emit('go', next)"
-    />
-    <section
-      class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-muted"
-      aria-labelledby="cost-bases-title"
-      data-testid="cost-bases"
-    >
-      <h3 id="cost-bases-title" class="font-semibold text-fg">
-        Deux bases de calcul
-      </h3>
-      <p class="inline-flex flex-wrap items-center gap-1.5">
-        <CostBasisBadge basis="price" /> se compare au prix affiché
-      </p>
-      <p class="inline-flex flex-wrap items-center gap-1.5">
-        <CostBasisBadge basis="all_in" /> prix + notaire + travaux + mobilier
-      </p>
-      <DefinitionButton term="cost_basis" />
-      <span
-        v-if="live"
-        class="ml-auto rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-fg"
-        data-testid="live-badge"
-        >aperçu en direct</span
-      >
-    </section>
+    <ListingChanges v-if="changes" :changes="changes" />
 
-    <p v-if="!evaluation" class="text-sm text-muted">
-      Saisissez un prix et un loyer visé pour voir les indicateurs.
-    </p>
-    <template v-else>
-      <div class="grid gap-4 @4xl:grid-cols-3 @4xl:items-start">
-        <NegotiationSummary
-          :price="evaluation.metrics.price"
-          :target-price="targetPrice"
-          :suggested-offer="negotiation?.suggestedOffer ?? null"
-          :gauge="reading?.gauge ?? null"
-        />
-        <CostSummary
-          :metrics="evaluation.metrics"
-          :assumptions="assumptions"
-          :payment="reading?.payment ?? null"
-        />
-        <ProfitabilitySummary
-          :metrics="evaluation.metrics"
-          :checks="reading?.checks ?? null"
+    <section
+      :class="[card, 'grid gap-3.5']"
+      aria-labelledby="key-figures-title"
+      data-testid="key-figures"
+    >
+      <div class="flex items-center justify-between gap-2">
+        <h2 id="key-figures-title" class="sr-only">L’essentiel</h2>
+        <span
+          v-if="live"
+          class="ml-auto rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-semibold text-fg"
+          data-testid="live-badge"
+          >aperçu en direct</span
+        >
+      </div>
+      <p v-if="!evaluation" class="text-sm text-muted">
+        Saisissez un prix et un loyer visé pour voir les indicateurs.
+      </p>
+      <div v-else class="grid grid-cols-2 gap-2.5 @3xl:grid-cols-4 @3xl:gap-3">
+        <button
+          v-for="figure in figures"
+          :key="figure.key"
+          type="button"
+          class="grid content-start gap-0.5 rounded-xl px-3 py-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:px-3.5 sm:py-3"
+          :class="
+            figure.accent
+              ? 'bg-accent-soft text-fg hover:ring-1 hover:ring-accent'
+              : 'bg-bg text-fg hover:ring-1 hover:ring-line'
+          "
+          :data-figure="figure.key"
+          @click="emit('go', figure.tab)"
+        >
+          <span
+            class="text-xs"
+            :class="figure.accent ? 'text-fg' : 'text-muted'"
+            >{{ figure.label }}</span
+          >
+          <strong
+            class="font-display text-[19px] leading-tight font-bold tabular-nums @3xl:text-2xl"
+            >{{ figure.value }}</strong
+          >
+          <span
+            v-if="figure.sub"
+            class="text-xs"
+            :class="figure.accent ? 'text-fg' : 'text-muted'"
+            >{{ figure.sub }}</span
+          >
+          <span class="sr-only"
+            >: voir l’onglet {{ tabLabel(figure.tab) }}</span
+          >
+        </button>
+      </div>
+
+      <div
+        class="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-t border-line pt-3"
+        data-testid="fit-line"
+      >
+        <FitBadge v-if="fit.activeCriteria > 0" :level="fit.level" />
+        <span class="min-w-0 flex-[1_1_22rem] text-sm">{{ fitLine(fit) }}</span>
+        <button
+          type="button"
+          class="inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm hover:bg-surface-2 sm:min-h-10"
+          :aria-expanded="fitOpen"
+          aria-controls="fit-detail"
+          data-testid="fit-toggle"
+          @click="fitOpen = !fitOpen"
+        >
+          {{ fitOpen ? 'Masquer le détail' : 'Voir le détail' }}
+        </button>
+      </div>
+      <div v-if="fitOpen" id="fit-detail">
+        <CriteriaFitSection
+          :fit="fit"
+          @precise="emit('precise')"
+          @go="next => emit('go', next)"
         />
       </div>
-      <AtTargetPanel
-        :target-price="targetPrice"
-        :checks="reading?.atTargetChecks ?? null"
-        @negotiate="emit('go', 'negocier')"
-      />
-    </template>
+    </section>
 
-    <div class="grid gap-4 @2xl:grid-cols-3">
+    <div class="grid gap-4 @3xl:grid-cols-2">
       <section
-        class="grid content-start gap-1.5 rounded-2xl border border-line bg-surface px-4 py-3"
-        aria-labelledby="summary-rental-title"
-        data-testid="summary-rental"
+        v-for="side in ['good', 'watch'] as const"
+        :key="side"
+        :class="[card, 'grid content-start gap-2.5']"
+        :aria-labelledby="`highlights-${side}-title`"
+        :data-testid="`highlights-${side}`"
       >
-        <h3 id="summary-rental-title" class="text-sm font-semibold">
-          Louabilité (phase 2)
-        </h3>
-        <template v-if="evaluation">
-          <p class="flex flex-wrap items-center gap-1.5 text-sm">
-            <RentalPill :verdict="evaluation.rental.verdict" />
-            <span class="text-muted">en {{ evaluation.rental.year }}</span>
-          </p>
-          <p class="text-xs text-muted">
-            <template
-              v-if="
-                rentalCounts.bad + rentalCounts.warn + rentalCounts.unknown ===
-                0
-              "
-              >Aucun point bloquant ni d’attention.</template
+        <h2 :id="`highlights-${side}-title`" class="text-base font-semibold">
+          {{ side === 'good' ? 'Ce qui plaît' : 'À surveiller' }}
+        </h2>
+        <ul v-if="highlights[side].length" class="grid gap-2 leading-snug">
+          <li
+            v-for="point in highlights[side]"
+            :key="point.key"
+            class="flex items-baseline justify-between gap-3"
+            :data-highlight="point.key"
+          >
+            <span class="min-w-0 break-words">{{ point.text }}</span>
+            <button
+              type="button"
+              :class="linkClass"
+              :aria-label="`${point.text} : voir l’onglet ${tabLabel(point.tab)}`"
+              @click="emit('go', point.tab)"
             >
-            <template v-else>
-              {{ rentalCounts.bad }} bloquant(s) ·
-              {{ rentalCounts.warn }} point(s) d’attention ·
-              {{ rentalCounts.unknown }} à vérifier
-            </template>
-          </p>
-        </template>
-        <button
-          type="button"
-          :class="linkClass"
-          @click="emit('go', 'financer')"
-        >
-          Contrôles et étude →
-        </button>
-      </section>
-      <section
-        class="grid content-start gap-1.5 rounded-2xl border border-line bg-surface px-4 py-3"
-        aria-labelledby="summary-follow-title"
-        data-testid="summary-follow"
-      >
-        <h3 id="summary-follow-title" class="text-sm font-semibold">Suivi</h3>
-        <p class="text-sm">
-          {{ openTasks.length }} tâche(s) ouverte(s) ·
+              {{ tabLabel(point.tab) }}
+            </button>
+          </li>
+        </ul>
+        <p v-else class="text-sm text-muted">
           {{
-            item.opinions.length === 0
-              ? 'aucun avis'
-              : `${item.opinions.length} avis`
+            side === 'good'
+              ? 'Rien à mettre en avant pour l’instant.'
+              : 'Rien à signaler pour l’instant.'
           }}
         </p>
-        <p v-if="nextTask" class="text-xs text-muted">
-          Prochaine : {{ nextTask.label }}
-        </p>
-        <button type="button" :class="linkClass" @click="emit('go', 'suivi')">
-          Avis, tâches, visites, journal →
-        </button>
-      </section>
-      <section
-        class="grid content-start gap-1.5 rounded-2xl border border-line bg-surface px-4 py-3"
-        aria-labelledby="summary-area-title"
-        data-testid="summary-area"
-      >
-        <h3 id="summary-area-title" class="text-sm font-semibold">Quartier</h3>
-        <p class="text-sm">
-          <template v-if="tram"
-            >Tram {{ tram.name }} à
-            {{ formatDistance(tram.distanceMeters) }}</template
-          >
-          <template v-else>Tram : à vérifier</template>
-          ·
-          <template v-if="marketMedian !== null"
-            >marché DVF {{ formatEurosPerM2(marketMedian) }}</template
-          >
-          <template v-else>marché DVF inconnu</template>
-        </p>
-        <p class="text-sm" data-testid="summary-neighbourhood">
-          <template v-if="surroundings?.neighbourhood.value"
-            >Quartier {{ surroundings.neighbourhood.value.name
-            }}<template
-              v-if="
-                surroundings.neighbourhood.value.commune !==
-                surroundings.neighbourhood.value.name
-              "
-            >
-              ({{ surroundings.neighbourhood.value.commune }})</template
-            ><template v-if="surroundings.neighbourhood.status === 'to_verify'">
-              · à vérifier</template
-            ></template
-          >
-          <template v-else>Quartier : non disponible</template>
-        </p>
-        <p
-          v-if="equipment"
-          class="text-xs text-muted"
-          data-testid="summary-equipment"
-        >
-          {{ equipment }} (à vol d’oiseau)
-        </p>
-        <p
-          v-if="evaluation && marketMedian !== null"
-          class="text-xs text-muted"
-        >
-          L’annonce : {{ formatEurosPerM2(evaluation.metrics.pricePerM2) }}
-          <CostBasisBadge basis="price" compact />
-        </p>
-        <button
-          type="button"
-          :class="linkClass"
-          @click="emit('go', 'quartier')"
-        >
-          Contexte, équipements, carte, risques →
-        </button>
       </section>
     </div>
+
+    <div class="grid gap-4 @3xl:grid-cols-2 @3xl:items-start">
+      <OpinionsSection
+        :opinions="item.opinions"
+        :members="members ?? []"
+        :me-id="meId ?? null"
+        :saving="savingOpinion"
+        @save="input => emit('saveOpinion', input)"
+      />
+      <section
+        :class="[card, 'grid content-start gap-2.5']"
+        aria-labelledby="next-steps-title"
+        data-testid="next-steps"
+      >
+        <div class="flex flex-wrap items-baseline justify-between gap-x-3">
+          <h2 id="next-steps-title" class="text-base font-semibold">
+            Prochaines étapes
+          </h2>
+          <button
+            type="button"
+            :class="linkClass"
+            data-testid="go-todo"
+            @click="emit('go', 'a-faire')"
+          >
+            Tout voir dans À faire
+          </button>
+        </div>
+        <ul v-if="steps.length" class="grid gap-2 leading-snug">
+          <li
+            v-for="step in steps"
+            :key="`${step.kind}-${step.id}`"
+            class="flex items-baseline gap-2.5"
+            :data-step="step.kind"
+          >
+            <span
+              class="flex-none rounded-md px-1.5 py-0.5 text-xs font-semibold"
+              :class="STEP_KINDS[step.kind].tone"
+              >{{ STEP_KINDS[step.kind].label }}</span
+            >
+            <span class="min-w-0 break-words">{{ step.text }}</span>
+          </li>
+        </ul>
+        <p v-else class="text-sm text-muted">Rien à faire pour l’instant.</p>
+      </section>
+    </div>
+
+    <p class="text-sm text-muted" data-testid="synthesis-freshness">
+      <template v-if="item.lastCheck && freshness.label">
+        {{ freshness.label
+        }}<template v-if="checkedBy"> par {{ checkedBy }}</template> :
+        {{ item.lastCheck.summary }}
+      </template>
+      <template v-else>{{ freshness.title }}.</template>
+      <button
+        type="button"
+        class="ml-1 text-accent underline-offset-2 hover:underline"
+        data-testid="go-history"
+        @click="emit('go', 'historique')"
+      >
+        Historique
+      </button>
+    </p>
   </div>
 </template>

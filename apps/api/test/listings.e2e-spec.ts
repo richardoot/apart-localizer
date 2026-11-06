@@ -164,7 +164,10 @@ describe('Listings (e2e)', () => {
       expect(listing.status).toBe('to_study')
       expect(listing.source).toBe('autre')
       expect(listing.rentalPlan.targetRent).toBe(750)
-      expect(listing.rentalPlan.leaseType).toBe('unfurnished')
+      // Lot 19 : l'année et le type de location sont ceux de l'espace.
+      expect(listing.rentalPlan).not.toHaveProperty('leaseType')
+      expect(listing.rentalPlan).not.toHaveProperty('year')
+      expect(listing).not.toHaveProperty('assumptionsOverride')
       expect(listing.location.commune).toBe('Talence')
       expect(listing.location.point).toBeNull()
       expect(isNewForMe).toBe(true)
@@ -260,7 +263,7 @@ describe('Listings (e2e)', () => {
       expect(text).toContain('coordinates')
     })
 
-    it("applique les travaux et une surcharge d'hypothèses par annonce", async () => {
+    it("applique les travaux ; une surcharge d'hypothèses par annonce est ignorée (lot 19)", async () => {
       const res = await request(ctx.server)
         .post('/listings')
         .set(ctx.auth(richard))
@@ -279,7 +282,14 @@ describe('Listings (e2e)', () => {
         .expect(201)
       expect(res.body.evaluation.metrics.renovationTotal).toBe(5000)
       expect(res.body.evaluation.metrics.totalCost).toBe(225_000)
-      expect(res.body.evaluation.metrics.loanAmount).toBe(165_000)
+      // L'apport de l'espace (40 000 €), pas les 60 000 € envoyés.
+      expect(res.body.evaluation.metrics.loanAmount).toBe(185_000)
+      expect(res.body.listing).not.toHaveProperty('assumptionsOverride')
+      const row = await ctx.prisma.listing.findUniqueOrThrow({
+        where: { id: res.body.listing.id },
+        select: { assumptionsOverride: true },
+      })
+      expect(row.assumptionsOverride).toBeNull()
       expect(res.body.listing.renovation.items).toHaveLength(2)
       expect(res.body.listing.renovation.items[0].position).toBe(0)
     })

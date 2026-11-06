@@ -11,7 +11,7 @@ export const checkKeys = {
 
 /**
  * Lot 15 : les vérifications d'une annonce sur le portail (chronologie
- * « Mises à jour ») et l'enregistrement d'une vérification depuis la fiche
+ * de l'Historique) et l'enregistrement d'une vérification depuis la fiche
  * (« Vue en ligne aujourd'hui », « Plus en ligne »). Une vérification change
  * la fiche, la liste (« à revérifier »), le brief et le journal.
  */

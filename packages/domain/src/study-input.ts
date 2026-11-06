@@ -15,8 +15,10 @@ import type { RentalChecksInput } from './rental-checks.js'
 /**
  * L'entrée des études du lot 5 (coût d'occupation, projection, scénarios) :
  * l'entrée financière de `compute`, celle des contrôles de louabilité et le
- * type de bail visé. Dérivée d'une annonce par `studyInputFromListing`, la
- * même fonction pour l'API, le MCP et l'aperçu du navigateur.
+ * type de bail visé. Dérivée d'une annonce et des hypothèses de l'espace par
+ * `studyInputFromListing`, la même fonction pour l'API, le MCP et l'aperçu du
+ * navigateur. Depuis le lot 19, l'année et le type de location viennent des
+ * hypothèses de l'espace, jamais de l'annonce ; un scénario peut les changer.
  */
 export interface StudyInput {
   financials: ListingFinancials
@@ -29,8 +31,6 @@ export type StudyListingLike = ListingLike & {
   dpeClass?: DpeClass | null
   rentalPlan?:
     | (NonNullable<ListingLike['rentalPlan']> & {
-        year?: number | null
-        leaseType?: LeaseType | null
         marketRent?: number | null
         demand?: RentalDemand | null
         coOwnershipAllowsRental?: TriState | null
@@ -40,14 +40,18 @@ export type StudyListingLike = ListingLike & {
     | null
 }
 
-/** L'entrée des contrôles de louabilité d'une annonce (phase 2). */
+/**
+ * L'entrée des contrôles de louabilité d'une annonce (phase 2). L'année reste
+ * nulle : elle se lit dans les hypothèses de l'espace (date de mise en
+ * location, sinon `rentalYear`) ; seul un scénario la fixe.
+ */
 export function rentalChecksInputFromListing(
   listing: StudyListingLike
 ): RentalChecksInput {
   const plan = listing.rentalPlan
   return {
     dpeClass: listing.dpeClass ?? null,
-    year: plan?.year ?? null,
+    year: null,
     marketRent: plan?.marketRent ?? null,
     demand: plan?.demand ?? null,
     coOwnershipAllowsRental: plan?.coOwnershipAllowsRental ?? 'unknown',
@@ -58,20 +62,21 @@ export function rentalChecksInputFromListing(
 
 export function studyInputFromListing(
   listing: StudyListingLike,
+  assumptions: { leaseType?: LeaseType | null },
   at?: Date
 ): StudyInput {
   return {
     financials: financialsFromListing(listing, undefined, at),
     rental: rentalChecksInputFromListing(listing),
-    leaseType: listing.rentalPlan?.leaseType ?? 'unfurnished',
+    leaseType: assumptions.leaseType ?? 'unfurnished',
   }
 }
 
 /**
- * La date de mise en location (bascule en phase 2). L'année de la phase 2 de
- * l'annonce l'emporte ; la date précise des hypothèses s'applique si elle
- * tombe la même année (ou si l'annonce n'en fixe pas) ; à défaut, le
- * 1er janvier de l'année retenue.
+ * La date de mise en location (bascule en phase 2). Une année fixée par un
+ * scénario l'emporte ; la date précise des hypothèses s'applique si elle
+ * tombe la même année (ou si rien n'en fixe) ; à défaut, le 1er janvier de
+ * l'année retenue (`rentalYear` des hypothèses de l'espace).
  */
 export function rentalStartDate(
   listingYear: number | null,

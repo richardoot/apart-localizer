@@ -127,12 +127,13 @@ describe('Prix cible et négociation (e2e)', () => {
         title: 'T2 moins cher',
         price: 150_000,
       })
-      // Sans loyer visé et sans effort admis, aucun critère ne donne de prix.
+      // Sans loyer visé et avec des charges qui mangent l'effort admis,
+      // aucun critère ne donne de prix (lot 19 : plus de surcharge par annonce).
       const noRent = await createListing({
         ...EXAMPLE,
         title: 'Sans loyer visé',
         rentalPlan: null,
-        assumptionsOverride: { maxMonthlyEffort: 0 },
+        annualCharges: 12_000,
       })
       expect(
         (await get(`/listings/${cheaper}/target-price`).expect(200)).body.rank

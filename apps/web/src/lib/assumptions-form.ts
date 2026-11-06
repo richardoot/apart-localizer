@@ -2,12 +2,14 @@ import {
   AssumptionsSchema,
   DEFAULT_NOTARY_SCALE,
   FURNISHED_RENTAL_KIND_LABELS,
+  LEASE_TYPE_LABELS,
   TARGET_CRITERION_LABELS,
   TAX_REGIME_LABELS,
 } from '@apart/contracts'
 import type {
   Assumptions,
   FurnishedRentalKind,
+  LeaseType,
   NotaryMode,
   NotaryScale,
   TargetCriterion,
@@ -65,6 +67,8 @@ export interface AssumptionsFormModel {
   negotiableDiscountPercent: string
   tightDiscountPercent: string
   rentalYear: string
+  /** Lot 19 : le type de location de la phase 2, pour tout l'espace. */
+  leaseType: LeaseType
   /** Lot 5 : phase 1, fiscalité, horizon. */
   currentRent: string
   maintenanceAnnual: string
@@ -87,6 +91,8 @@ export const TAX_REGIMES = Object.keys(TAX_REGIME_LABELS) as TaxRegime[]
 export const FURNISHED_KINDS = Object.keys(
   FURNISHED_RENTAL_KIND_LABELS
 ) as FurnishedRentalKind[]
+/** Lot 19 : vide, meublé, colocation. */
+export const LEASE_TYPES = Object.keys(LEASE_TYPE_LABELS) as LeaseType[]
 
 /**
  * Les critères du prix cible que la page laisse cocher, dans l'ordre des
@@ -156,6 +162,7 @@ export function formFromValues(values: Assumptions): AssumptionsFormModel {
     negotiableDiscountPercent: percentInput(values.negotiableDiscount),
     tightDiscountPercent: percentInput(values.tightDiscount),
     rentalYear: String(values.rentalYear),
+    leaseType: values.leaseType,
     currentRent: optionalAmount(values.currentRent),
     maintenanceAnnual: optionalAmount(values.maintenanceAnnual),
     purchaseDate: values.purchaseDate ?? '',
@@ -207,6 +214,7 @@ export interface AssumptionsDraft {
   negotiableDiscount: number | null
   tightDiscount: number | null
   rentalYear: number | null
+  leaseType: LeaseType
   currentRent: number | null
   maintenanceAnnual: number | null
   purchaseDate: string | null
@@ -259,6 +267,7 @@ export function draftFromForm(model: AssumptionsFormModel): AssumptionsDraft {
     negotiableDiscount: percentToFraction(model.negotiableDiscountPercent),
     tightDiscount: percentToFraction(model.tightDiscountPercent),
     rentalYear: parseNumberInput(model.rentalYear),
+    leaseType: model.leaseType,
     currentRent:
       model.currentRent.trim() === ''
         ? null
@@ -514,6 +523,14 @@ const STATIC_FIELDS: readonly FieldSpec[] = [
     valueKey: 'rentalYear',
   },
   {
+    key: 'leaseType',
+    label: 'Type de location (phase 2)',
+    section: 'calendrier',
+    kind: 'choice',
+    valueKey: 'leaseType',
+    choices: LEASE_TYPE_LABELS,
+  },
+  {
     key: 'vacancyMonths',
     label: 'Vacance locative',
     section: 'calendrier',
@@ -716,6 +733,7 @@ const INPUT_IDS: Record<string, string> = {
   maintenanceAnnual: 'h-maintenance',
   rentalStartDate: 'h-rental-start',
   rentalYear: 'h-year',
+  leaseType: 'h-lease-type',
   vacancyMonths: 'h-vacancy',
   fixedCostsAnnual: 'h-fixed',
   notaryMode: 'h-notary-mode-scale',

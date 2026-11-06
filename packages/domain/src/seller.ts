@@ -13,7 +13,7 @@ import type {
  * (par défaut, jamais deviné), le nom de l'agence ou du réseau, et la
  * référence de l'annonce, qui sert à retrouver la même annonce sur les autres
  * portails. Le nom d'une personne n'est jamais un champ de l'annonce : il
- * reste dans le contact de l'onglet Échanges (lot 17). Pur.
+ * reste dans le contact de l'annonceur (onglet « À faire », lot 17). Pur.
  */
 
 /** Ce que l'annonce sait de son vendeur. */

@@ -100,6 +100,7 @@ const arbAssumptionsWith = (
       'effort',
     ] as Assumptions['targetCriteria']),
     rentalYear: fc.constant(2028),
+    leaseType: fc.constant('unfurnished' as const),
     currentRent: fc.constant(null),
     maintenanceAnnual: fc.constant(null),
     // Lot 5 : sans effet sur le coût, le rendement et le prix cible.

@@ -871,7 +871,7 @@ describe('tri', () => {
     )
     expect(decision.listing?.id).toBe(LISTING_ID)
     expect(n(knownLineText(changedCheck, true))).toBe(
-      'Même lien : prix 219 000 € → 212 000 €, appliqué dans « Mises à jour »'
+      'Même lien : prix 219 000 € → 212 000 €, appliqué, noté dans l’Historique'
     )
     expect(n(knownLineText(changedCheck, false))).toBe(
       'Même lien : prix 219 000 € → 212 000 €, non appliqué'
@@ -904,7 +904,7 @@ describe('tri', () => {
     )
     expect(item.fit).toBeNull()
     expect(item.check?.outcome).toBe('changed')
-    expect(item.why).toContain('appliqué dans')
+    expect(item.why).toContain('appliqué, noté dans')
   })
 
   it('écartée : jamais reproposée, la raison gardée', () => {
@@ -1275,7 +1275,7 @@ describe('compte rendu', () => {
         line(
           'seloger',
           'known',
-          'Même lien : prix, appliqué dans « Mises à jour »'
+          'Même lien : prix, appliqué, noté dans l’Historique'
         ),
         line('seloger', 'duplicate_probable'),
       ]
@@ -1301,6 +1301,28 @@ describe('compte rendu', () => {
       note: 'Non parcouru cette fois',
     })
     expect(bilan[5]).toMatchObject({ count: '1 lue', note: 'rien de nouveau' })
+    // Une exploration enregistrée avant le lot 19 (« appliqué dans « Mises à
+    // jour » ») compte toujours sa mise à jour.
+    expect(
+      portalBilan(
+        [
+          {
+            portal: 'seloger',
+            status: 'read',
+            count: 1,
+            note: null,
+            searchUrl: null,
+          },
+        ],
+        [
+          line(
+            'seloger',
+            'known',
+            'Même lien : prix, appliqué dans « Mises à jour »'
+          ),
+        ]
+      )[0]?.note
+    ).toBe('1 mise à jour')
     expect(
       portalBilan(
         [

@@ -1,10 +1,9 @@
 /**
- * Lot 17 : questions aux agences dans l'interface. Onglet « Échanges »
- * (messages à valider modifiables et validés par lot, contact saisi et
- * effacé, chronologie avec réponse appliquée et valeur proposée à appliquer,
- * relance due, « pas de réponse », signature), état des tâches demandées dans
- * Suivi, pastille « à valider » de l'onglet, bloc de la Synthèse. API
- * simulée ; données fictives.
+ * Lot 17 : questions aux agences dans l'interface, rangées au lot 19 dans
+ * l'onglet « À faire » (messages à valider modifiables et validés, contact
+ * saisi et effacé, réponse appliquée et valeur proposée à appliquer, relance
+ * due, « pas de réponse », signature), état des tâches demandées, pastille
+ * de l'onglet, bloc de la Synthèse. API simulée ; données fictives.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -13,6 +12,7 @@ import type { AgencyRequest } from '@apart/contracts'
 import {
   MEMBERS,
   fakeAgencyRequest,
+  fakeEvaluated,
   fakeExchanges,
   fakeTask,
 } from '@/test/fixtures'
@@ -34,6 +34,8 @@ const apiMock = vi.hoisted(() => ({
     noAnswer: vi.fn(),
     apply: vi.fn(),
   },
+  tasks: { create: vi.fn(), update: vi.fn(), remove: vi.fn() },
+  visits: { list: vi.fn() },
 }))
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
@@ -42,7 +44,7 @@ vi.mock('@/lib/api', async () => {
 
 import ExchangesSection from './ExchangesSection.vue'
 import PendingMessages from './PendingMessages.vue'
-import TasksSection from '@/components/listings/TasksSection.vue'
+import TodoTab from '@/components/listings/tabs/TodoTab.vue'
 import ListingTabs from '@/components/listings/ListingTabs.vue'
 
 const LISTING = '11111111-1111-4111-8111-111111111111'
@@ -123,7 +125,7 @@ function mountWith<T>(component: T, props: Record<string, unknown> = {}) {
   })
 }
 
-describe('onglet « Échanges » (lot 17)', () => {
+describe('questions aux agences dans « À faire » (lots 17 et 19)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     apiMock.agency.settings.mockResolvedValue({
@@ -132,9 +134,14 @@ describe('onglet « Échanges » (lot 17)', () => {
       defaultSignature: 'Richard et Chloé',
       followUpBusinessDays: 5,
     })
+    apiMock.visits.list.mockResolvedValue([])
     apiMock.agency.exchanges.mockResolvedValue(
       fakeExchanges({
-        requests: [DRAFT, ANSWERED, DUE],
+        requests: [
+          { ...DRAFT, taskIds: ['aaaaaaaa-0000-4000-8000-000000000001'] },
+          { ...ANSWERED, taskIds: ['aaaaaaaa-0000-4000-8000-000000000002'] },
+          DUE,
+        ],
         openQuestions: [
           {
             taskId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
@@ -159,25 +166,71 @@ describe('onglet « Échanges » (lot 17)', () => {
     )
   })
 
-  it('montre le lot à valider, modifiable, et le valide d’un clic', async () => {
+  /** La fiche fictive : une question par demande, le DTG pas encore posé. */
+  function mountTodo() {
+    return mountWith(TodoTab, {
+      item: fakeEvaluated(
+        { id: LISTING },
+        {
+          tasks: [
+            fakeTask({
+              id: 'aaaaaaaa-0000-4000-8000-000000000001',
+              label: 'Demander les diagnostics',
+              position: 0,
+            }),
+            fakeTask({
+              id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              label: 'Demander la taxe foncière',
+              field: 'propertyTax',
+              position: 1,
+            }),
+            fakeTask({
+              id: 'aaaaaaaa-0000-4000-8000-000000000002',
+              label: 'Demander le montant des charges',
+              field: 'annualCharges',
+              position: 2,
+              done: true,
+              answeredAt: '2026-11-07T15:00:00.000Z',
+              requestId: ANSWERED.id,
+            }),
+            fakeTask({
+              id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+              label: 'Demander le DTG',
+              position: 3,
+            }),
+          ],
+        }
+      ),
+      members: MEMBERS,
+      meId: MEMBERS[0]?.id ?? null,
+    })
+  }
+
+  it('le message à valider se lit, se corrige et se valide d’un clic', async () => {
+    apiMock.agency.exchanges.mockResolvedValue(
+      fakeExchanges({
+        requests: [
+          { ...DRAFT, taskIds: ['aaaaaaaa-0000-4000-8000-000000000001'] },
+        ],
+      })
+    )
     apiMock.agency.approve.mockResolvedValue({ requests: [] })
     apiMock.agency.update.mockResolvedValue({ request: DRAFT })
-    const wrapper = mountWith(ExchangesSection, {
-      listingId: LISTING,
-      members: MEMBERS,
-    })
+    const wrapper = mountTodo()
     await flushPromises()
-    const drafts = wrapper.get('[data-testid="drafts-section"]')
-    expect(drafts.text()).toContain('Messages à valider')
-    expect(drafts.text()).toContain('préparé par Claude (MCP, pour Richard)')
-    const body = drafts.get<HTMLTextAreaElement>('[data-testid="draft-body"]')
-    expect(body.element.value).toContain('Bien cordialement,\nRichard et Chloé')
+    const draft = wrapper.get('[data-testid="draft-message"]')
+    expect(draft.text()).toContain('préparé par Claude (MCP, pour Richard)')
+    expect(
+      draft.get('[data-testid="draft-text"]').element.textContent
+    ).toContain('Bien cordialement,\nRichard et Chloé')
     // Un texte modifié s'enregistre avant la validation.
+    await draft.get('[data-testid="draft-edit"]').trigger('click')
+    const body = draft.get<HTMLTextAreaElement>('[data-testid="draft-body"]')
     await body.setValue('Bonjour,\nTexte corrigé.\nRichard et Chloé')
     expect(
-      wrapper.get('[data-testid="drafts-approve"]').attributes('disabled')
+      draft.get('[data-testid="draft-approve"]').attributes('disabled')
     ).toBeDefined()
-    await wrapper.get('[data-testid="draft-save"]').trigger('click')
+    await draft.get('[data-testid="draft-save"]').trigger('click')
     await flushPromises()
     expect(apiMock.agency.update).toHaveBeenCalledWith(DRAFT.id, {
       subject: DRAFT.subject,
@@ -185,13 +238,13 @@ describe('onglet « Échanges » (lot 17)', () => {
     })
     // Revenir au texte d'origine rend la validation possible.
     await body.setValue(DRAFT.body)
-    await wrapper.get('[data-testid="drafts-approve"]').trigger('click')
+    await draft.get('[data-testid="draft-approve"]').trigger('click')
     await flushPromises()
     expect(apiMock.agency.approve).toHaveBeenCalledWith([DRAFT.id])
     expect(wrapper.text()).toContain('Message validé : demandez à Claude')
   })
 
-  it('questions à poser, préparation, relance due, chronologie avec réponse appliquée et valeur proposée', async () => {
+  it('questions à poser, préparation, relance due, réponse appliquée et valeur proposée', async () => {
     apiMock.agency.draft.mockResolvedValue({ request: DRAFT })
     apiMock.agency.apply.mockResolvedValue({
       request: ANSWERED,
@@ -199,19 +252,19 @@ describe('onglet « Échanges » (lot 17)', () => {
       applied: [],
     })
     apiMock.agency.noAnswer.mockResolvedValue({ request: DUE })
-    const wrapper = mountWith(ExchangesSection, {
-      listingId: LISTING,
-      members: MEMBERS,
-    })
+    const wrapper = mountTodo()
     await flushPromises()
-    const questions = wrapper.get('[data-testid="open-questions"]')
-    expect(questions.text()).toContain('Demander le DTG')
-    expect(questions.text()).toContain('demandée le 5 nov.')
+    expect(wrapper.get('[data-testid="todo-agency-bar"]').text()).toContain(
+      '1 question pas encore posée à l’annonceur.'
+    )
     await wrapper.get('[data-testid="prepare-message"]').trigger('click')
     await flushPromises()
     expect(apiMock.agency.draft).toHaveBeenCalledWith(LISTING, {})
 
-    const timeline = wrapper.get('[data-testid="requests-timeline"]')
+    const answered = wrapper.get(
+      '[data-key="task:aaaaaaaa-0000-4000-8000-000000000002"]'
+    )
+    const timeline = answered.get('[data-testid="requests-timeline"]')
     expect(timeline.text()).toContain('Réponse reçue')
     expect(timeline.text()).toContain(
       'validée dans la conversation avec Claude par Chloé'
@@ -246,13 +299,13 @@ describe('onglet « Échanges » (lot 17)', () => {
   it('contact : saisi, vérifié, effacé après confirmation', async () => {
     apiMock.agency.putContact.mockResolvedValue({})
     apiMock.agency.clearContact.mockResolvedValue(undefined)
-    const wrapper = mountWith(ExchangesSection, {
-      listingId: LISTING,
-      members: MEMBERS,
-    })
+    const wrapper = mountWith(ExchangesSection, { listingId: LISTING })
     await flushPromises()
     expect(wrapper.get('[data-testid="contact-empty"]').text()).toContain(
       'Aucun contact'
+    )
+    expect(wrapper.get('[data-testid="exchanges-outbound"]').text()).toContain(
+      'jamais par le serveur'
     )
     await wrapper.get('[data-testid="contact-edit"]').trigger('click')
     await wrapper.get('[data-testid="contact-save"]').trigger('click')
@@ -292,17 +345,11 @@ describe('onglet « Échanges » (lot 17)', () => {
         },
       })
     )
-    const filled = mountWith(ExchangesSection, {
-      listingId: LISTING,
-      members: MEMBERS,
-    })
+    const filled = mountWith(ExchangesSection, { listingId: LISTING })
     await flushPromises()
     const view = filled.get('[data-testid="contact-view"]')
     expect(view.text()).toContain('contact@agence.exemple.invalid')
     expect(view.text()).toContain('ouvrir la conversation')
-    expect(filled.get('[data-testid="history-empty"]').text()).toContain(
-      'Aucune demande envoyée'
-    )
     await filled.get('[data-testid="contact-clear"]').trigger('click')
     expect(
       filled.get('[data-testid="contact-clear-confirm"]').text()
@@ -315,7 +362,14 @@ describe('onglet « Échanges » (lot 17)', () => {
   it('un message validé se note envoyé ; la signature se change', async () => {
     apiMock.agency.exchanges.mockResolvedValue(
       fakeExchanges({
-        requests: [{ ...DRAFT, status: 'approved', approvedVia: 'app' }],
+        requests: [
+          {
+            ...DRAFT,
+            status: 'approved',
+            approvedVia: 'app',
+            taskIds: ['aaaaaaaa-0000-4000-8000-000000000001'],
+          },
+        ],
       })
     )
     apiMock.agency.sent.mockResolvedValue({ request: DRAFT })
@@ -325,10 +379,7 @@ describe('onglet « Échanges » (lot 17)', () => {
       defaultSignature: 'Richard et Chloé',
       followUpBusinessDays: 5,
     })
-    const wrapper = mountWith(ExchangesSection, {
-      listingId: LISTING,
-      members: MEMBERS,
-    })
+    const wrapper = mountTodo()
     await flushPromises()
     await wrapper.get('[data-testid="mark-sent"]').trigger('click')
     await flushPromises()
@@ -336,7 +387,7 @@ describe('onglet « Échanges » (lot 17)', () => {
     const signature = wrapper.get('[data-testid="signature"]')
     expect(signature.text()).toContain('Richard et Chloé')
     expect(signature.text()).toContain('aucune adresse ni aucun téléphone')
-    await signature.get('button').trigger('click')
+    await signature.get('[data-testid="signature-edit"]').trigger('click')
     await wrapper
       .get('[aria-label="Signature des messages"] input')
       .setValue('R. et C. [Exemple]')
@@ -351,15 +402,19 @@ describe('onglet « Échanges » (lot 17)', () => {
 
   it('dit l’erreur de l’API', async () => {
     const { ApiError } = await import('@/lib/api')
+    apiMock.agency.exchanges.mockResolvedValue(
+      fakeExchanges({
+        requests: [
+          { ...DRAFT, taskIds: ['aaaaaaaa-0000-4000-8000-000000000001'] },
+        ],
+      })
+    )
     apiMock.agency.approve.mockRejectedValue(
       new ApiError(400, 'Seul un message « à valider » se valide')
     )
-    const wrapper = mountWith(ExchangesSection, {
-      listingId: LISTING,
-      members: MEMBERS,
-    })
+    const wrapper = mountTodo()
     await flushPromises()
-    await wrapper.get('[data-testid="drafts-approve"]').trigger('click')
+    await wrapper.get('[data-testid="draft-approve"]').trigger('click')
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain(
       'Seul un message « à valider » se valide'
@@ -372,52 +427,75 @@ describe('Suivi, onglet et Synthèse (lot 17)', () => {
     vi.clearAllMocks()
   })
 
-  it('chaque tâche liée dit son état : demandée le …, réponse du …, message à valider', () => {
+  it('chaque tâche liée dit son état : demandée le …, réponse du …, message à valider', async () => {
+    apiMock.visits.list.mockResolvedValue([])
+    apiMock.agency.settings.mockResolvedValue({
+      signature: 'Richard et Chloé',
+      custom: false,
+      defaultSignature: 'Richard et Chloé',
+      followUpBusinessDays: 5,
+    })
     const requests: AgencyRequest[] = [
       fakeAgencyRequest({ taskIds: ['t1'] }),
       { ...DRAFT, taskIds: ['t3'] },
     ]
-    const wrapper = mount(TasksSection, {
-      props: {
-        members: MEMBERS,
-        requests,
-        tasks: [
-          fakeTask({
-            id: 't1',
-            label: 'Demander la taxe foncière',
-            field: 'propertyTax',
-          }),
-          fakeTask({
-            id: 't2',
-            label: 'Demander les charges',
-            field: 'annualCharges',
-            done: true,
-            answeredAt: '2026-11-07T15:00:00.000Z',
-          }),
-          fakeTask({ id: 't3', label: 'Demander le DTG' }),
-          fakeTask({ id: 't4', label: 'Vérifier la desserte' }),
-        ],
-      },
+    apiMock.agency.exchanges.mockResolvedValue(fakeExchanges({ requests }))
+    const wrapper = mountWith(TodoTab, {
+      item: fakeEvaluated(
+        { id: LISTING },
+        {
+          tasks: [
+            fakeTask({
+              id: 't1',
+              label: 'Demander la taxe foncière',
+              field: 'propertyTax',
+              position: 0,
+            }),
+            fakeTask({
+              id: 't2',
+              label: 'Demander les charges',
+              field: 'annualCharges',
+              done: true,
+              answeredAt: '2026-11-07T15:00:00.000Z',
+              position: 1,
+            }),
+            fakeTask({ id: 't3', label: 'Demander le DTG', position: 2 }),
+            fakeTask({
+              id: 't4',
+              label: 'Vérifier la desserte',
+              position: 3,
+            }),
+          ],
+        }
+      ),
+      members: MEMBERS,
+      meId: MEMBERS[0]?.id ?? null,
     })
-    const states = wrapper.findAll('[data-testid="task-request-state"]')
-    expect(states.map(s => s.text())).toEqual([
-      'Demandée le 5 nov. à l’agence',
-      'Réponse du 7 nov.',
-      'Message à valider',
-    ])
-    expect(states.map(s => s.attributes('data-request-state'))).toEqual([
-      'requested',
-      'answered',
-      'draft',
+    await flushPromises()
+    const states = wrapper
+      .findAll('[data-testid="todo-item"]')
+      .map(i => [
+        i.attributes('data-key'),
+        i.attributes('data-state'),
+        i.find('[data-testid="todo-state"]').exists()
+          ? i.get('[data-testid="todo-state"]').text()
+          : null,
+      ])
+    expect(states).toEqual([
+      ['task:t1', 'requested', 'Demandée le 5 nov. à l’agence'],
+      ['task:t3', 'draft', 'Message à valider'],
+      ['task:t4', 'open', null],
+      ['task:t2', 'answered', 'Réponse du 7 nov.'],
     ])
   })
 
-  it('l’onglet Échanges signale les messages à valider', () => {
+  it('l’onglet À faire compte ce qui est à traiter (lot 19)', () => {
     const wrapper = mount(ListingTabs, {
-      props: { modelValue: 'synthese', pendingMessages: 2 },
+      props: { modelValue: 'synthese', todoCount: 3 },
     })
-    expect(wrapper.get('[data-testid="tab-echanges"]').text()).toContain(
-      '2 à valider'
+    expect(wrapper.get('[data-testid="tab-a-faire"]').text()).toContain('3')
+    expect(wrapper.get('[data-testid="todo-count"]').text()).toContain(
+      '3 à traiter'
     )
   })
 

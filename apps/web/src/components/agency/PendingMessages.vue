@@ -108,7 +108,7 @@
           :to="{
             name: 'listing',
             params: { id: r.listingId },
-            query: { onglet: 'echanges' },
+            query: { onglet: 'a-faire' },
           }"
           class="text-accent underline"
           >{{ r.listing.title }}</RouterLink

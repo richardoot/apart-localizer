@@ -14,7 +14,7 @@
    * Une annonce trouvée par Claude (ou reçue par e-mail) avec la même agence
    * et la même référence qu'une annonce suivie est la même, publiée sur un
    * autre portail : son lien a rejoint la fiche, rien d'autre ne change ; un
-   * écart de prix est noté dans « Mises à jour ». « Ce n'est pas la même »
+   * écart de prix est noté dans l’Historique. « Ce n'est pas la même »
    * (après confirmation) retire le lien de la fiche et la remet à valider.
    * Montrés `AUTO_ATTACH_REVIEW_DAYS` jours.
    */
@@ -83,7 +83,7 @@
     <p class="max-w-3xl text-[13px] leading-normal text-muted">
       Ces annonces sont les vôtres, publiées sur un autre portail. Le lien
       rejoint la fiche, rien d’autre ne change ; un écart de prix est noté dans
-      « Mises à jour ».
+      l’Historique.
     </p>
     <ul class="grid gap-2">
       <li

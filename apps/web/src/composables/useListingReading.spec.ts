@@ -12,7 +12,6 @@ import { readingOf, useListingReading } from './useListingReading'
 const item = fakeEvaluated({
   renovation: null,
   annualCharges: null,
-  assumptionsOverride: null,
 })
 
 describe('useListingReading (lot 9)', () => {

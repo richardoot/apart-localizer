@@ -33,6 +33,11 @@
     rowAxis: SensitivityAxis
     colAxis: SensitivityAxis
     loading?: boolean
+    /**
+     * Lot 19 : dans le dépli « Sensibilité » de l'onglet Négocier, sans cadre
+     * ni titre visible (le résumé du dépli le porte).
+     */
+    bare?: boolean
   }>()
   const emit = defineEmits<{
     'update:rowAxis': [axis: SensitivityAxis]
@@ -121,12 +126,16 @@
 
 <template>
   <section
-    class="grid gap-3 rounded-2xl border border-line bg-surface p-4 text-sm sm:p-5"
+    class="grid gap-3 text-sm"
+    :class="bare ? '' : 'rounded-2xl border border-line bg-surface p-4 sm:p-5'"
     aria-labelledby="sensitivity-title"
   >
     <header class="flex flex-wrap items-start justify-between gap-3">
       <div class="grid max-w-3xl gap-1">
-        <h3 id="sensitivity-title" class="font-display text-lg font-bold">
+        <h3
+          id="sensitivity-title"
+          :class="bare ? 'sr-only' : 'font-display text-lg font-bold'"
+        >
           Sensibilité
         </h3>
         <p class="text-muted" data-testid="sensitivity-explanation">

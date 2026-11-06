@@ -77,8 +77,22 @@ describe('ListingForm', () => {
       '45'
     )
     expect(wrapper.find('#f-status').exists()).toBe(false)
-    expect((wrapper.get('#f-o-rate').element as HTMLInputElement).value).toBe(
-      '3.2'
+  })
+
+  it('lot 19 : ni année ni type de location, ni hypothèses propres à l’annonce', () => {
+    const wrapper = mount(ListingForm, {
+      props: { modelValue: formFromListing(fakeListing()), errors: {} },
+    })
+    expect(wrapper.find('#f-p2-year').exists()).toBe(false)
+    expect(wrapper.find('#f-p2-lease').exists()).toBe(false)
+    expect(wrapper.find('#f-o-rate').exists()).toBe(false)
+    expect(wrapper.find('#f-o-dp').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Hypothèses surchargées')
+    expect(wrapper.text()).toContain(
+      'L’année et le type de location se règlent pour tout l’espace'
     )
+    // La phase 2 garde ce qui dépend du bien.
+    expect(wrapper.find('#f-p2-control').exists()).toBe(true)
+    expect(wrapper.find('#f-p2-coown').exists()).toBe(true)
   })
 })

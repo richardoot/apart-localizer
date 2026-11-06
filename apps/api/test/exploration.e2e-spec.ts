@@ -625,7 +625,7 @@ describe('Exploration par les critères (e2e, lot 16)', () => {
       blockedPortals: 1,
     })
     expect(n(e.lines[0]?.why)).toBe(
-      'Même lien : prix 219 000 € → 212 000 €, appliqué dans « Mises à jour »'
+      'Même lien : prix 219 000 € → 212 000 €, appliqué, noté dans l’Historique'
     )
     expect(e.lines[4]?.excerpt).toBe(
       'Exemple fictif : balcon, cave. Contact [téléphone masqué].'

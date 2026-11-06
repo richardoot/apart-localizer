@@ -36,8 +36,11 @@ vi.mock('@/lib/api', async () => {
 })
 
 import CompliancePanel from './CompliancePanel.vue'
-import StudySection from './StudySection.vue'
+import OccupancyPanel from './OccupancyPanel.vue'
 import ProjectionChart from './ProjectionChart.vue'
+import ProjectionPanel from './ProjectionPanel.vue'
+import RentMarketPanel from './RentMarketPanel.vue'
+import ScenariosPanel from './ScenariosPanel.vue'
 
 const A = AssumptionsSchema.parse({
   ...DEFAULT_ASSUMPTIONS,
@@ -86,27 +89,47 @@ const saved: Scenario = {
   updatedAt: '2026-11-03T10:00:00.000Z',
 }
 
-function mountSection() {
+/**
+ * Lot 19 : les panneaux de l'étude vivent dans l'onglet Budget (phase 1,
+ * projection et scénarios repliés, loyers comparables et conformité sous la
+ * phase 2) ; ils se testent ici un par un, avec l'entrée de l'étude calculée
+ * comme dans la fiche (hypothèses de l'espace).
+ */
+const input = studyInputFromListing(item.listing, A)
+
+type Panel = 'phase1' | 'scenarios' | 'projection' | 'market' | 'compliance'
+
+function mountPanel(panel: Panel) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
-  return mount(StudySection, {
-    props: { item, assumptions: A },
+  const options = {
     attachTo: document.body,
-    global: { plugins: [[VueQueryPlugin, { queryClient: client }]] },
-  })
+    global: { plugins: [[VueQueryPlugin, { queryClient: client }]] as never },
+  }
+  const common = { listingId: item.listing.id }
+  const study = { ...common, title: item.listing.title, input, assumptions: A }
+  switch (panel) {
+    case 'phase1':
+      return mount(OccupancyPanel, {
+        ...options,
+        props: { ...common, input, assumptions: A },
+      })
+    case 'scenarios':
+      return mount(ScenariosPanel, { ...options, props: study })
+    case 'projection':
+      return mount(ProjectionPanel, { ...options, props: study })
+    case 'market':
+      return mount(RentMarketPanel, {
+        ...options,
+        props: { ...common, furnished: false, currentMarketRent: null },
+      })
+    default:
+      return mount(CompliancePanel, { ...options, props: common })
+  }
 }
 
-async function openTab(
-  wrapper: ReturnType<typeof mountSection>,
-  label: string
-): Promise<void> {
-  const tab = wrapper.findAll('[role="tab"]').find(t => t.text() === label)
-  await tab?.trigger('click')
-  await flushPromises()
-}
-
-describe('StudySection (lot 5)', () => {
+describe('panneaux de l’étude (lot 5, onglet Budget au lot 19)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     apiMock.scenarios.list.mockResolvedValue([saved])
@@ -153,48 +176,24 @@ describe('StudySection (lot 5)', () => {
     )
   })
 
-  it('onglets accessibles ; phase 1 par défaut, calculée sans appel réseau', async () => {
-    const wrapper = mountSection()
+  it('phase 1 : calculée sans appel réseau', async () => {
+    const wrapper = mountPanel('phase1')
     await flushPromises()
-    const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs.map(t => t.text())).toEqual([
-      'Phase 1',
-      'Scénarios',
-      'Projection',
-      'Loyer de marché',
-      'Conformité',
-    ])
-    expect(tabs[0]?.attributes('aria-selected')).toBe('true')
     const occupancy = wrapper.get('[data-testid="occupancy"]').text()
     expect(occupancy).toContain("Coût d'occupation")
     expect(occupancy).toContain('de plus que le loyer actuel')
+    expect(occupancy).toContain('de capital remboursé')
     expect(wrapper.get('[data-testid="switch"]').text()).toContain(
       '1 janv. 2028'
     )
     expect(apiMock.study.compliance).not.toHaveBeenCalled()
     expect(apiMock.scenarios.list).not.toHaveBeenCalled()
-    await wrapper
-      .get('[role="tablist"]')
-      .trigger('keydown', { key: 'ArrowRight' })
-    expect(
-      wrapper.findAll('[role="tab"]')[1]?.attributes('aria-selected')
-    ).toBe('true')
-    await wrapper
-      .get('[role="tablist"]')
-      .trigger('keydown', { key: 'ArrowLeft' })
-    await wrapper
-      .get('[role="tablist"]')
-      .trigger('keydown', { key: 'ArrowLeft' })
-    expect(
-      wrapper.findAll('[role="tab"]')[4]?.attributes('aria-selected')
-    ).toBe('true')
-    await wrapper.get('[role="tablist"]').trigger('keydown', { key: 'Enter' })
     wrapper.unmount()
   })
 
   it('scénarios : comparaison en direct, enregistrement, scénario enregistré appliqué ou supprimé', async () => {
-    const wrapper = mountSection()
-    await openTab(wrapper, 'Scénarios')
+    const wrapper = mountPanel('scenarios')
+    await flushPromises()
     expect(apiMock.scenarios.list).toHaveBeenCalledWith(item.listing.id)
     await wrapper.get('#sc-price').setValue('150000')
     const cost = wrapper.get('[data-key="totalCost"]')
@@ -231,8 +230,8 @@ describe('StudySection (lot 5)', () => {
   })
 
   it('scénario : enregistrer sans nom est refusé, une erreur serveur est affichée', async () => {
-    const wrapper = mountSection()
-    await openTab(wrapper, 'Scénarios')
+    const wrapper = mountPanel('scenarios')
+    await flushPromises()
     await wrapper.get('#sc-rent').setValue('800')
     await wrapper.get('[data-action="save-scenario"]').trigger('click')
     expect(wrapper.text()).toContain('Donnez un nom')
@@ -248,8 +247,8 @@ describe('StudySection (lot 5)', () => {
   })
 
   it('projection : TRI, régimes, revente, tableau annuel, graphique ; TMI de l’aperçu', async () => {
-    const wrapper = mountSection()
-    await openTab(wrapper, 'Projection')
+    const wrapper = mountPanel('projection')
+    await flushPromises()
     const panel = wrapper.get('[data-testid="projection"]')
     expect(panel.text()).toContain('TRI avant impôt')
     expect(panel.text()).toContain('TMI à renseigner')
@@ -280,8 +279,8 @@ describe('StudySection (lot 5)', () => {
   })
 
   it('loyer de marché : synthèse, ajout, suppression, retenir le loyer estimé', async () => {
-    const wrapper = mountSection()
-    await openTab(wrapper, 'Loyer de marché')
+    const wrapper = mountPanel('market')
+    await flushPromises()
     expect(apiMock.study.comparables).toHaveBeenCalledWith(item.listing.id)
     const summary = wrapper.get('[data-testid="rent-market-summary"]').text()
     expect(summary).toContain('17 €/m²')
@@ -307,7 +306,7 @@ describe('StudySection (lot 5)', () => {
       comparables[0]?.id
     )
     await wrapper.get('[data-action="retain-market-rent"]').trigger('click')
-    expect(wrapper.emitted('retainMarketRent')?.[0]).toEqual([765])
+    expect(wrapper.emitted('retain')?.[0]).toEqual([765])
     await wrapper.get('#rc-rent').setValue('')
     await wrapper.get('form').trigger('submit')
     expect(wrapper.text()).toContain('Loyer et surface sont nécessaires.')
@@ -315,8 +314,8 @@ describe('StudySection (lot 5)', () => {
   })
 
   it('conformité : points datés et sourcés par catégorie, verdict', async () => {
-    const wrapper = mountSection()
-    await openTab(wrapper, 'Conformité')
+    const wrapper = mountPanel('compliance')
+    await flushPromises()
     expect(apiMock.study.compliance).toHaveBeenCalledWith(item.listing.id)
     const panel = wrapper.get('[data-testid="compliance"]')
     expect(panel.text()).toContain('Incompatible')
@@ -347,16 +346,6 @@ describe('StudySection (lot 5)', () => {
         panel.find('[data-testid="no-risks"]').exists()
     ).toBe(true)
     expect(panel.find('[data-testid="georisques"]').exists()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it('sans hypothèses chargées : l’étude attend', () => {
-    const client = new QueryClient()
-    const wrapper = mount(StudySection, {
-      props: { item, assumptions: null },
-      global: { plugins: [[VueQueryPlugin, { queryClient: client }]] },
-    })
-    expect(wrapper.text()).toContain('Chargement des hypothèses')
     wrapper.unmount()
   })
 })
@@ -394,12 +383,17 @@ describe('ProjectionChart', () => {
 })
 
 describe('entrée de l’étude', () => {
-  it('l’annonce et ses hypothèses surchargées, comme côté serveur', async () => {
+  it('l’annonce et les hypothèses de l’espace, comme côté serveur (lot 19 : plus de surcharge par annonce)', async () => {
     const { useStudyInput } = await import('@/composables/useStudy')
     const { ref } = await import('vue')
-    const study = useStudyInput(ref(item.listing), ref(A))
-    expect(study.value?.input).toEqual(studyInputFromListing(item.listing))
-    expect(study.value?.assumptions.interestRate).toBe(0.032)
+    const furnished = AssumptionsSchema.parse({ ...A, leaseType: 'furnished' })
+    const study = useStudyInput(ref(item.listing), ref(furnished))
+    expect(study.value?.input).toEqual(
+      studyInputFromListing(item.listing, furnished)
+    )
+    expect(study.value?.input.leaseType).toBe('furnished')
+    expect(study.value?.assumptions).toEqual(furnished)
+    expect(study.value?.assumptions.interestRate).toBe(A.interestRate)
     expect(useStudyInput(ref(null), ref(A)).value).toBeNull()
   })
 })

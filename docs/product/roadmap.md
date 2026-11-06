@@ -3,13 +3,14 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
-État au 6 novembre 2026 : **les lots 0 à 18 sont livrés** côté code, tests et documentation ; les
+État au 6 novembre 2026 : **les lots 0 à 19 sont livrés** côté code, tests et documentation ; les
 lots 0 à 17 sont déployés (Vercel et Supabase cloud ; imports du lot 11, `import:places` et
 `relocate:listings` du lot 12 faits en production ; migrations des lots 14 à 17 appliquées, le
 rattrapage `refresh:criteria-fit` attend les critères de Richard). Le lot 18 (une annonce,
 plusieurs portails) attend son déploiement : migration additive
 `20261108100000_lot18_listing_links`, avec le rattrapage des liens d'origine des annonces
-existantes dans la migration, sans variable ni import nouveau. Restent les actions
+existantes dans la migration, sans variable ni import nouveau. Le lot 19 (une fiche, sept
+questions) attend aussi son déploiement, sans migration. Restent les actions
 d'exploitation (Supabase cloud, Vercel, clés et connecteur :
 [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard » dans chaque lot, et
 les critères « Fini quand » qui demandent le déploiement ou un usage réel (lot 1 : déploiement et
@@ -23,7 +24,8 @@ Richard ; lot 14 : les critères de Richard créés sur le site déployé et les
 lot 16 : une vraie exploration lancée depuis claude.ai dans le navigateur de Richard et l'onglet
 « À valider » relu à deux ; lot 17 : une vraie série de questions envoyée par Claude après
 validation, et sa réponse enregistrée ; lot 18 : une vraie tournée qui retrouve une annonce
-d'agence sur un deuxième portail par sa référence), à constater après la mise en ligne.
+d'agence sur un deuxième portail par sa référence ; lot 19 : une lecture des sept onglets par
+Richard et Chloé sur ordinateur et sur téléphone), à constater après la mise en ligne.
 
 ## Lot 0 : socle
 
@@ -745,3 +747,61 @@ rejoint la fiche (et se détache d'un clic si ce n'est pas la même) ; une même
 autre agence attend dans « À valider ». (Vérifié en tests automatisés, e2e MCP JSON-RPC compris,
 et sur captures Chromium d'un banc d'essai, jeu de démo fictif ; à confirmer par Richard avec une
 vraie tournée après le déploiement.)
+
+## Lot 19 : une fiche, sept questions
+
+Statut : livré (à déployer, sans migration ni variable nouvelle).
+
+- Précise le lot 9 (fiche) et le lot 13 (page Hypothèses). Demande de Richard : rendre chaque
+  onglet de la fiche lisible. Critiques : l'adéquation aux critères prenait trop de place en tête
+  de la Synthèse ; les travaux étaient cachés dans « Fiche et saisie » (Financer et louer), un
+  grand formulaire fouillis qui portait aussi des réglages de l'espace ; Quartier était très
+  verbeux ; Suivi mêlait historique, notation et tâches ; Échanges était séparé des tâches.
+  Maquette validée (sept onglets, en-tête, correspondance de chaque section, mobile 390 px) ;
+  décision validée : les réglages de l'espace quittent la fiche. ADR 0029.
+- Livré :
+  - **Sept onglets, une question chacun** (`?onglet=`) : **Synthèse** (« Faut-il y aller ? » :
+    quatre chiffres qui ouvrent leur onglet, l'adéquation en une ligne avec son détail
+    dépliable, « Ce qui plaît » et « À surveiller » tirés des données par `domain`, nos avis,
+    prochaines étapes, dernière vérification), **Le bien** (travaux en tête, caractéristiques,
+    énergie avec le DPE de l'ADEME, copropriété et charges, l'annonce et son adresse, description
+    et notes ; « Où la trouver » et « Qui la vend » à droite ; marque « IA »), **Budget**
+    (hypothèses de l'espace rappelées, achat et sa répartition, phase 1, phase 2 avec le loyer
+    visé, le marché, le plafond d'encadrement et les contrôles, rendement et projection par
+    scénario), **Négocier** (prix cible et jauge, ventes comparables DVF, arguments à copier, prix
+    et offres avec « Préparer une offre » au montant choisi, sensibilité repliée), **Quartier**
+    (six tuiles, le détail de la tuile choisie, la carte, les sources), **À faire** (tâches,
+    questions à l'annonceur avec l'état de leur demande et visites en une liste filtrable, ajout
+    « À demander à l'agence », contact de l'annonceur, points à vérifier pendant la visite,
+    visites), **Historique** (une chronologie : journal, vérifications, prix et offres,
+    adéquation, échanges, filtrable ; « Vérifier sur les portails » ; dates et champs lus par
+    l'IA). Pastille de « À faire » : tâches ouvertes, messages à valider, relances dues. Les
+    anciens identifiants (`financer`, `suivi`, `echanges`) mènent au nouvel onglet ; les
+    notifications pointent Historique (vérification) et À faire (réponse de l'annonceur).
+  - **En-tête allégé** : retour, statut, titre, prix et prix au m², surface, pièces, étage, lieu,
+    pastilles, portails, fraîcheur ; barre d'onglets collée en haut, défilante sur mobile.
+  - **Édition par section** : chaque section se modifie sur place, une à la fois, avec l'aperçu
+    en direct (coût tout compris, mensualité, verdict) ; quitter une section modifiée demande
+    confirmation dans la fiche. Même mise à jour qu'avant pour les champs de la section (même
+    DTO, mêmes garde-fous, même journal), testée sur une charge utile relevée avec le code
+    d'avant ; les champs des autres sections gardent leur provenance.
+  - **Réglages de l'espace hors de la fiche** : plus d'hypothèses surchargées par annonce (retirées
+    de l'interface, des entrées REST et MCP et des calculs) ; l'année et le type de location de
+    la phase 2 se règlent dans la page Hypothèses (type de location ajouté au calendrier, résumé
+    compris) et valent pour toutes les annonces (louabilité, encadrement, comparables, fiscalité,
+    projection, scénarios, verdict, prix cible, MCP, export). Une entrée qui envoie encore ces
+    clés est acceptée et elles sont ignorées. Colonnes gardées, documentées « plus lues ».
+  - **`domain`** : `listing-overview.ts` (`listingHighlights`, `todoItems`, `filterTodo`,
+    `todoProgress`, `todoPendingCount`, `nextSteps`, `visitWhen`), lecture de la fiche
+    (`marketGap`, `costShares`, `priceRangeGauge`, `rentGauge`) ; `studyInputFromListing` et
+    `complianceInputFromListing` prennent les hypothèses ; aucune formule changée.
+  - **Export** : version 1 ; `leaseType` dans les hypothèses, plus de surcharge ni d'année ou de
+    type par annonce.
+- Plus tard : un rappel « ce qui a changé » par section ; l'édition de plusieurs sections d'un
+  coup sur ordinateur ; une fiche en pleine page si le panneau élargi gêne sur portable.
+
+Fini quand : chaque onglet répond à sa question sans défiler longtemps ; les travaux se lisent et
+se modifient en tête du bien ; plus aucun réglage de l'espace dans la fiche ; un lien d'avant le
+lot 19 ouvre le bon onglet. (Vérifié en tests automatisés, e2e REST et MCP JSON-RPC compris, et
+sur captures Chromium, jeu fictif ; à confirmer par Richard et Chloé sur la vraie fiche après le
+déploiement.)

@@ -29,7 +29,7 @@ describe('résumés des sections', () => {
     expect(nbsp(summaries.financement)).toBe('40 000 € · 3,65 % · 25 ans')
     expect(summaries.criteres).toBe('brut ≥ 5,5 % · effort ≤ 150 €/mois')
     expect(summaries.calendrier).toBe(
-      'location janv. 2028 · 0,5 mois de vacance'
+      'location janv. 2028, vide · 0,5 mois de vacance'
     )
     expect(summaries.notaire).toBe('taux forfaitaire 7,5 %')
     expect(summaries.fiscalite).toBe(
@@ -46,11 +46,17 @@ describe('résumés des sections', () => {
       netYieldThreshold: 0.035,
       notaryMode: 'scale',
       marginalTaxRate: 0.3,
+      leaseType: 'furnished',
     }
     const summaries = sectionSummaries(draft, DEFAULT_READINGS)
+    // Lot 19 : le type de location de l'espace se lit dans le calendrier.
     expect(summaries.calendrier).toBe(
-      'achat déc. 2026 · location sept. 2028 · 1 mois de vacance'
+      'achat déc. 2026 · location sept. 2028, meublée · 1 mois de vacance'
     )
+    expect(
+      sectionSummaries({ ...draft, leaseType: 'shared' }, DEFAULT_READINGS)
+        .calendrier
+    ).toContain('location sept. 2028, colocation')
     expect(summaries.criteres).toContain('net ≥ 3,5 %')
     expect(nbsp(summaries.notaire)).toBe(
       'barème officiel · ≈ 8,0 % à 200 000 €'
@@ -78,12 +84,12 @@ describe('résumés des sections', () => {
     const summaries = sectionSummaries(draft, DEFAULT_READINGS)
     expect(summaries.financement).toBe('— · — · — ans')
     expect(summaries.criteres).toBe('brut ≥ — · effort ≤ —')
-    expect(summaries.calendrier).toBe('location janv. —')
+    expect(summaries.calendrier).toBe('location janv. —, vide')
     expect(summaries.notaire).toBe('taux forfaitaire —')
     expect(
       sectionSummaries({ ...base(), vacancyMonths: 0 }, DEFAULT_READINGS)
         .calendrier
-    ).toBe('location janv. 2028 · sans vacance')
+    ).toBe('location janv. 2028, vide · sans vacance')
   })
 
   it('pastilles de la fiscalité repliée', () => {

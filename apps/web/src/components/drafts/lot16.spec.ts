@@ -415,7 +415,7 @@ describe('DraftCard', () => {
       }),
     })
     expect(n(wrapper.text())).toContain(
-      'Fiche mise à jour : Prix 215 000 € → 210 000 €, noté dans « Mises à jour ».'
+      'Fiche mise à jour : Prix 215 000 € → 210 000 €, noté dans l’Historique.'
     )
     await wrapper.setProps({
       draft: fakeDraft({

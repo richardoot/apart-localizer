@@ -12,7 +12,6 @@ import { ListingPlacementSchema } from './placement.js'
 import { RenovationInputSchema, RenovationSchema } from './renovation.js'
 import { RentalPlanInputSchema, RentalPlanSchema } from './rental-plan.js'
 import { FieldProvenanceMapSchema } from './sourced.js'
-import { AssumptionsOverrideSchema } from './assumptions.js'
 import { ListingOpenDataContextSchema } from './opendata.js'
 import { withoutDefaults } from './zod-utils.js'
 
@@ -215,7 +214,7 @@ export const ListingIdentityInputSchema = z.object({
   sellerType: SellerTypeSchema.default('unknown'),
   sellerName: nullableText(
     120,
-    "Nom de l'agence, ou du réseau pour un mandataire, tel que l'annonce l'écrit ; jamais le nom d'une personne (conseiller, interlocuteur : contact de l'onglet Échanges) ; null pour un particulier"
+    "Nom de l'agence, ou du réseau pour un mandataire, tel que l'annonce l'écrit ; jamais le nom d'une personne (conseiller, interlocuteur : contact de l'annonceur, onglet « À faire ») ; null pour un particulier"
   ),
   sellerReference: nullableText(
     60,
@@ -240,7 +239,9 @@ export const ListingIdentityInputSchema = z.object({
 
 /**
  * Entrée de création : tout ce qu'un membre, l'IA ou le MCP peuvent fournir.
- * Les sous-objets travaux et phase 2 sont facultatifs.
+ * Les sous-objets travaux et phase 2 sont facultatifs. Les hypothèses de
+ * calcul (apport, taux, durée, notaire, année et type de location) sont
+ * celles de l'espace, jamais celles de l'annonce (lot 19).
  */
 export const ListingInputSchema = ListingIdentityInputSchema.extend({
   ...ListingPropertyInputSchema.shape,
@@ -251,7 +252,9 @@ export const ListingInputSchema = ListingIdentityInputSchema.extend({
   discardReason: nullableText(500, "Raison d'écartement"),
   renovation: RenovationInputSchema.nullable().default(null),
   rentalPlan: RentalPlanInputSchema.nullable().default(null),
-  assumptionsOverride: AssumptionsOverrideSchema.nullable().default(null),
+  // Lot 19 (ADR 0029) : plus d'hypothèses propres à une annonce
+  // (`assumptionsOverride`) ; une entrée qui en envoie encore voit la clé
+  // ignorée, la colonne `listings.assumptions_override` n'est plus lue.
   fieldSources: FieldProvenanceMapSchema.default({}),
   sourceText: z
     .string()

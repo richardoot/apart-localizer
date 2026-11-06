@@ -44,7 +44,7 @@ describe('aperçu en direct', () => {
     expect(preview.evaluation?.targetPrice.targetPrice).toBeLessThan(147_600)
   })
 
-  it('applique travaux et surcharges d’hypothèses, et réagit aux frappes', async () => {
+  it('applique les travaux avec les hypothèses de l’espace, et réagit aux frappes (lot 19 : plus de surcharge par annonce)', async () => {
     const form = ref(emptyForm())
     form.value.price = '200000'
     form.value.surface = '45'
@@ -54,16 +54,22 @@ describe('aperçu en direct', () => {
       { key: 'a', label: 'Peinture', amount: '2500' },
       { key: 'b', label: 'Sols', amount: '2 500' },
     ]
-    form.value.overrides.downPayment = '60000'
-    const preview = useLivePreview(form, ref(DEFAULT_ASSUMPTIONS))
+    const assumptions = ref(DEFAULT_ASSUMPTIONS)
+    const preview = useLivePreview(form, assumptions)
     expect(preview.value.evaluation?.metrics.renovationTotal).toBe(5000)
     expect(preview.value.evaluation?.metrics.loanAmount).toBe(
-      200_000 + 15_000 + 5000 - 60_000
+      200_000 + 15_000 + 5000 - 40_000
     )
-    expect(preview.value.assumptions?.downPayment).toBe(60_000)
-    form.value.overrides.interestRatePercent = '3,2'
+    expect(preview.value.assumptions).toEqual(DEFAULT_ASSUMPTIONS)
+    expect(form.value).not.toHaveProperty('overrides')
+    const first = form.value.renovation.items[0]
+    if (first) first.amount = '4500'
     await nextTick()
-    expect(preview.value.assumptions?.interestRate).toBeCloseTo(0.032, 10)
+    expect(preview.value.evaluation?.metrics.renovationTotal).toBe(7000)
+    // L'année de la phase 2 est celle de l'espace.
+    assumptions.value = { ...DEFAULT_ASSUMPTIONS, rentalYear: 2031 }
+    await nextTick()
+    expect(preview.value.evaluation?.rental.year).toBe(2031)
   })
 
   it('le critère « marché » lit la médiane DVF enregistrée sur l’annonce (lot 4)', () => {

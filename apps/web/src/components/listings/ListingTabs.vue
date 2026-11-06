@@ -4,22 +4,22 @@
   import type { ListingTab } from '@/lib/listing-tabs'
 
   /**
-   * Les onglets de la fiche (lot 9), en vrai motif d'onglets : `tablist`,
-   * `aria-selected`, un seul onglet atteignable par Tab, flèches gauche et
-   * droite, Début et Fin. Soulignés sur ordinateur ; en pastilles qui
-   * défilent horizontalement sur mobile, hautes de 44 px au moins.
+   * Les sept onglets de la fiche (lot 19), en vrai motif d'onglets :
+   * `tablist`, `aria-selected`, un seul onglet atteignable par Tab, flèches
+   * gauche et droite, Début et Fin. Soulignés, dans une barre qui défile
+   * horizontalement quand la place manque (mobile), hauts de 44 px. La
+   * pastille de « À faire » compte ce qui est à traiter (tâches ouvertes,
+   * messages à valider, relances dues).
    */
   defineProps<{
-    /** Nombre de tâches ouvertes, affiché sur l'onglet Suivi. */
-    openTasks?: number
-    /** Lot 17 : messages à valider, affichés sur l'onglet Échanges. */
-    pendingMessages?: number
+    /** Lot 19 : à traiter dans « À faire » (`todoPendingCount` de `domain`). */
+    todoCount?: number
   }>()
   const tab = defineModel<ListingTab>({ required: true })
 
   const buttons = ref<HTMLButtonElement[]>([])
 
-  /** Sur mobile, les pastilles défilent : l'onglet ouvert reste visible (lot 17 : six onglets). */
+  /** La barre défile : l'onglet ouvert reste visible. */
   function reveal(): void {
     const index = LISTING_TABS.findIndex(t => t.id === tab.value)
     buttons.value[index]?.scrollIntoView?.({
@@ -67,7 +67,7 @@
   <div
     role="tablist"
     aria-label="Sections de la fiche"
-    class="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 sm:mx-0 sm:gap-1 sm:border-b sm:border-line sm:px-0 sm:pb-0"
+    class="relative -mx-4 flex gap-0.5 overflow-x-auto overscroll-x-contain px-2 [scrollbar-width:none] sm:mx-0 sm:px-0"
     @keydown="onKey"
   >
     <button
@@ -85,27 +85,21 @@
       :aria-controls="`listing-panel-${choice.id}`"
       :tabindex="tab === choice.id ? 0 : -1"
       :data-testid="`tab-${choice.id}`"
-      class="inline-flex min-h-11 flex-none items-center gap-1 rounded-full border px-3.5 text-sm whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:-mb-px sm:min-h-10 sm:rounded-none sm:border-0 sm:border-b-[3px] sm:px-3"
+      class="inline-flex min-h-11 flex-none items-center gap-1.5 border-b-[3px] px-2.5 text-sm whitespace-nowrap focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent sm:px-3"
       :class="
         tab === choice.id
-          ? 'border-accent bg-accent font-semibold text-accent-fg sm:bg-transparent sm:text-fg'
-          : 'border-line bg-surface text-fg hover:bg-surface-2 sm:border-transparent sm:bg-transparent sm:text-muted sm:hover:bg-transparent sm:hover:text-fg'
+          ? 'border-accent font-semibold text-fg'
+          : 'border-transparent text-muted hover:text-fg'
       "
       @click="select(choice.id)"
     >
-      <span class="sm:hidden">{{ choice.short }}</span>
-      <span class="hidden sm:inline">{{ choice.label }}</span>
+      {{ choice.label }}
       <span
-        v-if="choice.id === 'suivi' && openTasks"
-        class="text-xs font-normal"
-        data-testid="open-tasks-count"
-        >· {{ openTasks }} tâche{{ openTasks > 1 ? 's' : '' }}</span
-      >
-      <span
-        v-if="choice.id === 'echanges' && pendingMessages"
-        class="rounded-full bg-warn-soft px-1.5 text-xs font-medium text-warn"
-        data-testid="pending-messages-count"
-        >{{ pendingMessages }} à valider</span
+        v-if="choice.id === 'a-faire' && todoCount"
+        class="rounded-full bg-accent px-1.5 text-xs leading-5 font-semibold text-accent-fg"
+        data-testid="todo-count"
+        ><span class="sr-only">, </span>{{ todoCount
+        }}<span class="sr-only"> à traiter</span></span
       >
     </button>
   </div>

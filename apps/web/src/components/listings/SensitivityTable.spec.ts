@@ -5,7 +5,7 @@ import { financialsFromListing, sensitivityGrid } from '@apart/domain'
 import { fakeEvaluated } from '@/test/fixtures'
 import SensitivityTable from './SensitivityTable.vue'
 
-const item = fakeEvaluated({ assumptionsOverride: null, renovation: null })
+const item = fakeEvaluated({ renovation: null })
 const financials = financialsFromListing(item.listing)
 
 describe('SensitivityTable', () => {
@@ -178,5 +178,23 @@ describe('SensitivityTable', () => {
     expect(wrapper.get('[data-testid="sensitivity-detail"]').text()).toContain(
       '(prix cible)'
     )
+  })
+
+  it('lot 19 : dans le dépli de Négocier, sans cadre ni titre visible', () => {
+    const grid = sensitivityGrid(financials, DEFAULT_ASSUMPTIONS, {
+      rowAxis: 'price',
+      colAxis: 'rent',
+    })
+    const framed = mount(SensitivityTable, {
+      props: { grid, rowAxis: 'price', colAxis: 'rent' },
+    })
+    expect(framed.get('section').classes()).toContain('border')
+    expect(framed.get('#sensitivity-title').classes()).not.toContain('sr-only')
+    const bare = mount(SensitivityTable, {
+      props: { grid, rowAxis: 'price', colAxis: 'rent', bare: true },
+    })
+    expect(bare.get('section').classes()).not.toContain('border')
+    expect(bare.get('#sensitivity-title').classes()).toContain('sr-only')
+    expect(bare.find('[data-testid="sensitivity-grid"]').exists()).toBe(true)
   })
 })

@@ -116,9 +116,10 @@ export class ListingEnrichmentService {
         rooms: listing.rooms,
         constructionYear: listing.constructionYear,
         constructionPeriod: listing.constructionPeriod,
-        leaseType: listing.rentalPlan?.leaseType ?? null,
+        // Lot 19 : le type et l'année de location de l'espace.
+        leaseType: values.leaseType,
         surface: listing.surface,
-        rentalYear: listing.rentalPlan?.year ?? values.rentalYear,
+        rentalYear: values.rentalYear,
         area: listingAreaRef(listing.location),
         placement: listing.location.placement,
       },
@@ -511,13 +512,13 @@ export class ListingEnrichmentService {
       precision = 'exact'
     }
     const surface = request.surface ?? listing?.surface ?? null
+    const values = await this.assumptions.currentValues(member.workspaceId)
     const leaseType =
       request.furnished === true
         ? 'furnished'
         : request.furnished === false
           ? 'unfurnished'
-          : (listing?.rentalPlan?.leaseType ?? null)
-    const values = await this.assumptions.currentValues(member.workspaceId)
+          : values.leaseType
     const approximation = locationApproximation({
       point,
       precision,
@@ -549,7 +550,7 @@ export class ListingEnrichmentService {
           constructionPeriod: listing?.constructionPeriod ?? null,
           leaseType,
           surface,
-          rentalYear: listing?.rentalPlan?.year ?? values.rentalYear,
+          rentalYear: values.rentalYear,
           area: precision
             ? listingAreaRef({
                 precision,

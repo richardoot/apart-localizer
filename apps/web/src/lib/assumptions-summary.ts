@@ -1,5 +1,9 @@
 import { TAX_REGIME_LABELS, VERDICT_LABELS } from '@apart/contracts'
-import type { AssumptionsImpact, VerdictChange } from '@apart/contracts'
+import type {
+  AssumptionsImpact,
+  LeaseType,
+  VerdictChange,
+} from '@apart/contracts'
 import { REFERENCE_NOTARY_PRICE } from '@apart/domain'
 import type { AssumptionsDraft, SectionId } from './assumptions-form'
 import {
@@ -25,6 +29,13 @@ export interface SummaryReadings {
   notaryRate: number | null
   /** Le barème saisi a les valeurs du barème par défaut. */
   scaleIsDefault: boolean
+}
+
+/** Lot 19 : le type de location de l'espace, en un mot. */
+const LEASE_SHORT: Record<LeaseType, string> = {
+  unfurnished: 'vide',
+  furnished: 'meublée',
+  shared: 'colocation',
 }
 
 const or = <T>(value: T | null, format: (v: T) => string): string =>
@@ -59,6 +70,8 @@ export function sectionSummaries(
     draft.rentalStartDate !== null
       ? formatMonthYear(draft.rentalStartDate)
       : `janv. ${or(draft.rentalYear, String)}`
+  // Lot 19 : le type de location de l'espace.
+  const lease = LEASE_SHORT[draft.leaseType]
   const vacancy =
     draft.vacancyMonths === null
       ? null
@@ -96,7 +109,7 @@ export function sectionSummaries(
       draft.purchaseDate
         ? `achat ${formatMonthYear(draft.purchaseDate)}`
         : null,
-      `location ${location}`,
+      `location ${location}, ${lease}`,
       vacancy,
     ]
       .filter(Boolean)

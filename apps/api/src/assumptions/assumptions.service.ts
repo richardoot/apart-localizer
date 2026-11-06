@@ -1,7 +1,7 @@
 import { ConflictException, Injectable } from '@nestjs/common'
+import { ModuleRef } from '@nestjs/core'
 import {
   ACTIVE_LISTING_STATUSES,
-  AssumptionsOverrideSchema,
   AssumptionsSchema,
   DEFAULT_ASSUMPTIONS,
 } from '@apart/contracts'
@@ -13,13 +13,14 @@ import type {
   AssumptionsUpdateResult,
   AssumptionsVersion as AssumptionsVersionDto,
 } from '@apart/contracts'
-import { mergeAssumptions } from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { CriteriaMatchService } from '../listings/criteria-match.service'
 import { listingInclude, toListingDto } from '../listings/listing.mapper'
 import type { AssumptionsVersion, Member } from '../generated/prisma'
 import { assumptionsImpact } from './impact'
+import { RENTAL_CONTEXT_REFRESHER } from './rental-context'
+import type { RentalContextRefresher } from './rental-context'
 
 /**
  * Hypothèses globales de l'espace, versionnées : chaque modification ajoute
@@ -31,7 +32,8 @@ export class AssumptionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
-    private readonly criteriaFit: CriteriaMatchService
+    private readonly criteriaFit: CriteriaMatchService,
+    private readonly moduleRef: ModuleRef
   ) {}
 
   async current(workspaceId: string): Promise<AssumptionsVersionDto> {
@@ -53,18 +55,6 @@ export class AssumptionsService {
   /** The values in force, as the domain wants them. */
   async currentValues(workspaceId: string): Promise<Assumptions> {
     return (await this.current(workspaceId)).values
-  }
-
-  /** The values in force for one listing: the workspace's, overridden field by field. */
-  async forListing(
-    workspaceId: string,
-    override: unknown
-  ): Promise<Assumptions> {
-    const base = await this.currentValues(workspaceId)
-    const parsed = AssumptionsOverrideSchema.nullable().safeParse(
-      override ?? null
-    )
-    return mergeAssumptions(base, parsed.success ? parsed.data : null)
   }
 
   async history(workspaceId: string): Promise<AssumptionsVersionDto[]> {
@@ -129,6 +119,12 @@ export class AssumptionsService {
       )
       return version
     })
+    await this.refreshRentalContext(
+      member,
+      previous.values,
+      AssumptionsSchema.parse(created.values),
+      channel
+    )
     const active = await this.prisma.searchCriteria.count({
       where: { workspaceId: member.workspaceId, active: true },
     })
@@ -143,6 +139,40 @@ export class AssumptionsService {
         ).summary
       : null
     return { ...toDto(created), impact, criteriaFit }
+  }
+
+  /**
+   * Lot 19 : l'année et le type de location se règlent pour tout l'espace ;
+   * le plafond d'encadrement d'une annonce dépend du type (vide ou meublé) et
+   * l'arrêté de l'année. Quand l'un d'eux change, l'instantané open data des
+   * annonces qui ont une phase 2 est recalculé (plafond posé d'office
+   * compris), comme à la modification d'une annonce. Aucun appel réseau : les
+   * données ouvertes sont celles importées en base.
+   */
+  private async refreshRentalContext(
+    member: Member,
+    before: Assumptions,
+    after: Assumptions,
+    channel: ActivityChannel
+  ): Promise<void> {
+    if (
+      before.leaseType === after.leaseType &&
+      before.rentalYear === after.rentalYear
+    ) {
+      return
+    }
+    const enrichment = this.moduleRef.get<RentalContextRefresher>(
+      RENTAL_CONTEXT_REFRESHER,
+      { strict: false }
+    )
+    const rows = await this.prisma.listing.findMany({
+      where: { workspaceId: member.workspaceId, rentalPlan: { isNot: null } },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    for (const row of rows) {
+      await enrichment.enrich(member, row.id, { dpe: false, channel })
+    }
   }
 
   /** Impact d'hypothèses candidates sur les annonces actives, sans rien enregistrer. */

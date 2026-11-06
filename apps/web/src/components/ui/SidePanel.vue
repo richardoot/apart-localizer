@@ -28,7 +28,13 @@
         "
         :aria-describedby="undefined"
       >
+        <!--
+          Lot 19 : un panneau peut fournir son propre en-tête (`top`), qui
+          défile avec le contenu sur un fond de page ; il porte alors le
+          titre du dialogue (DialogTitle) et son bouton de fermeture.
+        -->
         <header
+          v-if="!$slots.top"
           class="flex items-start justify-between gap-3 border-b border-line px-4 py-3"
         >
           <DialogTitle class="font-display text-lg font-bold">
@@ -43,7 +49,17 @@
             ✕
           </button>
         </header>
-        <div class="flex-1 overflow-y-auto px-4 py-4">
+        <div
+          v-if="$slots.top"
+          class="flex-1 overflow-x-hidden overflow-y-auto bg-bg"
+          data-panel-scroller
+        >
+          <slot name="top" />
+          <div class="px-4 pt-4 pb-10 sm:px-5">
+            <slot />
+          </div>
+        </div>
+        <div v-else class="flex-1 overflow-y-auto px-4 py-4">
           <slot />
         </div>
         <footer

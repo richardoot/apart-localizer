@@ -22,6 +22,7 @@ import {
   financialsFromListing,
   negotiationBrief,
   rentalChecks,
+  rentalChecksInputFromListing,
   targetPrice,
 } from '@apart/domain'
 
@@ -129,8 +130,6 @@ export function fakeListing(over: Partial<Listing> = {}): Listing {
       ],
     },
     rentalPlan: {
-      year: null,
-      leaseType: 'unfurnished',
       rentControl: 'auto',
       referenceRentPerM2: null,
       targetRent: 750,
@@ -141,7 +140,6 @@ export function fakeListing(over: Partial<Listing> = {}): Listing {
       rentalPermitRequired: 'unknown',
       notes: null,
     },
-    assumptionsOverride: { downPayment: 60_000, interestRate: 0.032 },
     fieldSources: {},
     createdById: null,
     createdAt: now,
@@ -205,17 +203,7 @@ export function fakeEvaluated(
     evaluation: {
       metrics,
       rental: rentalChecks(
-        {
-          dpeClass: listing.dpeClass,
-          year: listing.rentalPlan?.year ?? null,
-          marketRent: listing.rentalPlan?.marketRent ?? null,
-          demand: listing.rentalPlan?.demand ?? null,
-          coOwnershipAllowsRental:
-            listing.rentalPlan?.coOwnershipAllowsRental ?? 'unknown',
-          decencyCompliant: listing.rentalPlan?.decencyCompliant ?? 'unknown',
-          rentalPermitRequired:
-            listing.rentalPlan?.rentalPermitRequired ?? 'unknown',
-        },
+        rentalChecksInputFromListing(listing),
         metrics,
         assumptions
       ),

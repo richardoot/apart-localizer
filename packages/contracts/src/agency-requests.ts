@@ -569,7 +569,7 @@ export const OpenQuestionSchema = z.object({
 })
 export type OpenQuestion = z.infer<typeof OpenQuestionSchema>
 
-/** `GET /listings/:id/agency-requests` : l'onglet « Échanges » de la fiche. */
+/** `GET /listings/:id/agency-requests` : les échanges avec l'annonceur (onglet « À faire » de la fiche). */
 export const ListingExchangesSchema = z.object({
   listingId: z.string().uuid(),
   listing: AgencyRequestListingSchema,

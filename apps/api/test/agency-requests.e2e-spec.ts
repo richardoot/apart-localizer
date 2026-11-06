@@ -593,7 +593,7 @@ describe('Lot 17 : questions aux agences (e2e)', () => {
     expect(notifications[0]).toMatchObject({
       recipientId: chloeId,
       title: "Réponse de l'agence : T2 fictif Bègles",
-      url: `/annonces/${id}?onglet=echanges`,
+      url: `/annonces/${id}?onglet=a-faire`,
     })
     const whatsNew = await api()
       .get('/whats-new')

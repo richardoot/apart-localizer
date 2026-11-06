@@ -220,7 +220,7 @@
 
 <template>
   <section
-    class="grid gap-3 rounded-2xl border border-line bg-surface p-4"
+    class="@container grid gap-3 rounded-2xl border border-line bg-surface p-4"
     aria-labelledby="links-title"
     data-testid="listing-links"
   >
@@ -240,19 +240,19 @@
     >
       Aucun lien pour l’instant : ajoutez celui de la page de l’annonce.
     </p>
-    <div v-else class="grid gap-2 sm:gap-0">
+    <div v-else class="grid gap-2 @xl:gap-0">
       <div
-        class="hidden border-b border-line pb-1.5 text-xs font-medium text-muted sm:grid sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto] sm:gap-3"
+        class="hidden border-b border-line pb-1.5 text-xs font-medium text-muted @xl:grid @xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto] @xl:gap-3"
         aria-hidden="true"
       >
         <span>Portail</span><span>Prix affiché</span><span>Vue en ligne</span
         ><span class="text-right">Actions</span>
       </div>
-      <ul class="grid gap-2 sm:gap-0" data-testid="links-list">
+      <ul class="grid gap-2 @xl:gap-0" data-testid="links-list">
         <li
           v-for="link in ordered"
           :key="link.id"
-          class="grid gap-x-3 gap-y-1.5 rounded-xl border border-line p-3 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto] sm:items-start sm:rounded-none sm:border-0 sm:border-b sm:px-0 sm:py-2.5"
+          class="grid gap-x-3 gap-y-1.5 rounded-xl border border-line p-3 @xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto] @xl:items-start @xl:rounded-none @xl:border-0 @xl:border-b @xl:px-0 @xl:py-2.5"
           :class="link.online ? '' : 'text-muted'"
           :data-link="link.id"
           :data-portal="link.portal"
@@ -326,7 +326,7 @@
             >
           </div>
           <div
-            class="flex flex-wrap items-start gap-1.5 sm:justify-end"
+            class="flex flex-wrap items-start gap-1.5 @xl:justify-end"
             data-testid="link-actions"
           >
             <a
@@ -420,7 +420,7 @@
     <p v-else-if="ordered.length > 1" class="text-xs text-muted">
       Le prix de la fiche est le plus bas affiché en ligne. Un écart entre
       portails est souvent une question de frais d’agence inclus ou non, ou une
-      baisse pas encore reportée : il est noté dans « Mises à jour ».
+      baisse pas encore reportée : il est noté dans l’Historique.
     </p>
 
     <p
@@ -449,7 +449,7 @@
 
     <button
       type="button"
-      class="inline-flex min-h-11 w-fit items-center rounded-lg border border-line px-3 text-sm font-medium hover:bg-surface-2 sm:hidden"
+      class="inline-flex min-h-11 w-fit items-center rounded-lg border border-accent px-3 text-sm font-semibold text-accent hover:bg-accent-soft @xl:hidden sm:min-h-10"
       :aria-expanded="formOpen"
       aria-controls="new-link-form"
       data-action="open-add-link"
@@ -460,7 +460,7 @@
     <form
       id="new-link-form"
       class="gap-2 border-t border-line pt-3"
-      :class="formOpen ? 'grid' : 'hidden sm:grid'"
+      :class="formOpen ? 'grid' : 'hidden @xl:grid'"
       data-testid="add-link-form"
       @submit.prevent="addLink"
     >

@@ -262,9 +262,9 @@ export function notificationsForActivity(
           : type === 'listing_checked' &&
               url &&
               event.action !== 'listing_link.added'
-            ? `${url}?onglet=suivi`
+            ? `${url}?onglet=historique`
             : type === 'agency_answer' && url
-              ? `${url}?onglet=echanges`
+              ? `${url}?onglet=a-faire`
               : url,
     listingId: event.listingId,
   }))

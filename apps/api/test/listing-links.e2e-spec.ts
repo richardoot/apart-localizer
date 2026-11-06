@@ -3,7 +3,7 @@
  * le REST : lien d'origine à la création, ajout d'un lien (portail reconnu,
  * URL d'une autre fiche refusée avec son nom), prix par lien et prix de la
  * fiche (le plus bas en ligne, proposé quand il a été saisi à la main),
- * écart noté dans « Mises à jour », lien plus en ligne sans que l'annonce le
+ * écart noté dans l'Historique, lien plus en ligne sans que l'annonce le
  * soit, retrait (jamais le dernier lien), lien principal recopié, vendeur et
  * référence (un particulier n'en a pas), filtres de la liste, journal,
  * notifications, export. Aucune page de portail n'est téléchargée : les liens
