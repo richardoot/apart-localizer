@@ -3,15 +3,22 @@
   import {
     LISTING_CHECK_DISPOSITION_LABELS,
     LISTING_CHECK_OUTCOME_LABELS,
+    LISTING_PORTAL_LABELS,
   } from '@apart/contracts'
   import type {
     ListingCheck,
     ListingCheckOutcome,
     ListingCheckSuggestion,
+    ListingLink,
     ListingStatus,
     Member,
   } from '@apart/contracts'
-  import { activityActorName, checkFreshness } from '@apart/domain'
+  import {
+    activityActorName,
+    checkFreshness,
+    orderLinks,
+    portalWhere,
+  } from '@apart/domain'
   import { useListingChecks } from '@/composables/useListingChecks'
   import { ApiError } from '@/lib/api'
   import { formatDate } from '@/lib/format'
@@ -25,17 +32,28 @@
    * Deux constats à la main : « Vue en ligne aujourd'hui » et « Plus en
    * ligne » ; le second propose « Vendu ou retiré », appliqué seulement si
    * le membre le confirme.
+   *
+   * Lot 18 : une annonce sur plusieurs portails se vérifie lien par lien
+   * (« Lien vérifié ») ; un lien plus en ligne parmi d'autres est une mise à
+   * jour, « Vendu ou retiré » n'est proposé que si plus aucun lien n'est en
+   * ligne. Le portail vérifié est dit dans la chronologie, et un lien
+   * ajouté y figure (« Lien ajouté »).
    */
-  const props = defineProps<{
-    listingId: string
-    status: ListingStatus
-    updatedAt: string
-    createdAt: string
-    lastCheckedAt: string | null
-    lastSeenOnlineAt: string | null
-    url: string | null
-    members: Member[]
-  }>()
+  const props = withDefaults(
+    defineProps<{
+      listingId: string
+      status: ListingStatus
+      updatedAt: string
+      createdAt: string
+      lastCheckedAt: string | null
+      lastSeenOnlineAt: string | null
+      url: string | null
+      members: Member[]
+      /** Lot 18 : les liens de l'annonce sur les portails. */
+      links?: ListingLink[]
+    }>(),
+    { links: () => [] }
+  )
   const emit = defineEmits<{ 'set-status': [status: ListingStatus] }>()
 
   const checks = useListingChecks(computed(() => props.listingId))
@@ -45,6 +63,27 @@
   const evidence = ref('')
   const suggestion = ref<ListingCheckSuggestion | null>(null)
   const showAll = ref(false)
+
+  /** Lot 18 : plusieurs liens, le lien vérifié se choisit (le principal par défaut). */
+  const orderedLinks = computed(() => orderLinks(props.links))
+  const multiLink = computed(() => props.links.length > 1)
+  const chosenLinkId = ref<string | null>(null)
+  const chosenLink = computed(
+    () =>
+      orderedLinks.value.find(l => l.id === chosenLinkId.value) ??
+      orderedLinks.value[0] ??
+      null
+  )
+  /** Ce que la vérification désigne : le lien choisi, sinon l'URL de la fiche. */
+  const target = computed(() =>
+    multiLink.value && chosenLink.value
+      ? { linkId: chosenLink.value.id, checkedUrl: chosenLink.value.url }
+      : props.url
+        ? { checkedUrl: props.url }
+        : {}
+  )
+  const linkOption = (link: ListingLink): string =>
+    `${LISTING_PORTAL_LABELS[link.portal]}${link.primary ? ' (lien principal)' : ''}${link.online ? '' : ' (plus en ligne)'}`
 
   /** Les cinq plus récentes, puis tout sur demande. */
   const SHOWN = 5
@@ -92,6 +131,7 @@
     offline: 'bg-bad-soft text-bad',
     republished: 'bg-warn-soft text-warn',
     inaccessible: 'border border-dashed border-muted text-muted',
+    link_added: 'border border-accent text-accent',
   }
   const DISPOSITION_TONES: Record<string, string> = {
     applied: 'text-good',
@@ -111,10 +151,12 @@
         observed: { online: true },
         outcome: 'unchanged',
         expectedUpdatedAt: props.updatedAt,
-        ...(props.url ? { checkedUrl: props.url } : {}),
+        ...target.value,
       })
       suggestion.value = null
-      notice.value = 'Annonce notée en ligne aujourd’hui.'
+      notice.value = multiLink.value
+        ? `Lien ${LISTING_PORTAL_LABELS[chosenLink.value?.portal ?? 'autre']} noté en ligne aujourd’hui.`
+        : 'Annonce notée en ligne aujourd’hui.'
     } catch (error) {
       report(error)
     }
@@ -128,12 +170,14 @@
         outcome: 'offline',
         expectedUpdatedAt: props.updatedAt,
         ...(evidence.value.trim() ? { evidence: evidence.value.trim() } : {}),
-        ...(props.url ? { checkedUrl: props.url } : {}),
+        ...target.value,
       })
       confirmingOffline.value = false
       evidence.value = ''
       suggestion.value = result.suggestion
-      notice.value = 'Annonce notée « plus en ligne ».'
+      notice.value = multiLink.value
+        ? `Lien ${LISTING_PORTAL_LABELS[chosenLink.value?.portal ?? 'autre']} noté « plus en ligne ».`
+        : 'Annonce notée « plus en ligne ».'
     } catch (error) {
       report(error)
     }
@@ -204,13 +248,37 @@
       changement de statut n’est jamais appliqué sans votre accord.
     </p>
 
+    <label
+      v-if="multiLink"
+      class="grid gap-1 text-xs font-medium text-muted sm:max-w-sm"
+    >
+      Lien vérifié
+      <select
+        :value="chosenLink?.id"
+        class="min-h-11 rounded-lg border border-line bg-bg px-3 text-sm text-fg sm:min-h-9"
+        data-testid="check-link"
+        @change="chosenLinkId = ($event.target as HTMLSelectElement).value"
+      >
+        <option v-for="link in orderedLinks" :key="link.id" :value="link.id">
+          {{ linkOption(link) }}
+        </option>
+      </select>
+    </label>
+
     <form
       v-if="confirmingOffline"
       class="grid gap-2 rounded-lg border border-line bg-surface-2 p-3"
       data-testid="check-offline-form"
       @submit.prevent="markOffline"
     >
-      <p class="text-sm">
+      <p v-if="multiLink" class="text-sm">
+        Noter que le lien
+        {{ LISTING_PORTAL_LABELS[chosenLink?.portal ?? 'autre'] }} n’est plus en
+        ligne ? Le statut ne change pas : «
+        {{ LISTING_STATUS_LABELS.sold_or_withdrawn }} » ne sera proposé que si
+        plus aucun lien n’est en ligne.
+      </p>
+      <p v-else class="text-sm">
         Noter que l’annonce n’est plus en ligne ? Le statut ne change pas encore
         : « {{ LISTING_STATUS_LABELS.sold_or_withdrawn }} » vous sera proposé.
       </p>
@@ -306,7 +374,13 @@
           >
           <span class="text-muted"
             ><time :datetime="check.checkedAt">{{ when(check.checkedAt) }}</time
-            >, par {{ who(check) }}</span
+            >, par {{ who(check)
+            }}<template v-if="multiLink && check.link">
+              ·
+              <span data-testid="check-portal">{{
+                portalWhere(check.link.portal)
+              }}</span></template
+            ></span
           >
         </div>
         <ul v-if="check.changes.length" class="grid gap-0.5 text-sm">

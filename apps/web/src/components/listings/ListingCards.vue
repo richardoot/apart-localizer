@@ -1,6 +1,10 @@
 <script setup lang="ts">
   import type { EvaluatedListing } from '@apart/contracts'
-  import { locationApproximation } from '@apart/domain'
+  import {
+    locationApproximation,
+    priceRangeText,
+    sellerListLabel,
+  } from '@apart/domain'
   import {
     formatDistance,
     formatEuros,
@@ -14,6 +18,7 @@
   import FitSummary from './FitSummary.vue'
   import CheckFreshnessBadge from './CheckFreshnessBadge.vue'
   import NewBadge from './NewBadge.vue'
+  import PortalChips from './PortalChips.vue'
   import PrecisionBadge from './PrecisionBadge.vue'
   import RentalPill from './RentalPill.vue'
   import StatusBadge from './StatusBadge.vue'
@@ -74,6 +79,16 @@
               :last-outcome="item.lastCheck?.outcome ?? null"
             />
           </div>
+          <div
+            class="flex flex-wrap items-center gap-1.5 text-xs text-muted"
+            data-testid="card-seller"
+          >
+            <PortalChips :links="item.links" short />
+            <span>{{ sellerListLabel(item.listing.sellerType) }}</span>
+            <span v-if="item.listing.sellerReference" class="font-mono"
+              >· réf. {{ item.listing.sellerReference }}</span
+            >
+          </div>
         </div>
         <VerdictPill :verdict="item.evaluation.metrics.verdict" />
       </header>
@@ -86,6 +101,13 @@
           </dt>
           <dd class="font-mono text-xs">
             {{ formatEuros(item.listing.price) }}
+          </dd>
+          <dd
+            v-if="priceRangeText(item.links)"
+            class="text-[11px] text-warn"
+            data-testid="card-price-range"
+          >
+            {{ priceRangeText(item.links) }}
           </dd>
         </div>
         <div>

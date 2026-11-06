@@ -10,6 +10,7 @@ import {
   ActivityChannelSchema,
   DpeClassSchema,
   ListingStatusSchema,
+  ObservedSellerTypeSchema,
   PerimeterTypeSchema,
 } from './enums.js'
 import {
@@ -139,6 +140,27 @@ export const ExplorationCandidateSchema = z
       'Charges de copropriété annuelles (montant mensuel × 12)'
     ),
     propertyTax: candidateAmount('Taxe foncière annuelle'),
+    // Lot 18 : le vendeur lu sur la page (même agence et même référence
+    // qu'une annonce suivie : le lien est rattaché d'office à sa fiche).
+    sellerType: ObservedSellerTypeSchema.optional(),
+    sellerName: z
+      .string()
+      .trim()
+      .min(1)
+      .max(120)
+      .optional()
+      .describe(
+        "Agence, ou réseau pour un mandataire, affichés sur la page ; jamais le nom d'une personne"
+      ),
+    reference: z
+      .string()
+      .trim()
+      .min(1)
+      .max(60)
+      .optional()
+      .describe(
+        'Référence de l’annonce affichée (« Réf. EX-2041 », « Mandat n° 2041 ») ; jamais pour un particulier'
+      ),
   })
   .describe(
     'Une annonce lue par Claude sur un portail : seuls url et portal sont obligatoires, le reste si la page le donne'
@@ -153,9 +175,9 @@ export type ExplorationCandidateInput = z.input<
 // ---------------------------------------------------------------------------
 
 export const ExplorationOutcomeSchema = z
-  .enum(['new', 'duplicate_probable', 'known', 'dismissed', 'out'])
+  .enum(['new', 'duplicate_probable', 'known', 'dismissed', 'out', 'attached'])
   .describe(
-    'Résultat du tri : new (nouvelle, brouillon « À valider »), duplicate_probable (même bien qu’une annonce suivie, sous un autre lien : brouillon à trancher), known (déjà suivie, même lien : vérification lot 15), dismissed (déjà écartée : jamais reproposée), out (hors critères même avec la marge : une ligne du compte rendu seulement)'
+    'Résultat du tri : new (nouvelle, brouillon « À valider »), duplicate_probable (même bien qu’une annonce suivie, sous un autre lien : brouillon à trancher), known (déjà suivie, même lien : vérification lot 15), dismissed (déjà écartée : jamais reproposée), out (hors critères même avec la marge : une ligne du compte rendu seulement), attached (lot 18 : même agence et même référence qu’une annonce suivie : le lien est rattaché d’office à sa fiche, « Ce n’est pas la même » le détache)'
   )
 export type ExplorationOutcome = z.infer<typeof ExplorationOutcomeSchema>
 
@@ -165,6 +187,7 @@ export const EXPLORATION_OUTCOME_LABELS: Record<ExplorationOutcome, string> = {
   known: 'Déjà suivie',
   dismissed: 'Déjà écartée',
   out: 'Hors critères',
+  attached: 'Rattachée d’office',
 }
 
 /** Les résultats qui deviennent un brouillon « À valider ». */
@@ -267,7 +290,7 @@ export const CandidateTriageSchema = z.object({
     'Adéquation aux critères actifs, calculée comme pour une annonce (lot 14) ; null pour une annonce déjà suivie'
   ),
   listing: ExplorationListingRefSchema.nullable().describe(
-    'L’annonce suivie (même lien) ou écartée concernée'
+    'L’annonce suivie (même lien, ou même agence et même référence pour un lien rattaché d’office) ou écartée concernée'
   ),
   draftId: z
     .string()
@@ -307,6 +330,14 @@ export const ExplorationCountsSchema = z.object({
   known: z.number().int().min(0),
   dismissed: z.number().int().min(0),
   out: z.number().int().min(0),
+  attached: z
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .describe(
+      'Lot 18 : liens rattachés d’office à une annonce suivie (même agence, même référence)'
+    ),
   draftsCreated: z
     .number()
     .int()
@@ -550,6 +581,22 @@ export const ExplorationRecordResultSchema = z.object({
       })
     )
     .describe('Vérifications appliquées aux annonces déjà suivies'),
+  attached: z
+    .array(
+      z.object({
+        listingId: z.string().uuid(),
+        title: z.string(),
+        linkId: z.string().uuid().nullable(),
+        draftId: z.string().uuid().nullable(),
+        summary: z.string(),
+        applied: z.boolean(),
+        problem: z.string().nullable(),
+      })
+    )
+    .default([])
+    .describe(
+      'Lot 18 : liens rattachés d’office (même agence, même référence) ; montrés dans « À valider » avec « Ce n’est pas la même »'
+    ),
   persisted: z.literal(true),
 })
 export type ExplorationRecordResult = z.infer<

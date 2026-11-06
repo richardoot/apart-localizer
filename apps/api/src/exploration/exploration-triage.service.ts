@@ -19,15 +19,24 @@ import {
   dedupeCandidates,
   draftInputFromCandidate,
   isAddressPrecision,
+  linkKey,
+  matchDuplicates,
   normalizeListingUrl,
+  referenceMatchOf,
 } from '@apart/domain'
-import type { SameUrlDraft, SameUrlListing, TriageFacts } from '@apart/domain'
+import type {
+  DuplicateRow,
+  SameUrlDraft,
+  SameUrlListing,
+  TriageFacts,
+} from '@apart/domain'
 import { GeoService } from '../geo/geo.service'
 import type { ListingAreaRef } from '../geo/geo.service'
-import { probeFromInput } from '../listings/duplicates.service'
-import { matchDuplicates } from '../listings/duplicates'
-import type { DuplicateRow } from '../listings/duplicates'
-import { num } from '../listings/listing.mapper'
+import {
+  DUPLICATE_ROW_SELECT,
+  duplicateRowOf,
+  probeFromInput,
+} from '../listings/duplicates.service'
 import { ListingChecksService } from '../listings/listing-checks.service'
 import { applyLocated, withOpenDataProvenance } from '../listings/location'
 import { GeocodingService } from '../opendata/geocoding.service'
@@ -57,6 +66,21 @@ export interface TriagedCandidate {
   observed: ListingObserved | null
   /** Le garde-fou de cette vérification (`updatedAt` lu au tri). */
   expectedUpdatedAt: string | null
+  /** Lot 18 : le lien de l'annonce suivie revu (même lien). */
+  linkId: string | null
+  /**
+   * Lot 18 : le lien à rattacher d'office à l'annonce suivie (même agence,
+   * même référence), avec la fiche lue (le brouillon qui le portera).
+   */
+  attach: {
+    listingId: string
+    updatedAt: string
+    input: ListingInput
+    warnings: string[]
+    placement: ListingPlacement | null
+    /** Les doublons probables, gardés si le rattachement est refusé. */
+    duplicates: DuplicateCandidate[]
+  } | null
 }
 
 export interface TriageRun {
@@ -116,17 +140,11 @@ export class ExplorationTriageService {
       this.prisma.listing.findMany({
         where: { workspaceId },
         select: {
-          id: true,
-          title: true,
-          status: true,
-          url: true,
+          ...DUPLICATE_ROW_SELECT,
           discardReason: true,
           discardedAt: true,
-          price: true,
-          surface: true,
-          commune: true,
-          addressRaw: true,
-          addressNormalized: true,
+          updatedAt: true,
+          links: { select: { id: true, normalizedUrl: true } },
         },
       }),
       this.prisma.listingDraft.findMany({
@@ -161,7 +179,15 @@ export class ExplorationTriageService {
         discardedAt: l.discardedAt?.toISOString() ?? null,
       },
     })
+    // Lot 18 : une annonce suivie se reconnaît à n'importe lequel de ses liens.
+    const linkAt = new Map<string, string>()
     for (const l of listings) {
+      for (const link of l.links) {
+        if (!sameUrl.has(link.normalizedUrl)) {
+          sameUrl.set(link.normalizedUrl, listingRef(l))
+          linkAt.set(link.normalizedUrl, link.id)
+        }
+      }
       const key = normalizeListingUrl(l.url)
       if (key && !sameUrl.has(key)) sameUrl.set(key, listingRef(l))
     }
@@ -191,17 +217,7 @@ export class ExplorationTriageService {
         })
       }
     }
-    const listingRows: DuplicateRow[] = listings.map(l => ({
-      id: l.id,
-      title: l.title,
-      status: l.status,
-      price: Number(l.price),
-      surface: num(l.surface),
-      commune: l.commune,
-      url: l.url,
-      addressRaw: l.addressRaw,
-      addressNormalized: l.addressNormalized,
-    }))
+    const listingRows: DuplicateRow[] = listings.map(duplicateRowOf)
     const dismissedDrafts = drafts.filter(d => d.status === 'dismissed')
     const draftRows: DuplicateRow[] = dismissedDrafts.flatMap(d => {
       const parsed = ListingInputSchema.safeParse(d.input)
@@ -218,6 +234,10 @@ export class ExplorationTriageService {
           url: d.url,
           addressRaw: input.location.addressRaw,
           addressNormalized: input.location.addressNormalized,
+          links: [linkKey(d.url)].filter((k): k is string => k !== null),
+          sellerType: input.sellerType,
+          sellerName: input.sellerName,
+          sellerReference: input.sellerReference,
         },
       ]
     })
@@ -291,13 +311,20 @@ export class ExplorationTriageService {
       let observed: ListingObserved | null = null
       let expectedUpdatedAt: string | null = null
       let duplicates: DuplicateCandidate[] = []
+      let attachTo: TriageFacts['attachTo'] = null
       const lookalikes: ExplorationDismissal[] = []
+      const sameLinkId = normalizedUrl
+        ? (linkAt.get(normalizedUrl) ?? null)
+        : null
       if (p.same?.kind === 'listing' && p.same.listing.status !== 'discarded') {
         observed = candidateObserved(candidate)
         const preview = await this.checks.preview(
           member,
           p.same.listing.id,
-          ListingCheckPreviewRequestSchema.parse({ observed }),
+          ListingCheckPreviewRequestSchema.parse({
+            observed,
+            ...(sameLinkId ? { linkId: sameLinkId } : {}),
+          }),
           'mcp'
         )
         expectedUpdatedAt = preview.guards.expectedUpdatedAt
@@ -325,6 +352,16 @@ export class ExplorationTriageService {
           d => !d.reasons.every(r => r.kind === 'same_url')
         )
         duplicates = found.filter(d => d.status !== 'discarded')
+        // Lot 18 : même agence et même référence qu'une annonce suivie : le
+        // lien rejoint sa fiche (sauf un brouillon déjà à valider à ce lien).
+        const byReference = referenceMatchOf(duplicates)
+        if (byReference && p.same === null) {
+          attachTo = {
+            id: byReference.listingId,
+            title: byReference.title,
+            status: byReference.status,
+          }
+        }
         for (const d of found) {
           if (
             d.status !== 'discarded' ||
@@ -366,11 +403,16 @@ export class ExplorationTriageService {
         duplicates,
         lookalikes,
         fit: fits.get(String(index)) as TriageFacts['fit'],
+        attachTo,
       }
       const triage = candidateTriage(facts)
       const makesDraft =
         (triage.outcome === 'new' || triage.outcome === 'duplicate_probable') &&
         !triage.alreadyPending
+      const target =
+        triage.outcome === 'attached' && triage.listing
+          ? byId.get(triage.listing.id)
+          : undefined
       items.push({
         candidate,
         triage,
@@ -379,6 +421,17 @@ export class ExplorationTriageService {
           : null,
         observed,
         expectedUpdatedAt,
+        linkId: triage.outcome === 'known' ? sameLinkId : null,
+        attach: target
+          ? {
+              listingId: target.id,
+              updatedAt: target.updatedAt.toISOString(),
+              input: p.input,
+              warnings: p.warnings,
+              placement: p.placement,
+              duplicates,
+            }
+          : null,
       })
     }
     return {

@@ -1,6 +1,7 @@
 import {
   ListingCheckChangeSchema,
   ListingCheckSchema,
+  ListingLinkSchema,
   CriteriaFitCheckSchema,
   CriteriaFitOriginSchema,
   ListingOpenDataContextSchema,
@@ -14,11 +15,13 @@ import {
   TaskSchema,
 } from '@apart/contracts'
 import type {
+  CheckedLink,
   CriteriaFitEntry,
   CriteriaMatch,
   ListingCriteriaFit,
   FieldProvenanceMap,
   LinkedListing,
+  ListingLink as ListingLinkDto,
   ListingCheck as ListingCheckDto,
   ListingCheckSummary,
   ListingRepublication,
@@ -30,9 +33,11 @@ import type {
   PriceEvent as PriceEventDto,
   Task as TaskDto,
 } from '@apart/contracts'
-import { listingCriteriaFit } from '@apart/domain'
+import { listingCriteriaFit, orderLinks, primaryLink } from '@apart/domain'
+import type { LinkState } from '@apart/domain'
 import type {
   ListingCheck,
+  ListingLink,
   Offer,
   Opinion,
   PriceEvent,
@@ -65,6 +70,8 @@ export const listingInclude = {
   republishedAs: { select: linkedSelect },
   // Lot 14 : une visite prévue garde une annonce hors critères dans la liste.
   visits: { where: { status: 'planned' }, select: { id: true } },
+  // Lot 18 : les liens de l'annonce sur les portails.
+  links: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
 } satisfies Prisma.ListingInclude
 
 export type ListingRow = Prisma.ListingGetPayload<{
@@ -259,13 +266,94 @@ export function toListingDto(row: ListingRow): ListingDto {
     lastCheckedAt: row.lastCheckedAt?.toISOString() ?? null,
     lastSeenOnlineAt: row.lastSeenOnlineAt?.toISOString() ?? null,
     republishedFromId: row.republishedFromId,
+    // Lot 18 : le vendeur.
+    sellerType: row.sellerType,
+    sellerName: row.sellerName,
+    sellerReference: row.sellerReference,
+    sellerReferenceKey: row.sellerReferenceKey,
   }
   return ListingSchema.parse(dto)
 }
 
+/** Ce que les règles de `domain` lisent d'un lien enregistré (lot 18). */
+export function linkStateOf(link: ListingLink): LinkState {
+  return {
+    id: link.id,
+    portal: link.portal,
+    url: link.url,
+    normalizedUrl: link.normalizedUrl,
+    externalId: link.externalId,
+    price: num(link.price),
+    priceAt: link.priceAt?.toISOString() ?? null,
+    online: link.offlineSince === null,
+    offlineSince: link.offlineSince?.toISOString() ?? null,
+    lastSeenOnlineAt: link.lastSeenOnlineAt?.toISOString() ?? null,
+    lastCheckedAt: link.lastCheckedAt?.toISOString() ?? null,
+    createdAt: link.createdAt.toISOString(),
+    origin: link.origin,
+    readSellerName: link.readSellerName,
+    readReference: link.readReference,
+  }
+}
+
+/** Un lien (lot 18) ; `primary` dit si c'est le lien principal. */
+export function toListingLinkDto(
+  link: ListingLink,
+  primary: boolean
+): ListingLinkDto {
+  return ListingLinkSchema.parse({
+    id: link.id,
+    listingId: link.listingId,
+    portal: link.portal,
+    url: link.url,
+    normalizedUrl: link.normalizedUrl,
+    externalId: link.externalId,
+    price: num(link.price),
+    priceAt: link.priceAt?.toISOString() ?? null,
+    firstSeenAt: link.firstSeenAt?.toISOString() ?? null,
+    lastSeenOnlineAt: link.lastSeenOnlineAt?.toISOString() ?? null,
+    lastCheckedAt: link.lastCheckedAt?.toISOString() ?? null,
+    offlineSince: link.offlineSince?.toISOString() ?? null,
+    online: link.offlineSince === null,
+    primary,
+    origin: link.origin,
+    readSellerName: link.readSellerName,
+    readReference: link.readReference,
+    evidence: link.evidence,
+    addedById: link.addedById,
+    createdAt: link.createdAt.toISOString(),
+    updatedAt: link.updatedAt.toISOString(),
+  })
+}
+
+/** Les liens d'une annonce, le principal d'abord, puis du plus ancien au plus récent. */
+export function toListingLinkDtos(
+  links: readonly ListingLink[]
+): ListingLinkDto[] {
+  const states = links.map(link => ({ link, state: linkStateOf(link) }))
+  const primary = primaryLink(states.map(s => s.state))
+  const byId = new Map(states.map(s => [s.state.id, s.link]))
+  return orderLinks(states.map(s => s.state)).map(state =>
+    toListingLinkDto(
+      byId.get(state.id) as ListingLink,
+      state.id === primary?.id
+    )
+  )
+}
+
+/** Un lien vérifié, en quelques champs. */
+function checkedLinkOf(
+  link: Pick<ListingLink, 'id' | 'portal' | 'url'> | null | undefined
+): CheckedLink | null {
+  return link ? { id: link.id, portal: link.portal, url: link.url } : null
+}
+
 /** Une vérification (lot 15) ; des écarts illisibles (version antérieure) sont omis. */
 export function toListingCheckDto(
-  check: ListingCheck & { linkedListing?: LinkedListing | null }
+  check: ListingCheck & {
+    linkedListing?: LinkedListing | null
+    link?: Pick<ListingLink, 'id' | 'portal' | 'url'> | null
+  }
 ): ListingCheckDto {
   const changes = Array.isArray(check.changes)
     ? check.changes.flatMap(change => {
@@ -278,7 +366,12 @@ export function toListingCheckDto(
     listingId: check.listingId,
     checkedAt: check.checkedAt.toISOString(),
     authorId: check.authorId,
-    channel: check.channel === 'mcp' ? 'mcp' : 'web',
+    channel:
+      check.channel === 'mcp'
+        ? 'mcp'
+        : check.channel === 'system'
+          ? 'system'
+          : 'web',
     outcome: check.outcome,
     changes,
     summary: check.summary,
@@ -286,6 +379,7 @@ export function toListingCheckDto(
     checkedUrl: check.checkedUrl,
     linkedListing: check.linkedListing ?? null,
     suggestedStatus: check.suggestedStatus,
+    link: checkedLinkOf(check.link),
   })
 }
 
@@ -296,7 +390,12 @@ export function toLastCheck(row: ListingRow): ListingCheckSummary | null {
     ? {
         id: last.id,
         checkedAt: last.checkedAt.toISOString(),
-        channel: last.channel === 'mcp' ? 'mcp' : 'web',
+        channel:
+          last.channel === 'mcp'
+            ? 'mcp'
+            : last.channel === 'system'
+              ? 'system'
+              : 'web',
         authorId: last.authorId,
         outcome: last.outcome,
         summary: last.summary,

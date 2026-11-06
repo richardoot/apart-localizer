@@ -4,6 +4,8 @@
   import FitBadge from '@/components/listings/FitBadge.vue'
   import {
     draftFitReason,
+    draftSellerLabel,
+    duplicateLead,
     draftPlace,
     draftReadLabel,
     draftSourceLabel,
@@ -21,6 +23,11 @@
    * sur le portail » ; un doublon probable se tranche : « C'est la même :
    * mettre à jour la fiche » ou « C'en est une autre ». Lisible sans la
    * couleur, boutons de 44 px.
+   *
+   * Lot 18 : le vendeur lu (agence et référence) est affiché ; « C'est la
+   * même : ajouter ce lien à la fiche » ajoute le lien du brouillon à
+   * l'annonce suivie ; un doublon certain (même agence, même référence) est
+   * mis en avant, une même référence avec une autre agence est dite.
    */
   const props = withDefaults(
     defineProps<{
@@ -46,6 +53,7 @@
   const duplicate = computed(() => pendingDuplicate(d.value))
   const fitReason = computed(() => draftFitReason(d.value))
   const portalLabel = computed(() => draftSourceLabel(d.value))
+  const sellerLabel = computed(() => draftSellerLabel(d.value))
   const rooms = computed(() =>
     d.value.listing.rooms === null
       ? 'pièces ?'
@@ -74,6 +82,12 @@
           data-testid="draft-portal"
           >{{ portalLabel }}</span
         >
+        <span
+          v-if="sellerLabel"
+          class="rounded-md border border-line px-1.5 py-px text-xs text-muted"
+          data-testid="draft-seller"
+          >{{ sellerLabel }}</span
+        >
         <span class="text-xs text-muted">{{ draftWhen(d) }}</span>
       </div>
       <div
@@ -101,11 +115,16 @@
       </div>
       <div
         v-if="duplicate"
-        class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-warn-soft px-3 py-2.5"
+        class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl px-3 py-2.5"
+        :class="duplicate.certain ? 'bg-accent-soft' : 'bg-warn-soft'"
         data-testid="draft-duplicate"
+        :data-certain="duplicate.certain"
       >
-        <span class="min-w-0 flex-[1_1_20rem] text-sm leading-normal text-warn">
-          Peut-être
+        <span
+          class="min-w-0 flex-[1_1_20rem] text-sm leading-normal"
+          :class="duplicate.certain ? 'text-accent' : 'text-warn'"
+        >
+          {{ duplicateLead(duplicate) }}
           <RouterLink
             :to="{ name: 'listing', params: { id: duplicate.listingId } }"
             class="font-semibold underline underline-offset-2"
@@ -114,12 +133,21 @@
         </span>
         <button
           type="button"
-          class="min-h-10 rounded-lg border border-warn bg-surface px-3 text-sm font-semibold text-warn disabled:opacity-60"
+          class="min-h-10 rounded-lg border bg-surface px-3 text-sm font-semibold disabled:opacity-60"
+          :class="
+            duplicate.certain
+              ? 'border-accent text-accent'
+              : 'border-warn text-warn'
+          "
           :disabled="busy"
           data-action="same"
           @click="emit('same', duplicate.listingId)"
         >
-          C’est la même : mettre à jour la fiche
+          {{
+            d.url
+              ? 'C’est la même : ajouter ce lien à la fiche'
+              : 'C’est la même : mettre à jour la fiche'
+          }}
         </button>
         <button
           type="button"

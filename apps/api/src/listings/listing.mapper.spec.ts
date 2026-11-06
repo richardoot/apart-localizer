@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { Prisma } from '../generated/prisma'
 import {
+  linkStateOf,
   toLastCheck,
   toListingCheckDto,
   toListingDto,
+  toListingLinkDtos,
   toRepublication,
   num,
 } from './listing.mapper'
@@ -114,9 +116,40 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     criteriaFitLevel: null,
     criteriaFitChangedAt: null,
     criteriaFitOrigin: null,
+    sellerType: 'unknown',
+    sellerName: null,
+    sellerReference: null,
+    sellerReferenceKey: null,
+    links: [],
     ...over,
   }
 }
+
+const link = (
+  over: Partial<ListingRow['links'][number]> = {}
+): ListingRow['links'][number] => ({
+  id: '66666666-6666-4666-8666-666666666666',
+  workspaceId: '22222222-2222-4222-8222-222222222222',
+  listingId: '11111111-1111-4111-8111-111111111111',
+  portal: 'leboncoin',
+  url: 'https://www.leboncoin.fr/ad/ventes_immobilieres/0000000101',
+  normalizedUrl: 'https://leboncoin.fr/ad/ventes_immobilieres/0000000101',
+  externalId: '0000000101',
+  price: new Prisma.Decimal('200000'),
+  priceAt: now,
+  firstSeenAt: now,
+  lastSeenOnlineAt: null,
+  lastCheckedAt: null,
+  offlineSince: null,
+  origin: 'original',
+  readSellerName: null,
+  readReference: null,
+  evidence: null,
+  addedById: null,
+  createdAt: now,
+  updatedAt: now,
+  ...over,
+})
 
 describe('toListingDto', () => {
   it('converts decimals, dates and rebuilds the point from the mirror columns', () => {
@@ -214,6 +247,7 @@ describe('lot 15 : vérifications et republication', () => {
     checkedUrl: null,
     linkedListingId: null,
     suggestedStatus: null,
+    linkId: null,
   }
 
   it('dates de vérification, republication et dernier résultat', () => {
@@ -236,8 +270,12 @@ describe('lot 15 : vérifications et republication', () => {
       outcome: 'changed',
       summary: 'Prix 215 000 € → 205 000 €',
     })
+    // Lot 18 : le système (alerte e-mail) a son canal.
     expect(
       toLastCheck(row({ checks: [{ ...check, channel: 'system' }] }))?.channel
+    ).toBe('system')
+    expect(
+      toLastCheck(row({ checks: [{ ...check, channel: 'import' }] }))?.channel
     ).toBe('web')
     const linked = {
       id: '55555555-5555-4555-8555-555555555555',
@@ -258,5 +296,61 @@ describe('lot 15 : vérifications et republication', () => {
     expect(
       toListingCheckDto({ ...check, changes: null, channel: 'web' }).changes
     ).toEqual([])
+    expect(toListingCheckDto({ ...check, channel: 'system' }).channel).toBe(
+      'system'
+    )
+    // Lot 18 : le lien vérifié.
+    expect(
+      toListingCheckDto({
+        ...check,
+        link: {
+          id: link().id,
+          portal: 'seloger',
+          url: 'https://www.seloger.com/a/1',
+        },
+      }).link
+    ).toEqual({
+      id: link().id,
+      portal: 'seloger',
+      url: 'https://www.seloger.com/a/1',
+    })
+  })
+
+  it('lot 18 : vendeur, liens, le principal d’abord', () => {
+    const dto = toListingDto(
+      row({
+        sellerType: 'agency',
+        sellerName: '[Exemple] Agence',
+        sellerReference: 'EX-1',
+        sellerReferenceKey: 'EX1',
+      })
+    )
+    expect(dto).toMatchObject({
+      sellerType: 'agency',
+      sellerName: '[Exemple] Agence',
+      sellerReference: 'EX-1',
+      sellerReferenceKey: 'EX1',
+    })
+    const later = new Date('2026-11-04T10:00:00.000Z')
+    const offline = link({ offlineSince: later })
+    const other = link({
+      id: '77777777-7777-4777-8777-777777777777',
+      portal: 'seloger',
+      url: 'https://www.seloger.com/a/1',
+      normalizedUrl: 'https://seloger.com/a/1',
+      price: null,
+      priceAt: null,
+      createdAt: later,
+    })
+    const dtos = toListingLinkDtos([offline, other])
+    expect(dtos.map(l => [l.portal, l.primary, l.online, l.price])).toEqual([
+      ['seloger', true, true, null],
+      ['leboncoin', false, false, 200_000],
+    ])
+    expect(linkStateOf(offline)).toMatchObject({
+      online: false,
+      offlineSince: later.toISOString(),
+      price: 200_000,
+    })
   })
 })

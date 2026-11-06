@@ -1,6 +1,11 @@
 import { z } from 'zod'
 import { CriteriaFitLevelSchema } from './criteria-fit.js'
-import { DpeClassSchema, ListingStatusSchema, VerdictSchema } from './enums.js'
+import {
+  DpeClassSchema,
+  ListingStatusSchema,
+  SellerTypeSchema,
+  VerdictSchema,
+} from './enums.js'
 import { PointRadiusSchema } from './geojson.js'
 import { LocationPrecisionFilterSchema } from './placement.js'
 
@@ -97,6 +102,27 @@ export const ListingFiltersSchema = z.object({
     .describe(
       'Lot 15 : seulement les annonces à revérifier, actives et sans vérification depuis plus de N jours (à défaut de vérification, depuis leur ajout) ; 7 dans l’application'
     ),
+  sellerType: z
+    .array(SellerTypeSchema)
+    .optional()
+    .describe(
+      'Lot 18 : vendeurs retenus (agency, mandatary, private, unknown = à relever) ; « agence ou mandataire » = agency et mandatary'
+    ),
+  multiPortal: z
+    .boolean()
+    .optional()
+    .describe(
+      'Lot 18 : seulement les annonces publiées sur plusieurs portails (deux liens ou plus)'
+    ),
+  reference: z
+    .string()
+    .trim()
+    .min(1)
+    .max(60)
+    .optional()
+    .describe(
+      'Lot 18 : la référence de l’annonce chez l’agence ou le mandataire, comparée sans espaces, tirets ni points (« EX 2041 » = « EX-2041 »)'
+    ),
   near: PointRadiusSchema.optional().describe(
     'Point et rayon : annonces dans le rayon, avec leur distance en mètres'
   ),
@@ -104,7 +130,9 @@ export const ListingFiltersSchema = z.object({
     .string()
     .max(200)
     .optional()
-    .describe('Recherche texte (titre, commune, quartier, adresse, notes)'),
+    .describe(
+      'Recherche texte (titre, commune, quartier, adresse, notes, agence) ; une référence d’annonce se trouve aussi, espaces et tirets ignorés'
+    ),
   sort: ListingSortSchema.default('score'),
   order: ListingSortOrderSchema.default('desc'),
   page: z
@@ -175,6 +203,9 @@ export const ListingListQuerySchema = z.object({
   newForMe: bool,
   criteriaId: z.string().uuid().optional(),
   staleDays: integer(1, 365),
+  sellerType: csv(SellerTypeSchema),
+  multiPortal: bool,
+  reference: z.string().trim().min(1).max(60).optional(),
   lng: optionalNumber(z.coerce.number().min(-180).max(180)),
   lat: optionalNumber(z.coerce.number().min(-90).max(90)),
   radius: integer(1, 50_000),
@@ -215,6 +246,11 @@ export function listingFiltersFromQuery(
     ...(query.newForMe !== undefined ? { newForMe: query.newForMe } : {}),
     ...(query.criteriaId ? { criteriaId: query.criteriaId } : {}),
     ...(query.staleDays !== undefined ? { staleDays: query.staleDays } : {}),
+    ...(query.sellerType ? { sellerType: query.sellerType } : {}),
+    ...(query.multiPortal !== undefined
+      ? { multiPortal: query.multiPortal }
+      : {}),
+    ...(query.reference ? { reference: query.reference } : {}),
     ...(near ? { near } : {}),
     ...(query.search ? { search: query.search } : {}),
     sort: query.sort,
@@ -253,6 +289,9 @@ export function listingFiltersToQuery(
   if (filters.newForMe) query.newForMe = 'true'
   if (filters.criteriaId) query.criteriaId = filters.criteriaId
   num('staleDays', filters.staleDays)
+  list('sellerType', filters.sellerType)
+  if (filters.multiPortal) query.multiPortal = 'true'
+  if (filters.reference) query.reference = filters.reference
   if (filters.near) {
     query.lng = String(filters.near.longitude)
     query.lat = String(filters.near.latitude)

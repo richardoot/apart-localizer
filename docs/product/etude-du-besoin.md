@@ -148,11 +148,12 @@ Priorité : **M** (MVP, parité avec l'artefact plus le MCP), **S** (suivant), *
 | C3 | Création par le MCP à partir d'un contenu lu par Claude (page, texte, capture) | M |
 | C4 | Extraction IA côté serveur depuis un texte collé ou des captures d'écran, retour sous forme de fiche pré-remplie à valider | S |
 | C5 | Provenance et confiance par champ : `annonce`, `utilisateur`, `ia`, `open data`, `estimé`. L'écran garde le marqueur « ≈ » | S |
-| C6 | Détection de doublons (URL, adresse, couple prix et surface) avec fusion assistée | S |
+| C6 | Détection de doublons (URL, adresse, couple prix et surface) avec fusion assistée ; au lot 18, par n'importe lequel des liens d'une annonce et par la même agence avec la même référence | S |
 | C7 | Champs manquants transformés automatiquement en tâches | S |
 | C8 | Historique des prix et des modifications de l'annonce source (baisse de prix, retrait) | S |
 | C9 | Partage depuis le mobile (PWA share target) et transfert d'alertes e-mail | L |
 | C10 | Exploration des portails à partir des critères actifs (lot 16) : Claude cherche dans le navigateur de l'utilisateur, l'application trie (déjà suivie = vérification, écartée jamais reproposée, hors critères en simple ligne de compte rendu) et dépose le reste en brouillons « à valider » ; rien n'est ajouté sans un membre | S |
+| C11 | Une annonce, plusieurs portails (lot 18) : tous les liens d'une même annonce sur une seule fiche (portail, prix affiché, en ligne ou non), le prix de la fiche étant le plus bas en ligne et un écart entre portails noté sans être tranché ; qui vend (agence, mandataire, particulier, inconnu, jamais deviné), le nom de l'agence ou du réseau et la référence de l'annonce, qui fait reconnaître la même annonce ailleurs (même agence et même référence : rattachée d'office, détachable ; même référence chez une autre agence : à trancher) | S |
 
 Point de vigilance : pas de scraping automatisé des portails (conditions d'utilisation, anti-bot).
 Le canal principal est Claude qui lit la page dans le navigateur de l'utilisateur et appelle le
@@ -268,6 +269,7 @@ Lecture :
 | `prepare_agency_requests` | Brouillons de messages à l'annonceur, groupés par annonce, texte poli par défaut ; rien n'est envoyé, le membre valide d'abord (lot 17) |
 | `record_request_sent` | Enregistre l'envoi fait par Claude avec Gmail ou la messagerie du portail ; refusé sans validation dans l'application ou accord explicite dans la conversation (lot 17) |
 | `record_agency_answer` | Enregistre la réponse : valeurs appliquées (source « agence ») ou proposées, tâches cochées, extrait masqué (lot 17) |
+| `add_listing_link` | Rattache à une annonce le lien de la même annonce sur un autre portail, lu par Claude, seulement si l'agence et la référence sont les mêmes ; prix affiché, vendeur et référence lus ; prix de la fiche au plus bas en ligne, écart noté (lot 18) |
 
 Ressources et prompts : le schéma d'annonce en JSON Schema (`apart://schema/listing`), le
 glossaire des indicateurs (`apart://glossaire`), un prompt « analyser cette annonce » qui
@@ -330,7 +332,10 @@ Entités principales. Les montants sont en euros, les surfaces en m², les dates
 **Listing** (annonce) :
 
 - identité : source (`seloger`, `leboncoin`, `pap`, `bienici`, `agence`, `autre`), URL,
-  identifiant externe, titre, dates de publication et de dernière mise à jour constatées ;
+  identifiant externe, titre, dates de publication et de dernière mise à jour constatées ; depuis
+  le lot 18, source, URL et identifiant sont ceux du lien principal (le plus ancien en ligne) ;
+- vendeur (lot 18) : agence, mandataire, particulier ou inconnu (jamais deviné), nom de l'agence
+  ou du réseau (jamais celui d'une personne), référence de l'annonce et sa clé de comparaison ;
 - localisation : adresse saisie, adresse normalisée, identifiant BAN, coordonnées et point
   géographique PostGIS, précision (adresse exacte, rue, quartier, commune), commune, code INSEE,
   quartier ou arrêt ;
@@ -376,7 +381,15 @@ fiscaux datés ; versionnées (date d'effet) ; surcharge partielle par annonce.
 **ListingCheck** (lot 15) : annonce, date, membre et canal, résultat (inchangée, mise à jour, plus
 en ligne, republiée, page inaccessible), écarts (champ, avant, après, appliqué, proposé ou noté),
 résumé, extrait-preuve court, URL consultée, annonce liée, statut proposé. Sur l'annonce :
-dernière vérification, dernière fois vue en ligne, annonce dont elle est la republication.
+dernière vérification, dernière fois vue en ligne, annonce dont elle est la republication. Au
+lot 18, une vérification porte sur un lien de l'annonce.
+
+**ListingLink** (lot 18) : annonce, portail (Leboncoin, SeLoger, Bien'ici, PAP, Logic-Immo, site
+d'agence, autre), lien et sa forme normalisée (unique dans l'espace), identifiant sur le portail,
+prix affiché et sa date, première vue, dernière vue en ligne, dernière vérification, hors ligne
+depuis, origine (lien d'origine, à la main, Claude, exploration, partage, alerte e-mail), agence
+et référence lues, extrait-preuve court, auteur. Le prix de la fiche est le plus bas des liens en
+ligne ; un prix saisi à la main n'est jamais écrasé (proposé). Le dernier lien ne se retire pas.
 
 **Offer** : annonce, date, montant, canal (e-mail, téléphone, agence, en personne, courrier), réponse (en attente, acceptée, refusée, contre-proposition), contre-proposition, date de la réponse, auteur, notes. Une offre ne se supprime pas ; sa réponse propose un statut à l'annonce sans le changer d'office (ADR 0009).
 

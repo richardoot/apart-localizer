@@ -166,6 +166,61 @@ describe('Alertes e-mail entrantes (e2e)', () => {
       expect(log[0]?.channel).toBe('system')
     })
 
+    it('lot 18 : même agence et même référence qu’une annonce suivie, le lien est rattaché d’office', async () => {
+      // L'annonce suivie, publiée par la même agence (fictive), même référence.
+      const tracked = await request(ctx.server)
+        .post('/listings')
+        .set(ctx.auth(richard))
+        .send({
+          title: '[Exemple] T2 suivi',
+          price: 192_000,
+          url: 'https://agence-fictive.invalid/annonce/AGF-12345',
+          sellerType: 'agency',
+          sellerName: 'Agence Fictive Talence',
+          sellerReference: 'AGF-12345',
+          location: { commune: 'Talence' },
+        })
+        .expect(201)
+      const listingId = tracked.body.listing.id as string
+      const res = await post(ctx, workspaceId, ALERT).expect(202)
+      expect(res.body).toMatchObject({ candidates: 2, created: 0, attached: 2 })
+      const item = await request(ctx.server)
+        .get(`/listings/${listingId}`)
+        .set(ctx.auth(chloe))
+        .expect(200)
+      expect(
+        item.body.links.map((l: { portal: string; origin: string }) => [
+          l.portal,
+          l.origin,
+        ])
+      ).toEqual([
+        ['autre', 'original'],
+        ['seloger', 'email'],
+        ['seloger', 'email'],
+      ])
+      // Le plus bas en ligne devient le prix de la fiche.
+      expect(item.body.listing.price).toBe(189_000)
+      const attached = await request(ctx.server)
+        .get('/listing-drafts')
+        .query({ status: 'merged', attached: 'true' })
+        .set(ctx.auth(chloe))
+        .expect(200)
+      expect(attached.body).toHaveLength(2)
+      expect(attached.body[0].attachment.listingId).toBe(listingId)
+      // Les deux membres sont prévenus (écriture du système).
+      expect(
+        await ctx.prisma.notification.count({
+          where: {
+            type: 'listing_checked',
+            title: { startsWith: 'Nouveau lien' },
+          },
+        })
+      ).toBe(4)
+      // La même alerte ne revient pas : ses liens sont déjà rattachés.
+      const again = await post(ctx, workspaceId, ALERT).expect(202)
+      expect(again.body).toMatchObject({ created: 0, attached: 0, skipped: 2 })
+    })
+
     it('valide un brouillon en le liant à l’annonce créée, ou l’écarte', async () => {
       await post(ctx, workspaceId, ALERT).expect(202)
       const drafts = await request(ctx.server)

@@ -148,3 +148,42 @@ describe('api (lot 5)', () => {
     ])
   })
 })
+
+describe('api (lot 18)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock)
+    fetchMock.mockReset()
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({}),
+    })
+  })
+
+  it('liens des portails, liens rattachés d’office et détachement : chemins et méthodes', async () => {
+    await api.links.list('id-1')
+    await api.links.add('id-1', {
+      url: 'https://www.pap.fr/annonces/r0000000404',
+    })
+    await api.links.update('id-1', 'l-1', { online: false })
+    await api.links.remove('id-1', 'l-1')
+    await api.drafts.attached()
+    await api.drafts.detach('d-1')
+    const calls = fetchMock.mock.calls.map(
+      ([url, init]) =>
+        `${(init as RequestInit).method ?? 'GET'} ${String(url).replace(/^https?:\/\/[^/]+/, '')}`
+    )
+    expect(calls).toEqual([
+      'GET /listings/id-1/links',
+      'POST /listings/id-1/links',
+      'PATCH /listings/id-1/links/l-1',
+      'DELETE /listings/id-1/links/l-1',
+      'GET /listing-drafts?status=merged&attached=true',
+      'POST /listing-drafts/d-1/detach',
+    ])
+    await api.listings.list({ sellerType: ['private'], multiPortal: true })
+    const listed = String(fetchMock.mock.calls.at(-1)?.[0])
+    expect(listed).toContain('sellerType=private')
+    expect(listed).toContain('multiPortal=true')
+  })
+})

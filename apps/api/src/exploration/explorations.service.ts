@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import {
+  EXPLORATION_LINK_PORTAL,
   EXPLORATION_PORTAL_LABELS,
   ListingCheckInputSchema,
   NEIGHBOURHOOD_TERRITORY,
@@ -24,6 +25,7 @@ import type {
 import {
   briefZones,
   candidateEvidence,
+  candidateObserved,
   candidateExcerpt,
   explorationCounts,
   explorationSummaryText,
@@ -36,6 +38,8 @@ import { ActivityService } from '../activity/activity.service'
 import { GeoService } from '../geo/geo.service'
 import { countedStatuses, fitRuleOf } from '../listings/criteria-match.service'
 import { ListingChecksService } from '../listings/listing-checks.service'
+import { ListingLinksService } from '../listings/listing-links.service'
+import type { LinkAddInput } from '../listings/listing-links.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { perimeterOf } from '../search-criteria/search-criteria.mapper'
 import { isUniqueViolation } from '../workspace/workspace.service'
@@ -72,7 +76,8 @@ export class ExplorationsService {
     private readonly activity: ActivityService,
     private readonly geo: GeoService,
     private readonly triageService: ExplorationTriageService,
-    private readonly checks: ListingChecksService
+    private readonly checks: ListingChecksService,
+    private readonly links: ListingLinksService
   ) {}
 
   async list(
@@ -255,6 +260,7 @@ export class ExplorationsService {
     let written: {
       explorationId: string
       drafts: { id: string; title: string; index: number }[]
+      attachedDrafts: Map<number, string>
     }
     try {
       written = await this.prisma.$transaction(async tx => {
@@ -301,7 +307,42 @@ export class ExplorationsService {
           })
           drafts.push({ id: draft.id, title: item.draft.input.title, index })
         }
-        const draftAt = new Map(drafts.map(d => [d.index, d.id]))
+        // Lot 18 : même agence et même référence qu'une annonce suivie : un
+        // brouillon reconnu (merged), son lien rattaché d'office ensuite.
+        const attachedDrafts = new Map<number, string>()
+        for (const [index, item] of run.items.entries()) {
+          if (!item.attach) continue
+          const draft = await tx.listingDraft.create({
+            data: {
+              workspaceId: member.workspaceId,
+              origin: 'exploration',
+              status: 'merged',
+              extractedBy: 'claude',
+              input: item.attach.input as unknown as Prisma.InputJsonValue,
+              duplicates: item.attach
+                .duplicates as unknown as Prisma.InputJsonValue,
+              warnings: item.attach.warnings,
+              url: item.candidate.url,
+              receivedAt: finishedAt,
+              decidedAt: now,
+              decidedById: member.id,
+              listingId: item.attach.listingId,
+              attachedAt: now,
+              explorationId: exploration.id,
+              portal: item.candidate.portal,
+              excerpt: candidateExcerpt(item.candidate),
+              locationPlacement: item.attach.placement
+                ? (item.attach.placement as unknown as Prisma.InputJsonValue)
+                : Prisma.DbNull,
+            },
+            select: { id: true },
+          })
+          attachedDrafts.set(index, draft.id)
+        }
+        const draftAt = new Map([
+          ...drafts.map(d => [d.index, d.id] as const),
+          ...attachedDrafts.entries(),
+        ])
         await tx.explorationCandidate.createMany({
           data: run.items.map((item, position) => ({
             explorationId: exploration.id,
@@ -341,11 +382,12 @@ export class ExplorationsService {
                 .map(p => EXPLORATION_PORTAL_LABELS[p.portal]),
               criteria: criteria.map(c => c.name),
               draftIds: drafts.map(d => d.id),
+              attached: attachedDrafts.size,
             },
           },
           tx
         )
-        return { explorationId: exploration.id, drafts }
+        return { explorationId: exploration.id, drafts, attachedDrafts }
       })
     } catch (error) {
       // Deux envois simultanés du même runKey : le second rend le premier.
@@ -384,6 +426,7 @@ export class ExplorationsService {
               evidence: candidateEvidence(item.candidate),
               checkedUrl: item.candidate.url,
               expectedUpdatedAt: item.expectedUpdatedAt,
+              ...(item.linkId ? { linkId: item.linkId } : {}),
             }),
             channel
           )
@@ -412,6 +455,93 @@ export class ExplorationsService {
         data: { why },
       })
     }
+    // Lot 18 : les liens rattachés d'office (même agence, même référence),
+    // chacun dans sa transaction ; un rattachement refusé (vendeur qui
+    // contredit, lien pris) laisse le brouillon « à valider ».
+    const attached: ExplorationRecordResult['attached'] = []
+    for (const [position, item] of run.items.entries()) {
+      const draftId = written.attachedDrafts.get(position)
+      if (!item.attach || !draftId) continue
+      const c = item.candidate
+      const title = item.triage.listing?.title ?? item.attach.input.title
+      try {
+        const result = await this.links.add(
+          member,
+          item.attach.listingId,
+          {
+            url: c.url,
+            portal: EXPLORATION_LINK_PORTAL[c.portal],
+            online: true,
+            ...(c.price !== undefined ? { price: c.price } : {}),
+            ...(c.publishedAt !== undefined
+              ? { publishedAt: c.publishedAt }
+              : {}),
+            ...(c.sellerType !== undefined ? { sellerType: c.sellerType } : {}),
+            ...(c.sellerName !== undefined ? { sellerName: c.sellerName } : {}),
+            ...(c.reference !== undefined ? { reference: c.reference } : {}),
+            evidence: candidateEvidence(c),
+            facts: factsOfCandidate(c),
+          },
+          {
+            channel,
+            origin: 'exploration',
+            auto: true,
+            draftId,
+            strictSeller: true,
+          }
+        )
+        await this.prisma.listingDraft.update({
+          where: { id: draftId },
+          data: {
+            attachedLinkId: result.link?.id ?? null,
+            mergedCheckId: result.check?.id ?? null,
+          },
+        })
+        attached.push({
+          listingId: item.attach.listingId,
+          title,
+          linkId: result.link?.id ?? null,
+          draftId,
+          summary: result.summary,
+          applied: true,
+          problem: null,
+        })
+        await this.prisma.explorationCandidate.updateMany({
+          where: { explorationId: written.explorationId, position },
+          data: { why: `${item.triage.why} : ${result.summary}` },
+        })
+      } catch (error) {
+        const problem =
+          error instanceof Error ? error.message : 'rattachement refusé'
+        await this.prisma.listingDraft.update({
+          where: { id: draftId },
+          data: {
+            status: 'pending',
+            listingId: null,
+            attachedAt: null,
+            decidedAt: null,
+            decidedById: null,
+          },
+        })
+        attached.push({
+          listingId: item.attach.listingId,
+          title,
+          linkId: null,
+          draftId,
+          summary: item.triage.why,
+          applied: false,
+          problem,
+        })
+        await this.prisma.explorationCandidate.updateMany({
+          where: { explorationId: written.explorationId, position },
+          data: {
+            outcome: 'duplicate_probable',
+            why: `Même référence que « ${title} », rattachement refusé (${problem}) : à trancher dans « À valider »`,
+          },
+        })
+      }
+    }
+    const refused = attached.filter(a => !a.applied).length
     const checksChanged = checks.filter(
       c =>
         c.applied &&
@@ -419,13 +549,17 @@ export class ExplorationsService {
           c.outcome === 'offline' ||
           c.outcome === 'republished')
     ).length
-    if (checksChanged !== counts.checksChanged) {
+    if (checksChanged !== counts.checksChanged || refused > 0) {
       await this.prisma.exploration.update({
         where: { id: written.explorationId },
         data: {
           counts: {
             ...counts,
             checksChanged,
+            attached: counts.attached - refused,
+            duplicateProbable: counts.duplicateProbable + refused,
+            toValidate: counts.toValidate + refused,
+            draftsCreated: counts.draftsCreated + refused,
           } as unknown as Prisma.InputJsonValue,
         },
       })
@@ -434,8 +568,14 @@ export class ExplorationsService {
     return {
       exploration,
       replayed: false,
-      drafts: written.drafts.map(d => ({ id: d.id, title: d.title })),
+      drafts: [
+        ...written.drafts.map(d => ({ id: d.id, title: d.title })),
+        ...attached
+          .filter(a => !a.applied && a.draftId)
+          .map(a => ({ id: a.draftId as string, title: a.title })),
+      ],
       checks,
+      attached,
       persisted: true,
     }
   }
@@ -474,6 +614,22 @@ export class ExplorationsService {
   }
 }
 
+/** Les faits du bien lus sur la page d'une annonce rattachée d'office (lot 18). */
+function factsOfCandidate(
+  candidate: Parameters<typeof candidateObserved>[0]
+): NonNullable<LinkAddInput['facts']> {
+  const {
+    online: _online,
+    price: _price,
+    sellerType: _sellerType,
+    sellerName: _sellerName,
+    reference: _reference,
+    url: _url,
+    ...facts
+  } = candidateObserved(candidate)
+  return facts
+}
+
 /** La réponse d'un envoi rejoué : rien n'est écrit. */
 function replayed(exploration: ExplorationDetail): ExplorationRecordResult {
   return {
@@ -481,6 +637,7 @@ function replayed(exploration: ExplorationDetail): ExplorationRecordResult {
     replayed: true,
     drafts: [],
     checks: [],
+    attached: [],
     persisted: true,
   }
 }

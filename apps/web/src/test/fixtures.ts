@@ -7,6 +7,7 @@ import type {
   AgencyRequest,
   DuplicateCandidate,
   EvaluatedListing,
+  ListingLink,
   ListingExchanges,
   ExtractionResult,
   Listing,
@@ -150,6 +151,10 @@ export function fakeListing(over: Partial<Listing> = {}): Listing {
     lastCheckedAt: null,
     lastSeenOnlineAt: null,
     republishedFromId: null,
+    sellerType: 'unknown',
+    sellerName: null,
+    sellerReference: null,
+    sellerReferenceKey: null,
     ...over,
   }
 }
@@ -236,6 +241,38 @@ export function fakeEvaluated(
     criteriaChanges: null,
     lastCheck: null,
     republication: { from: null, to: null },
+    links: [],
+    ...over,
+  }
+}
+
+/**
+ * Lot 18 : un lien fictif d'une annonce sur un portail (identifiant
+ * impossible, aucune vraie annonce).
+ */
+export function fakeLink(over: Partial<ListingLink> = {}): ListingLink {
+  return {
+    id: 'ffffffff-ffff-4fff-8fff-ffffffffff01',
+    listingId: '11111111-1111-4111-8111-111111111111',
+    portal: 'leboncoin',
+    url: 'https://www.leboncoin.fr/ad/ventes_immobilieres/0000000101',
+    normalizedUrl: 'https://leboncoin.fr/ad/ventes_immobilieres/0000000101',
+    externalId: '0000000101',
+    price: 200_000,
+    priceAt: now,
+    firstSeenAt: now,
+    lastSeenOnlineAt: now,
+    lastCheckedAt: now,
+    offlineSince: null,
+    online: true,
+    primary: true,
+    origin: 'original',
+    readSellerName: null,
+    readReference: null,
+    evidence: null,
+    addedById: null,
+    createdAt: '2026-11-02T10:00:00.000Z',
+    updatedAt: now,
     ...over,
   }
 }
@@ -427,6 +464,11 @@ export function fakeDuplicate(
         detail: 'Talence : 45 m² contre 45,2 m²',
       },
     ],
+    certain: true,
+    sellerType: 'unknown',
+    sellerName: null,
+    sellerReference: null,
+    linkCount: 1,
     ...over,
   }
 }

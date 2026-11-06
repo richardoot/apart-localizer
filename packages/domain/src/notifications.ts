@@ -114,6 +114,10 @@ export function notificationTypeOf(
     case 'agency_request.answered':
       // Lot 17 : réponse de l'annonceur enregistrée (champs complétés).
       return 'agency_answer'
+    case 'listing_link.added':
+      // Lot 18 : un lien ajouté par Claude ou rattaché d'office (exploration,
+      // alerte e-mail) ; jamais un lien collé par un membre dans l'application.
+      return event.channel === 'web' ? null : 'listing_checked'
     default:
       return null
   }
@@ -214,6 +218,11 @@ export function notificationsForActivity(
       break
     }
     case 'listing_checked': {
+      if (event.action === 'listing_link.added') {
+        heading = `Nouveau lien : ${title}`
+        body = `${str(event.after, 'summary') ?? 'Lien ajouté'} (${field(event.after, 'auto') === true ? 'rattaché d’office' : 'ajouté'} par ${who}).`
+        break
+      }
       heading = `Mise à jour : ${title}`
       body = `${str(event.after, 'summary') ?? 'Annonce vérifiée sur le portail'} (vérifiée par ${who}).`
       break
@@ -250,7 +259,9 @@ export function notificationsForActivity(
         ? DRAFTS_INBOX_URL
         : type === 'member_joined'
           ? '/espace'
-          : type === 'listing_checked' && url
+          : type === 'listing_checked' &&
+              url &&
+              event.action !== 'listing_link.added'
             ? `${url}?onglet=suivi`
             : type === 'agency_answer' && url
               ? `${url}?onglet=echanges`

@@ -3,12 +3,18 @@
   import '@/lib/maplibre-worker'
   import * as maplibregl from 'maplibre-gl'
   import type { Map as MapLibreMap, Marker } from 'maplibre-gl'
+  import { LISTING_PORTAL_LABELS } from '@apart/contracts'
   import type {
     EvaluatedListing,
     LayerFeatureCollection,
     PointRadius,
   } from '@apart/contracts'
-  import { locationApproximation, precisionBadge } from '@apart/domain'
+  import {
+    locationApproximation,
+    orderLinks,
+    precisionBadge,
+    sellerListLabel,
+  } from '@apart/domain'
   import type { PrecisionTone } from '@apart/domain'
   import { useBaseMap } from '@/composables/useBaseMap'
   import type {
@@ -297,11 +303,23 @@
         ? ` · à ${locationApproximation(item.listing.location).approximate ? '≈ ' : ''}${formatDistance(item.distanceMeters)}`
         : ''
     const badge = precisionBadge(item.listing.location)
+    // Lot 18 : les portails (barrés : plus en ligne) et le vendeur.
+    const portals = orderLinks(item.links)
+      .map(link =>
+        link.online
+          ? esc(LISTING_PORTAL_LABELS[link.portal])
+          : `<s title="plus en ligne">${esc(LISTING_PORTAL_LABELS[link.portal])}</s>`
+      )
+      .join(' · ')
+    const where = portals
+      ? `<span data-portals style="opacity:.7">Sur ${portals} · ${esc(sellerListLabel(item.listing.sellerType))}</span><br>`
+      : ''
     return (
       `<strong>${esc(item.listing.title)}</strong><br>` +
       `${esc(formatEuros(item.listing.price))} · brut ${esc(formatPercent(m.grossYield))} · ${esc(VERDICT_LABELS[m.verdict])}<br>` +
       `<span style="opacity:.7">${esc(LISTING_STATUS_LABELS[item.listing.status])}${esc(distance)}</span><br>` +
       `<span data-precision="${esc(badge.tone)}" style="opacity:.7">Repère : ${esc(badge.label)}</span><br>` +
+      where +
       `<button type="button" data-open="${esc(item.listing.id)}" style="margin-top:6px;color:var(--accent);text-decoration:underline">Ouvrir la fiche</button>`
     )
   }

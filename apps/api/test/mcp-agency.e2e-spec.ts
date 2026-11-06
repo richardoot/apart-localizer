@@ -225,9 +225,13 @@ describe('Lot 17 : questions aux agences au connecteur MCP (e2e)', () => {
       where: { listingId: id },
     })
     expect(contact).toMatchObject({
-      agencyName: 'Agence [Exemple]',
       email: 'contact@agence.exemple.invalid',
     })
+    // Lot 18 : un seul nom d'agence, celui de l'annonce.
+    const withSeller = await ctx.prisma.listing.findUniqueOrThrow({
+      where: { id },
+    })
+    expect(withSeller.sellerName).toBe('Agence [Exemple]')
 
     // 4. Sans validation : refus lisible, rien n'est enregistré.
     const refused = await callTool(richard, 'record_request_sent', {
@@ -289,7 +293,8 @@ describe('Lot 17 : questions aux agences au connecteur MCP (e2e)', () => {
         where: { listingId: id },
       })
     ).toMatchObject({
-      agencyName: 'Agence [Exemple]',
+      // Lot 18 : le nom de l'agence vit sur l'annonce, plus dans le contact.
+      agencyName: null,
       contactName: 'Mme [Exemple]',
       email: 'contact@agence.exemple.invalid',
     })

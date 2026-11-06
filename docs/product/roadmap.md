@@ -3,13 +3,13 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
-État au 5 novembre 2026 : **les lots 0 à 17 sont livrés** côté code, tests et documentation ; les
-lots 0 à 15 sont déployés (Vercel et Supabase cloud ; imports du lot 11, `import:places` et
-`relocate:listings` du lot 12 faits en production ; migrations des lots 14 et 15 appliquées, le
-rattrapage `refresh:criteria-fit` attend les critères de Richard). Les lots 16 (exploration par les
-critères) et 17 (questions aux agences) attendent leur déploiement : migrations additives
-`20261107100000_lot16_exploration` et `20261107110000_lot17_agency_requests` (avec le rattrapage
-du champ des tâches connues), sans variable ni import nouveau. Restent les actions
+État au 6 novembre 2026 : **les lots 0 à 18 sont livrés** côté code, tests et documentation ; les
+lots 0 à 17 sont déployés (Vercel et Supabase cloud ; imports du lot 11, `import:places` et
+`relocate:listings` du lot 12 faits en production ; migrations des lots 14 à 17 appliquées, le
+rattrapage `refresh:criteria-fit` attend les critères de Richard). Le lot 18 (une annonce,
+plusieurs portails) attend son déploiement : migration additive
+`20261108100000_lot18_listing_links`, avec le rattrapage des liens d'origine des annonces
+existantes dans la migration, sans variable ni import nouveau. Restent les actions
 d'exploitation (Supabase cloud, Vercel, clés et connecteur :
 [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard » dans chaque lot, et
 les critères « Fini quand » qui demandent le déploiement ou un usage réel (lot 1 : déploiement et
@@ -22,7 +22,8 @@ rattrapage relu en simulation puis passé sur la production, et les quartiers re
 Richard ; lot 14 : les critères de Richard créés sur le site déployé et les deux onglets relus ;
 lot 16 : une vraie exploration lancée depuis claude.ai dans le navigateur de Richard et l'onglet
 « À valider » relu à deux ; lot 17 : une vraie série de questions envoyée par Claude après
-validation, et sa réponse enregistrée), à constater après la mise en ligne.
+validation, et sa réponse enregistrée ; lot 18 : une vraie tournée qui retrouve une annonce
+d'agence sur un deuxième portail par sa référence), à constater après la mise en ligne.
 
 ## Lot 0 : socle
 
@@ -665,3 +666,82 @@ prévient l'autre membre ; chaque échange se relit dans l'onglet Échanges. (V�
 automatisés, e2e MCP JSON-RPC compris avec le refus d'envoi sans validation, et sur captures
 Chromium d'un banc d'essai, jeu de démo fictif ; à confirmer par Richard avec une vraie série de
 questions après le déploiement.)
+
+## Lot 18 : une annonce, plusieurs portails
+
+Statut : livré (à déployer : migration additive `20261108100000_lot18_listing_links` avec son
+rattrapage, sans variable ni import nouveau, [docs/deploiement.md](../deploiement.md) § 2).
+
+- Besoin C11 (nouveau), précise C6, C8, C10 et S8. Demande de Richard : garder sur une seule
+  fiche tous les liens d'une même annonce publiée sur plusieurs portails, savoir qui vend
+  (particulier, agence, mandataire, inconnu) et, pour une agence ou un mandataire, garder la
+  référence de l'annonce (« Réf. EX-2041 ») pour reconnaître la même annonce ailleurs. Décisions
+  validées : le prix de la fiche est le plus bas des liens en ligne ; un écart entre portails est
+  noté, jamais tranché ; même agence et même référence = la même annonce, rattachée d'office à
+  l'exploration et aux alertes, détachable ; même référence avec une autre agence = à trancher ;
+  le vendeur n'est jamais deviné ; aucun scraping, aucun captcha contourné, une page de portail
+  est une donnée. Maquette validée (fiche « Où la trouver » et « Qui la vend », liste, « À
+  valider », conversation dans claude.ai, mobile 390 px). ADR 0028.
+- Livré :
+  - **Modèle** : `listing_links` (portail, URL et clé normalisée unique par espace, identifiant
+    sur le portail, prix affiché et sa date, première vue, dernière vue en ligne, dernière
+    vérification, hors ligne depuis, origine, agence et référence lues, extrait court masqué,
+    auteur) ; `listings.seller_type` (inconnu par défaut), `seller_name`, `seller_reference`,
+    `seller_reference_key` ; `listing_checks.link_id` ; brouillons rattachés d'office
+    (`attached_link_id`, `attached_at`, `detached_at`) ; portail `logicimmo` ; résultat de
+    vérification `link_added`, issue d'exploration `attached`. Le lien principal (le plus ancien
+    en ligne) reste recopié dans `listings.url`, `source` et `external_id`. Rattrapage : un lien
+    d'origine par annonce qui a une URL, vérifications rattachées, nom d'agence des contacts
+    reporté sur l'annonce.
+  - **Règles** (`domain` : `listing-urls.ts`, `seller.ts`, `same-listing.ts` déplacé de l'API,
+    `listing-links.ts`, `link-activity.ts`) : lien principal ; prix de la fiche = le plus bas en
+    ligne au prix connu, changement de prix ordinaire, proposé quand il a été saisi à la main ;
+    écart entre portails (« +5 000 € : frais inclus ? ») ; vérification d'un lien (« plus en
+    ligne » sur un portail = mise à jour, « Vendu ou retiré » proposé seulement si plus aucun lien
+    n'est en ligne) ; vendeur lu appliqué s'il était inconnu, proposé s'il contredit ; référence
+    nettoyée et clé de comparaison ; même agence tolérante (mots génériques, deux mots d'écart) ;
+    motifs de doublon `same_reference` (certain) et `same_reference_other_agency` (probable) ;
+    phrases du journal, notification et « ce qui a changé ».
+  - **API** : `GET`, `POST /listings/:id/links`, `PATCH /listings/:id/links/:linkId` (prix ou
+    état relevés = une vérification ; portail ou identifiant corrigés), `DELETE` (jamais le
+    dernier lien) ; vendeur dans la création et la modification ; une URL déjà sur une autre fiche
+    refusée avec son nom ; création refusée pour même agence et même référence sauf
+    `ignoreDuplicates` ; filtres `sellerType`, `multiPortal`, `reference`, recherche par référence
+    et agence ; vérifications par lien (`linkId`) ; exploration et alertes e-mail : rattachement
+    d'office par agence et référence, `POST /listing-drafts/:id/detach` (« Ce n'est pas la
+    même »), `GET /listing-drafts?attached=true` ; « C'est la même » ajoute le lien du brouillon ;
+    le contact du lot 17 lit et écrit le nom d'agence de l'annonce ; journal `listing_link.added`,
+    `updated`, `removed`, `detached` (sorte « Liens des portails »).
+  - **MCP** (`mcp-links.ts`) : `add_listing_link` (seulement si l'agence et la référence sont
+    les mêmes ; refus rendus pour un lien pris, un vendeur qui contredit) ; vendeur, référence et
+    liens dans `get_listing`, `list_listings`, `extract_listing`, `create_listing`,
+    `update_listing`, `find_duplicates`, `triage_candidates`, `record_exploration`,
+    `check_listing` et `apply_listing_check` (`linkId`) ; prompts `review_listings` (chercher la
+    référence sur les autres portails), `explore_listings` et `analyze_listing` : 39 outils, cinq
+    prompts, aucun outil de suppression.
+  - **IA** : l'extraction lit le vendeur, l'agence ou le réseau et la référence, sans rien
+    deviner (règle « Vendeur » de l'invite).
+  - **Interface** : en-tête de fiche (pastilles des portails, vendeur, référence) ; dans la
+    Synthèse, « Où la trouver » (portail, prix affiché et écart, en ligne ou non, ajouté, ouvrir ; « Ajouter un
+    lien » avec le portail reconnu ; proposition de prix) et « Qui la vend » (vendeur, agence ou
+    réseau, référence à copier, provenance) ; liste : colonnes Portails, Vendeur, Référence,
+    filtres « Vendeur » et « Sur plusieurs portails » dans l'URL, recherche par référence ;
+    « À valider » : « Liens rattachés d'office : même agence, même référence » avec « Ce n'est
+    pas la même », doublon « C'est la même : ajouter ce lien à la fiche » ; popup de la carte ;
+    mobile 390 px.
+  - **Export** : `links` et vendeur dans le JSON (version 1, additif) ; quatre colonnes CSV en fin
+    de ligne (Vendeur, Agence, Référence, Liens).
+  - **Démo** : le T2 des Chartrons sur trois portails (écart de prix, un lien plus en ligne), un
+    particulier sur deux portails, un mandataire au lien rattaché d'office par l'exploration, une
+    agence à référence, un brouillon « même référence, autre agence », des vendeurs à relever.
+- Plus tard : demander à l'agence si un prix plus haut inclut ses frais (lot 17) ; une recherche
+  planifiée de la référence sur les autres portails ; une comparaison des noms d'agence tolérante
+  aux fautes de frappe.
+
+Fini quand : une annonce publiée sur trois portails n'a qu'une fiche, avec ses trois liens, son
+prix le plus bas en ligne et l'écart noté ; le vendeur et la référence se lisent sur la fiche et
+dans la liste ; une annonce d'agence trouvée ailleurs avec la même agence et la même référence
+rejoint la fiche (et se détache d'un clic si ce n'est pas la même) ; une même référence chez une
+autre agence attend dans « À valider ». (Vérifié en tests automatisés, e2e MCP JSON-RPC compris,
+et sur captures Chromium d'un banc d'essai, jeu de démo fictif ; à confirmer par Richard avec une
+vraie tournée après le déploiement.)

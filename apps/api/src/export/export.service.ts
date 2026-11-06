@@ -172,6 +172,7 @@ export class ExportService {
         orderBy: { checkedAt: 'desc' },
         include: {
           linkedListing: { select: { id: true, title: true, status: true } },
+          link: { select: { id: true, portal: true, url: true } },
         },
       }),
       // Lot 16 : les explorations des portails par Claude, avec leurs lignes.
@@ -226,6 +227,8 @@ export class ExportService {
         criteriaFit: item.criteriaFit,
         contact: exchanges.contacts.get(item.listing.id) ?? null,
         agencyRequests: exchanges.requests.get(item.listing.id) ?? [],
+        // Lot 18 : les liens des portails, le principal d'abord.
+        links: item.links,
       })),
       searchCriteria: criteria.map(toSearchCriteriaDto),
       scenarios: scenarios.map(toScenarioDto),

@@ -36,6 +36,7 @@ import {
   EvaluateRequestSchema,
   HypotheticalListingSchema,
 } from './views.js'
+import { ListingLinkReadingSchema } from './listing-links.js'
 import {
   AgencyAnswerInputSchema,
   AgencyChannelSchema,
@@ -675,4 +676,43 @@ export const McpCheckAgencyAnswersPromptArgsSchema = z.object({
 })
 export type McpCheckAgencyAnswersPromptArgs = z.infer<
   typeof McpCheckAgencyAnswersPromptArgsSchema
+>
+
+// ---------------------------------------------------------------------------
+// Lot 18 : une annonce, plusieurs portails
+// ---------------------------------------------------------------------------
+
+/**
+ * `add_listing_link` (écriture) : la même annonce lue par Claude sur un autre
+ * portail, dans le navigateur de l'utilisateur. Le lien rejoint la fiche, son
+ * prix affiché entre dans le prix de la fiche (le plus bas en ligne), un
+ * écart est noté ; refusé si le lien est déjà celui d'une autre annonce, ou
+ * si l'agence ou la référence lues contredisent la fiche.
+ */
+export const McpAddListingLinkInputSchema = z.object({
+  listingId,
+  url: z
+    .string()
+    .trim()
+    .url()
+    .max(2000)
+    .describe(
+      'Lien de la même annonce sur l’autre portail (page de l’annonce)'
+    ),
+  ...ListingLinkReadingSchema.shape,
+  online: z
+    .boolean()
+    .default(true)
+    .describe(
+      'Vrai (défaut) : vous venez de lire la page en ligne ; faux si l’annonce a disparu de ce portail'
+    ),
+  expectedUpdatedAt: z
+    .string()
+    .datetime()
+    .describe(
+      "Garde-fou : `updatedAt` lu avec get_listing ; refus si l'annonce a changé depuis"
+    ),
+})
+export type McpAddListingLinkInput = z.infer<
+  typeof McpAddListingLinkInputSchema
 >

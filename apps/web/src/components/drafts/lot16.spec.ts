@@ -32,6 +32,8 @@ const apiMock = vi.hoisted(() => ({
     acceptInCriteria: vi.fn(),
     merge: vi.fn(),
     distinct: vi.fn(),
+    attached: vi.fn(() => Promise.resolve([])),
+    detach: vi.fn(),
   },
   explorations: { list: vi.fn(), get: vi.fn(), brief: vi.fn() },
   searchCriteria: { list: vi.fn(), update: vi.fn() },
@@ -91,6 +93,11 @@ const duplicate = {
       detail: 'même surface, même rue, 5 000 € de moins',
     },
   ],
+  certain: false,
+  sellerType: 'unknown' as const,
+  sellerName: null,
+  sellerReference: null,
+  linkCount: 1,
 }
 
 function makeRouter() {

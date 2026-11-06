@@ -70,6 +70,8 @@ export function fakeDraft(over: Partial<ListingDraft> = {}): ListingDraft {
     distinct: false,
     merge: null,
     fit: fitOf(),
+    attachment: null,
+    detachedAt: null,
     ...over,
   }
 }

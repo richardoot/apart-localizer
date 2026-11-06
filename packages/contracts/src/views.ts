@@ -10,6 +10,7 @@ import { DuplicateCandidateSchema } from './duplicates.js'
 import { ListingStatusSchema } from './enums.js'
 import { LISTING_PAGE_MAX } from './filters.js'
 import { ListingInputSchema, ListingSchema } from './listing.js'
+import { ListingLinkSchema } from './listing-links.js'
 import {
   ListingCheckSummarySchema,
   ListingRepublicationSchema,
@@ -87,6 +88,12 @@ export const EvaluatedListingSchema = z.object({
   }).describe(
     'Lot 15 : annonce que celle-ci reprend et annonce qui la reprend (republication du même bien)'
   ),
+  links: z
+    .array(ListingLinkSchema)
+    .default([])
+    .describe(
+      'Lot 18 : les liens de l’annonce, un par portail où elle est publiée (le principal d’abord, puis du plus ancien au plus récent) : prix affiché, en ligne ou non, origine ; le prix de la fiche est le plus bas des liens en ligne dont le prix est connu'
+    ),
 })
 export type EvaluatedListing = z.infer<typeof EvaluatedListingSchema>
 

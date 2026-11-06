@@ -190,6 +190,11 @@ const item: CandidateTriage = {
       commune: 'Bordeaux',
       url: null,
       score: 0.8,
+      certain: false,
+      sellerType: 'unknown',
+      sellerName: null,
+      sellerReference: null,
+      linkCount: 0,
       reasons: [
         { kind: 'same_commune_price_surface', score: 0.8, detail: 'x' },
       ],
@@ -209,7 +214,7 @@ describe('MCP lot 16 : exploration par les critères', () => {
       'triage_candidates',
       'record_exploration',
     ])
-    expect(MCP_TOOL_NAMES).toHaveLength(38)
+    expect(MCP_TOOL_NAMES).toHaveLength(39)
     expect(MCP_PROMPT_NAMES).toContain('explore_listings')
   })
 
@@ -297,6 +302,7 @@ describe('MCP lot 16 : exploration par les critères', () => {
       exploration,
       replayed: false,
       drafts: [{ id: ID, title: '[Exemple] T3' }],
+      attached: [],
       checks: [
         {
           listingId: ID,

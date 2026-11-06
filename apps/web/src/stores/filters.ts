@@ -13,6 +13,7 @@ import type {
   ListingFiltersInput,
   ListingStatus,
   PointRadius,
+  SellerType,
 } from '@apart/contracts'
 import type { LocationQueryRaw } from 'vue-router'
 
@@ -54,6 +55,44 @@ export function toggledFitLevels(
     : MAIN_TAB_FIT_LEVELS.filter(l => next.includes(l))
 }
 export const LISTING_VIEWS: readonly ListingView[] = ['table', 'cards', 'map']
+
+/**
+ * Lot 18 : le filtre « Vendeur » de la liste, en quatre choix ; chacun est
+ * une liste de types (`sellerType` de l'API et de l'URL).
+ */
+export type SellerFilterChoice = 'all' | 'pro' | 'private' | 'unknown'
+
+export const SELLER_FILTER_CHOICES: readonly {
+  choice: SellerFilterChoice
+  label: string
+  types: SellerType[] | undefined
+}[] = [
+  { choice: 'all', label: 'Tous', types: undefined },
+  {
+    choice: 'pro',
+    label: 'Agence ou mandataire',
+    types: ['agency', 'mandatary'],
+  },
+  { choice: 'private', label: 'Particulier', types: ['private'] },
+  { choice: 'unknown', label: 'À relever', types: ['unknown'] },
+]
+
+/** Le choix affiché pour une liste de types (une liste hors des quatre : la plus proche). */
+export function sellerChoiceOf(
+  types: readonly SellerType[] | undefined
+): SellerFilterChoice {
+  if (!types?.length) return 'all'
+  const set = new Set(types)
+  const match = SELLER_FILTER_CHOICES.find(
+    c =>
+      c.types !== undefined &&
+      c.types.length === set.size &&
+      c.types.every(t => set.has(t))
+  )
+  if (match) return match.choice
+  if (set.has('agency') || set.has('mandatary')) return 'pro'
+  return set.has('private') ? 'private' : 'unknown'
+}
 
 /** Les filtres sans tri ni pagination, tels que l'écran les manipule. */
 export type FilterState = Omit<ListingFilters, 'page' | 'limit'>
@@ -138,6 +177,9 @@ export const useFiltersStore = defineStore('filters', () => {
     if (f.near) count += 1
     if (f.criteriaId) count += 1
     if (f.search) count += 1
+    if (f.sellerType?.length) count += 1
+    if (f.multiPortal) count += 1
+    if (f.reference) count += 1
     return count
   })
 
@@ -164,6 +206,12 @@ export const useFiltersStore = defineStore('filters', () => {
 
   function setNear(near: PointRadius | undefined): void {
     patch({ near })
+  }
+
+  /** Lot 18 : « Vendeur » (Tous, Agence ou mandataire, Particulier, À relever). */
+  function setSellerChoice(choice: SellerFilterChoice): void {
+    const types = SELLER_FILTER_CHOICES.find(c => c.choice === choice)?.types
+    patch({ sellerType: types ? [...types] : undefined })
   }
 
   const fitTab = computed<FitTab>(() =>
@@ -218,6 +266,7 @@ export const useFiltersStore = defineStore('filters', () => {
     patch,
     toggleStatus,
     setNear,
+    setSellerChoice,
     fitTab,
     setFitTab,
     toggleFitLevel,

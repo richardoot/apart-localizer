@@ -108,6 +108,79 @@ describe('CSV pour un tableur français', () => {
     // Lot 15 : jamais vérifiée, cellules vides en fin de ligne.
     expect(cell('Vérifiée le')).toBe('')
     expect(cell('Dernière vérification')).toBe('')
+    // Lot 18 : vendeur inconnu, aucun lien.
+    expect(cell('Vendeur')).toBe('Inconnu')
+    expect(cell('Agence')).toBeNull()
+    expect(cell('Liens')).toBe('')
+    const sold = listingCsvRow(
+      {
+        ...item,
+        listing: {
+          ...item.listing,
+          sellerType: 'agency',
+          sellerName: '[Exemple] Agence du port',
+          sellerReference: 'EX-2041',
+        },
+        links: [
+          {
+            id: '66666666-6666-4666-8666-666666666666',
+            listingId: item.listing.id,
+            portal: 'leboncoin',
+            url: 'https://www.leboncoin.fr/ad/ventes_immobilieres/0000000101',
+            normalizedUrl:
+              'https://leboncoin.fr/ad/ventes_immobilieres/0000000101',
+            externalId: null,
+            price: 200_000,
+            priceAt: null,
+            firstSeenAt: null,
+            lastSeenOnlineAt: null,
+            lastCheckedAt: null,
+            offlineSince: null,
+            online: true,
+            primary: true,
+            origin: 'original',
+            readSellerName: null,
+            readReference: null,
+            evidence: null,
+            addedById: null,
+            createdAt: '2026-11-03T10:00:00.000Z',
+            updatedAt: '2026-11-03T10:00:00.000Z',
+          },
+          {
+            id: '77777777-7777-4777-8777-777777777777',
+            listingId: item.listing.id,
+            portal: 'seloger',
+            url: 'https://www.seloger.com/annonces/achat/0000000202.htm',
+            normalizedUrl: 'https://seloger.com/annonces/achat/0000000202.htm',
+            externalId: null,
+            price: null,
+            priceAt: null,
+            firstSeenAt: null,
+            lastSeenOnlineAt: null,
+            lastCheckedAt: null,
+            offlineSince: '2026-11-04T10:00:00.000Z',
+            online: false,
+            primary: false,
+            origin: 'claude',
+            readSellerName: null,
+            readReference: null,
+            evidence: null,
+            addedById: null,
+            createdAt: '2026-11-03T10:00:00.000Z',
+            updatedAt: '2026-11-03T10:00:00.000Z',
+          },
+        ],
+      },
+      0
+    )
+    const soldCell = (column: (typeof LISTING_CSV_COLUMNS)[number]) =>
+      sold[LISTING_CSV_COLUMNS.indexOf(column)]
+    expect(soldCell('Vendeur')).toBe('Agence')
+    expect(soldCell('Agence')).toBe('[Exemple] Agence du port')
+    expect(soldCell('Référence')).toBe('EX-2041')
+    expect(soldCell('Liens')).toBe(
+      'Leboncoin : https://www.leboncoin.fr/ad/ventes_immobilieres/0000000101 | SeLoger : https://www.seloger.com/annonces/achat/0000000202.htm (plus en ligne)'
+    )
     const checked = listingCsvRow(
       {
         ...item,
@@ -150,8 +223,8 @@ describe('CSV pour un tableur français', () => {
       },
       0
     )
-    expect(kept.at(-2)).toBe('Hors critères')
-    expect(kept.at(-1)).toBe(
+    expect(kept.at(-6)).toBe('Hors critères')
+    expect(kept.at(-5)).toBe(
       '« Talence » : Prix +19 % (maximum 220 000 €, marge 5 %) : Gardée dans la liste : offre en cours'
     )
     const inside = listingCsvRow(
@@ -166,18 +239,22 @@ describe('CSV pour un tableur français', () => {
       },
       0
     )
-    expect(inside.at(-2)).toBe('Dans les critères')
-    expect(inside.at(-1)).toBe('')
+    expect(inside.at(-6)).toBe('Dans les critères')
+    expect(inside.at(-5)).toBe('')
   })
 
-  it('les colonnes des lots 15 et 14 viennent après « Identifiant » : aucune colonne ne se décale', () => {
-    expect(LISTING_CSV_COLUMNS.slice(-6)).toEqual([
+  it('les colonnes des lots 15, 14 et 18 viennent après « Identifiant » : aucune colonne ne se décale', () => {
+    expect(LISTING_CSV_COLUMNS.slice(-10)).toEqual([
       'Identifiant',
       'Vérifiée le',
       'Vue en ligne le',
       'Dernière vérification',
       'Adéquation',
       'Raisons de l’adéquation',
+      'Vendeur',
+      'Agence',
+      'Référence',
+      'Liens',
     ])
   })
 })

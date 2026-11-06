@@ -44,6 +44,7 @@ function check(over: Partial<ListingCheck>): ListingCheck {
     checkedUrl: null,
     linkedListing: null,
     suggestedStatus: null,
+    link: null,
     ...over,
   }
 }

@@ -2,9 +2,11 @@ import {
   ListingInputSchema,
   ListingLocationInputSchema,
   ListingSourceSchema,
+  ObservedSellerTypeSchema,
   RenovationLevelSchema,
   listingSourceFromUrl,
 } from '@apart/contracts'
+import { normalizeSeller } from '@apart/domain'
 import type {
   AiField,
   AiListingExtraction,
@@ -39,8 +41,10 @@ const SCALAR_FIELDS: ReadonlyArray<
   [keyof AiListingExtraction, keyof ListingInput, string]
 > = [
   ['title', 'title', 'Titre'],
-  ['externalId', 'externalId', 'Référence'],
-  ['agencyName', 'sourceLabel', 'Agence'],
+  ['externalId', 'externalId', 'Identifiant sur le portail'],
+  // Lot 18 : le vendeur (agence ou réseau, référence de l'annonce).
+  ['agencyName', 'sellerName', 'Agence'],
+  ['agencyReference', 'sellerReference', 'Référence'],
   ['price', 'price', 'Prix'],
   ['feesAmount', 'feesAmount', 'Honoraires'],
   ['feesPercent', 'feesPercent', 'Honoraires (%)'],
@@ -87,6 +91,9 @@ const LOCATION_FIELDS: ReadonlyArray<
   ['commune', 'commune', 'Commune'],
   ['district', 'district', 'Quartier'],
 ]
+
+type ObservedSellerTypeOrUnknown =
+  'agency' | 'mandatary' | 'private' | 'unknown'
 
 const clamp01 = (value: number): number =>
   Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
@@ -265,6 +272,37 @@ export function extractionToListing(
       recordedAt
     )
   }
+
+  // Lot 18 : le vendeur lu, jamais deviné ; un particulier n'a ni agence ni
+  // référence (elles sont écartées, avec une remarque).
+  accept(
+    'sellerType',
+    'Vendeur',
+    raw.sellerType,
+    ObservedSellerTypeSchema,
+    assembled
+  )
+  const seller = normalizeSeller({
+    sellerType:
+      (assembled.sellerType as ObservedSellerTypeOrUnknown) ?? 'unknown',
+    sellerName: (assembled.sellerName as string | undefined) ?? null,
+    sellerReference: (assembled.sellerReference as string | undefined) ?? null,
+  })
+  if (
+    seller.sellerType === 'private' &&
+    (assembled.sellerName !== undefined ||
+      assembled.sellerReference !== undefined)
+  ) {
+    warnings.push(
+      'Vendu par un particulier : agence et référence écartées (un particulier n’en a pas).'
+    )
+    delete fieldSources.sellerName
+    delete fieldSources.sellerReference
+  }
+  assembled.sellerName = seller.sellerName
+  assembled.sellerReference = seller.sellerReference
+  if (seller.sellerName === null) delete fieldSources.sellerName
+  if (seller.sellerReference === null) delete fieldSources.sellerReference
 
   const publishedAt = dateToIso(raw.publishedAt.value)
   if (publishedAt) {

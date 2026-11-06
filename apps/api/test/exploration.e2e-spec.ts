@@ -143,7 +143,7 @@ function candidates() {
     },
     // À la marge : prix +2,7 %.
     {
-      url: 'https://www.seloger.com/annonces/achat/appartement/bordeaux-33/990000001.htm',
+      url: 'https://www.seloger.com/annonces/achat/appartement/bordeaux-33/0000009001.htm',
       portal: 'seloger',
       title: '[Exemple] T3 63 m², proche tram',
       price: 226_000,
@@ -349,7 +349,7 @@ describe('Exploration par les critères (e2e, lot 16)', () => {
     })
     doublonId = await createListing({
       title: '[Exemple] T3 66 m², balcon et cave',
-      url: 'https://www.seloger.com/annonces/achat/appartement/bordeaux-33/990000099.htm',
+      url: 'https://www.seloger.com/annonces/achat/appartement/bordeaux-33/0000009099.htm',
       source: 'seloger',
       price: 215_000,
       surface: 66,
@@ -743,7 +743,7 @@ describe('Exploration par les critères (e2e, lot 16)', () => {
     expect(drafts).toHaveLength(4)
     const byUrl = (part: string) => drafts.find(d => d.url.includes(part))
     const inside = byUrl('2800000011')
-    const margin = byUrl('990000001')
+    const margin = byUrl('0000009001')
     const confirm = byUrl('2800000012')
     const dup = byUrl('r900000002')
     expect(inside).toMatchObject({
@@ -823,15 +823,31 @@ describe('Exploration par les critères (e2e, lot 16)', () => {
       .expect(200)
     expect(merged.body.status).toBe('merged')
     expect(merged.body.listingId).toBe(doublonId)
-    expect(n(merged.body.merge.summary)).toBe(
+    // Lot 18 : « C'est la même » ajoute aussi le lien à la fiche.
+    expect(n(merged.body.merge.summary)).toContain(
+      'Lien PAP ajouté : 210 000 €'
+    )
+    expect(n(merged.body.merge.summary)).toContain(
       'Prix 215 000 € → 210 000 € · DPE : C (nouveau)'
+    )
+    expect(n(merged.body.merge.summary)).toContain(
+      'Écart entre portails : SeLoger affiche 215 000 €'
     )
     const doublon = await api()
       .get(`/listings/${doublonId}`)
       .set(ctx.auth(richard))
       .expect(200)
     expect(doublon.body.listing.price).toBe(210_000)
-    expect(doublon.body.listing.url).toContain('990000099')
+    expect(doublon.body.listing.url).toContain('0000009099')
+    expect(
+      doublon.body.links.map((l: { portal: string; origin: string }) => [
+        l.portal,
+        l.origin,
+      ])
+    ).toEqual([
+      ['seloger', 'original'],
+      ['pap', 'exploration'],
+    ])
 
     // « C'en est une autre » : les doublons ne sont plus proposés.
     const distinct = await api()
@@ -872,8 +888,8 @@ describe('Exploration par les critères (e2e, lot 16)', () => {
       second.items.find(i => i.url.includes(part))
     expect(outcome('2800000011')?.outcome).toBe('known')
     expect(outcome('r900000002')?.outcome).toBe('known')
-    expect(outcome('990000001')).toMatchObject({ outcome: 'dismissed' })
-    expect(outcome('990000001')?.why).toContain('« trop cher »')
+    expect(outcome('0000009001')).toMatchObject({ outcome: 'dismissed' })
+    expect(outcome('0000009001')?.why).toContain('« trop cher »')
     // Toujours à valider (même lien) ; l'annonce ajoutée à la même adresse
     // en fait un doublon probable, sans nouveau brouillon.
     expect(outcome('2800000012')).toMatchObject({

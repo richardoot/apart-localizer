@@ -163,7 +163,12 @@ http://localhost:3000/mcp` ([développement local](docs/developpement-local.md#t
   annonces reçues par e-mail ou trouvées par Claude en explorant les portails : adéquation,
   doublon probable à trancher (« C'est la même : mettre à jour la fiche », « C'en est une
   autre »), Ajouter à la liste, Modifier avant d'ajouter, Écarter (raison facultative, Annuler),
-  bandeau de la dernière exploration et « Ajouter celles « dans les critères » ».
+  bandeau de la dernière exploration et « Ajouter celles « dans les critères » ». Lot 18 :
+  colonnes **Portails** (pastilles, barrée quand le lien n'est plus en ligne), **Vendeur** et
+  **Référence**, filtres « Vendeur » (agence ou mandataire, particulier, à relever) et « Sur
+  plusieurs portails » dans l'URL, recherche par référence (espaces et tirets ignorés) ; dans
+  « À valider », les **liens rattachés d'office** (même agence, même référence) avec « Ce n'est
+  pas la même », et pour un doublon « C'est la même : ajouter ce lien à la fiche ».
 - **Ce que Claude cherche** (`/criteres/:id`, lot 16) : le brief d'un critère (seuils marge
   comprise, zones, annonces déjà connues), les portails à cocher et leurs liens de recherche
   fabriqués sans réseau, la demande à copier dans claude.ai, les dernières explorations ; le
@@ -238,7 +243,13 @@ http://localhost:3000/mcp` ([développement local](docs/developpement-local.md#t
   rien), questions à poser, contact de l'annonceur (modifiable, effaçable), chronologie des
   demandes avec la réponse dépliable, les valeurs appliquées ou « proposées » (bouton
   « Appliquer ») et la relance due. La Synthèse montre le bloc « Messages à valider ». Le
-  changement de statut avec garde-fou reste en tête de fiche. L'ouverture marque l'annonce
+  changement de statut avec garde-fou reste en tête de fiche. Lot 18 : l'en-tête montre les
+  portails où l'annonce est publiée, le vendeur et la référence ; dans la Synthèse, **« Où la
+  trouver »** liste ses
+  liens (portail, prix affiché et écart « frais inclus ? », en ligne ou non, ajouté, « Ouvrir »,
+  « Ajouter un lien » avec le portail reconnu ; le prix de la fiche est le plus bas en ligne) et
+  **« Qui la vend »** le vendeur (agence, mandataire, particulier, inconnu), l'agence ou le
+  réseau et la référence, à copier, avec sa provenance. L'ouverture marque l'annonce
   « vue » pour le membre ; le badge « nouvelle » s'éteint pour lui seul.
 - **Comparer** (`/comparer?ids=…`) : depuis le tableau, cocher deux à six annonces puis
   « Comparer » : indicateurs, prix cibles, décotes et verdicts côte à côte, la meilleure par

@@ -5,6 +5,7 @@ import {
   ListingSourceSchema,
   ListingStatusSchema,
   LocationPrecisionSchema,
+  SellerTypeSchema,
 } from './enums.js'
 import { PointSchema } from './geojson.js'
 import { ListingPlacementSchema } from './placement.js'
@@ -204,8 +205,22 @@ export const ListingIdentityInputSchema = z.object({
     .max(2000)
     .nullable()
     .default(null)
-    .describe("Lien vers l'annonce"),
-  externalId: nullableText(120, "Identifiant de l'annonce chez la source"),
+    .describe(
+      "Lien principal de l'annonce (lot 18 : les autres portails sont dans ses liens, `links`) ; une URL déjà rattachée à une autre annonce de l'espace est refusée"
+    ),
+  externalId: nullableText(
+    120,
+    "Identifiant de l'annonce sur le portail du lien principal (numéro Leboncoin…) ; la référence de l'agence va dans sellerReference"
+  ),
+  sellerType: SellerTypeSchema.default('unknown'),
+  sellerName: nullableText(
+    120,
+    "Nom de l'agence, ou du réseau pour un mandataire, tel que l'annonce l'écrit ; jamais le nom d'une personne (conseiller, interlocuteur : contact de l'onglet Échanges) ; null pour un particulier"
+  ),
+  sellerReference: nullableText(
+    60,
+    "Référence de l'annonce chez l'agence ou le mandataire, telle qu'écrite (« EX-2041 » pour « Réf. EX-2041 », « Mandat n° 2041 ») ; jamais pour un particulier ; sert à retrouver l'annonce sur les autres portails"
+  ),
   title: z.string().min(1).max(300).describe("Titre court de l'annonce"),
   publishedAt: z
     .string()
@@ -353,6 +368,14 @@ export const ListingSchema = ListingInputSchema.omit({
     .default(null)
     .describe(
       'Annonce plus ancienne dont celle-ci est la republication (même bien) : durée en ligne et baisses se cumulent'
+    ),
+  // Lot 18 : la clé de comparaison de la référence, calculée par le serveur.
+  sellerReferenceKey: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe(
+      'La référence réduite pour la comparer (majuscules, sans espaces, tirets ni points : « EX2041 ») ; calculée, jamais saisie'
     ),
 })
 export type Listing = z.infer<typeof ListingSchema>

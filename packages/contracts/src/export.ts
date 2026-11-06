@@ -8,6 +8,7 @@ import {
 } from './collaboration.js'
 import { ListingSchema } from './listing.js'
 import { ListingCheckSchema } from './listing-checks.js'
+import { ListingLinkSchema } from './listing-links.js'
 import { ListingMetricsSchema, TargetPriceSchema } from './metrics.js'
 import { RentalVerdictSchema } from './enums.js'
 import { ListingCriteriaFitSchema } from './criteria-fit.js'
@@ -103,6 +104,12 @@ export const ExportListingSchema = z.object({
     .default([])
     .describe(
       "Lot 17 : demandes à l'annonceur (messages, validation, envoi, réponses), de la plus récente à la plus ancienne (absent dans un export antérieur)"
+    ),
+  links: z
+    .array(ListingLinkSchema)
+    .default([])
+    .describe(
+      'Lot 18 : les liens de l’annonce, un par portail (prix affiché, en ligne ou non, origine), le principal d’abord (absent dans un export antérieur : `listing.url` est alors le seul lien)'
     ),
 })
 export type ExportListing = z.infer<typeof ExportListingSchema>

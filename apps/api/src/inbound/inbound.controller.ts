@@ -74,14 +74,19 @@ export class DraftsController {
   @Get()
   @ApiOperation({
     summary:
-      'Annonces à valider, reçues par e-mail ou trouvées par Claude en explorant les portails (status=pending par défaut), avec leur adéquation aux critères calculée à la lecture',
+      'Annonces à valider, reçues par e-mail ou trouvées par Claude en explorant les portails (status=pending par défaut), avec leur adéquation aux critères calculée à la lecture ; lot 18 : attached=true donne les liens rattachés d’office (même agence, même référence) des derniers jours',
   })
   @ZodResponse({ status: 200, type: [ListingDraftDto] })
   list(
     @CurrentMember() member: Member,
     @Query() query: ListingDraftQueryDto
   ): Promise<ListingDraftDto[]> {
-    return this.drafts.list(member, query.status, query.explorationId)
+    return this.drafts.list(
+      member,
+      query.status,
+      query.explorationId,
+      query.attached ?? false
+    )
   }
 
   @Post('accept-in-criteria')
@@ -135,6 +140,20 @@ export class DraftsController {
     @Body() body: ListingDraftMergeDto
   ): Promise<ListingDraftDto> {
     return this.drafts.merge(member, id, body)
+  }
+
+  @Post(':id/detach')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Lot 18 : « Ce n’est pas la même » sur un lien rattaché d’office : le lien est retiré de la fiche (le prix de la fiche suit ses liens restants), le brouillon revient « à valider » ; journalisé',
+  })
+  @ZodResponse({ status: 200, type: ListingDraftDto })
+  detach(
+    @CurrentMember() member: Member,
+    @Param('id', ParseUUIDPipe) id: string
+  ): Promise<ListingDraftDto> {
+    return this.drafts.detach(member, id)
   }
 
   @Post(':id/distinct')

@@ -223,8 +223,9 @@ describe('MCP (e2e)', () => {
       // au lot 6, un au lot 8 (membres, lecture seule), deux au lot 15
       // (vérification des annonces sur le portail), trois au lot 16
       // (exploration des portails par les critères), quatre au lot 17
-      // (questions aux agences).
-      expect(names).toHaveLength(38)
+      // (questions aux agences), un au lot 18 (une annonce, plusieurs
+      // portails).
+      expect(names).toHaveLength(39)
       const extract = list.body.result.tools.find(
         (t: { name: string }) => t.name === 'extract_listing'
       )
@@ -597,11 +598,28 @@ describe('MCP (e2e)', () => {
       expect(created.createdTasks[0]?.origin).toBe('missing_field')
       expect(created.duplicates).toEqual([])
 
-      const again = await callTool(writer, 'create_listing', {
+      // Lot 18 : le même lien est refusé, même « créer quand même ».
+      const sameLink = await callTool(writer, 'create_listing', {
         listing: { ...extracted.listing, ignoreDuplicates: true },
+      })
+      expect(sameLink.isError).toBe(true)
+      expect(sameLink.content[0]?.text).toContain(
+        'Refusé : Ce lien est déjà celui de l’annonce'
+      )
+      // Même agence et même référence : refus qui propose le lien.
+      const sameReference = await callTool(writer, 'create_listing', {
+        listing: { ...extracted.listing, url: null },
+      })
+      expect(sameReference.isError).toBe(true)
+      expect(sameReference.content[0]?.text).toContain('add_listing_link')
+      const again = await callTool(writer, 'create_listing', {
+        listing: { ...extracted.listing, url: null, ignoreDuplicates: true },
       })
       expect(again.isError).toBeUndefined()
       expect(again.content[0]?.text).toContain('1 doublon(s) probable(s)')
+      expect(again.content[0]?.text).toContain(
+        'certain : c’est la même annonce'
+      )
       const second = fenced(again) as {
         listing: { id: string }
         duplicates: Array<{
@@ -611,7 +629,7 @@ describe('MCP (e2e)', () => {
       }
       expect(second.duplicates[0]?.listingId).toBe(created.listing.id)
       expect(second.duplicates[0]?.reasons.map(r => r.kind)).toContain(
-        'same_url'
+        'same_reference'
       )
       const log = await ctx.prisma.activityLog.findFirst({
         where: { listingId: second.listing.id, action: 'listing.created' },

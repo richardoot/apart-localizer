@@ -90,9 +90,10 @@ describe('lot 17 : mapper des demandes et du contact', () => {
       updatedAt: NOW,
       updatedById: null,
     }
-    expect(toListingContactDto(contact)).toEqual({
+    // Lot 18 : le nom de l'agence est celui de l'annonce.
+    expect(toListingContactDto(contact, 'Agence [Exemple] du port')).toEqual({
       listingId: ID,
-      agencyName: 'Agence [Exemple]',
+      agencyName: 'Agence [Exemple] du port',
       contactName: null,
       email: 'contact@agence.exemple.invalid',
       phone: null,

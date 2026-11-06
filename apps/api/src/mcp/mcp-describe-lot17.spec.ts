@@ -100,13 +100,14 @@ const view: ListingExchanges = {
 
 describe('MCP lot 17 : questions aux agences', () => {
   it('déclare quatre outils à la suite, deux prompts de plus, aucun outil de suppression', () => {
-    expect(MCP_TOOL_NAMES.slice(-4)).toEqual([
+    const start = MCP_TOOL_NAMES.indexOf('list_open_questions')
+    expect(MCP_TOOL_NAMES.slice(start, start + 4)).toEqual([
       'list_open_questions',
       'prepare_agency_requests',
       'record_request_sent',
       'record_agency_answer',
     ])
-    expect(MCP_TOOL_NAMES).toHaveLength(38)
+    expect(MCP_TOOL_NAMES).toHaveLength(39)
     expect(MCP_TOOL_NAMES.some(name => /delete|remove/.test(name))).toBe(false)
     expect(MCP_PROMPT_NAMES).toEqual([
       'analyze_listing',
@@ -262,6 +263,8 @@ describe('MCP lot 17 : questions aux agences', () => {
       listing: {
         listing: {
           title: 'T2 fictif',
+          sellerType: 'unknown',
+          sellerReference: null,
           status: 'to_study',
           price: 189000,
           surface: 42,
@@ -282,6 +285,7 @@ describe('MCP lot 17 : questions aux agences', () => {
         distanceMeters: null,
         criteriaChanges: null,
         criteriaFit: NO_CRITERIA_FIT,
+        links: [],
       },
       applied: [change],
       proposed: [proposed],

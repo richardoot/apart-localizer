@@ -38,6 +38,34 @@ export const LISTING_STATUS_LABELS: Record<ListingStatus, string> = {
   sold_or_withdrawn: 'Vendu ou retiré',
 }
 
+/**
+ * Qui vend (lot 18, ADR 0028) : une agence, un mandataire (réseau de
+ * conseillers immobiliers indépendants), un particulier (vente de
+ * particulier à particulier), ou inconnu (par défaut, jamais deviné : la
+ * page de l'annonce ne l'a pas encore dit).
+ */
+export const SellerTypeSchema = z
+  .enum(['agency', 'mandatary', 'private', 'unknown'])
+  .describe(
+    "Vendeur : agency (agence immobilière), mandatary (mandataire, conseiller indépendant d'un réseau), private (particulier, de particulier à particulier : pas d'agence ni de référence), unknown (pas encore lu ; jamais deviné)"
+  )
+export type SellerType = z.infer<typeof SellerTypeSchema>
+
+export const SELLER_TYPE_LABELS: Record<SellerType, string> = {
+  agency: 'Agence',
+  mandatary: 'Mandataire',
+  private: 'Particulier',
+  unknown: 'Inconnu',
+}
+
+/** Un vendeur lu sur une page : agence, mandataire ou particulier (« inconnu » ne se lit pas). */
+export const ObservedSellerTypeSchema = z
+  .enum(['agency', 'mandatary', 'private'])
+  .describe(
+    "Vendeur lu sur la page : agency (agence), mandatary (mandataire d'un réseau de conseillers indépendants), private (particulier) ; absent = non lu"
+  )
+export type ObservedSellerType = z.infer<typeof ObservedSellerTypeSchema>
+
 /** Statuts « actifs » : ceux affichés par défaut dans le tableau comparatif. */
 export const ACTIVE_LISTING_STATUSES: readonly ListingStatus[] = [
   'to_study',

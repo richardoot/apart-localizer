@@ -37,7 +37,9 @@ import { demoId } from './ids.js'
  *    adéquation aux critères (lot 14 : mesures PostGIS et décision de
  *    `domain` par le service de l'API, dans la transaction), lot 16 :
  *    explorations fictives, leurs brouillons et les lignes de leur compte
- *    rendu, journal et notifications (règles de `domain`) ;
+ *    rendu, journal et notifications (règles de `domain`) ; lot 18 : les
+ *    liens de chaque annonce sur les portails, le vendeur, le lien
+ *    rattaché d'office par une exploration ;
  * 4. vérifie que les autres espaces n'ont pas bougé, sinon annule tout.
  */
 
@@ -65,6 +67,8 @@ export interface DemoSeedReport {
   otherWorkspaces: OtherWorkspace[]
   /** Lot 17 : demandes aux annonceurs. */
   agencyRequests: number
+  /** Lot 18 : liens des annonces sur les portails. */
+  links: number
 }
 
 export interface OtherWorkspace {
@@ -152,6 +156,41 @@ export async function writeDemoDataset(
         }
       }
 
+      // Lot 18 : les liens des annonces (le lien d'origine en tête), avant
+      // les vérifications qui les citent.
+      await tx.listingLink.createMany({
+        data: dataset.listings.flatMap(listing =>
+          listing.links.map(link => ({
+            id: link.id,
+            workspaceId,
+            listingId: listing.id,
+            portal: link.portal,
+            url: link.url,
+            normalizedUrl: link.normalizedUrl,
+            externalId: link.externalId,
+            price: dec(link.price),
+            priceAt: link.priceAt ? new Date(link.priceAt) : null,
+            firstSeenAt: new Date(link.firstSeenAt),
+            lastSeenOnlineAt: link.lastSeenOnlineAt
+              ? new Date(link.lastSeenOnlineAt)
+              : null,
+            lastCheckedAt: link.lastCheckedAt
+              ? new Date(link.lastCheckedAt)
+              : null,
+            offlineSince: link.offlineSince
+              ? new Date(link.offlineSince)
+              : null,
+            origin: link.origin,
+            readSellerName: link.readSellerName,
+            readReference: link.readReference,
+            evidence: link.evidence,
+            addedById: link.addedBy ? idOf(link.addedBy) : null,
+            createdAt: new Date(link.createdAt),
+            updatedAt: new Date(link.updatedAt),
+          }))
+        ),
+      })
+
       // Lot 15 : republications et vérifications, une fois toutes les annonces là.
       for (const listing of dataset.listings) {
         if (listing.republishedFromId) {
@@ -180,6 +219,7 @@ export async function writeDemoDataset(
             checkedUrl: c.checkedUrl,
             linkedListingId: c.linkedListingId,
             suggestedStatus: c.suggestedStatus,
+            linkId: c.linkId,
           }))
         ),
       })
@@ -189,7 +229,8 @@ export async function writeDemoDataset(
         data: dataset.contacts.map(c => ({
           listingId: c.listingId,
           workspaceId,
-          agencyName: c.agencyName,
+          // Lot 18 : le nom de l'agence est celui de l'annonce (seller_name).
+          agencyName: null,
           contactName: c.contactName,
           email: c.email,
           phone: c.phone,
@@ -436,6 +477,11 @@ export async function writeDemoDataset(
           dismissReason: d.dismissReason,
           decidedById: d.decidedBy ? idOf(d.decidedBy) : null,
           decidedAt: d.decidedAt ? new Date(d.decidedAt) : null,
+          // Lot 18 : reconnu et rattaché d'office à une annonce suivie.
+          listingId: d.listingId,
+          attachedLinkId: d.attachedLinkId,
+          attachedAt: d.attachedAt ? new Date(d.attachedAt) : null,
+          mergedCheckId: d.mergedCheckId,
         })),
       })
       const listingIdByKey = new Map(dataset.listings.map(l => [l.key, l.id]))
@@ -555,6 +601,7 @@ export async function writeDemoDataset(
         notifications: notifications.length,
         otherWorkspaces: after,
         agencyRequests: dataset.agencyRequests.length,
+        links: dataset.listings.reduce((n, l) => n + l.links.length, 0),
       }
     },
     { timeout: 120_000, maxWait: 10_000 }
@@ -630,6 +677,11 @@ async function createListing(
       sourceLabel: input.sourceLabel,
       url: input.url,
       externalId: input.externalId,
+      // Lot 18 : le vendeur (inconnu par défaut, jamais deviné).
+      sellerType: input.sellerType,
+      sellerName: input.sellerName,
+      sellerReference: input.sellerReference,
+      sellerReferenceKey: listing.sellerReferenceKey,
       title: input.title,
       publishedAt: input.publishedAt ? new Date(input.publishedAt) : null,
       description: input.description,

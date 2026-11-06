@@ -92,6 +92,7 @@ import type {
 } from '@apart/contracts'
 import {
   checkFreshness,
+  sellerText,
   formatCheckDay,
   describeListingFit,
   fitReasonsText,
@@ -123,6 +124,8 @@ import type { ComplianceService } from '../study/compliance.service'
 import type { VisitsService } from '../visits/visits.service'
 import type { WhatsNewService } from '../whats-new/whats-new.service'
 import type { ExplorationsService } from '../exploration/explorations.service'
+import type { ListingLinksService } from '../listings/listing-links.service'
+import { describeLinksAndSeller } from './mcp-links'
 import { answer, dataResult, refusal, writeRefusal } from './tool-results'
 
 /** Ce dont les outils ont besoin : le membre, ses portées, les services métier. */
@@ -152,6 +155,8 @@ export interface McpToolContext {
   exploration: ExplorationsService
   /** Lot 17 : questions aux agences (contact, demandes, réponses). */
   agency: AgencyRequestsService
+  /** Lot 18 : les liens d'une annonce sur les portails. */
+  links: ListingLinksService
 }
 
 const CHANNEL = 'mcp' as const
@@ -164,7 +169,8 @@ const CHANNEL = 'mcp' as const
  * (visites, « ce qui a changé »), lot 8 (membres, en lecture seule), lot 15
  * (vérification des annonces sur le portail, `mcp-checks.ts`), lot 16
  * (exploration des portails par les critères, `mcp-exploration.ts`), lot 17
- * (questions aux agences, `mcp-agency.ts`).
+ * (questions aux agences, `mcp-agency.ts`), lot 18 (une annonce, plusieurs
+ * portails, `mcp-links.ts`).
  */
 export const MCP_TOOL_NAMES = [
   'list_listings',
@@ -205,6 +211,7 @@ export const MCP_TOOL_NAMES = [
   'prepare_agency_requests',
   'record_request_sent',
   'record_agency_answer',
+  'add_listing_link',
 ] as const
 
 /**
@@ -244,6 +251,16 @@ export function describeListing(item: EvaluatedListing): string {
     `location ${RENTAL_VERDICT_LABELS[item.evaluation.rental.verdict]}`,
   ]
   parts.push(`repère : ${precisionBadge(item.listing.location).label}`)
+  // Lot 18 : les portails et le vendeur.
+  if (item.links.length > 1) {
+    const offline = item.links.filter(l => !l.online).length
+    parts.push(
+      `sur ${item.links.length} portails${offline ? ` (${offline} plus en ligne)` : ''}`
+    )
+  }
+  if (item.listing.sellerType !== 'unknown' || item.listing.sellerReference) {
+    parts.push(`vendeur : ${sellerText(item.listing)}`)
+  }
   // Lot 14 : l'adéquation aux critères actifs, avec la raison.
   const fit = item.criteriaFit
   if (fit.activeCriteria > 0) {
@@ -309,7 +326,9 @@ export function describeDuplicates(duplicates: DuplicateCandidate[]): string {
       d =>
         `- ${d.title} (${LISTING_STATUS_LABELS[d.status]}, ${formatEuros(d.price)}) [id ${d.listingId}] : ${d.reasons
           .map(r => DUPLICATE_REASON_LABELS[r.kind])
-          .join(', ')} (score ${d.score})`
+          .join(
+            ', '
+          )} (score ${d.score})${d.certain ? ' — certain : c’est la même annonce ; ajoutez ce lien à sa fiche (add_listing_link) plutôt que de créer une annonce' : ''}`
     ),
   ].join('\n')
 }
@@ -890,6 +909,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         'Lot 12 : chaque annonce porte la précision de son repère (`location.precision` : exact au numéro, street à la rue, district au centre du quartier, commune au centre de la commune) et son placement (`location.placement` : méthode, quartier retenu, texte reconnu, « à vérifier ») ; le filtre `precision` (exact, street, district, commune, none) sépare les annonces exactement localisées des génériques. ' +
         'Lot 15 : chaque annonce porte `listing.lastCheckedAt` (dernière vérification sur le portail), `listing.lastSeenOnlineAt` (dernière fois vue en ligne) et `lastCheck` (date, résultat, résumé) ; `staleDays: 7` ne garde que les annonces à revérifier (actives, sans vérification depuis plus de N jours, à défaut depuis leur ajout) et `sort: "lastCheckedAt"`, `order: "asc"` les range de la plus ancienne vérification à la plus récente : la file de la tournée de mise à jour (prompt review_listings). ' +
         'Lot 14 : chaque annonce porte son adéquation aux critères actifs (`criteriaFit` : meilleur niveau in « dans les critères », to_confirm « à confirmer » (adresse au quartier ou à la commune dont le contour touche le périmètre, ou donnée manquante), margin « à la marge » (dépassement dans la marge de tolérance), out « hors critères » ; raisons chiffrées ; détail par critère ; `kept` quand une annonce hors critères reste dans la liste pour une offre en cours ou une visite prévue). ' +
+        'Lot 18 : chaque annonce porte ses liens (`links` : un par portail, prix affiché, en ligne ou non, lien principal d’abord) et son vendeur (`listing.sellerType` agency, mandatary, private, unknown ; `sellerName` agence ou réseau ; `sellerReference`) ; filtres `sellerType` (unknown = à relever), `multiPortal: true` (deux liens ou plus) et `reference` (la référence de l’agence, espaces et tirets ignorés) ; `search` trouve aussi une référence. ' +
         'Sans filtre `fit`, la réponse est l’onglet « Dans les critères » de l’application (in, to_confirm, margin, plus les hors critères gardées) ; `fit: ["out"]` donne l’onglet « Hors critères » (rien n’est perdu), `fit` liste exactement les niveaux voulus. Sans critère actif, tout est « dans les critères ». `fit` de la réponse compte les annonces par niveau.',
       inputSchema: McpListListingsInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -918,7 +938,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         "et son contexte de données ouvertes (`context`) : arrêt de tram le plus proche (distance, ligne), plafond d'encadrement (Bordeaux), DPE vérifié auprès de l'ADEME et sa validité, comparables DVF datés ; " +
         'et (lot 11) son quartier (quartier officiel, IRIS ou commune, avec sa source), la piste d’athlétisme, le drive le plus proche de chaque enseigne préférée (Carrefour, Auchan, Intermarché) et toutes enseignes, et la salle Fitness Park les plus proches, distances à vol d’oiseau (« non disponible » si la source n’est pas importée). ' +
         'Lot 12 : la précision du repère et son placement (`listing.location.placement` : adresse, quartier reconnu dans `district` avec sa zone et son texte, lieu-dit OpenStreetMap, centre de la commune ou point saisi) ; `context.approximation` dit quand les distances partent du centre du quartier ou de la commune (à lire « ≈ »). Dites-le au membre et proposez de préciser l’adresse. ' +
-        'Lot 14 : `criteriaFit`, l’adéquation aux critères actifs : meilleur niveau, raisons, « depuis », et pour chaque critère le niveau, les raisons et le détail filtre par filtre (`checks` : valeur de l’annonce, seuil, marge appliquée). Une annonce « à confirmer » à cause de l’adresse (`locationPending`) sera tranchée en précisant l’adresse (update_listing).',
+        'Lot 14 : `criteriaFit`, l’adéquation aux critères actifs : meilleur niveau, raisons, « depuis », et pour chaque critère le niveau, les raisons et le détail filtre par filtre (`checks` : valeur de l’annonce, seuil, marge appliquée). Une annonce « à confirmer » à cause de l’adresse (`locationPending`) sera tranchée en précisant l’adresse (update_listing). ' +
+        'Lot 18 : « Où la trouver » (`links` : chaque portail avec son prix affiché, l’écart au plus bas, en ligne ou non, l’origine du lien et son identifiant `id` à passer en `linkId` à check_listing et apply_listing_check) et « Qui la vend » (`listing.sellerType`, `sellerName`, `sellerReference` : la référence à chercher sur les autres portails). Le prix de la fiche est le plus bas des liens en ligne.',
       inputSchema: McpGetListingInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -930,7 +951,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           .map(c => `  - [${c.level}] ${c.message}`)
           .join('\n')
         return dataResult(
-          `${describeListing(item)}\n${describeFitDetail(item)}\n${describePlacement(item)}\nContrôles de louabilité :\n${checks}\n${describeContext(context)}`,
+          `${describeListing(item)}\n${describeLinksAndSeller(item)}\n${describeFitDetail(item)}\n${describePlacement(item)}\nContrôles de louabilité :\n${checks}\n${describeContext(context)}`,
           { ...item, context }
         )
       })
@@ -983,6 +1004,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       description:
         "Lit le texte d'une annonce (page lue dans le navigateur, mail d'agence) et/ou des captures d'écran (base64) par le modèle d'extraction côté serveur, et rend une fiche normalisée pré-remplie : " +
         'pour chaque champ la valeur, la provenance « ai », la confiance (0 à 1) et l’extrait justificatif dans `listing.fieldSources` ; les champs indispensables manquants ou douteux ; les doublons probables déjà dans l’espace ; l’adresse géocodée si possible ; le coût de l’appel. ' +
+        'Lot 18 : le vendeur (`sellerType` agence, mandataire, particulier ; jamais deviné), l’agence ou le réseau (`sellerName`, jamais le nom d’une personne) et la référence de l’annonce (`sellerReference`, « Réf. », « Mandat n° ») sont lus ; un doublon `certain` (même lien, ou même agence et même référence) est la même annonce sur un autre portail : proposez add_listing_link sur cette fiche plutôt que create_listing. ' +
         "Rien n'est enregistré : présentez la fiche au membre, laissez-le corriger, puis appelez create_listing avec `listing` tel que rendu (fieldSources compris). Répond 503 si l'IA n'est pas configurée côté serveur.",
       inputSchema: McpExtractListingInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
@@ -1037,6 +1059,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         'Placement du repère (lot 12) : mettez dans `location.addressRaw` l’adresse la plus précise que l’annonce ou le membre donne (numéro et rue : repère « exact ») ; et dans `location.district` le quartier ou secteur cité, du plus large au plus fin (« Bordeaux Sud, Victoire »), sans la commune ni les mentions de tram : sans numéro, le repère est placé au centre du quartier reconnu (précision `district`), sinon au centre de la commune (`commune`) ; les distances sont alors approchées. Ne passez un point que s’il est sûr (lu sur une carte de l’annonce) : il prime sur le géocodage. ' +
         'Passez la fiche rendue par extract_listing telle quelle (fieldSources : provenance, confiance et extrait par champ ; mettez `user` sur les champs que le membre a corrigés). ' +
         'La réponse liste les doublons probables (la création n’est pas bloquée ; `ignoreDuplicates: true` quand le membre a vu l’alerte et confirme), les tâches créées pour les champs indispensables manquants, ' +
+        'Lot 18 : vendeur (`sellerType`, `sellerName`, `sellerReference`) comme l’annonce le dit. Refus rendu en réponse si le lien est déjà celui d’une autre annonce (son nom est donné : ouvrez-la), ou si une annonce a la même agence et la même référence (c’est la même annonce sur un autre portail : ajoutez ce lien à sa fiche avec add_listing_link ; `ignoreDuplicates: true` seulement si le membre confirme que c’est une autre annonce). ' +
         'les critères de recherche dans lesquels l’annonce entre (`criteriaChanges`), et les enrichissements open data faits côté serveur (arrêt de tram, plafond d’encadrement, prix médian DVF, DPE vérifié à l’ADEME). ' +
         '`provenance` : « ai » si Claude a lu la page, « user » si le membre a dicté les valeurs. Portée listings:write.',
       inputSchema: McpCreateListingInputSchema,
@@ -1077,7 +1100,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         'Mise à jour partielle : seuls les champs de `patch` changent ; un sous-objet fourni (travaux, phase 2, localisation) remplace l’existant. ' +
         'Garde-fous optimistes : `expectedUpdatedAt` (le `updatedAt` lu) et `expectedPrice` ; si l’annonce a changé entre-temps, rien n’est écrit et la réponse l’explique. ' +
         'Un nouveau prix ajoute une ligne à l’historique. ' +
-        'Pour préciser la localisation (lot 12), passez `location` entier (adresse au numéro dans `addressRaw`, commune, quartier cité dans `district`, sans `point`) : le repère est replacé côté serveur (adresse, sinon quartier reconnu, sinon commune) et les distances recalculées ; changer seulement le quartier ne touche pas un repère déjà à l’adresse (numéro ou rue). Portée listings:write.',
+        'Pour préciser la localisation (lot 12), passez `location` entier (adresse au numéro dans `addressRaw`, commune, quartier cité dans `district`, sans `point`) : le repère est replacé côté serveur (adresse, sinon quartier reconnu, sinon commune) et les distances recalculées ; changer seulement le quartier ne touche pas un repère déjà à l’adresse (numéro ou rue). ' +
+        'Lot 18 : le vendeur (`sellerType`, `sellerName`, `sellerReference` ; un particulier n’a ni agence ni référence) ; `url` remplace le lien principal (refusé s’il est déjà celui d’une autre annonce) : pour un autre portail, utilisez add_listing_link. Portée listings:write.',
       inputSchema: McpUpdateListingInputSchema,
       annotations: {
         readOnlyHint: false,
@@ -1901,8 +1925,8 @@ export function analyzeListingPrompt(args: {
     "Analyse cette annonce immobilière pour l'espace apart-localizer, en suivant ces étapes dans l'ordre :",
     '',
     `1. Appelle l'outil extract_listing avec le texte ci-dessous dans \`text\`${args.url ? `, l'URL \`${args.url}\` dans \`url\`` : ''} et, si des captures d'écran sont jointes à la conversation, chacune dans \`images\` (base64, type MIME). N'invente aucune valeur toi-même : c'est le modèle d'extraction côté serveur qui lit.`,
-    "2. Présente la fiche rendue au membre en français : prix, surface, pièces, étage, DPE, charges, taxe foncière, adresse et commune, travaux évoqués ; pour chaque valeur, sa confiance et l'extrait justificatif (listing.fieldSources) ; la liste des champs indispensables manquants ou douteux ; les doublons probables avec leur motif.",
-    "3. S'il y a un doublon probable, demande au membre s'il s'agit de la même annonce (dans ce cas n'enregistre rien et propose update_listing ou get_listing sur l'existante) ou s'il veut créer quand même (ignoreDuplicates: true).",
+    "2. Présente la fiche rendue au membre en français : prix, surface, pièces, étage, DPE, charges, taxe foncière, adresse et commune, travaux évoqués, vendeur (agence, mandataire ou particulier, jamais deviné), agence ou réseau et référence de l'annonce ; pour chaque valeur, sa confiance et l'extrait justificatif (listing.fieldSources) ; la liste des champs indispensables manquants ou douteux ; les doublons probables avec leur motif.",
+    "3. S'il y a un doublon `certain` (même lien, ou même agence et même référence : la même annonce sur un autre portail), ne crée rien : propose au membre d'ajouter ce lien à la fiche existante avec add_listing_link (prix affiché, vendeur et référence lus). S'il y a un doublon probable, demande au membre s'il s'agit de la même annonce (dans ce cas n'enregistre rien et propose add_listing_link ou update_listing sur l'existante) ou s'il veut créer quand même (ignoreDuplicates: true).",
     "4. Attends la confirmation explicite du membre avant d'écrire. Applique ses corrections dans la fiche et marque chaque champ corrigé avec la provenance « user » dans fieldSources.",
     "5. Après confirmation seulement, appelle create_listing avec « listing » = la fiche rendue par extract_listing (corrections comprises, fieldSources conservé, sourceText conservé) et « provenance: ai ». Rapporte l'identifiant, les indicateurs (coût tout compris, mensualité, rendement brut, effort, verdict), le verdict de louabilité et les tâches créées pour les champs manquants.",
     '',

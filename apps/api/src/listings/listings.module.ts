@@ -8,6 +8,8 @@ import { ListingEnrichmentService } from './enrichment.service'
 import { ExtractionService } from './extraction.service'
 import { ListingChecksController } from './listing-checks.controller'
 import { ListingChecksService } from './listing-checks.service'
+import { ListingLinksController } from './listing-links.controller'
+import { ListingLinksService } from './listing-links.service'
 import { ListingsController } from './listings.controller'
 import { MarketContextController } from './market-context.controller'
 import { ListingsService } from './listings.service'
@@ -19,6 +21,7 @@ import { TargetPriceService } from './target-price.service'
     ListingsController,
     MarketContextController,
     ListingChecksController,
+    ListingLinksController,
     CriteriaFitController,
   ],
   providers: [
@@ -28,6 +31,7 @@ import { TargetPriceService } from './target-price.service'
     TargetPriceService,
     ListingEnrichmentService,
     ListingChecksService,
+    ListingLinksService,
   ],
   exports: [
     ListingsService,
@@ -36,6 +40,7 @@ import { TargetPriceService } from './target-price.service'
     TargetPriceService,
     ListingEnrichmentService,
     ListingChecksService,
+    ListingLinksService,
     OpendataModule,
   ],
 })

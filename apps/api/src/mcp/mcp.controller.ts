@@ -29,6 +29,8 @@ import { ComplianceService } from '../study/compliance.service'
 import { VisitsService } from '../visits/visits.service'
 import { WhatsNewService } from '../whats-new/whats-new.service'
 import { ListingChecksService } from '../listings/listing-checks.service'
+import { ListingLinksService } from '../listings/listing-links.service'
+import { registerLinkTools } from './mcp-links'
 import { ExplorationsService } from '../exploration/explorations.service'
 import { registerCheckPrompts, registerCheckTools } from './mcp-checks'
 import {
@@ -74,7 +76,8 @@ export class McpController {
     private readonly whatsNew: WhatsNewService,
     private readonly checks: ListingChecksService,
     private readonly agency: AgencyRequestsService,
-    private readonly exploration: ExplorationsService
+    private readonly exploration: ExplorationsService,
+    private readonly links: ListingLinksService
   ) {}
 
   @Post()
@@ -122,6 +125,7 @@ export class McpController {
       checks: this.checks,
       exploration: this.exploration,
       agency: this.agency,
+      links: this.links,
     }
     registerTools(server, context)
     // Lot 15 : vérification des annonces sur le portail.
@@ -130,6 +134,8 @@ export class McpController {
     registerExplorationTools(server, context)
     // Lot 17 : questions aux agences.
     registerAgencyTools(server, context)
+    // Lot 18 : une annonce, plusieurs portails.
+    registerLinkTools(server, context)
     registerPrompts(server)
     registerCheckPrompts(server)
     registerExplorationPrompts(server)

@@ -4,7 +4,7 @@ import type {
   ListingDraft,
   LocationPrecision,
 } from '@apart/contracts'
-import { fitReasonsText } from '@apart/domain'
+import { fitReasonsText, sellerListLabel } from '@apart/domain'
 import { formatRelativeDays } from './format'
 
 /**
@@ -68,6 +68,33 @@ export function pendingDuplicate(
 ): DuplicateCandidate | null {
   if (draft.status !== 'pending' || draft.distinct) return null
   return draft.duplicates[0] ?? null
+}
+
+/**
+ * Lot 18 : le début de la phrase du doublon : « Même annonce que » (même
+ * lien, ou même agence et même référence), « Même référence, autre agence
+ * que », sinon « Peut-être ».
+ */
+export function duplicateLead(
+  duplicate: Pick<DuplicateCandidate, 'certain' | 'reasons'>
+): string {
+  if (duplicate.certain) return 'Même annonce que'
+  if (duplicate.reasons.some(r => r.kind === 'same_reference_other_agency')) {
+    return 'Même référence, autre agence que'
+  }
+  return 'Peut-être'
+}
+
+/** Lot 18 : le vendeur lu, « Agence · réf. EX-3310 », « Particulier » ; rien s'il est inconnu. */
+export function draftSellerLabel(
+  draft: Pick<ListingDraft, 'listing'>
+): string | null {
+  const { sellerType, sellerReference } = draft.listing
+  if (sellerType === 'unknown' && !sellerReference) return null
+  const head = sellerListLabel(sellerType)
+  return sellerReference && sellerType !== 'private'
+    ? `${head} · réf. ${sellerReference}`
+    : head
 }
 
 /** « même surface, même rue, 5 000 € de moins » : les motifs du doublon, en clair. */

@@ -215,6 +215,8 @@ enum ListingCheckOutcome {
   offline
   republished
   inaccessible
+  /// Lot 18 : la même annonce sur un autre portail, rattachée à la fiche.
+  link_added
 
   @@schema("app")
 }
@@ -283,6 +285,45 @@ enum TransitMode {
   @@schema("app")
 }
 
+/// Portail d'un lien d'annonce (lot 18, ADR 0028) : plus riche que
+/// `ListingSource` (lien principal, export de version 1), Logic-Immo compris.
+enum ListingPortal {
+  leboncoin
+  seloger
+  bienici
+  pap
+  logicimmo
+  agence
+  autre
+
+  @@schema("app")
+}
+
+/// D'où vient un lien (lot 18) : lien d'origine de l'annonce (ou repris par
+/// la migration), ajouté à la main, par Claude, trouvé par une exploration,
+/// partagé depuis le téléphone, reçu dans une alerte e-mail.
+enum ListingLinkOrigin {
+  original
+  manual
+  claude
+  exploration
+  share
+  email
+
+  @@schema("app")
+}
+
+/// Qui vend (lot 18) : agence, mandataire, particulier, inconnu (par défaut,
+/// jamais deviné).
+enum SellerType {
+  agency
+  mandatary
+  private
+  unknown
+
+  @@schema("app")
+}
+
 /// Genre d'un équipement de proximité importé (lot 11).
 enum AmenityKind {
   athletics_track
@@ -337,6 +378,8 @@ model Workspace {
   agencySignature String?          @map("agency_signature")
   agencyRequests  AgencyRequest[]
   listingContacts ListingContact[]
+  /// Lot 18 : les liens des annonces sur les portails.
+  listingLinks    ListingLink[]
 
   @@map("workspaces")
   @@schema("app")
@@ -410,6 +453,8 @@ model Member {
   approvedAgencyRequests AgencyRequest[]    @relation("AgencyRequestApprover")
   sentAgencyRequests     AgencyRequest[]    @relation("AgencyRequestSender")
   updatedContacts        ListingContact[]   @relation("ListingContactEditor")
+  // Lot 18 : les liens ajoutés.
+  addedLinks             ListingLink[]      @relation("ListingLinkAuthor")
 
   @@unique([workspaceId, handle])
   @@index([workspaceId])
@@ -542,6 +587,15 @@ model Listing {
   /// une annonce reprend au plus une annonce et n'est reprise que par une.
   republishedFromId String?   @unique @map("republished_from_id")
 
+  // Vendeur (lot 18, ADR 0028) : agence, mandataire, particulier ou inconnu
+  // (jamais deviné), nom de l'agence ou du réseau (jamais celui d'une
+  // personne : contact du lot 17), référence de l'annonce et sa clé de
+  // comparaison (majuscules, sans espaces, tirets ni points).
+  sellerType         SellerType @default(unknown) @map("seller_type")
+  sellerName         String?    @map("seller_name")
+  sellerReference    String?    @map("seller_reference")
+  sellerReferenceKey String?    @map("seller_reference_key")
+
   // Adéquation aux critères actifs (lot 14) : le meilleur niveau parmi les
   // critères actifs (null = jamais comparée), la date de son dernier
   // changement et ce qui l'a fait changer ({ cause, trigger, criteriaName }).
@@ -578,11 +632,14 @@ model Listing {
   // Lot 17 : contact de l'annonceur et demandes.
   contact          ListingContact?
   agencyRequests   AgencyRequest[]
+  // Lot 18 : les liens de l'annonce sur les portails.
+  links            ListingLink[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, commune])
   @@index([workspaceId, url])
   @@index([workspaceId, criteriaFitLevel])
+  @@index([workspaceId, sellerReferenceKey])
   @@map("listings")
   @@schema("app")
 }
@@ -881,8 +938,11 @@ model ListingCheck {
   linkedListingId String?             @map("linked_listing_id")
   /// Statut proposé, jamais appliqué d'office.
   suggestedStatus ListingStatus?      @map("suggested_status")
+  /// Lot 18 : le lien vérifié (null : annonce sans lien, ou lien retiré depuis).
+  linkId          String?             @map("link_id")
 
   listing       Listing        @relation("ListingChecks", fields: [listingId], references: [id], onDelete: Cascade)
+  link          ListingLink?   @relation(fields: [linkId], references: [id], onDelete: SetNull)
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   author        Member?        @relation("ListingCheckAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   linkedListing Listing?       @relation("ListingCheckLinked", fields: [linkedListingId], references: [id], onDelete: SetNull)
@@ -1010,13 +1070,19 @@ model ListingDraft {
   /// Comment le repère a été placé à la lecture (JSON validé par
   /// ListingPlacementSchema), pour l'adéquation calculée à la lecture.
   locationPlacement Json?              @map("location_placement")
+  // Lot 18 : lien rattaché d'office (même agence, même référence) à
+  // l'annonce `listing_id` ; « Ce n'est pas la même » le détache.
+  attachedLinkId    String?            @map("attached_link_id")
+  attachedAt        DateTime?          @map("attached_at") @db.Timestamptz(6)
+  detachedAt        DateTime?          @map("detached_at") @db.Timestamptz(6)
 
-  workspace   Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  decidedBy   Member?                @relation("DraftDecider", fields: [decidedById], references: [id], onDelete: SetNull)
-  listing     Listing?               @relation(fields: [listingId], references: [id], onDelete: SetNull)
-  exploration Exploration?           @relation(fields: [explorationId], references: [id], onDelete: SetNull)
-  mergedCheck ListingCheck?          @relation(fields: [mergedCheckId], references: [id], onDelete: SetNull)
-  lines       ExplorationCandidate[]
+  workspace    Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  decidedBy    Member?                @relation("DraftDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  attachedLink ListingLink?           @relation(fields: [attachedLinkId], references: [id], onDelete: SetNull)
+  listing      Listing?               @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  exploration  Exploration?           @relation(fields: [explorationId], references: [id], onDelete: SetNull)
+  mergedCheck  ListingCheck?          @relation(fields: [mergedCheckId], references: [id], onDelete: SetNull)
+  lines        ExplorationCandidate[]
 
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, url])
@@ -1305,6 +1371,8 @@ enum ExplorationOutcome {
   known
   dismissed
   out
+  /// Lot 18 : même agence et même référence qu'une annonce suivie : lien rattaché d'office.
+  attached
 
   @@schema("app")
 }
@@ -1493,5 +1561,56 @@ model AgencyRequest {
   @@index([listingId, createdAt(sort: Desc)])
   @@index([workspaceId, status])
   @@map("agency_requests")
+  @@schema("app")
+}
+
+// ---------------------------------------------------------------------------
+// Lot 18 : une annonce, plusieurs portails (ADR 0028)
+// ---------------------------------------------------------------------------
+
+/// Un lien d'une annonce sur un portail : la même annonce est souvent
+/// publiée sur plusieurs portails. L'URL normalisée est unique dans l'espace
+/// (un lien n'appartient qu'à une annonce). Le lien principal (le plus ancien
+/// en ligne, à défaut le plus ancien) est recopié dans `listings.url`,
+/// `source` et `external_id`. Le prix de la fiche est le plus bas des liens en
+/// ligne dont le prix est connu. Le serveur ne joint jamais un portail.
+model ListingLink {
+  id               String            @id @default(uuid())
+  workspaceId      String            @map("workspace_id")
+  listingId        String            @map("listing_id")
+  portal           ListingPortal
+  url              String
+  /// `normalizeListingUrl` (domain) : https, hôte sans www, chemin, requête
+  /// retirée sur un portail connu.
+  normalizedUrl    String            @map("normalized_url")
+  /// Identifiant de l'annonce sur ce portail (numéro Leboncoin…).
+  externalId       String?           @map("external_id")
+  /// Prix affiché sur ce portail, et la date du relevé.
+  price            Decimal?          @db.Decimal(12, 2)
+  priceAt          DateTime?         @map("price_at") @db.Timestamptz(6)
+  firstSeenAt      DateTime?         @map("first_seen_at") @db.Timestamptz(6)
+  lastSeenOnlineAt DateTime?         @map("last_seen_online_at") @db.Timestamptz(6)
+  lastCheckedAt    DateTime?         @map("last_checked_at") @db.Timestamptz(6)
+  /// Plus en ligne depuis cette date ; null = en ligne (ou pas encore vérifié).
+  offlineSince     DateTime?         @map("offline_since") @db.Timestamptz(6)
+  origin           ListingLinkOrigin
+  /// L'agence (ou le réseau) et la référence affichées sur ce portail.
+  readSellerName   String?           @map("read_seller_name")
+  readReference    String?           @map("read_reference")
+  /// Extrait court lu à l'ajout (500 caractères, téléphones et e-mails masqués).
+  evidence         String?
+  addedById        String?           @map("added_by_id")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  listing        Listing        @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  addedBy        Member?        @relation("ListingLinkAuthor", fields: [addedById], references: [id], onDelete: SetNull)
+  checks         ListingCheck[]
+  attachedDrafts ListingDraft[]
+
+  @@unique([workspaceId, normalizedUrl])
+  @@index([listingId, createdAt])
+  @@map("listing_links")
   @@schema("app")
 }

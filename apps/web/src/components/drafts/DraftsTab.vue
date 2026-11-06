@@ -8,6 +8,7 @@
   import { useExplorationList } from '@/composables/useExplorations'
   import { ApiError } from '@/lib/api'
   import { mergeDraftCards, pendingDuplicate } from '@/lib/drafts'
+  import AttachedLinks from './AttachedLinks.vue'
   import DraftCard from './DraftCard.vue'
 
   /**
@@ -16,6 +17,8 @@
    * bandeau de la dernière exploration (résumé, compte rendu, « Ajouter
    * celles « dans les critères » »), et les décisions de la session gardées
    * à leur place (« Ajoutée », « Écartée… Annuler », « Fiche mise à jour »).
+   * Lot 18 : en tête, les liens rattachés d'office (même agence, même
+   * référence), avec « Ce n'est pas la même ».
    */
   const router = useRouter()
   const drafts = useDrafts()
@@ -187,10 +190,13 @@
       </div>
     </section>
 
+    <AttachedLinks />
+
     <p class="max-w-3xl text-[13px] leading-normal text-muted">
-      Claude n’ajoute rien de lui-même : chaque annonce trouvée attend votre
-      choix. Ajoutée, elle rejoint la liste avec sa fiche pré-remplie ; écartée,
-      Claude ne la proposera plus.
+      Claude n’ajoute aucune annonce de lui-même : chaque annonce trouvée attend
+      votre choix. Ajoutée, elle rejoint la liste avec sa fiche pré-remplie ;
+      écartée, Claude ne la proposera plus. Seul le lien d’une annonce déjà
+      suivie (même agence, même référence) rejoint sa fiche d’office.
     </p>
 
     <p v-if="drafts.isPending.value" class="text-sm text-muted">

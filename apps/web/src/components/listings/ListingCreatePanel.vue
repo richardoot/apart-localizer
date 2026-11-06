@@ -6,6 +6,7 @@
     ExtractionResult,
     ListingDraft,
     ListingInput,
+    ListingLinkInputRaw,
   } from '@apart/contracts'
   import {
     EXPLORATION_PORTAL_LABELS,
@@ -15,6 +16,7 @@
   import SidePanel from '@/components/ui/SidePanel.vue'
   import { describeUsage } from '@/composables/useExtraction'
   import { useListingMutations } from '@/composables/useListings'
+  import { useAttachLink } from '@/composables/useListingLinks'
   import { useLivePreview } from '@/composables/useLivePreview'
   import { useAssumptions } from '@/composables/useWorkspace'
   import { ApiError, api } from '@/lib/api'
@@ -27,6 +29,9 @@
     validateForm,
   } from '@/lib/listing-form'
   import type { ListingForm as ListingFormModel } from '@/lib/listing-form'
+  import { parseNumberInput } from '@/lib/format'
+  import { conflictListingOf, conflictText } from '@/lib/listing-links'
+  import type { ConflictListing } from '@/lib/listing-links'
   import { provenanceAfterEdits } from '@/lib/provenance'
   import DuplicatesBanner from './DuplicatesBanner.vue'
   import ExtractionPane from './ExtractionPane.vue'
@@ -65,7 +70,7 @@
   const draftId = one(query.brouillon)
   const draft = ref<ListingDraft | null>(null)
   const notice = ref<string | null>(null)
-  const { decide } = useDrafts()
+  const { decide, merge } = useDrafts()
 
   const form = ref(emptyForm())
   const errors = ref<Record<string, string>>({})
@@ -73,6 +78,9 @@
   const { values: assumptions } = useAssumptions()
   const preview = useLivePreview(form, assumptions)
   const { create } = useListingMutations()
+  const attachLink = useAttachLink()
+  /** Lot 18 : le refus d'une création (même lien, ou même agence et même référence). */
+  const conflict = ref<ConflictListing | null>(null)
 
   /** Le résultat de l'extraction, et le formulaire tel qu'il l'a rempli (pour repérer les corrections). */
   const extraction = ref<ExtractionResult | null>(null)
@@ -118,6 +126,53 @@
   const visibleDuplicates = computed(() =>
     ignoreDuplicates.value ? [] : (extraction.value?.duplicates ?? [])
   )
+
+  /** Lot 18 : le lien de l'annonce saisie, à ajouter à une fiche existante. */
+  const linkUrl = computed(() => form.value.url.trim() || null)
+
+  /**
+   * « C'est la même : ajouter ce lien » : le lien rejoint la fiche de
+   * l'annonce suivie (origine « partagé depuis le téléphone » ou « à la
+   * main »), avec ce qui a été lu (prix, vendeur) ; rien n'est créé. Un
+   * brouillon se reconnaît comme la même annonce (`merge`).
+   */
+  async function attach(listingId: string): Promise<void> {
+    const url = linkUrl.value
+    if (!url) return
+    failure.value = null
+    try {
+      if (draft.value) {
+        await merge.mutateAsync({ id: draft.value.id, request: { listingId } })
+      } else {
+        const read = extraction.value?.listing ?? null
+        const price = parseNumberInput(form.value.price)
+        const input: ListingLinkInputRaw = {
+          url,
+          origin: shared ? 'share' : 'manual',
+          ...(price !== null && price > 0 ? { price } : {}),
+          ...(shared ? { online: true } : {}),
+          ...(read && read.sellerType !== 'unknown'
+            ? { sellerType: read.sellerType }
+            : {}),
+          ...(read?.sellerName ? { sellerName: read.sellerName } : {}),
+          ...(read?.sellerReference ? { reference: read.sellerReference } : {}),
+        }
+        await attachLink.mutateAsync({ listingId, input })
+      }
+      emit('open', listingId)
+    } catch (err) {
+      failure.value = conflictText(
+        err instanceof ApiError ? err.message : "L'ajout du lien a échoué."
+      )
+    }
+  }
+
+  /** « C'en est une autre : créer quand même » après un refus de même référence. */
+  function createAnyway(): void {
+    ignoreDuplicates.value = true
+    conflict.value = null
+    void save()
+  }
 
   function onExtracted(result: ExtractionResult): void {
     extraction.value = result
@@ -208,6 +263,7 @@
     errors.value = issues
     if (!input) return
     failure.value = null
+    conflict.value = null
     try {
       const body = extraction.value
         ? {
@@ -218,7 +274,9 @@
             fieldSources: fieldSources.value ?? {},
             ignoreDuplicates: ignoreDuplicates.value,
           }
-        : input
+        : ignoreDuplicates.value
+          ? { ...input, ignoreDuplicates: true }
+          : input
       const created = await create.mutateAsync(body)
       if (draft.value) {
         await decide.mutateAsync({
@@ -228,8 +286,13 @@
       }
       emit('created', created.listing.id, created.criteriaChanges)
     } catch (err) {
-      failure.value =
+      const message =
         err instanceof ApiError ? err.message : "L'enregistrement a échoué."
+      conflict.value =
+        err instanceof ApiError && err.status === 409
+          ? conflictListingOf(message)
+          : null
+      failure.value = conflictText(message)
     }
   }
 </script>
@@ -340,8 +403,11 @@
 
         <DuplicatesBanner
           :duplicates="visibleDuplicates"
+          :link-url="linkUrl"
+          :busy="attachLink.isPending.value || merge.isPending.value"
           @open="id => emit('open', id)"
           @ignore="ignoreDuplicates = true"
+          @attach="attach"
         />
 
         <MetricsPreview :evaluation="preview.evaluation" />
@@ -355,13 +421,43 @@
           :field-sources="fieldSources"
           :missing="missingPaths"
         />
-        <p
+        <div
           v-if="failure"
           role="alert"
-          class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
+          class="grid gap-2 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
+          data-testid="create-failure"
         >
-          {{ failure }}
-        </p>
+          <p>{{ failure }}</p>
+          <div v-if="conflict" class="flex flex-wrap gap-2">
+            <button
+              v-if="!conflict.sameLink && linkUrl"
+              type="button"
+              class="min-h-9 rounded-lg border border-accent bg-surface px-3 text-xs font-semibold text-accent disabled:opacity-60"
+              :disabled="attachLink.isPending.value || merge.isPending.value"
+              data-action="conflict-attach"
+              @click="attach(conflict.id)"
+            >
+              C’est la même : ajouter ce lien à « {{ conflict.title }} »
+            </button>
+            <button
+              type="button"
+              class="min-h-9 rounded-lg border border-line bg-surface px-3 text-xs text-fg"
+              data-action="conflict-open"
+              @click="emit('open', conflict.id)"
+            >
+              Ouvrir « {{ conflict.title }} »
+            </button>
+            <button
+              v-if="!conflict.sameLink"
+              type="button"
+              class="min-h-9 rounded-lg border border-warn bg-surface px-3 text-xs text-warn"
+              data-action="conflict-create"
+              @click="createAnyway"
+            >
+              C’en est une autre : créer quand même
+            </button>
+          </div>
+        </div>
       </template>
     </div>
     <template #footer>

@@ -2,6 +2,7 @@ import {
   AssumptionsSchema,
   DEFAULT_ASSUMPTIONS,
   DEFAULT_TASKS,
+  LISTING_LINK_EVIDENCE_MAX,
   ListingInputSchema,
   OfferInputSchema,
   OpinionInputSchema,
@@ -16,12 +17,15 @@ import type {
   ActivityChannel,
   Assumptions,
   DpeClass,
+  FieldProvenanceMap,
   ListingCheckChange,
   ListingCheckOutcome,
   ListingObserved,
   ListingQuestionField,
   LeaseType,
   ListingInput,
+  ListingLinkOrigin,
+  ListingPortal,
   ListingSource,
   ListingStatus,
   LocationPrecision,
@@ -33,18 +37,28 @@ import type {
   RentComparableInput,
   ScenarioInput,
   SearchCriteriaInput,
+  SellerType,
   Verdict,
 } from '@apart/contracts'
 import {
   compute,
+  detectLinkPortal,
   effectiveObserved,
   financialsFromListing,
-  listingCheckDiff,
+  linkAddedDiff,
+  linkCheckDiff,
+  linkKey,
   listingCheckSummary,
+  matchDuplicates,
+  normalizeSeller,
+  portalOfListingSource,
+  portalWhere,
+  primaryLink,
   republicationProposal,
-  resolveCheckOutcome,
+  resolveLinkCheckOutcome,
   sanitizeEvidence,
 } from '@apart/domain'
+import type { DuplicateRow, LinkState, SellerFacts } from '@apart/domain'
 import { DEMO_ACCOUNTS, DEMO_WORKSPACE_NAME } from './accounts.js'
 import { buildDemoExplorations } from './exploration.js'
 import type { DemoExploration, DemoExplorationDraft } from './exploration.js'
@@ -135,6 +149,34 @@ export interface DemoCheck {
   checkedUrl: string | null
   linkedListingId: string | null
   suggestedStatus: ListingStatus | null
+  /** Lot 18 : le lien vérifié (ou ajouté). */
+  linkId: string
+}
+
+/** Lot 18 : un lien de l'annonce sur un portail (fictif). */
+export interface DemoLink {
+  id: string
+  key: string
+  portal: ListingPortal
+  url: string
+  normalizedUrl: string
+  externalId: string | null
+  price: number | null
+  priceAt: string | null
+  firstSeenAt: string
+  lastSeenOnlineAt: string | null
+  lastCheckedAt: string | null
+  offlineSince: string | null
+  online: boolean
+  origin: ListingLinkOrigin
+  readSellerName: string | null
+  readReference: string | null
+  evidence: string | null
+  addedBy: DemoHandle | null
+  createdAt: string
+  updatedAt: string
+  /** Rattaché d'office par une exploration : le brouillon reconnu qui le porte. */
+  draftId: string | null
 }
 
 export interface DemoListing {
@@ -175,6 +217,9 @@ export interface DemoListing {
   lastSeenOnlineAt: string | null
   /** Lot 15 : l'annonce plus ancienne dont celle-ci est la republication. */
   republishedFromId: string | null
+  /** Lot 18 : ses liens, le lien d'origine en tête ; la clé de sa référence. */
+  links: DemoLink[]
+  sellerReferenceKey: string | null
 }
 
 export interface DemoCriteria {
@@ -1144,8 +1189,34 @@ export function buildDemoDataset(now: Date = new Date()): DemoDataset {
       surface: l.input.surface,
       commune: l.input.location.commune,
       url: l.input.url,
+      sellerType: l.input.sellerType,
+      sellerName: l.input.sellerName,
+      sellerReference: l.input.sellerReference,
+      links: l.links,
+      checks: l.checks,
     }
   }
+  // Lot 18 : les doublons d'une annonce lue, comparée à tous les liens et
+  // au vendeur des annonces du jeu (règles de `domain`).
+  const duplicateRows: DuplicateRow[] = listings.map(l => ({
+    id: l.id,
+    title: l.input.title,
+    status: l.input.status,
+    price: l.input.price,
+    surface: l.input.surface,
+    commune: l.input.location.commune,
+    url: l.input.url,
+    addressRaw: l.input.location.addressRaw,
+    addressNormalized: null,
+    // Les liens connus avant l'exploration (pas ceux qu'elle a rattachés).
+    links: l.links
+      .filter(link => link.draftId === null)
+      .map(link => link.normalizedUrl),
+    sellerType: l.input.sellerType,
+    sellerName: l.input.sellerName,
+    sellerReference: l.input.sellerReference,
+    sellerReferenceKey: l.sellerReferenceKey,
+  }))
   const criteriaRef = (key: string) => {
     const c = criteria.find(x => x.key === key)
     if (!c) throw new Error(`Critère de démo inconnu : ${key}`)
@@ -1154,6 +1225,7 @@ export function buildDemoDataset(now: Date = new Date()): DemoDataset {
   const { explorations, drafts: explorationDrafts } = buildDemoExplorations({
     at,
     listing: listingRef,
+    duplicates: probe => matchDuplicates(probe, duplicateRows),
     criteria: { centre: criteriaRef('centre'), tramB: criteriaRef('tram-b') },
     log,
   })
@@ -1218,6 +1290,24 @@ function buildListing(
         : { source: 'user' as const },
     ])
   )
+  // Lot 18 : le vendeur saisi ou lu à la création (inconnu par défaut).
+  const seller = SELLERS[spec.key]
+  if (seller) {
+    const keys =
+      seller.type === 'private'
+        ? ['sellerType']
+        : ['sellerType', 'sellerName', 'sellerReference']
+    for (const key of keys) {
+      fieldSources[key] =
+        provenance === 'ai'
+          ? {
+              source: 'ai' as const,
+              confidence: 0.8,
+              evidence: 'Lu sur la page de l’annonce (exemple fictif)',
+            }
+          : { source: 'user' as const }
+    }
+  }
   const finalStatus = spec.statuses?.[spec.statuses.length - 1]
   const input = ListingInputSchema.parse({
     source: spec.source,
@@ -1272,6 +1362,9 @@ function buildListing(
       demand: spec.demand ?? null,
     },
     fieldSources,
+    sellerType: seller?.type ?? 'unknown',
+    sellerName: seller?.name ?? null,
+    sellerReference: seller?.reference ?? null,
   })
 
   log({
@@ -1296,12 +1389,7 @@ function buildListing(
   prices.forEach((p, index) => {
     if (index === 0) return
     // Lot 15 : un prix trouvé par une vérification est journalisé par elle.
-    if (
-      (CHECKS[spec.key] ?? []).some(
-        c => c.observed.price === p.price && c.days === spec.prices[index]?.[0]
-      )
-    )
-      return
+    if (foundByCheck(spec, index)) return
     log({
       at: p.at,
       actor: other,
@@ -1559,23 +1647,28 @@ function buildListing(
   if (createdDays >= 7 && createdAt < otherSince)
     views.push({ handle: other, seenAt: at(createdDays - 1, 21) })
 
-  // Lot 15 : vérifications sur le portail (règles de `domain`, données fictives).
-  const checks = buildChecks(spec, input, prices, statuses, at, log)
-  const seen = checks.filter(
-    c =>
-      c.outcome === 'unchanged' ||
-      c.outcome === 'changed' ||
-      (c.outcome === 'republished' && c.linkedListingId === null)
-  )
+  // Lots 15 et 18 : liens, vérifications et liens ajoutés (règles de
+  // `domain`, données fictives).
+  const timeline = buildLinksAndChecks(spec, input, prices, statuses, at, log)
+  const finalInput = ListingInputSchema.parse({
+    ...input,
+    ...timeline.seller,
+    fieldSources: timeline.fieldSources,
+  })
 
   const updatedAt =
-    [createdAt, ...prices.map(p => p.at), ...statuses.map(s => s.at)]
+    [
+      createdAt,
+      ...prices.map(p => p.at),
+      ...statuses.map(s => s.at),
+      ...timeline.touchedAt,
+    ]
       .sort()
       .at(-1) ?? createdAt
   return {
     key: spec.key,
     id,
-    input,
+    input: finalInput,
     createdAt,
     updatedAt,
     createdBy: spec.createdBy,
@@ -1588,12 +1681,14 @@ function buildListing(
     visits,
     rentComparables,
     views,
-    checks,
-    lastCheckedAt: checks.at(-1)?.at ?? null,
-    lastSeenOnlineAt: seen.at(-1)?.at ?? null,
+    checks: timeline.checks,
+    lastCheckedAt: timeline.lastCheckedAt,
+    lastSeenOnlineAt: timeline.lastSeenOnlineAt,
     republishedFromId: spec.republishedFrom
       ? demoId(`listing:${spec.republishedFrom}`)
       : null,
+    links: timeline.links,
+    sellerReferenceKey: normalizeSeller(timeline.seller).sellerReferenceKey,
   }
 }
 
@@ -1613,6 +1708,8 @@ interface DemoCheckSpec {
   outcome?: ListingCheckOutcome
   evidence?: string
   linkedKey?: string
+  /** Lot 18 : le lien vérifié (clé de `LINKS`) ; le lien d'origine sinon. */
+  link?: string
 }
 
 const CHECKS: Record<string, DemoCheckSpec[]> = {
@@ -1671,6 +1768,18 @@ const CHECKS: Record<string, DemoCheckSpec[]> = {
         'Vue sur SeLoger pendant une exploration : Prix : 175 000 €, 58 m², 3 pièces (exemple fictif)',
     },
   ],
+  // Lot 18 : un lien parmi trois plus en ligne (les autres le sont encore).
+  'chartrons-t2': [
+    {
+      days: 5,
+      hour: 9,
+      by: 'demo2',
+      channel: 'mcp',
+      link: 'bienici',
+      observed: { online: false },
+      evidence: 'Cette annonce n’est plus disponible. (exemple fictif)',
+    },
+  ],
   // La chronologie complète : inchangée, prix, plus en ligne, republiée.
   'cenon-t3-origine': [
     {
@@ -1708,7 +1817,182 @@ const CHECKS: Record<string, DemoCheckSpec[]> = {
   ],
 }
 
-function buildChecks(
+/** Lot 18 : le vendeur fictif de quelques annonces ; les autres restent « inconnu ». */
+const SELLERS: Record<
+  string,
+  { type: SellerType; name?: string; reference?: string }
+> = {
+  'chartrons-t2': {
+    type: 'agency',
+    name: '[Exemple] Immobilier des Chartrons',
+    reference: 'EX-2041',
+  },
+  'bastide-t2': {
+    type: 'agency',
+    name: 'Agence [Exemple]',
+    reference: 'EX-1987',
+  },
+  'merignac-t2': {
+    type: 'mandatary',
+    name: '[Exemple] Réseau des conseillers',
+    reference: 'EX-3310',
+  },
+  'cauderan-t3': { type: 'private' },
+}
+
+/**
+ * Lot 18 : les autres liens d'une annonce, ajoutés après son lien d'origine,
+ * avec ce qui a été lu sur leur page (fictif : identifiants impossibles
+ * `0000000…`, chemins « exemple »). Chaque ajout est une vérification
+ * « Lien ajouté » (écarts, prix de la fiche et vendeur par `domain`) et va
+ * au journal (`listing_link.added`).
+ */
+interface LinkSpec {
+  key: string
+  portal: ListingPortal
+  url: string
+  externalId?: string
+  days: number
+  hour?: number
+  by: DemoHandle
+  channel: 'web' | 'mcp'
+  origin: Exclude<ListingLinkOrigin, 'original' | 'email'>
+  observed: ListingObserved
+  evidence?: string
+  /** Rattaché d'office par l'exploration d'hier : la clé de son brouillon reconnu. */
+  draftKey?: string
+}
+
+const LBC = 'https://www.leboncoin.fr/ad/ventes_immobilieres/'
+
+const LINKS: Record<string, LinkSpec[]> = {
+  // Trois portails : SeLoger d'origine, Bien'ici ajouté par Sacha (depuis
+  // plus en ligne), Leboncoin trouvé par Claude 5 000 € plus cher.
+  'chartrons-t2': [
+    {
+      key: 'bienici',
+      portal: 'bienici',
+      url: 'https://www.bienici.com/annonce/vente/bordeaux/appartement/exemple-121',
+      days: 10,
+      hour: 20,
+      by: 'demo2',
+      channel: 'web',
+      origin: 'manual',
+      observed: { online: true, price: 172_000 },
+    },
+    {
+      key: 'leboncoin',
+      portal: 'leboncoin',
+      url: `${LBC}0000000121`,
+      externalId: '0000000121',
+      days: 3,
+      hour: 10,
+      by: 'demo',
+      channel: 'mcp',
+      origin: 'claude',
+      observed: {
+        online: true,
+        price: 177_000,
+        sellerType: 'agency',
+        sellerName: '[Exemple] Immobilier des Chartrons',
+        reference: 'Réf. EX-2041',
+      },
+      evidence:
+        'Prix : 177 000 € — Réf. EX-2041 — [Exemple] Immobilier des Chartrons (exemple fictif)',
+    },
+  ],
+  // Un particulier sur PAP et Leboncoin : le lien partagé depuis le téléphone.
+  'cauderan-t3': [
+    {
+      key: 'leboncoin',
+      portal: 'leboncoin',
+      url: `${LBC}0000000122`,
+      externalId: '0000000122',
+      days: 1,
+      hour: 18,
+      by: 'demo',
+      channel: 'web',
+      origin: 'share',
+      observed: { online: true, price: 268_000 },
+    },
+  ],
+  // Le mandataire : même réseau, même référence sur Bien'ici, rattaché
+  // d'office par l'exploration d'hier (« Ce n'est pas la même » le détache).
+  'merignac-t2': [
+    {
+      key: 'bienici',
+      portal: 'bienici',
+      url: 'https://www.bienici.com/annonce/vente/merignac/appartement/exemple-112',
+      days: 1,
+      hour: 11,
+      by: 'demo',
+      channel: 'mcp',
+      origin: 'exploration',
+      draftKey: 'attached',
+      observed: {
+        online: true,
+        price: 152_000,
+        surface: 47,
+        rooms: 2,
+        sellerType: 'mandatary',
+        sellerName: '[Exemple] Réseau des conseillers',
+        reference: 'EX-3310',
+      },
+      evidence:
+        'Vue sur Bien’ici pendant une exploration : 152 000 €, 47 m², 2 pièces — mandat EX-3310, [Exemple] Réseau des conseillers (exemple fictif)',
+    },
+  ],
+}
+
+/** Le prix `index` de l'annonce est-il trouvé par une de ses vérifications (même jour, même prix) ? */
+function foundByCheck(spec: ListingSpec, index: number): boolean {
+  const entry = spec.prices[index]
+  if (!entry || index === 0) return false
+  return (CHECKS[spec.key] ?? []).some(
+    c => c.observed.price === entry[1] && c.days === entry[0]
+  )
+}
+
+interface LinkTimeline {
+  links: DemoLink[]
+  checks: DemoCheck[]
+  lastCheckedAt: string | null
+  lastSeenOnlineAt: string | null
+  seller: SellerFacts
+  fieldSources: FieldProvenanceMap
+  /** Les instants où une écriture a changé la fiche (`updatedAt`). */
+  touchedAt: string[]
+}
+
+const linkStateOf = (l: DemoLink): LinkState => ({
+  id: l.id,
+  portal: l.portal,
+  url: l.url,
+  normalizedUrl: l.normalizedUrl,
+  externalId: l.externalId,
+  price: l.price,
+  priceAt: l.priceAt,
+  online: l.online,
+  offlineSince: l.offlineSince,
+  lastSeenOnlineAt: l.lastSeenOnlineAt,
+  lastCheckedAt: l.lastCheckedAt,
+  createdAt: l.createdAt,
+  origin: l.origin,
+  readSellerName: l.readSellerName,
+  readReference: l.readReference,
+})
+
+/**
+ * Lots 15 et 18 : la vie des liens d'une annonce, dans l'ordre : son lien
+ * d'origine (qui suit les changements de prix saisis), les vérifications de
+ * `CHECKS` (chacune sur un lien, comparée à la fiche et à ses liens de ce
+ * moment-là par `domain` : écarts, résultat, résumé) et les liens ajoutés
+ * de `LINKS`. Le prix de la fiche ne change que par ce que `domain` décide,
+ * et il doit retomber sur les prix de la fiche (`prices`), sinon le jeu est
+ * incohérent. Une vérification qui trouve un changement de prix ne le
+ * journalise pas une deuxième fois.
+ */
+function buildLinksAndChecks(
   spec: ListingSpec,
   input: ListingInput,
   prices: Array<{ at: string; price: number }>,
@@ -1720,113 +2004,408 @@ function buildChecks(
       after?: Record<string, unknown> | null
     }
   ) => void
-): DemoCheck[] {
-  return (CHECKS[spec.key] ?? []).map((c, index) => {
-    // À l'heure des changements de prix (11 h) : la vérification trouve celui
-    // du même instant, qu'elle a fait enregistrer.
-    const checkAt = at(c.days, c.hour ?? 11)
-    const latest = <T extends { at: string }>(list: T[]): T | undefined =>
-      list.filter(x => x.at < checkAt).at(-1)
-    const stored = {
-      ...input,
-      price: latest(prices)?.price ?? input.price,
-      status: latest(statuses)?.status ?? ('to_study' as const),
-    }
-    const observed = effectiveObserved(c.observed, c.outcome)
-    const diff = listingCheckDiff(stored, observed)
-    const resolution = resolveCheckOutcome({
-      declared: c.outcome,
-      observed,
-      diff,
-      linked: c.linkedKey !== undefined,
+): LinkTimeline {
+  const createdAt = prices[0]?.at ?? at(0)
+  const url = input.url as string
+  let links: DemoLink[] = [
+    {
+      id: demoId(`link:${spec.key}:original`),
+      key: 'original',
+      portal: portalOfListingSource(input.source, input.sourceLabel, url),
+      url,
+      normalizedUrl: linkKey(url) as string,
+      externalId: input.externalId,
+      price: prices[0]?.price ?? input.price,
+      priceAt: createdAt,
+      firstSeenAt: createdAt,
+      lastSeenOnlineAt: null,
+      lastCheckedAt: null,
+      offlineSince: null,
+      online: true,
+      origin: 'original',
+      readSellerName: null,
+      readReference: null,
+      evidence: null,
+      addedBy: spec.createdBy,
+      createdAt,
+      updatedAt: createdAt,
+      draftId: null,
+    },
+  ]
+  let seller: SellerFacts = {
+    sellerType: input.sellerType,
+    sellerName: input.sellerName,
+    sellerReference: input.sellerReference,
+  }
+  let fieldSources: FieldProvenanceMap = { ...input.fieldSources }
+  let fichePrice = prices[0]?.price ?? input.price
+  let lastCheckedAt: string | null = null
+  let lastSeenOnlineAt: string | null = null
+  const checks: DemoCheck[] = []
+  const touchedAt: string[] = []
+
+  /** Recopie l'état des liens rendu par `domain`. */
+  const merge = (after: readonly LinkState[], when: string): void => {
+    links = links.map(l => {
+      const s = after.find(x => x.id === l.id)
+      if (!s) return l
+      const next: DemoLink = {
+        ...l,
+        url: s.url,
+        normalizedUrl: s.normalizedUrl,
+        price: s.price,
+        priceAt: s.priceAt,
+        online: s.online,
+        offlineSince: s.offlineSince,
+        lastSeenOnlineAt: s.lastSeenOnlineAt,
+        readSellerName: s.readSellerName ?? null,
+        readReference: s.readReference ?? null,
+      }
+      return JSON.stringify(next) === JSON.stringify(l)
+        ? l
+        : { ...next, updatedAt: when }
     })
-    if (!resolution.ok) {
-      throw new Error(
-        `Vérification fictive incohérente : ${resolution.problem}`
-      )
-    }
-    const linked = c.linkedKey
-      ? SPECS.find(x => x.key === c.linkedKey)
-      : undefined
-    let changes = resolution.applyFacts ? diff.changes : []
-    let suggestedStatus = resolution.applyFacts ? diff.suggestedStatus : null
-    // La publication d'origine est la plus ancienne des deux (ajoutée plus tôt).
-    const linkedIsOrigin =
-      linked !== undefined &&
-      (linked.prices[0]?.[0] ?? 0) > (spec.prices[0]?.[0] ?? 0)
-    if (linked) {
-      const statusOf = (s: ListingSpec, current: ListingStatus | undefined) =>
-        current ??
-        (s.statuses ?? [])
-          .filter(([days]) => at(days, 19) <= checkAt)
-          .at(-1)?.[1] ??
-        'to_study'
-      const origin = linkedIsOrigin ? linked : spec
-      const successor = linkedIsOrigin ? spec : linked
-      const proposal = republicationProposal(
-        {
-          title: origin.title,
-          status: statusOf(origin, linkedIsOrigin ? undefined : stored.status),
-        },
-        { title: successor.title }
-      )
-      changes = [
-        ...changes.filter(
-          x => !(x.field === 'status' && x.disposition === 'proposed')
-        ),
-        ...(proposal ? [proposal] : []),
-      ]
-      suggestedStatus = proposal ? 'sold_or_withdrawn' : null
-    }
-    const summary = listingCheckSummary(
-      resolution.outcome,
-      changes,
-      linked
-        ? {
-            title: linked.title,
-            role: linkedIsOrigin ? 'predecessor' : 'successor',
-          }
-        : null
+  }
+  const checkedLink = (id: string, when: string): void => {
+    links = links.map(l =>
+      l.id === id ? { ...l, lastCheckedAt: when, updatedAt: when } : l
     )
-    const id = demoId(`check:${spec.key}:${index}`)
-    const linkedListingId = linked ? demoId(`listing:${linked.key}`) : null
-    const applied = changes.filter(x => x.disposition === 'applied')
+  }
+  /** Les faits et le vendeur lus deviennent « lus dans l'annonce », avec d'où. */
+  const applyRead = (
+    patch: object,
+    sellerPatch: Partial<SellerFacts>,
+    portal: ListingPortal,
+    channel: 'web' | 'mcp',
+    when: string
+  ): void => {
+    if (Object.keys(sellerPatch).length > 0) {
+      const next = normalizeSeller({ ...seller, ...sellerPatch })
+      seller = {
+        sellerType: next.sellerType,
+        sellerName: next.sellerName,
+        sellerReference: next.sellerReference,
+      }
+    }
+    const keys = [...Object.keys(patch), ...Object.keys(sellerPatch)]
+    if (keys.length === 0) return
+    const evidence = `Lue ${portalWhere(portal)}${channel === 'mcp' ? ' par Claude' : ''}`
+    fieldSources = {
+      ...fieldSources,
+      ...Object.fromEntries(
+        keys.map(key => [
+          key,
+          { source: 'listing' as const, recordedAt: when, evidence },
+        ])
+      ),
+    }
+    touchedAt.push(when)
+  }
+  const priceFound = (to: number, when: string): void => {
+    if (!prices.some(p => p.at === when && p.price === to)) {
+      throw new Error(
+        `Jeu de démo incohérent : ${spec.key} passe à ${to} € le ${when}, absent de ses prix`
+      )
+    }
+    fichePrice = to
+  }
+
+  type Event =
+    | { at: string; order: 0; kind: 'price'; price: number }
+    | {
+        at: string
+        order: 1
+        kind: 'check'
+        check: DemoCheckSpec
+        index: number
+      }
+    | { at: string; order: 2; kind: 'link'; link: LinkSpec }
+  const events: Event[] = [
+    ...prices.flatMap((p, index): Event[] =>
+      index === 0 || foundByCheck(spec, index)
+        ? []
+        : [{ at: p.at, order: 0, kind: 'price', price: p.price }]
+    ),
+    ...(CHECKS[spec.key] ?? []).map((check, index): Event => ({
+      at: at(check.days, check.hour ?? 11),
+      order: 1,
+      kind: 'check',
+      check,
+      index,
+    })),
+    ...(LINKS[spec.key] ?? []).map((link): Event => ({
+      at: at(link.days, link.hour ?? 10),
+      order: 2,
+      kind: 'link',
+      link,
+    })),
+  ].sort((a, b) => a.at.localeCompare(b.at) || a.order - b.order)
+
+  for (const event of events) {
+    const status =
+      statuses.filter(s => s.at < event.at).at(-1)?.status ??
+      ('to_study' as const)
+    const stored = { ...input, price: fichePrice, status }
+    const states = links.map(linkStateOf)
+    const priceSource = fieldSources.price?.source ?? null
+
+    // Un prix saisi : le lien principal le suit (comme la migration du lot 18).
+    if (event.kind === 'price') {
+      fichePrice = event.price
+      const primary = primaryLink(states)
+      links = links.map(l =>
+        l.id === primary?.id
+          ? { ...l, price: event.price, priceAt: event.at, updatedAt: event.at }
+          : l
+      )
+      continue
+    }
+
+    if (event.kind === 'check') {
+      const c = event.check
+      const checkAt = event.at
+      const link = links.find(l => l.key === (c.link ?? 'original'))
+      if (!link) {
+        throw new Error(`Lien de démo inconnu : ${spec.key} / ${c.link}`)
+      }
+      const observed = effectiveObserved(c.observed, c.outcome)
+      const diff = linkCheckDiff({
+        stored,
+        priceSource,
+        seller,
+        links: states,
+        linkId: link.id,
+        observed,
+        now: checkAt,
+      })
+      const resolution = resolveLinkCheckOutcome({
+        declared: c.outcome,
+        observed,
+        diff,
+        linked: c.linkedKey !== undefined,
+      })
+      if (!resolution.ok) {
+        throw new Error(
+          `Vérification fictive incohérente : ${resolution.problem}`
+        )
+      }
+      const linked = c.linkedKey
+        ? SPECS.find(x => x.key === c.linkedKey)
+        : undefined
+      let changes = resolution.applyFacts ? diff.changes : []
+      let suggestedStatus = resolution.applyFacts ? diff.suggestedStatus : null
+      // La publication d'origine est la plus ancienne des deux (ajoutée plus tôt).
+      const linkedIsOrigin =
+        linked !== undefined &&
+        (linked.prices[0]?.[0] ?? 0) > (spec.prices[0]?.[0] ?? 0)
+      if (linked) {
+        const statusOf = (s: ListingSpec, current: ListingStatus | undefined) =>
+          current ??
+          (s.statuses ?? [])
+            .filter(([days]) => at(days, 19) <= checkAt)
+            .at(-1)?.[1] ??
+          'to_study'
+        const origin = linkedIsOrigin ? linked : spec
+        const successor = linkedIsOrigin ? spec : linked
+        const proposal = republicationProposal(
+          {
+            title: origin.title,
+            status: statusOf(
+              origin,
+              linkedIsOrigin ? undefined : stored.status
+            ),
+          },
+          { title: successor.title }
+        )
+        changes = [
+          ...changes.filter(
+            x => !(x.field === 'status' && x.disposition === 'proposed')
+          ),
+          ...(proposal ? [proposal] : []),
+        ]
+        suggestedStatus = proposal ? 'sold_or_withdrawn' : null
+      }
+      const summary = listingCheckSummary(
+        resolution.outcome,
+        changes,
+        linked
+          ? {
+              title: linked.title,
+              role: linkedIsOrigin ? 'predecessor' : 'successor',
+            }
+          : null
+      )
+      if (resolution.applyFacts) {
+        if (diff.price) priceFound(diff.price.to, checkAt)
+        merge(diff.linksAfter, checkAt)
+        applyRead(diff.patch, diff.sellerPatch, link.portal, c.channel, checkAt)
+      }
+      checkedLink(link.id, checkAt)
+      lastCheckedAt = checkAt
+      if (resolution.seenOnline) lastSeenOnlineAt = checkAt
+      const id = demoId(`check:${spec.key}:${event.index}`)
+      const linkedListingId = linked ? demoId(`listing:${linked.key}`) : null
+      const applied = changes.filter(x => x.disposition === 'applied')
+      log({
+        at: checkAt,
+        actor: c.by,
+        channel: c.channel,
+        action: 'listing.checked',
+        listingKey: spec.key,
+        before: applied.length
+          ? {
+              facts: Object.fromEntries(applied.map(x => [x.field, x.before])),
+            }
+          : null,
+        after: {
+          checkId: id,
+          outcome: resolution.outcome,
+          summary,
+          ...(applied.length
+            ? {
+                facts: Object.fromEntries(applied.map(x => [x.field, x.after])),
+              }
+            : {}),
+          ...(suggestedStatus ? { suggestedStatus } : {}),
+          ...(linkedListingId ? { linkedListingId } : {}),
+          linkId: link.id,
+          portal: link.portal,
+        },
+      })
+      checks.push({
+        id,
+        at: checkAt,
+        by: c.by,
+        channel: c.channel,
+        outcome: resolution.outcome,
+        changes,
+        summary,
+        evidence: sanitizeEvidence(c.evidence),
+        checkedUrl: link.url,
+        linkedListingId,
+        suggestedStatus,
+        linkId: link.id,
+      })
+      continue
+    }
+
+    // Un lien ajouté, avec ce qui a été lu sur sa page.
+    const l = event.link
+    const addAt = event.at
+    const id = demoId(`link:${spec.key}:${l.key}`)
+    const portal = detectLinkPortal(l.url, l.portal)
+    const initial: LinkState = {
+      id,
+      portal,
+      url: l.url,
+      normalizedUrl: linkKey(l.url) as string,
+      externalId: l.externalId ?? null,
+      price: null,
+      priceAt: null,
+      online: l.observed.online !== false,
+      offlineSince: l.observed.online === false ? addAt : null,
+      lastSeenOnlineAt: null,
+      lastCheckedAt: null,
+      createdAt: addAt,
+      origin: l.origin,
+    }
+    const diff = linkAddedDiff({
+      stored,
+      priceSource,
+      seller,
+      links: states,
+      link: initial,
+      observed: l.observed,
+      now: addAt,
+    })
+    const summary = listingCheckSummary('link_added', diff.changes)
+    const checked =
+      l.observed.online !== undefined || l.observed.price !== undefined
+    const evidence = sanitizeEvidence(l.evidence, LISTING_LINK_EVIDENCE_MAX)
+    const draftId = l.draftKey
+      ? demoId(`exploration-draft:${l.draftKey}`)
+      : null
+    if (diff.price) priceFound(diff.price.to, addAt)
+    links.push({
+      ...initial,
+      key: l.key,
+      externalId: l.externalId ?? null,
+      firstSeenAt: addAt,
+      readSellerName: null,
+      readReference: null,
+      evidence,
+      addedBy: l.by,
+      updatedAt: addAt,
+      draftId,
+    })
+    merge(diff.linksAfter, addAt)
+    if (checked) {
+      checkedLink(id, addAt)
+      lastCheckedAt = addAt
+    }
+    if (l.observed.online === true) lastSeenOnlineAt = addAt
+    applyRead(diff.patch, diff.sellerPatch, portal, l.channel, addAt)
+    touchedAt.push(addAt)
+    const checkId = demoId(`check:${spec.key}:link:${l.key}`)
+    checks.push({
+      id: checkId,
+      at: addAt,
+      by: l.by,
+      channel: l.channel,
+      outcome: 'link_added',
+      changes: diff.changes,
+      summary,
+      evidence,
+      checkedUrl: l.url,
+      linkedListingId: null,
+      suggestedStatus: diff.suggestedStatus,
+      linkId: id,
+    })
+    const facts = diff.changes.filter(
+      c => c.disposition === 'applied' && c.field !== 'link'
+    )
     log({
-      at: checkAt,
-      actor: c.by,
-      channel: c.channel,
-      action: 'listing.checked',
+      at: addAt,
+      actor: l.by,
+      channel: l.channel,
+      action: 'listing_link.added',
       listingKey: spec.key,
-      before: applied.length
-        ? { facts: Object.fromEntries(applied.map(x => [x.field, x.before])) }
+      before: facts.length
+        ? { facts: Object.fromEntries(facts.map(c => [c.field, c.before])) }
         : null,
       after: {
-        checkId: id,
-        outcome: resolution.outcome,
+        linkId: id,
+        portal,
+        url: l.url,
+        origin: l.origin,
+        auto: l.draftKey !== undefined,
+        ...(draftId ? { draftId } : {}),
+        checkId,
         summary,
-        ...(applied.length
-          ? {
-              facts: Object.fromEntries(applied.map(x => [x.field, x.after])),
-            }
+        ...(l.observed.price !== undefined
+          ? { linkPrice: l.observed.price }
           : {}),
-        ...(suggestedStatus ? { suggestedStatus } : {}),
-        ...(linkedListingId ? { linkedListingId } : {}),
+        ...(facts.length
+          ? { facts: Object.fromEntries(facts.map(c => [c.field, c.after])) }
+          : {}),
       },
     })
-    return {
-      id,
-      at: checkAt,
-      by: c.by,
-      channel: c.channel,
-      outcome: resolution.outcome,
-      changes,
-      summary,
-      evidence: sanitizeEvidence(c.evidence),
-      checkedUrl: input.url,
-      linkedListingId,
-      suggestedStatus,
-    }
-  })
+  }
+
+  if (fichePrice !== input.price) {
+    throw new Error(
+      `Jeu de démo incohérent : ${spec.key} finit à ${fichePrice} € au lieu de ${input.price} €`
+    )
+  }
+  return {
+    links,
+    checks,
+    lastCheckedAt,
+    lastSeenOnlineAt,
+    seller,
+    fieldSources,
+    touchedAt,
+  }
 }
 
 const MANUAL_TASKS: Record<

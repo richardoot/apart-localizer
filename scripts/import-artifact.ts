@@ -11,6 +11,9 @@
  * (travaux, phase 2, avis, tâches, « vu par » Richard), puis géocode les
  * adresses par la Géoplateforme IGN avec un cache sur disque. Idempotent :
  * une annonce déjà importée (même identifiant externe) est laissée telle quelle.
+ * Lot 18 : le lien de l'annonce devient son lien d'origine (`listing_links`),
+ * comme le fait la migration pour les annonces déjà en base ; un lien déjà
+ * pris dans l'espace reçoit une clé suffixée `#doublon-<id>`.
  *
  * Le SQL géographique n'est pas ici : le point passe par GeoService.
  */
@@ -23,6 +26,7 @@ import { config as loadEnv } from 'dotenv'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
 import { taskFieldForLabel } from '@apart/contracts'
+import { linkKey, portalOfListingSource } from '@apart/domain'
 import { Prisma, PrismaClient } from '../apps/api/src/generated/prisma/index.js'
 import { GeoService } from '../apps/api/src/geo/geo.service.js'
 import type { PrismaService } from '../apps/api/src/prisma/prisma.service.js'
@@ -351,6 +355,37 @@ async function importListing(
             : undefined,
       },
     })
+    // Lot 18 : le lien d'origine, comme la migration pour les annonces en base.
+    const key = linkKey(input.url)
+    if (input.url && key) {
+      const taken = await tx.listingLink.findUnique({
+        where: {
+          workspaceId_normalizedUrl: { workspaceId, normalizedUrl: key },
+        },
+        select: { id: true },
+      })
+      const at = item.createdAt ? new Date(item.createdAt) : new Date()
+      await tx.listingLink.create({
+        data: {
+          workspaceId,
+          listingId: listing.id,
+          portal: portalOfListingSource(
+            input.source,
+            input.sourceLabel,
+            input.url
+          ),
+          url: input.url.trim(),
+          normalizedUrl: taken ? `${key}#doublon-${listing.id}` : key,
+          externalId: item.externalId,
+          price: input.price > 0 ? new Prisma.Decimal(input.price) : null,
+          priceAt: input.price > 0 ? at : null,
+          firstSeenAt: at,
+          origin: 'original',
+          addedById: richardId ?? null,
+          createdAt: at,
+        },
+      })
+    }
     await tx.activityLog.create({
       data: {
         workspaceId,

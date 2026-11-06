@@ -12,6 +12,7 @@ import {
   MEMBERS,
   fakeEvaluated,
   fakeExchanges,
+  fakeLink,
   fakeOffer,
   fakeTargetPriceReport,
 } from '@/test/fixtures'
@@ -210,6 +211,61 @@ describe('ListingPanel', () => {
     expect(apiMock.listings.sensitivity).not.toHaveBeenCalled()
     expect(apiMock.listings.context).not.toHaveBeenCalled()
     expect(apiMock.visits.list).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('lot 18 : l’en-tête dit où la trouver et qui la vend ; la synthèse a « Où la trouver » et « Qui la vend »', async () => {
+    const multi = fakeEvaluated(
+      {
+        sellerType: 'agency',
+        sellerName: '[Exemple] Immobilier des Chartrons',
+        sellerReference: 'EX-2041',
+        sellerReferenceKey: 'EX2041',
+      },
+      {
+        links: [
+          fakeLink(),
+          fakeLink({
+            id: 'ffffffff-ffff-4fff-8fff-ffffffffff02',
+            portal: 'seloger',
+            url: 'https://www.seloger.com/annonces/0000000202.htm',
+            primary: false,
+            online: false,
+            offlineSince: '2026-11-04T09:00:00.000Z',
+            createdAt: '2026-11-03T10:00:00.000Z',
+          }),
+        ],
+      }
+    )
+    apiMock.listings.get.mockResolvedValue(multi)
+    apiMock.listings.markSeen.mockResolvedValue({ ...multi, isNewForMe: false })
+    const wrapper = mountPanel()
+    await flushPromises()
+    const where = query('[data-testid="listing-where"]')
+    expect(where?.textContent).toContain('Sur')
+    const chips = [...(where?.querySelectorAll('a[data-portal]') ?? [])]
+    expect(chips.map(c => c.getAttribute('data-portal'))).toEqual([
+      'leboncoin',
+      'seloger',
+    ])
+    expect(chips[1]?.getAttribute('data-online')).toBe('false')
+    expect(chips[0]?.getAttribute('rel')).toBe('noopener noreferrer')
+    expect(query('[data-testid="seller-chip"]')?.textContent).toBe(
+      'Agence · [Exemple] Immobilier des Chartrons'
+    )
+    expect(query('[data-testid="reference-chip"]')?.textContent).toBe(
+      'Réf. EX-2041'
+    )
+    // Plus de « voir l'annonce » : les pastilles sont les liens.
+    expect(text()).not.toContain("voir l'annonce")
+    expect(query('[data-testid="listing-links"]')?.textContent).toContain(
+      'Où la trouver'
+    )
+    expect(query('[data-testid="seller-section"]')?.textContent).toContain(
+      'Qui la vend'
+    )
+    await openTab('suivi')
+    expect(query('[data-testid="check-link"]')).not.toBeNull()
     wrapper.unmount()
   })
 

@@ -5,7 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import {
+  AUTO_ATTACH_REVIEW_DAYS,
   DuplicateCandidateSchema,
+  EXPLORATION_LINK_PORTAL,
   EXPLORATION_PORTAL_LABELS,
   ListingCheckInputSchema,
   ListingDraftSchema,
@@ -23,20 +25,39 @@ import type {
   ListingInput,
   ListingObserved,
 } from '@apart/contracts'
-import { formatEuros } from '@apart/domain'
+import { detectLinkPortal, formatEuros, linkKey } from '@apart/domain'
 import { z } from 'zod'
 import { ActivityService } from '../activity/activity.service'
 import { CandidateFitService } from '../exploration/candidate-fit.service'
 import { ListingChecksService } from '../listings/listing-checks.service'
+import { ListingLinksService } from '../listings/listing-links.service'
 import { ListingsService } from '../listings/listings.service'
 import { placementOf } from '../listings/listing.mapper'
 import { PrismaService } from '../prisma/prisma.service'
 import type { Prisma } from '../generated/prisma'
-import type { ListingDraft as DraftRow, Member } from '../generated/prisma'
+import type {
+  ListingDraft as DraftRow,
+  ListingPortal,
+  Member,
+} from '../generated/prisma'
 
-/** Ce qu'une lecture de brouillon charge avec lui : la vérification d'un brouillon reconnu. */
+/**
+ * Ce qu'une lecture de brouillon charge avec lui : la vérification d'un
+ * brouillon reconnu ; lot 18 : l'annonce et le lien d'un rattachement
+ * d'office.
+ */
 const draftInclude = {
   mergedCheck: { select: { id: true, summary: true } },
+  listing: {
+    select: {
+      id: true,
+      title: true,
+      price: true,
+      sellerName: true,
+      sellerReference: true,
+    },
+  },
+  attachedLink: { select: { id: true, portal: true } },
 } as const
 
 type DraftRowWithCheck = Prisma.ListingDraftGetPayload<{
@@ -51,8 +72,20 @@ function draftInput(row: Pick<DraftRow, 'input'>): ListingInput {
     : ListingInputSchema.parse({ title: 'Annonce reçue', price: 0 })
 }
 
+type DraftListingRef = {
+  id: string
+  title: string
+  price: { toString(): string } | number
+  sellerName: string | null
+  sellerReference: string | null
+}
+
 export function toDraftDto(
-  row: DraftRow & { mergedCheck?: { id: string; summary: string } | null },
+  row: DraftRow & {
+    mergedCheck?: { id: string; summary: string } | null
+    listing?: DraftListingRef | null
+    attachedLink?: { id: string; portal: ListingPortal } | null
+  },
   fit: ListingCriteriaFit | null = null
 ): ListingDraft {
   return ListingDraftSchema.parse({
@@ -88,6 +121,26 @@ export function toDraftDto(
           }
         : null,
     fit,
+    // Lot 18 : le lien rattaché d'office (même agence, même référence).
+    attachment:
+      row.status === 'merged' && row.attachedAt && row.listing
+        ? {
+            listingId: row.listing.id,
+            listingTitle: row.listing.title,
+            linkId: row.attachedLink?.id ?? row.attachedLinkId,
+            portal:
+              row.attachedLink?.portal ??
+              (row.portal
+                ? EXPLORATION_LINK_PORTAL[row.portal]
+                : detectLinkPortal(row.url)),
+            attachedAt: row.attachedAt.toISOString(),
+            fichePrice: Number(row.listing.price),
+            sellerName: row.listing.sellerName,
+            sellerReference: row.listing.sellerReference,
+            summary: row.mergedCheck?.summary ?? 'Lien rattaché à la fiche',
+          }
+        : null,
+    detachedAt: row.detachedAt?.toISOString() ?? null,
   })
 }
 
@@ -127,19 +180,24 @@ export class DraftsService {
     private readonly activity: ActivityService,
     private readonly listings: ListingsService,
     private readonly checks: ListingChecksService,
-    private readonly fit: CandidateFitService
+    private readonly fit: CandidateFitService,
+    private readonly links: ListingLinksService
   ) {}
 
   async list(
     member: Member,
     status: ListingDraftStatus,
-    explorationId?: string
+    explorationId?: string,
+    attached = false
   ): Promise<ListingDraft[]> {
+    const since = new Date(Date.now() - AUTO_ATTACH_REVIEW_DAYS * 86_400_000)
     const rows = await this.prisma.listingDraft.findMany({
       where: {
         workspaceId: member.workspaceId,
-        status,
+        status: attached ? 'merged' : status,
         ...(explorationId ? { explorationId } : {}),
+        // Lot 18 : les liens rattachés d'office des derniers jours.
+        ...(attached ? { attachedAt: { gte: since } } : {}),
       },
       include: draftInclude,
       orderBy: { receivedAt: 'desc' },
@@ -398,17 +456,60 @@ export class DraftsService {
     const item = await this.listings.get(member, request.listingId)
     const input = draftInput(row)
     const portal = row.portal ? EXPLORATION_PORTAL_LABELS[row.portal] : null
-    const result = await this.checks.apply(
-      member,
-      request.listingId,
-      ListingCheckInputSchema.parse({
-        observed: observedFromDraft(input),
-        evidence: `Même bien vu ${portal ? `sur ${portal}` : 'dans une alerte'}${input.price > 0 ? ` : Prix : ${formatEuros(input.price)}` : ''}`,
-        ...(row.url ? { checkedUrl: row.url } : {}),
-        expectedUpdatedAt: request.expectedUpdatedAt ?? item.listing.updatedAt,
-      }),
-      'web'
-    )
+    const evidence = `Même bien vu ${portal ? `sur ${portal}` : 'dans une alerte'}${input.price > 0 ? ` : Prix : ${formatEuros(input.price)}` : ''}`
+    const expectedUpdatedAt =
+      request.expectedUpdatedAt ?? item.listing.updatedAt
+    // Lot 18 : « C'est la même » ajoute le lien du brouillon à la fiche (le
+    // prix lu devient celui de ce lien) ; un lien déjà sur la fiche est
+    // vérifié ; sans lien, la vérification du lot 16.
+    const key = linkKey(row.url)
+    const own = key ? item.links.find(l => l.normalizedUrl === key) : undefined
+    let result: { check: { id: string; summary: string } }
+    if (row.url && key && !own) {
+      const { price, ...facts } = observedFromDraft(input)
+      const added = await this.links.add(
+        member,
+        request.listingId,
+        {
+          url: row.url,
+          portal: row.portal
+            ? EXPLORATION_LINK_PORTAL[row.portal]
+            : detectLinkPortal(row.url),
+          online: true,
+          ...(price !== undefined ? { price } : {}),
+          facts,
+          ...(input.sellerType !== 'unknown'
+            ? { sellerType: input.sellerType }
+            : {}),
+          ...(input.sellerName ? { sellerName: input.sellerName } : {}),
+          ...(input.sellerReference
+            ? { reference: input.sellerReference }
+            : {}),
+          evidence,
+          expectedUpdatedAt,
+        },
+        {
+          channel: 'web',
+          origin: row.origin === 'exploration' ? 'exploration' : 'email',
+          draftId: id,
+        }
+      )
+      if (!added.check) throw new ConflictException('Lien non ajouté')
+      result = { check: added.check }
+    } else {
+      const observed = observedFromDraft(input)
+      result = await this.checks.apply(
+        member,
+        request.listingId,
+        ListingCheckInputSchema.parse({
+          observed: own ? { ...observed, online: true } : observed,
+          evidence,
+          ...(own ? { linkId: own.id, checkedUrl: row.url } : {}),
+          expectedUpdatedAt,
+        }),
+        'web'
+      )
+    }
     const saved = await this.prisma.$transaction(async tx => {
       const written = await tx.listingDraft.updateMany({
         where: { id, status: 'pending' },
@@ -445,6 +546,51 @@ export class DraftsService {
       })
     })
     return toDraftDto(saved)
+  }
+
+  /**
+   * Lot 18 : « Ce n'est pas la même » sur un lien rattaché d'office : le lien
+   * est retiré de la fiche (journalisé, le prix de la fiche suit ses liens
+   * restants) et le brouillon revient « à valider », noté « c'en est une
+   * autre » (ses doublons ne sont plus proposés).
+   */
+  async detach(member: Member, id: string): Promise<ListingDraft> {
+    const row = await this.row(member, id)
+    if (row.status !== 'merged' || !row.attachedAt || !row.listingId) {
+      throw new ConflictException(
+        'Ce brouillon n’a pas de lien rattaché d’office à détacher.'
+      )
+    }
+    // Le lien retiré et le brouillon rouvert dans une même transaction.
+    const now = new Date()
+    const reopen = async (tx: Prisma.TransactionClient): Promise<void> => {
+      const written = await tx.listingDraft.updateMany({
+        where: { id, status: 'merged' },
+        data: {
+          status: 'pending',
+          listingId: null,
+          attachedLinkId: null,
+          mergedCheckId: null,
+          decidedAt: null,
+          decidedById: null,
+          detachedAt: now,
+          distinctAt: now,
+        },
+      })
+      if (written.count === 0) throw this.alreadyDecided()
+    }
+    if (row.attachedLinkId) {
+      await this.links.detach(
+        member,
+        row.listingId,
+        row.attachedLinkId,
+        id,
+        reopen
+      )
+    } else {
+      await this.prisma.$transaction(tx => reopen(tx))
+    }
+    return this.get(member, id)
   }
 
   /** « C'en est une autre » : les doublons probables ne sont plus proposés. */

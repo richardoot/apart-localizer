@@ -1,8 +1,10 @@
 import {
   LISTING_CHECK_OUTCOME_LABELS,
   CRITERIA_FIT_LEVEL_LABELS,
+  LISTING_PORTAL_LABELS,
   LISTING_STATUS_LABELS,
   RENTAL_VERDICT_LABELS,
+  SELLER_TYPE_LABELS,
   VERDICT_LABELS,
 } from '@apart/contracts'
 import type { EvaluatedListing } from '@apart/contracts'
@@ -110,6 +112,11 @@ export const LISTING_CSV_COLUMNS = [
   // Lot 14, en fin de ligne pour ne pas décaler les colonnes existantes.
   'Adéquation',
   'Raisons de l’adéquation',
+  // Lot 18, en fin de ligne : vendeur et liens des portails.
+  'Vendeur',
+  'Agence',
+  'Référence',
+  'Liens',
 ] as const
 
 /** Une ligne par annonce, dans l'ordre de `LISTING_CSV_COLUMNS`. */
@@ -172,7 +179,24 @@ export function listingCsvRow(
     item.lastCheck ? LISTING_CHECK_OUTCOME_LABELS[item.lastCheck.outcome] : '',
     fitCell(item),
     fitReasonsCell(item),
+    SELLER_TYPE_LABELS[l.sellerType],
+    l.sellerName,
+    l.sellerReference,
+    linksCell(item),
   ]
+}
+
+/**
+ * Lot 18 : les liens de l'annonce, le principal d'abord, séparés par « | » :
+ * « Leboncoin : https://… | SeLoger : https://… (plus en ligne) ».
+ */
+function linksCell(item: EvaluatedListing): string {
+  return item.links
+    .map(
+      link =>
+        `${LISTING_PORTAL_LABELS[link.portal]} : ${link.url}${link.online ? '' : ' (plus en ligne)'}`
+    )
+    .join(' | ')
 }
 
 /** Lot 14 : le niveau d'adéquation, ou « Aucun critère actif ». */

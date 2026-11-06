@@ -190,6 +190,11 @@ const duplicate: DuplicateCandidate = {
       detail: 'Bordeaux : 66 m² contre 66 m², 215 000 € contre 210 000 €',
     },
   ],
+  certain: false,
+  sellerType: 'unknown',
+  sellerName: null,
+  sellerReference: null,
+  linkCount: 1,
 }
 
 const changedCheck: ExplorationCheck = {
@@ -1113,6 +1118,7 @@ describe('compte rendu', () => {
       known: 2,
       dismissed: 1,
       out: 2,
+      attached: 0,
       draftsCreated: 2,
       checksChanged: 1,
       blockedPortals: 1,
@@ -1512,5 +1518,100 @@ describe('adéquation : verdict inconnu (annonce lue sans loyer visé)', () => {
     expect(result.level).toBe('to_confirm')
     expect(result.reasons).toEqual(['verdict inconnu : loyer visé à saisir'])
     expect(result.locationPending).toBe(false)
+  })
+})
+
+describe('lot 18 : lien rattaché d’office (même agence, même référence)', () => {
+  const target = {
+    id: LISTING_ID,
+    title: '[Exemple] T3 68 m², balcon sud',
+    status: 'to_study' as const,
+  }
+
+  it('rattaché d’office, avant les écartées et les hors critères', () => {
+    const decision = triageCandidate(
+      facts({ attachTo: target, fit: fitOf(289_000) })
+    )
+    expect(decision.outcome).toBe('attached')
+    expect(decision.listing).toEqual(target)
+    expect(decision.why).toBe(
+      'Même agence et même référence que « [Exemple] T3 68 m², balcon sud » : lien rattaché d’office à sa fiche'
+    )
+    const triaged = candidateTriage(facts({ attachTo: target }))
+    expect(triaged.outcome).toBe('attached')
+    expect(triaged.warnings).toEqual([])
+    expect(triaged.check).toBeNull()
+  })
+
+  it('un brouillon déjà à valider au même lien n’est pas rattaché', () => {
+    const decision = triageCandidate(
+      facts({
+        attachTo: target,
+        sameUrl: {
+          kind: 'draft',
+          draftId: DRAFT_ID,
+          status: 'pending',
+          title: 'x',
+          reason: null,
+          decidedAt: null,
+          decidedBy: null,
+        },
+      })
+    )
+    expect(decision.outcome).toBe('new')
+    expect(decision.alreadyPending).toBe(true)
+  })
+
+  it('compté et résumé dans le compte rendu, rangé avec les déjà suivies', () => {
+    const items = [
+      { outcome: 'attached' as const, alreadyPending: false, check: null },
+      { outcome: 'new' as const, alreadyPending: false, check: null },
+    ]
+    const counts = explorationCounts(items)
+    expect(counts.attached).toBe(1)
+    expect(explorationSummaryText(counts)).toBe(
+      '2 annonces vues : 1 à valider, 1 rattachée d’office'
+    )
+    const lines = [
+      { portal: 'seloger' as const, outcome: 'attached' as const, why: 'x' },
+      { portal: 'seloger' as const, outcome: 'attached' as const, why: 'y' },
+    ]
+    expect(
+      portalBilan(
+        [
+          {
+            portal: 'seloger',
+            status: 'read',
+            count: 2,
+            note: null,
+            searchUrl: null,
+          },
+        ],
+        lines
+      )[0]?.note
+    ).toBe('2 rattachées d’office')
+    expect(filterExplorationLines(lines, 'known')).toHaveLength(2)
+    expect(explorationLineFilterCounts(lines).todo).toBe(0)
+  })
+
+  it('le vendeur lu passe dans la vérification et dans le brouillon', () => {
+    const read = candidate({
+      sellerType: 'agency',
+      sellerName: '[Exemple] Immobilier des Chartrons',
+      reference: 'Réf. EX-2041',
+    })
+    expect(candidateObserved(read)).toMatchObject({
+      sellerType: 'agency',
+      sellerName: '[Exemple] Immobilier des Chartrons',
+      reference: 'Réf. EX-2041',
+    })
+    const { input } = draftInputFromCandidate(read)
+    expect(input.sellerType).toBe('agency')
+    expect(input.sellerReference).toBe('EX-2041')
+    expect(input.fieldSources.sellerReference?.source).toBe('listing')
+    const privateSeller = draftInputFromCandidate(
+      candidate({ sellerType: 'private', reference: 'EX-1' })
+    ).input
+    expect(privateSeller.sellerReference).toBeNull()
   })
 })

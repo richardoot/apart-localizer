@@ -366,7 +366,7 @@ describe('Extraction IA, géocodage, doublons (e2e)', () => {
       expect(row?.sourceText).toBe(SAMPLE_LISTING_TEXT)
     })
 
-    it('signale les doublons sans bloquer et journalise « créer quand même »', async () => {
+    it('signale les doublons, refuse la même annonce (lien, agence et référence) et journalise « créer quand même »', async () => {
       const listing = await extractedListing()
       const first = await request(ctx.server)
         .post('/listings')
@@ -374,20 +374,46 @@ describe('Extraction IA, géocodage, doublons (e2e)', () => {
         .send(listing)
         .expect(201)
       expect(first.body.duplicates).toEqual([])
-      const second = await request(ctx.server)
+      // Lot 18 : un lien n'est que sur une fiche, même « créer quand même ».
+      const sameLink = await request(ctx.server)
         .post('/listings')
         .set(ctx.auth(chloe))
         .send({ ...listing, title: 'Revue par Chloé', ignoreDuplicates: true })
+        .expect(409)
+      expect(sameLink.body.message).toContain(
+        `Ce lien est déjà celui de l’annonce « ${listing.title} »`
+      )
+      // Même agence et même référence : la même annonce, proposée en lien.
+      const sameReference = await request(ctx.server)
+        .post('/listings')
+        .set(ctx.auth(chloe))
+        .send({ ...listing, url: null, title: 'Revue par Chloé' })
+        .expect(409)
+      expect(sameReference.body.message).toContain(
+        'Même agence et même référence'
+      )
+      expect(sameReference.body.message).toContain('add_listing_link')
+      const second = await request(ctx.server)
+        .post('/listings')
+        .set(ctx.auth(chloe))
+        .send({
+          ...listing,
+          url: null,
+          title: 'Revue par Chloé',
+          ignoreDuplicates: true,
+        })
         .expect(201)
       expect(second.body.duplicates).toHaveLength(1)
       expect(second.body.duplicates[0]).toMatchObject({
         listingId: first.body.listing.id,
         title: listing.title,
         score: 1,
+        certain: true,
+        sellerReference: 'AGF-12345',
       })
       expect(
         second.body.duplicates[0].reasons.map((r: { kind: string }) => r.kind)
-      ).toContain('same_url')
+      ).toContain('same_reference')
       const log = await ctx.prisma.activityLog.findFirst({
         where: { listingId: second.body.listing.id, action: 'listing.created' },
       })

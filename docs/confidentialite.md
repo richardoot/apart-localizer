@@ -70,7 +70,7 @@ elles sont protégées.
   suivante, MCP compris), ses abonnements push sont supprimés. Un espace quitté pour en rejoindre
   un autre n'est jamais supprimé.
 - **Questions aux agences (lot 17, ADR 0027)** : le **contact de l'annonceur** (`listing_contacts` :
-  nom de l'agence, interlocuteur, e-mail, téléphone, lien de la messagerie du portail, canal
+  nom de l'agence, lu et écrit sur l'annonce depuis le lot 18, interlocuteur, e-mail, téléphone, lien de la messagerie du portail, canal
   préféré) est une donnée personnelle d'un tiers : seulement ce que l'annonce donne, saisi par un
   membre ou complété par Claude (lu sur la page de l'annonce), modifiable et effaçable dans
   l'onglet « Échanges » de la fiche (`DELETE /listings/:id/contact`), jamais vidé ni supprimé par
@@ -87,6 +87,20 @@ elles sont protégées.
   validation d'un membre, avec les outils de l'utilisateur (Gmail, messagerie du portail dans son
   navigateur) ; l'e-mail reçu n'est pas conservé en entier. Contacts et demandes partent avec
   l'annonce (cascade) et figurent dans l'export JSON.
+- **Une annonce, plusieurs portails (lot 18, ADR 0028)** : les liens d'une annonce
+  (`listing_links`) sont des pages publiques de portails, lues par Claude dans le navigateur de
+  l'utilisateur ou collées par un membre ; le serveur n'en télécharge aucune et ne suit aucun
+  lien. Un lien garde son portail, son URL, son prix affiché, ses dates (vu, vérifié, hors
+  ligne), son origine, l'agence et la référence lues sur sa page, son auteur et un extrait-preuve
+  **court** (500 caractères au plus, téléphones et e-mails masqués : `sanitizeEvidence`). Le
+  **vendeur** de l'annonce (agence, mandataire, particulier ou inconnu), le nom de l'agence ou du
+  réseau et la référence sont des faits de l'annonce, pas des coordonnées : le nom d'une personne
+  (conseiller, mandataire nommé, particulier) n'y est jamais écrit ; il ne vit que dans le contact
+  de l'annonceur (lot 17), effaçable. Le nom de l'agence du contact est désormais celui de
+  l'annonce (la migration l'y a reporté) : il figure dans la colonne CSV « Agence », et effacer
+  le contact ne l'efface pas. Un particulier n'a ni agence ni référence. Liens et vendeur partent
+  avec l'annonce (cascade) et figurent dans l'export (JSON ; CSV : vendeur, agence, référence et
+  liens).
 
 ## Journaux
 
@@ -121,4 +135,7 @@ elles sont protégées.
   à leur auteur.
 - **Tiers (lot 17)** : le contact d'un annonceur s'efface depuis l'onglet « Échanges » de la
   fiche (bouton « Effacer ») ; les demandes déjà envoyées gardent le nom affiché du destinataire
-  et le texte envoyé, et partent avec l'annonce.
+  et le texte envoyé, et partent avec l'annonce. Lot 18 : le nom de l'agence reste sur l'annonce
+  (« Qui la vend », modifiable) ; l'ancienne colonne `listing_contacts.agency_name`, gelée (plus lue),
+  garde sa valeur d'avant le lot 18 jusqu'à la prochaine écriture du contact, dans l'application
+  ou par Claude (elle est alors vidée), ou jusqu'à son effacement.

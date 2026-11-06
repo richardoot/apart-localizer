@@ -2,11 +2,13 @@ import {
   ACTIVITY_CHANNEL_LABELS,
   CRITERIA_FIT_LEVEL_LABELS,
   LEASE_TYPE_LABELS,
+  LISTING_PORTAL_LABELS,
   LISTING_STATUS_LABELS,
   MEMBER_ROLE_LABELS,
   OFFER_CHANNEL_LABELS,
   OFFER_RESPONSE_LABELS,
   RENOVATION_LEVEL_LABELS,
+  SELLER_TYPE_LABELS,
   VISIT_STATUS_LABELS,
   activityKindOf,
   listingFieldLabel,
@@ -19,6 +21,7 @@ import type {
 } from '@apart/contracts'
 import { formatEuros } from './format.js'
 import { describeAgencyActivity } from './agency-activity.js'
+import { describeLinkActivity, portalWhere } from './link-activity.js'
 
 /**
  * Le journal d'activité en français (besoin S6) : à partir d'une ligne
@@ -63,6 +66,7 @@ const EURO_FIELDS = new Set([
   'rent',
   'newPrice',
   'oldPrice',
+  'linkPrice',
 ])
 const AREA_FIELDS = new Set(['surface', 'surfaceTotal'])
 const DATE_FIELDS = new Set([
@@ -115,6 +119,9 @@ const ENUM_LABELS: Record<string, Record<string, string>> = {
     district: 'quartier',
     commune: 'commune',
   },
+  // Lot 18 : vendeur et portail d'un lien.
+  sellerType: SELLER_TYPE_LABELS,
+  portal: LISTING_PORTAL_LABELS,
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -427,18 +434,19 @@ export function describeActivity(
       // Lot 15 : une vérification sur le portail ; les faits appliqués
       // sont dans `facts`, avant et après.
       const outcome = text(after, 'outcome')
+      // Lot 18 : la vérification porte sur un lien (« sur SeLoger »).
+      const where = portalWhere(isRecord(after) ? after.portal : null)
       const heads: Record<string, string> = {
-        unchanged: "a vérifié l'annonce sur le portail : inchangée",
-        changed: "a vérifié l'annonce sur le portail : mise à jour",
-        offline: "a vérifié l'annonce sur le portail : plus en ligne",
-        republished: "a vérifié l'annonce sur le portail : republiée",
+        unchanged: `a vérifié l'annonce ${where} : inchangée`,
+        changed: `a vérifié l'annonce ${where} : mise à jour`,
+        offline: `a vérifié l'annonce ${where} : plus en ligne`,
+        republished: `a vérifié l'annonce ${where} : republiée`,
         inaccessible:
           "n'a pas pu vérifier l'annonce : page inaccessible (rien n'est vérifié)",
       }
       const suggested = text(after, 'suggestedStatus')
       const head =
-        (outcome ? heads[outcome] : undefined) ??
-        "a vérifié l'annonce sur le portail"
+        (outcome ? heads[outcome] : undefined) ?? `a vérifié l'annonce ${where}`
       return describe(
         suggested
           ? `${head} ; statut proposé « ${formatActivityValue('status', suggested, members) ?? suggested} » (non appliqué)`
@@ -653,6 +661,11 @@ export function describeActivity(
         activityChanges(b, a, members)
       )
       if (agency) return describe(agency.summary, agency.changes)
+      // Lot 18 : liens de l'annonce sur les portails.
+      const link = describeLinkActivity(action, before, after, (b, a) =>
+        activityChanges(b, a, members)
+      )
+      if (link) return describe(link.summary, link.changes)
       return describe(action, activityChanges(before, after, members))
     }
   }

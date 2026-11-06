@@ -65,6 +65,8 @@ export function listingSourceFromUrl(
   if (host.includes('seloger')) return 'seloger'
   if (host.includes('bienici') || host.includes('bien-ici')) return 'bienici'
   if (host.includes('pap.fr')) return 'pap'
+  // Lot 18 : Logic-Immo n'a pas de valeur dans `ListingSource` (lien principal).
+  if (host.includes('logic-immo')) return 'autre'
   return 'agence'
 }
 

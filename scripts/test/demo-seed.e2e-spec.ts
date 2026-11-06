@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createE2eDatabase } from '../../apps/api/test/e2e-database.js'
 import type { E2eDatabase } from '../../apps/api/test/e2e-database.js'
 import { buildDemoDataset } from '../lib/demo/dataset.js'
-import { DEMO_WORKSPACE_ID } from '../lib/demo/ids.js'
+import { DEMO_WORKSPACE_ID, demoId } from '../lib/demo/ids.js'
 import { DemoSeedConflict, writeDemoDataset } from '../lib/demo/write.js'
 
 /**
@@ -106,9 +106,11 @@ describe('seed de démonstration (e2e, PostGIS)', () => {
     expect(c.unread).toBeGreaterThan(0)
     expect(c.visits).toBe(8)
     // Lot 16 : deux explorations fictives, leurs lignes et leurs brouillons ;
-    // à valider : l'alerte e-mail et les quatre de la dernière exploration.
+    // à valider : l'alerte e-mail et les cinq de la dernière exploration
+    // (lot 18 : dont un doublon par la référence ; un brouillon reconnu,
+    // rattaché d'office).
     expect(report.explorations).toBe(2)
-    expect(report.drafts).toBe(6)
+    expect(report.drafts).toBe(8)
     expect(
       await db.prisma.exploration.count({
         where: { workspaceId: DEMO_WORKSPACE_ID },
@@ -118,12 +120,53 @@ describe('seed de démonstration (e2e, PostGIS)', () => {
       await db.prisma.explorationCandidate.count({
         where: { exploration: { workspaceId: DEMO_WORKSPACE_ID } },
       })
-    ).toBe(13)
+    ).toBe(15)
     expect(
       await db.prisma.listingDraft.count({
         where: { workspaceId: DEMO_WORKSPACE_ID, status: 'pending' },
       })
-    ).toBe(5)
+    ).toBe(6)
+    // Lot 18 : un lien d'origine par annonce et quatre liens ajoutés, chaque
+    // vérification sur un lien, le lien rattaché d'office et son brouillon
+    // reconnu ; le nom de l'agence est sur l'annonce, jamais dans le contact.
+    expect(report.links).toBe(dataset.listings.length + 4)
+    expect(
+      await db.prisma.listingLink.count({
+        where: { workspaceId: DEMO_WORKSPACE_ID },
+      })
+    ).toBe(report.links)
+    expect(
+      await db.prisma.listingCheck.count({
+        where: { workspaceId: DEMO_WORKSPACE_ID, linkId: null },
+      })
+    ).toBe(0)
+    const merged = await db.prisma.listingDraft.findFirstOrThrow({
+      where: { workspaceId: DEMO_WORKSPACE_ID, status: 'merged' },
+      include: { attachedLink: true },
+    })
+    expect(merged.attachedLink).toMatchObject({
+      origin: 'exploration',
+      listingId: demoId('listing:merignac-t2'),
+    })
+    expect(merged.attachedAt).not.toBeNull()
+    const chartrons = await db.prisma.listing.findUniqueOrThrow({
+      where: { id: demoId('listing:chartrons-t2') },
+      include: { contact: true, links: { orderBy: { createdAt: 'asc' } } },
+    })
+    expect(chartrons).toMatchObject({
+      sellerType: 'agency',
+      sellerName: '[Exemple] Immobilier des Chartrons',
+      sellerReferenceKey: 'EX2041',
+      url: chartrons.links[0]?.url,
+    })
+    expect(
+      chartrons.links.map(l => [l.portal, l.offlineSince === null])
+    ).toEqual([
+      ['seloger', true],
+      ['bienici', false],
+      ['leboncoin', true],
+    ])
+    expect(chartrons.contact?.agencyName).toBeNull()
     // Lot 17 : trois demandes (réponse reçue, à valider, relance due), trois
     // contacts, les tâches demandées ou répondues rattachées, une
     // notification « réponse de l'agence » pour l'autre membre.

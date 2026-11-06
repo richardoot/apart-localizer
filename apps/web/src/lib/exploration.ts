@@ -114,6 +114,10 @@ export const OUTCOME_BADGE: Record<
   new: { label: 'À valider', tone: 'bg-accent text-accent-fg' },
   duplicate_probable: { label: 'À valider', tone: 'bg-accent text-accent-fg' },
   known: { label: 'Déjà suivie', tone: 'bg-accent-soft text-accent' },
+  attached: {
+    label: 'Rattachée d’office',
+    tone: 'border border-accent text-accent',
+  },
   dismissed: { label: 'Déjà écartée', tone: 'bg-surface-2 text-fg' },
   out: { label: 'Hors critères', tone: 'bg-muted text-surface' },
 }

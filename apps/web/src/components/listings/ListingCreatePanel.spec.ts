@@ -13,7 +13,8 @@ const apiMock = vi.hoisted(() => ({
   workspace: vi.fn(),
   assumptions: { current: vi.fn() },
   listings: { extract: vi.fn(), create: vi.fn() },
-  drafts: { get: vi.fn(), decide: vi.fn(), list: vi.fn() },
+  drafts: { get: vi.fn(), decide: vi.fn(), list: vi.fn(), merge: vi.fn() },
+  links: { add: vi.fn() },
 }))
 
 /** La route courante : vide, sauf pour les tests de partage et de brouillon. */
@@ -30,6 +31,19 @@ vi.mock('@/lib/api', async () => {
 })
 
 import ListingCreatePanel from './ListingCreatePanel.vue'
+
+/** Une annonce qui ressemble, sans le même lien (« créer quand même » possible). */
+const similar = fakeDuplicate({
+  certain: false,
+  score: 0.8,
+  reasons: [
+    {
+      kind: 'same_commune_price_surface',
+      score: 0.8,
+      detail: 'Talence : 45 m² contre 45,2 m²',
+    },
+  ],
+})
 
 function mountPanel() {
   const client = new QueryClient({
@@ -196,7 +210,7 @@ describe('ListingCreatePanel', () => {
 
   it('montre les doublons : « ouvrir l’existante » émet open, « créer quand même » enregistre avec ignoreDuplicates', async () => {
     apiMock.listings.extract.mockResolvedValue(
-      fakeExtractionResult({ duplicates: [fakeDuplicate()] })
+      fakeExtractionResult({ duplicates: [similar] })
     )
     const wrapper = mountPanel()
     await flushPromises()
@@ -209,7 +223,7 @@ describe('ListingCreatePanel', () => {
       .find(b => b.textContent?.includes("ouvrir l'existante"))
       ?.click()
     await flushPromises()
-    expect(wrapper.emitted('open')).toEqual([[fakeDuplicate().listingId]])
+    expect(wrapper.emitted('open')).toEqual([[similar.listingId]])
 
     ;[...banner.querySelectorAll('button')]
       .find(b => b.textContent?.includes('Créer quand même'))
@@ -329,6 +343,119 @@ describe('ListingCreatePanel', () => {
       { status: 'accepted', listingId: fakeEvaluated().listing.id }
     )
     expect(wrapper.emitted('created')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('lot 18 : partage depuis le téléphone d’une annonce déjà suivie, « C’est la même : ajouter ce lien »', async () => {
+    const url = 'https://www.seloger.com/annonces/0000000202.htm'
+    routeState.query = { partage: '1', url, texte: 'T3 fictif 68 m²' }
+    const extracted = fakeExtractionResult({
+      duplicates: [
+        fakeDuplicate({
+          sellerType: 'agency',
+          sellerReference: 'EX-2041',
+          reasons: [
+            {
+              kind: 'same_reference',
+              score: 1,
+              detail: 'Même agence et même référence (EX-2041)',
+            },
+          ],
+        }),
+      ],
+    })
+    extracted.listing.url = url
+    extracted.listing.sellerType = 'agency'
+    extracted.listing.sellerName = '[Exemple] Immobilier des Chartrons'
+    extracted.listing.sellerReference = 'EX-2041'
+    apiMock.listings.extract.mockResolvedValue(extracted)
+    apiMock.links.add.mockResolvedValue({
+      link: null,
+      check: null,
+      listing: fakeEvaluated(),
+      priceProposal: null,
+      summary: 'Lien SeLoger ajouté',
+    })
+    const wrapper = mountPanel()
+    await flushPromises()
+    query<HTMLButtonElement>('[data-action="attach-link"]').click()
+    await flushPromises()
+    expect(apiMock.links.add).toHaveBeenCalledWith(
+      '11111111-1111-4111-8111-111111111111',
+      {
+        url,
+        origin: 'share',
+        price: 189_000,
+        online: true,
+        sellerType: 'agency',
+        sellerName: '[Exemple] Immobilier des Chartrons',
+        reference: 'EX-2041',
+      }
+    )
+    expect(apiMock.listings.create).not.toHaveBeenCalled()
+    expect(wrapper.emitted('open')).toEqual([
+      ['11111111-1111-4111-8111-111111111111'],
+    ])
+    wrapper.unmount()
+  })
+
+  it('lot 18 : refus de même référence à la création : ajouter le lien, ouvrir, ou créer quand même', async () => {
+    const { ApiError } = await import('@/lib/api')
+    apiMock.listings.extract.mockResolvedValue(fakeExtractionResult())
+    apiMock.listings.create.mockRejectedValueOnce(
+      new ApiError(
+        409,
+        'Même agence et même référence que « [Exemple] T3 68 m² » [id 11111111-1111-4111-8111-111111111111] : c’est la même annonce, publiée sur un autre portail. Ajoutez ce lien à sa fiche (add_listing_link, ou « C’est la même : ajouter ce lien à la fiche »), ou confirmez qu’il s’agit d’une autre annonce (ignoreDuplicates).'
+      )
+    )
+    const wrapper = mountPanel()
+    await flushPromises()
+    await fill('#x-text', 'T2 Talence')
+    query<HTMLButtonElement>('[data-testid="analyze"]').click()
+    await flushPromises()
+    query<HTMLButtonElement>('[data-testid="save"]').click()
+    await flushPromises()
+    const failure = query('[data-testid="create-failure"]')
+    expect(failure.textContent).toContain(
+      'Même agence et même référence que « [Exemple] T3 68 m² » : c’est la même annonce'
+    )
+    expect(failure.textContent).not.toContain('[id ')
+    expect(failure.textContent).not.toContain('add_listing_link')
+    expect(failure.textContent).toContain(
+      'C’est la même : ajouter ce lien à « [Exemple] T3 68 m² »'
+    )
+    query<HTMLButtonElement>('[data-action="conflict-create"]').click()
+    await flushPromises()
+    expect(apiMock.listings.create).toHaveBeenCalledTimes(2)
+    expect(apiMock.listings.create.mock.calls[1]?.[0]).toMatchObject({
+      ignoreDuplicates: true,
+    })
+    expect(wrapper.emitted('created')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('lot 18 : un lien déjà sur une autre fiche ne se crée jamais quand même', async () => {
+    const { ApiError } = await import('@/lib/api')
+    apiMock.listings.extract.mockResolvedValue(fakeExtractionResult())
+    apiMock.listings.create.mockRejectedValueOnce(
+      new ApiError(
+        409,
+        'Ce lien est déjà celui de l’annonce « T2 fictif » [id 11111111-1111-4111-8111-111111111111] : une même URL ne peut pas être sur deux fiches. Ouvrez cette annonce plutôt que d’en créer une autre.'
+      )
+    )
+    const wrapper = mountPanel()
+    await flushPromises()
+    await fill('#x-text', 'T2 Talence')
+    query<HTMLButtonElement>('[data-testid="analyze"]').click()
+    await flushPromises()
+    query<HTMLButtonElement>('[data-testid="save"]').click()
+    await flushPromises()
+    expect(body().querySelector('[data-action="conflict-create"]')).toBeNull()
+    expect(body().querySelector('[data-action="conflict-attach"]')).toBeNull()
+    query<HTMLButtonElement>('[data-action="conflict-open"]').click()
+    expect(wrapper.emitted('open')).toEqual([
+      ['11111111-1111-4111-8111-111111111111'],
+    ])
     wrapper.unmount()
   })
 })

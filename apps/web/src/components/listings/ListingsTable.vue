@@ -11,7 +11,13 @@
   } from '@tanstack/vue-table'
   import type { ColumnDef } from '@tanstack/vue-table'
   import type { EvaluatedListing } from '@apart/contracts'
-  import { fitRank, keptLabel, rankValues } from '@apart/domain'
+  import {
+    fitRank,
+    keptLabel,
+    priceRangeText,
+    rankValues,
+    sellerListLabel,
+  } from '@apart/domain'
   import {
     formatEuros,
     formatEurosPerM2,
@@ -26,6 +32,7 @@
   import FitSummary from './FitSummary.vue'
   import CheckFreshnessBadge from './CheckFreshnessBadge.vue'
   import NewBadge from './NewBadge.vue'
+  import PortalChips from './PortalChips.vue'
   import PrecisionBadge from './PrecisionBadge.vue'
   import RentalPill from './RentalPill.vue'
   import StatusBadge from './StatusBadge.vue'
@@ -180,7 +187,74 @@
     helper.accessor(row => row.listing.price, {
       id: 'price',
       header: withBasis('Prix', 'price'),
-      cell: ctx => formatEuros(ctx.getValue()),
+      cell: ctx => {
+        // Lot 18 : « jusqu'à 219 000 € selon le portail ».
+        const range = priceRangeText(ctx.row.original.links)
+        return range
+          ? h('div', { class: 'grid gap-0.5' }, [
+              h('span', formatEuros(ctx.getValue())),
+              h(
+                'span',
+                {
+                  class: 'text-xs whitespace-normal text-warn',
+                  'data-testid': 'price-range',
+                },
+                range
+              ),
+            ])
+          : formatEuros(ctx.getValue())
+      },
+      sortFn: 'basic',
+    }),
+    // Lot 18 : les portails (barrés : plus en ligne), le vendeur, la référence.
+    helper.accessor(row => row.links.length, {
+      id: 'portals',
+      header: 'Portails',
+      cell: ctx =>
+        ctx.row.original.links.length
+          ? h(PortalChips, { links: ctx.row.original.links, short: true })
+          : '—',
+      sortFn: 'basic',
+    }),
+    helper.accessor(row => sellerListLabel(row.listing.sellerType), {
+      id: 'seller',
+      header: 'Vendeur',
+      cell: ctx =>
+        h('div', { class: 'grid gap-0.5', 'data-testid': 'seller-cell' }, [
+          h(
+            'span',
+            {
+              class:
+                ctx.row.original.listing.sellerType === 'unknown'
+                  ? 'text-muted'
+                  : '',
+            },
+            ctx.getValue()
+          ),
+          ctx.row.original.listing.sellerName &&
+          ctx.row.original.listing.sellerType !== 'private'
+            ? h(
+                'span',
+                { class: 'max-w-56 truncate text-xs text-muted' },
+                ctx.row.original.listing.sellerName
+              )
+            : null,
+        ]),
+      sortFn: 'basic',
+    }),
+    helper.accessor(row => row.listing.sellerReference ?? '', {
+      id: 'reference',
+      header: 'Référence',
+      cell: ctx =>
+        ctx.row.original.listing.sellerReference
+          ? h(
+              'span',
+              { class: 'font-mono text-xs' },
+              ctx.row.original.listing.sellerReference
+            )
+          : ctx.row.original.listing.sellerType === 'private'
+            ? '—'
+            : h('span', { class: 'text-xs text-muted' }, 'à relever'),
       sortFn: 'basic',
     }),
     helper.accessor(row => num(row.listing.surface), {
@@ -371,7 +445,7 @@
         </button>
       </span>
     </div>
-    <table class="w-full min-w-[1300px] text-sm">
+    <table class="w-full min-w-[1600px] text-sm">
       <thead class="bg-surface-2 text-left text-xs text-muted">
         <tr
           v-for="headerGroup in table.getHeaderGroups()"

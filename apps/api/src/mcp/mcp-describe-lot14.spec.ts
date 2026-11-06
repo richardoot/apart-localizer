@@ -45,8 +45,8 @@ const item = (criteriaFit: ListingCriteriaFit) =>
   ({ criteriaFit }) as unknown as EvaluatedListing
 
 describe('MCP lot 14', () => {
-  it('aucun outil nouveau au lot 14 : trente-huit outils avec les lots 15, 16 et 17, aucun de suppression', () => {
-    expect(MCP_TOOL_NAMES).toHaveLength(38)
+  it('aucun outil nouveau au lot 14 : trente-neuf outils avec les lots 15, 16, 17 et 18, aucun de suppression', () => {
+    expect(MCP_TOOL_NAMES).toHaveLength(39)
     expect(MCP_TOOL_NAMES.some(n => n.startsWith('delete'))).toBe(false)
   })
 

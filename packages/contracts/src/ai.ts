@@ -3,6 +3,7 @@ import {
   DpeClassSchema,
   FeesPayerSchema,
   ListingSourceSchema,
+  ObservedSellerTypeSchema,
   RenovationLevelSchema,
 } from './enums.js'
 import { ListingInputSchema } from './listing.js'
@@ -147,8 +148,19 @@ export const AiListingExtractionSchema = z.object({
     ListingSourceSchema,
     'Portail ou canal : seloger, leboncoin, pap, bienici, agence (site ou mail d’agence), autre'
   ),
-  agencyName: text("Nom de l'agence ou du vendeur professionnel"),
-  externalId: text("Référence ou identifiant de l'annonce chez la source"),
+  sellerType: aiField(
+    ObservedSellerTypeSchema,
+    "Qui vend : agency (agence immobilière), mandatary (mandataire : conseiller immobilier indépendant d'un réseau, « conseiller indépendant », « agent commercial »), private (particulier : « particulier », « de particulier à particulier », « sans frais d'agence ») ; null si l'annonce ne le dit pas : ne devine pas"
+  ),
+  agencyName: text(
+    "Nom de l'agence, ou du réseau pour un mandataire, tel qu'écrit ; jamais le nom d'une personne (le conseiller ou l'interlocuteur n'est pas lu ici) ; null pour un particulier"
+  ),
+  agencyReference: text(
+    "Référence de l'annonce chez l'agence ou le mandataire, sans le préfixe : « Réf. EX-2041 » → « EX-2041 », « Référence : 2041 », « Mandat n° 2041 » → « 2041 » ; null pour un particulier ou si absente"
+  ),
+  externalId: text(
+    "Identifiant de l'annonce sur le portail (numéro de l'annonce Leboncoin, SeLoger…), s'il est affiché ; pas la référence de l'agence"
+  ),
   price: num('Prix affiché en euros (prix de vente, honoraires inclus si FAI)'),
   feesIncluded: bool(
     'Vrai si le prix affiché inclut les honoraires d’agence (FAI, « honoraires inclus », « charge acquéreur ») ; faux si « honoraires à charge vendeur » ou « net vendeur »'

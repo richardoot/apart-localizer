@@ -37,6 +37,7 @@ import {
   applyProposed,
   defaultAgencyMessage,
   defaultSignature,
+  normalizeSeller,
   openQuestions,
   planAgencyAnswer,
   preferredAgencyChannel,
@@ -138,7 +139,9 @@ export class AgencyRequestsService {
     listingId: string
   ): Promise<ListingContactDto | null> {
     const listing = await this.loadListing(member, listingId)
-    return listing.contact ? toListingContactDto(listing.contact) : null
+    return listing.contact
+      ? toListingContactDto(listing.contact, listing.sellerName)
+      : null
   }
 
   /** Remplace le contact (REST) ; un champ à null est vidé. */
@@ -149,19 +152,25 @@ export class AgencyRequestsService {
   ): Promise<ListingContactDto> {
     const listing = await this.loadListing(member, listingId)
     const before = listing.contact
-    const changed = CONTACT_KEYS.filter(
-      key => (before?.[key] ?? null) !== input[key]
-    )
+    // Lot 18 : le nom de l'agence est celui de l'annonce (une seule source).
+    const current = (key: (typeof CONTACT_KEYS)[number]) =>
+      key === 'agencyName' ? listing.sellerName : (before?.[key] ?? null)
+    const changed = CONTACT_KEYS.filter(key => current(key) !== input[key])
+    const { agencyName, ...contact } = input
     const row = await this.prisma.$transaction(async tx => {
+      if (agencyName !== listing.sellerName) {
+        await this.writeSellerName(tx, listing, agencyName, 'user')
+      }
       const saved = await tx.listingContact.upsert({
         where: { listingId },
         create: {
           listingId,
           workspaceId: member.workspaceId,
-          ...input,
+          ...contact,
+          agencyName: null,
           updatedById: member.id,
         },
-        update: { ...input, updatedById: member.id },
+        update: { ...contact, agencyName: null, updatedById: member.id },
       })
       if (changed.length > 0) {
         await this.activity.record(
@@ -180,7 +189,38 @@ export class AgencyRequestsService {
       }
       return saved
     })
-    return toListingContactDto(row)
+    const after = await this.loadListing(member, listingId)
+    return toListingContactDto(row, after.sellerName)
+  }
+
+  /**
+   * Lot 18 : le nom de l'agence du contact est celui de l'annonce
+   * (`seller_name`), normalisé ; un particulier n'en a pas. Provenance du
+   * champ comme les autres.
+   */
+  private async writeSellerName(
+    tx: Prisma.TransactionClient,
+    listing: ExchangeListing,
+    name: string | null,
+    source: 'user' | 'ai'
+  ): Promise<void> {
+    const next = normalizeSeller({
+      sellerType: listing.sellerType,
+      sellerName: name,
+      sellerReference: listing.sellerReference,
+    })
+    if (next.sellerName === listing.sellerName) return
+    const sources = (listing.fieldSources ?? {}) as FieldProvenanceMap
+    await tx.listing.update({
+      where: { id: listing.id },
+      data: {
+        sellerName: next.sellerName,
+        fieldSources: {
+          ...sources,
+          sellerName: { source, recordedAt: new Date().toISOString() },
+        } as Prisma.InputJsonValue,
+      },
+    })
   }
 
   /** Efface le contact de l'annonceur (REST seulement ; jamais par le MCP). */
@@ -364,6 +404,9 @@ export class AgencyRequestsService {
     ])
     const now = new Date()
     const byListing = new Map(items.map(i => [i.listing.id, i]))
+    const sellerNames = new Map(
+      items.map(i => [i.listing.id, i.listing.sellerName])
+    )
     const result = new Map<string, AgencyRequestDto[]>()
     for (const row of requests) {
       const item = byListing.get(row.listingId)
@@ -378,7 +421,10 @@ export class AgencyRequestsService {
     }
     return {
       contacts: new Map(
-        contacts.map(c => [c.listingId, toListingContactDto(c)])
+        contacts.map(c => [
+          c.listingId,
+          toListingContactDto(c, sellerNames.get(c.listingId) ?? null),
+        ])
       ),
       requests: result,
     }
@@ -990,13 +1036,18 @@ export class AgencyRequestsService {
       followUpOf: followUp ? requestLike(followUp) : null,
     })
     if (!resolved.ok) throw new BadRequestException(resolved.problem)
-    const contact = mergeContact(listing.contact, item.contact ?? null)
+    const contact = mergeContact(
+      listing.contact,
+      item.contact ?? null,
+      listing.sellerName
+    )
     const byId = new Map(tasks.map(t => [t.id, t]))
     const message = defaultAgencyMessage({
       listing: {
         title: listing.title,
         url: listing.url,
-        externalId: listing.externalId,
+        // Lot 18 : la référence de l'agence, à défaut l'identifiant du portail.
+        externalId: listing.sellerReference ?? listing.externalId,
         commune: listing.commune,
         price: Number(listing.price),
       },
@@ -1040,20 +1091,48 @@ export class AgencyRequestsService {
     channel: WriteChannel
   ): Promise<void> {
     const before = listing.contact
+    // Lot 18 : le nom de l'agence va à l'annonce, seulement s'il était
+    // inconnu (un nom qui contredit la fiche n'est pas écrasé).
+    const nameRead =
+      patch.agencyName !== undefined && listing.sellerName === null
+    if (nameRead) {
+      await this.writeSellerName(tx, listing, patch.agencyName ?? null, 'ai')
+    }
     const changed = CONTACT_KEYS.filter(
-      key => patch[key] !== undefined && patch[key] !== (before?.[key] ?? null)
+      key =>
+        key !== 'agencyName' &&
+        patch[key] !== undefined &&
+        patch[key] !== (before?.[key] ?? null)
     )
-    if (changed.length === 0) return
+    if (changed.length === 0 && !nameRead) return
     const data = Object.fromEntries(changed.map(key => [key, patch[key]]))
+    if (changed.length === 0) {
+      await this.activity.record(
+        {
+          workspaceId: member.workspaceId,
+          listingId: listing.id,
+          actorMemberId: member.id,
+          channel,
+          action: 'contact.updated',
+          before: { state: before ? 'some' : 'none' },
+          after: { fields: ['agencyName'] },
+        },
+        tx
+      )
+      return
+    }
+    // Lot 18 : le nom de l'agence est celui de l'annonce ; la colonne du
+    // contact, gelée, est vidée à chaque écriture.
     await tx.listingContact.upsert({
       where: { listingId: listing.id },
       create: {
         listingId: listing.id,
         workspaceId: member.workspaceId,
         ...data,
+        agencyName: null,
         updatedById: member.id,
       },
-      update: { ...data, updatedById: member.id },
+      update: { ...data, agencyName: null, updatedById: member.id },
     })
     await this.activity.record(
       {
@@ -1063,7 +1142,7 @@ export class AgencyRequestsService {
         channel,
         action: 'contact.updated',
         before: { state: before ? 'some' : 'none' },
-        after: { fields: changed },
+        after: { fields: nameRead ? ['agencyName', ...changed] : changed },
       },
       tx
     )
@@ -1141,7 +1220,9 @@ export class AgencyRequestsService {
       listingId: listing.id,
       listing: summary,
       expectedUpdatedAt: listing.updatedAt.toISOString(),
-      contact: listing.contact ? toListingContactDto(listing.contact) : null,
+      contact: listing.contact
+        ? toListingContactDto(listing.contact, listing.sellerName)
+        : null,
       requests: listing.agencyRequests.map(row =>
         toAgencyRequestDto(row, {
           listing: summary,
@@ -1235,11 +1316,13 @@ function listingSummary(listing: {
 /** Le contact enregistré, complété des valeurs lues par Claude. */
 function mergeContact(
   stored: ListingContact | null,
-  patch: ListingContactPatch | null
+  patch: ListingContactPatch | null,
+  sellerName: string | null
 ) {
-  if (!stored && !patch) return null
+  if (!stored && !patch && !sellerName) return null
   return {
-    agencyName: patch?.agencyName ?? stored?.agencyName ?? null,
+    // Lot 18 : le nom de l'agence est celui de l'annonce.
+    agencyName: sellerName ?? patch?.agencyName ?? null,
     contactName: patch?.contactName ?? stored?.contactName ?? null,
     email: patch?.email ?? stored?.email ?? null,
     phone: patch?.phone ?? stored?.phone ?? null,

@@ -3,6 +3,7 @@ import { ExtractionUsageSchema } from './ai.js'
 import { DuplicateCandidateSchema } from './duplicates.js'
 import { ListingStatusSchema } from './enums.js'
 import {
+  CheckedLinkSchema,
   LinkedListingSchema,
   ListingCheckChangeSchema,
   ListingCheckFieldSchema,
@@ -61,6 +62,11 @@ export const ListingCheckPreviewSchema = z.object({
       'Annonces de l’espace qui ressemblent à la page lue : republications probables'
     ),
   republication: ListingRepublicationSchema,
+  link: CheckedLinkSchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 18 : le lien que la vérification porterait (identifiant à repasser à apply_listing_check en linkId) ; null pour une annonce sans lien'
+    ),
   extraction: z
     .object({
       usage: ExtractionUsageSchema,

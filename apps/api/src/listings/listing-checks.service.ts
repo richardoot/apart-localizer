@@ -6,8 +6,8 @@ import {
 import { ExtractionRequestSchema } from '@apart/contracts'
 import type {
   ActivityChannel,
+  CheckedLink,
   EvaluatedListing,
-  FieldProvenanceMap,
   LinkedListing,
   ListingCheck,
   ListingCheckChange,
@@ -21,33 +21,38 @@ import type {
 } from '@apart/contracts'
 import {
   effectiveObserved,
-  listingCheckDiff,
+  linkCheckDiff,
+  linkKey,
   listingCheckSummary,
   observedFromExtraction,
   orderRepublication,
+  primaryLink,
   republicationLinkProblem,
   republicationProposal,
-  resolveCheckOutcome,
+  resolveLinkCheckOutcome,
   sanitizeEvidence,
 } from '@apart/domain'
 import type {
   CheckOutcomeResolution,
-  ListingCheckDiff,
-  ListingCheckPatch,
+  LinkCheckDiff,
+  LinkState,
   RepublicationCandidate,
 } from '@apart/domain'
 import { ActivityService } from '../activity/activity.service'
 import { PrismaService } from '../prisma/prisma.service'
-import { Prisma } from '../generated/prisma'
+import type { Prisma } from '../generated/prisma'
 import type { Member } from '../generated/prisma'
 import { DuplicatesService } from './duplicates.service'
 import { ListingEnrichmentService } from './enrichment.service'
 import { ExtractionService } from './extraction.service'
+import { writeCheckFacts } from './link-writes'
 import { toListingCheckDto } from './listing.mapper'
-import { ListingsService, priceEventData } from './listings.service'
+import { ListingsService } from './listings.service'
 
 /** Les annonces liées se lisent en quelques champs. */
 const LINKED_SELECT = { id: true, title: true, status: true } as const
+/** Le lien vérifié (lot 18), en quelques champs. */
+const LINK_SELECT = { id: true, portal: true, url: true } as const
 
 /** Au-delà, une chaîne de republications est tronquée (garde-fou). */
 const MAX_CHAIN = 20
@@ -61,7 +66,7 @@ interface RepublicationNode extends RepublicationCandidate {
 /** Ce qu'une vérification ferait : calculé une fois, pour la vérification à blanc et l'enregistrement. */
 interface CheckPlan {
   observed: ListingObserved
-  diff: ListingCheckDiff
+  diff: LinkCheckDiff
   resolution: CheckOutcomeResolution
   /** Les écarts gardés avec la vérification (proposition de republication comprise). */
   changes: ListingCheckChange[]
@@ -73,17 +78,81 @@ interface CheckPlan {
     other: LinkedListing
   } | null
   linkProblem: string | null
+  /** Lot 18 : le lien vérifié (null : annonce sans lien). */
+  checked: CheckedLink | null
+}
+
+/** Les liens d'une annonce vue, pour les règles de `domain`. */
+export function linkStatesOf(item: EvaluatedListing): LinkState[] {
+  return item.links.map(l => ({
+    id: l.id,
+    portal: l.portal,
+    url: l.url,
+    normalizedUrl: l.normalizedUrl,
+    externalId: l.externalId,
+    price: l.price,
+    priceAt: l.priceAt,
+    online: l.online,
+    offlineSince: l.offlineSince,
+    lastSeenOnlineAt: l.lastSeenOnlineAt,
+    lastCheckedAt: l.lastCheckedAt,
+    createdAt: l.createdAt,
+    origin: l.origin,
+    readSellerName: l.readSellerName,
+    readReference: l.readReference,
+  }))
 }
 
 /**
- * Le suivi des mises à jour des annonces (lot 15, ADR 0025). Une
- * vérification part de ce que Claude a lu sur la page du portail dans le
- * navigateur de l'utilisateur (ou du texte de la page, lu par l'extraction) :
- * le serveur ne télécharge jamais la page. `domain` compare et classe ; ce
- * service applique les faits en une transaction (fiche, historique des
- * prix, dates de vérification, ligne `listing_checks`, journal et
+ * Le lien qu'une vérification porte (lot 18) : celui désigné (`linkId`),
+ * sinon celui dont l'URL est l'URL consultée, sinon le lien principal. Une
+ * URL consultée qui n'est aucun lien de l'annonce est refusée (sauf si c'est
+ * le nouveau lien lu, `observed.url`) : ajoutez-la d'abord.
+ */
+export function checkedLinkOf(
+  item: EvaluatedListing,
+  input: {
+    linkId?: string | undefined
+    checkedUrl?: string | undefined
+    observedUrl?: string | undefined
+  }
+): LinkState | null {
+  const links = linkStatesOf(item)
+  if (input.linkId !== undefined) {
+    const found = links.find(l => l.id === input.linkId)
+    if (!found) {
+      throw new NotFoundException(
+        'Lien introuvable sur cette annonce (linkId) : relisez ses liens avec get_listing'
+      )
+    }
+    return found
+  }
+  const primary = primaryLink(links)
+  if (input.checkedUrl !== undefined && links.length > 0) {
+    const key = linkKey(input.checkedUrl)
+    const found = links.find(l => l.normalizedUrl === key)
+    if (found) return found
+    if (input.observedUrl !== undefined && linkKey(input.observedUrl) === key) {
+      return primary
+    }
+    throw new BadRequestException(
+      'Le lien consulté (checkedUrl) n’est aucun des liens de cette annonce : ajoutez-le d’abord (add_listing_link, ou « Ajouter un lien » dans la fiche), ou passez linkId'
+    )
+  }
+  return primary
+}
+
+/**
+ * Le suivi des mises à jour des annonces (lot 15, ADR 0025), lien par lien
+ * depuis le lot 18 (ADR 0028). Une vérification part de ce que Claude a lu
+ * sur la page d'un lien dans le navigateur de l'utilisateur (ou du texte de
+ * la page, lu par l'extraction) : le serveur ne télécharge jamais la page.
+ * `domain` compare et classe (`linkCheckDiff`) ; ce service applique les
+ * faits en une transaction (fiche, prix de la fiche par l'historique, état
+ * du lien, vendeur lu, dates, ligne `listing_checks`, journal et
  * notifications), puis relance les enrichissements et les critères. Un
- * statut n'est jamais changé : il est proposé.
+ * statut n'est jamais changé : il est proposé, et seulement quand plus aucun
+ * lien n'est en ligne.
  */
 @Injectable()
 export class ListingChecksService {
@@ -106,7 +175,10 @@ export class ListingChecksService {
     const rows = await this.prisma.listingCheck.findMany({
       where: { listingId, workspaceId: member.workspaceId },
       orderBy: { checkedAt: 'desc' },
-      include: { linkedListing: { select: LINKED_SELECT } },
+      include: {
+        linkedListing: { select: LINKED_SELECT },
+        link: { select: LINK_SELECT },
+      },
       take: 200,
     })
     return rows.map(toListingCheckDto)
@@ -124,6 +196,10 @@ export class ListingChecksService {
     channel: ActivityChannel = 'web'
   ): Promise<ListingCheckPreview> {
     const item = await this.listings.get(member, listingId)
+    const target = checkedLinkOf(item, {
+      linkId: request.linkId,
+      observedUrl: request.observed?.url,
+    })
     let observed: ListingObserved = request.observed ?? {}
     let extraction: ListingCheckPreview['extraction'] = null
     const text = request.pageText?.trim() ? request.pageText : null
@@ -132,7 +208,7 @@ export class ListingChecksService {
         member,
         ExtractionRequestSchema.parse({
           text,
-          url: item.listing.url,
+          url: target?.url ?? item.listing.url,
           images: request.images,
           quality: request.quality,
         }),
@@ -142,7 +218,7 @@ export class ListingChecksService {
       observed = { ...observedFromExtraction(result.listing), ...observed }
       extraction = { usage: result.usage, warnings: result.warnings }
     }
-    const plan = await this.plan(member, item, {
+    const plan = await this.plan(member, item, target, {
       observed,
       outcome: request.outcome,
       republishedListingId: request.republishedListingId,
@@ -173,14 +249,19 @@ export class ListingChecksService {
       summary: plan.summary,
       applies:
         ok?.applyFacts === true
-          ? plan.changes
-              .filter(c => c.disposition === 'applied')
-              .map(c => c.field)
+          ? [
+              ...new Set(
+                plan.changes
+                  .filter(c => c.disposition === 'applied')
+                  .map(c => c.field)
+              ),
+            ]
           : [],
       updatesLastSeenOnline: ok?.seenOnline ?? false,
       suggestion: plan.suggestion,
       duplicates,
       republication: item.republication,
+      link: plan.checked,
       extraction,
       persisted: false,
     }
@@ -188,10 +269,12 @@ export class ListingChecksService {
 
   /**
    * Enregistre une vérification (`apply_listing_check`, boutons de la
-   * fiche) : garde-fous optimistes, faits appliqués, historique des prix
-   * (source `listing`), dates de vérification, rattachement d'une
-   * republication, ligne `listing_checks` et journal `listing.checked`,
-   * dans une transaction. Le statut proposé n'est jamais appliqué.
+   * fiche, prix ou état d'un lien relevés à la main) : garde-fous
+   * optimistes, faits appliqués, prix de la fiche par l'historique des prix
+   * (source `listing`), état du lien, dates de vérification, rattachement
+   * d'une republication, ligne `listing_checks` et journal
+   * `listing.checked`, dans une transaction. Le statut proposé n'est jamais
+   * appliqué.
    */
   async apply(
     member: Member,
@@ -206,13 +289,17 @@ export class ListingChecksService {
         ? { expectedPrice: input.expectedPrice }
         : {}),
     })
-    const plan = await this.plan(member, item, input)
+    const target = checkedLinkOf(item, {
+      linkId: input.linkId,
+      checkedUrl: input.checkedUrl,
+      observedUrl: input.observed.url,
+    })
+    const plan = await this.plan(member, item, target, input)
     if (!plan.resolution.ok) {
       throw new BadRequestException(plan.resolution.problem)
     }
     if (plan.linkProblem) throw new BadRequestException(plan.linkProblem)
     const { outcome, seenOnline, applyFacts } = plan.resolution
-    const patch: ListingCheckPatch = applyFacts ? plan.diff.patch : {}
     const applied = applyFacts
       ? plan.changes.filter(c => c.disposition === 'applied')
       : []
@@ -222,45 +309,22 @@ export class ListingChecksService {
       plan.link !== null &&
       plan.link.successor.id === listingId &&
       plan.link.successor.republishedFromId !== plan.link.predecessor.id
-    const touchesListing = Object.keys(patch).length > 0 || linkHere
 
     const created = await this.prisma.$transaction(async tx => {
-      await tx.listing.update({
-        where: { id: listingId },
-        data: {
-          ...patchData(patch),
-          ...(Object.keys(patch).length > 0
-            ? {
-                fieldSources: withListingProvenance(
-                  item.listing.fieldSources,
-                  Object.keys(patch),
-                  now
-                ) as Prisma.InputJsonValue,
-              }
-            : {}),
-          ...(linkHere && plan.link
-            ? { republishedFromId: plan.link.predecessor.id }
-            : {}),
-          lastCheckedAt: now,
-          ...(seenOnline ? { lastSeenOnlineAt: now } : {}),
-          // Une vérification qui ne change aucun fait ne « modifie » pas la
-          // fiche : les garde-fous des autres lecteurs restent valables.
-          ...(touchesListing
-            ? {}
-            : { updatedAt: new Date(item.listing.updatedAt) }),
-        },
+      await writeCheckFacts(tx, {
+        listingId,
+        item,
+        diff: plan.diff,
+        applyFacts,
+        seenOnline,
+        now,
+        channel,
+        linkId: plan.checked?.id ?? null,
+        portal: plan.checked?.portal ?? null,
+        ...(linkHere && plan.link
+          ? { alsoTouches: { republishedFromId: plan.link.predecessor.id } }
+          : {}),
       })
-      if (plan.diff.price && applyFacts) {
-        await tx.priceEvent.create({
-          data: priceEventData(
-            listingId,
-            plan.diff.price.from,
-            plan.diff.price.to,
-            'listing',
-            now
-          ),
-        })
-      }
       if (
         plan.link &&
         !linkHere &&
@@ -287,8 +351,12 @@ export class ListingChecksService {
           checkedUrl: input.checkedUrl ?? null,
           linkedListingId: plan.link?.other.id ?? null,
           suggestedStatus: plan.suggestion?.status ?? null,
+          linkId: plan.checked?.id ?? null,
         },
-        include: { linkedListing: { select: LINKED_SELECT } },
+        include: {
+          linkedListing: { select: LINKED_SELECT },
+          link: { select: LINK_SELECT },
+        },
       })
       await this.activity.record(
         {
@@ -297,24 +365,12 @@ export class ListingChecksService {
           actorMemberId: member.id,
           channel,
           action: 'listing.checked',
-          before: applied.length
-            ? {
-                facts: Object.fromEntries(
-                  applied.map(c => [c.field, c.before])
-                ),
-              }
-            : null,
+          before: applied.length ? { facts: factsOf(applied, 'before') } : null,
           after: {
             checkId: check.id,
             outcome,
             summary: plan.summary,
-            ...(applied.length
-              ? {
-                  facts: Object.fromEntries(
-                    applied.map(c => [c.field, c.after])
-                  ),
-                }
-              : {}),
+            ...(applied.length ? { facts: factsOf(applied, 'after') } : {}),
             ...(plan.suggestion
               ? {
                   suggestedStatus: plan.suggestion.status,
@@ -323,6 +379,9 @@ export class ListingChecksService {
               : {}),
             ...(plan.link ? { linkedListingId: plan.link.other.id } : {}),
             ...(input.checkedUrl ? { checkedUrl: input.checkedUrl } : {}),
+            ...(plan.checked
+              ? { linkId: plan.checked.id, portal: plan.checked.portal }
+              : {}),
           },
         },
         tx
@@ -331,6 +390,7 @@ export class ListingChecksService {
     })
 
     // Surface et pièces nourrissent le plafond d'encadrement et le marché.
+    const patch = applyFacts ? plan.diff.patch : {}
     if (patch.surface !== undefined || patch.rooms !== undefined) {
       await this.enrichment.enrich(member, listingId, { dpe: false, channel })
     }
@@ -347,6 +407,7 @@ export class ListingChecksService {
   private async plan(
     member: Member,
     item: EvaluatedListing,
+    target: LinkState | null,
     input: {
       observed: ListingObserved
       outcome?: ListingCheckOutcome | undefined
@@ -354,9 +415,21 @@ export class ListingChecksService {
     }
   ): Promise<CheckPlan> {
     const observed = effectiveObserved(input.observed, input.outcome)
-    const diff = listingCheckDiff(item.listing, observed)
+    const diff = linkCheckDiff({
+      stored: item.listing,
+      priceSource: item.listing.fieldSources.price?.source ?? null,
+      seller: {
+        sellerType: item.listing.sellerType,
+        sellerName: item.listing.sellerName,
+        sellerReference: item.listing.sellerReference,
+      },
+      links: linkStatesOf(item),
+      linkId: target?.id ?? null,
+      observed,
+      now: new Date().toISOString(),
+    })
     const linked = input.republishedListingId !== undefined
-    const resolution = resolveCheckOutcome({
+    const resolution = resolveLinkCheckOutcome({
       declared: input.outcome,
       observed,
       diff,
@@ -370,7 +443,10 @@ export class ListingChecksService {
             title: item.listing.title,
             currentStatus: item.listing.status,
             status: diff.suggestedStatus,
-            reason: 'L’annonce n’est plus en ligne sur le portail.',
+            reason:
+              item.links.length > 1
+                ? 'L’annonce n’est plus en ligne sur aucun de ses portails.'
+                : 'L’annonce n’est plus en ligne sur le portail.',
           }
         : null
     let link: CheckPlan['link'] = null
@@ -440,6 +516,9 @@ export class ListingChecksService {
       suggestion: resolution.ok && resolution.applyFacts ? suggestion : null,
       link,
       linkProblem,
+      checked: target
+        ? { id: target.id, portal: target.portal, url: target.url }
+        : null,
     }
   }
 
@@ -492,41 +571,14 @@ export class ListingChecksService {
   }
 }
 
-/** Les faits d'une vérification en colonnes Prisma. */
-function patchData(
-  patch: ListingCheckPatch
-): Prisma.ListingUncheckedUpdateInput {
-  const data: Prisma.ListingUncheckedUpdateInput = {}
-  const decimal = (value: number) => new Prisma.Decimal(value)
-  if (patch.price !== undefined) data.price = decimal(patch.price)
-  if (patch.annualCharges !== undefined)
-    data.annualCharges = decimal(patch.annualCharges)
-  if (patch.propertyTax !== undefined)
-    data.propertyTax = decimal(patch.propertyTax)
-  if (patch.surface !== undefined) data.surface = decimal(patch.surface)
-  if (patch.rooms !== undefined) data.rooms = patch.rooms
-  if (patch.dpeClass !== undefined) data.dpeClass = patch.dpeClass
-  if (patch.gesClass !== undefined) data.gesClass = patch.gesClass
-  if (patch.dpeConsumption !== undefined)
-    data.dpeConsumption = patch.dpeConsumption
-  if (patch.description !== undefined) data.description = patch.description
-  if (patch.publishedAt !== undefined)
-    data.publishedAt = new Date(patch.publishedAt)
-  if (patch.sourceUpdatedAt !== undefined)
-    data.sourceUpdatedAt = new Date(patch.sourceUpdatedAt)
-  if (patch.url !== undefined) data.url = patch.url
-  return data
-}
-
-/** Les champs appliqués par une vérification prennent la provenance « lue dans l'annonce ». */
-export function withListingProvenance(
-  existing: FieldProvenanceMap,
-  keys: readonly string[],
-  now: Date
-): FieldProvenanceMap {
-  const result: FieldProvenanceMap = { ...existing }
-  for (const key of keys) {
-    result[key] = { source: 'listing', recordedAt: now.toISOString() }
-  }
-  return result
+/**
+ * Les faits de la fiche qu'une vérification change, avant ou après, pour le
+ * journal (« ce qui a changé » lit `facts.price`). Le prix de la fiche
+ * (`price`) et les faits du bien ; le prix d'un portail est `linkPrice`.
+ */
+export function factsOf(
+  changes: readonly ListingCheckChange[],
+  side: 'before' | 'after'
+): Record<string, unknown> {
+  return Object.fromEntries(changes.map(c => [c.field, c[side]]))
 }

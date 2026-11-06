@@ -11,6 +11,7 @@
     locationApproximation,
     mergeAssumptions,
     precisionBadge,
+    sellerChipText,
   } from '@apart/domain'
   import SidePanel from '@/components/ui/SidePanel.vue'
   import {
@@ -39,13 +40,16 @@
   import FitBadge from './FitBadge.vue'
   import HistorySection from './HistorySection.vue'
   import ListingForm from './ListingForm.vue'
+  import ListingLinksSection from './ListingLinksSection.vue'
   import ListingSynthesis from './ListingSynthesis.vue'
   import ListingTabs from './ListingTabs.vue'
   import MetricsPreview from './MetricsPreview.vue'
   import NewBadge from './NewBadge.vue'
   import OpinionsSection from './OpinionsSection.vue'
+  import PortalChips from './PortalChips.vue'
   import PrecisionBadge from './PrecisionBadge.vue'
   import RentalChecksList from './RentalChecksList.vue'
+  import SellerSection from './SellerSection.vue'
   import SensitivityTable from './SensitivityTable.vue'
   import StatusBadge from './StatusBadge.vue'
   import StatusChanger from './StatusChanger.vue'
@@ -424,7 +428,7 @@
             ></template
           >
           <a
-            v-if="item.listing.url"
+            v-if="item.listing.url && item.links.length === 0"
             :href="item.listing.url"
             target="_blank"
             rel="noopener noreferrer"
@@ -432,6 +436,28 @@
             >voir l'annonce</a
           >
         </p>
+        <div
+          v-if="item.links.length || item.listing.sellerType !== 'unknown'"
+          class="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs"
+          data-testid="listing-where"
+        >
+          <template v-if="item.links.length">
+            <span class="text-muted">Sur</span>
+            <PortalChips :links="item.links" linked />
+            <span aria-hidden="true" class="h-3.5 w-px bg-line" />
+          </template>
+          <span
+            class="rounded-md border border-line px-1.5 py-px"
+            data-testid="seller-chip"
+            >{{ sellerChipText(item.listing) }}</span
+          >
+          <span
+            v-if="item.listing.sellerReference"
+            class="rounded-md border border-line px-1.5 py-px font-mono"
+            data-testid="reference-chip"
+            >Réf. {{ item.listing.sellerReference }}</span
+          >
+        </div>
         <div class="flex flex-wrap items-center gap-2">
           <StatusChanger
             :status="item.listing.status"
@@ -505,6 +531,14 @@
             @go="next => (tab = next)"
             @precise="preciseAddress"
           />
+          <div class="@container">
+            <div
+              class="grid gap-4 @3xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] @3xl:items-start"
+            >
+              <ListingLinksSection :item="item" />
+              <SellerSection :item="item" @go="next => (tab = next)" />
+            </div>
+          </div>
         </template>
 
         <template v-else-if="tab === 'negocier'">
@@ -643,6 +677,7 @@
             :last-checked-at="item.listing.lastCheckedAt"
             :last-seen-online-at="item.listing.lastSeenOnlineAt"
             :url="item.listing.url"
+            :links="item.links"
             :members="members"
             @set-status="status => changeStatus({ status, reason: null })"
           />

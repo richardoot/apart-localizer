@@ -33,10 +33,13 @@ import { demoId } from './ids.js'
  * demande à valider ; une demande envoyée il y a douze jours, sans réponse
  * (relance due). Contacts fictifs (« Agence [Exemple] », domaine
  * `exemple.invalid`) ; textes et réponses par les règles de `domain`.
+ * Lot 18 : le nom de l'agence du contact est celui du vendeur de l'annonce
+ * (une seule source) ; le message cite la référence de l'agence.
  */
 
 export interface DemoContact {
   listingId: string
+  /** Lot 18 : celui de l'annonce (`sellerName`), lu par l'API ; jamais écrit dans le contact. */
   agencyName: string | null
   contactName: string | null
   email: string | null
@@ -106,7 +109,6 @@ interface RequestSpec {
 
 interface ContactSpec {
   listingKey: string
-  agencyName: string
   contactName?: string
   email?: string
   phone?: string
@@ -120,7 +122,6 @@ interface ContactSpec {
 const CONTACTS: ContactSpec[] = [
   {
     listingKey: 'bastide-t2',
-    agencyName: 'Agence [Exemple]',
     contactName: 'Mme [Exemple]',
     email: 'contact@agence.exemple.invalid',
     preferredChannel: 'email',
@@ -130,7 +131,6 @@ const CONTACTS: ContactSpec[] = [
   },
   {
     listingKey: 'merignac-t2',
-    agencyName: 'Agence [Exemple] Mérignac',
     portalMessageUrl: 'https://exemple.invalid/messagerie/merignac-t2',
     preferredChannel: 'portal_message',
     days: [1, 10],
@@ -139,7 +139,6 @@ const CONTACTS: ContactSpec[] = [
   },
   {
     listingKey: 'chartrons-t2',
-    agencyName: 'Agence [Exemple] Chartrons',
     email: 'chartrons@agence.exemple.invalid',
     phone: '05 00 00 00 00',
     preferredChannel: 'email',
@@ -247,7 +246,7 @@ export function buildAgencyExchanges(
     if (!listing) return []
     const contact: DemoContact = {
       listingId: listing.id,
-      agencyName: spec.agencyName,
+      agencyName: listing.input.sellerName,
       contactName: spec.contactName ?? null,
       email: spec.email ?? null,
       phone: spec.phone ?? null,
@@ -293,7 +292,8 @@ export function buildAgencyExchanges(
       listing: {
         title: listing.input.title,
         url: listing.input.url,
-        externalId: listing.input.externalId,
+        // Lot 18 : la référence de l'agence, à défaut l'identifiant du portail.
+        externalId: listing.input.sellerReference ?? listing.input.externalId,
         commune: listing.input.location.commune,
         price: listing.input.price,
       },

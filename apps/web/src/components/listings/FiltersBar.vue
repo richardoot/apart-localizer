@@ -23,7 +23,11 @@
     VERDICT_LABELS,
   } from '@/lib/labels'
   import { formatDistance, parseNumberInput } from '@/lib/format'
-  import { useFiltersStore } from '@/stores/filters'
+  import {
+    SELLER_FILTER_CHOICES,
+    sellerChoiceOf,
+    useFiltersStore,
+  } from '@/stores/filters'
 
   const props = withDefaults(
     defineProps<{
@@ -117,6 +121,9 @@
         : 'desc'
   }
 
+  /** Lot 18 : le choix « Vendeur » courant. */
+  const sellerChoice = computed(() => sellerChoiceOf(store.filters.sellerType))
+
   const communeOptions = computed(() =>
     [...props.communes].sort((a, b) => a.localeCompare(b, 'fr'))
   )
@@ -135,7 +142,7 @@
         id="f-search"
         type="search"
         class="rounded-lg border border-line bg-bg px-3 py-1.5 text-sm"
-        placeholder="Titre, commune, quartier, notes…"
+        placeholder="Titre, quartier, agence, référence…"
         :value="store.filters.search ?? ''"
         @change="onSearch"
       />
@@ -266,6 +273,35 @@
       </div>
     </div>
 
+    <div class="grid gap-1 sm:col-span-2 lg:col-span-1">
+      <span id="f-seller-label" class="text-xs font-medium text-muted"
+        >Vendeur</span
+      >
+      <div
+        class="flex flex-wrap gap-1.5"
+        role="group"
+        aria-labelledby="f-seller-label"
+        data-testid="filter-seller"
+      >
+        <button
+          v-for="option in SELLER_FILTER_CHOICES"
+          :key="option.choice"
+          type="button"
+          class="rounded-full border px-2.5 py-0.5 text-xs"
+          :class="
+            sellerChoice === option.choice
+              ? 'border-accent bg-accent-soft text-fg'
+              : 'border-line text-muted hover:text-fg'
+          "
+          :aria-pressed="sellerChoice === option.choice"
+          :data-seller="option.choice"
+          @click="store.setSellerChoice(option.choice)"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+    </div>
+
     <div class="grid gap-1 sm:col-span-2 lg:col-span-4">
       <span class="text-xs font-medium text-muted">Repère</span>
       <div
@@ -325,6 +361,24 @@
           "
         />
         À revérifier
+      </label>
+      <label
+        class="flex items-center gap-2 text-sm"
+        title="Annonces publiées sur au moins deux portails (lot 18)"
+      >
+        <input
+          type="checkbox"
+          class="accent-accent"
+          data-testid="filter-multi-portal"
+          :checked="store.filters.multiPortal ?? false"
+          @change="
+            store.patch({
+              multiPortal:
+                ($event.target as HTMLInputElement).checked || undefined,
+            })
+          "
+        />
+        Sur plusieurs portails
       </label>
       <button
         v-if="store.filters.near"

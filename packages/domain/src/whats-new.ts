@@ -119,6 +119,18 @@ export function whatsNewKindOf(
       // Lot 17 : une réponse de l'annonceur, enregistrée par l'autre membre
       // ou par Claude.
       return 'agency_answer'
+    case 'listing_link.added':
+    case 'listing_link.removed':
+    case 'listing_link.detached': {
+      // Lot 18 : un lien ajouté est une mise à jour de la fiche ; un retrait
+      // ne compte que s'il change le prix de la fiche (le plus bas en ligne).
+      const after = event.after as Record<string, unknown> | null
+      const facts = after?.facts as Record<string, unknown> | null | undefined
+      if (facts && typeof facts === 'object' && 'price' in facts) {
+        return 'price_change'
+      }
+      return event.action === 'listing_link.added' ? 'listing_check' : null
+    }
     default:
       return null
   }
@@ -164,6 +176,14 @@ function itemOf(
     }
     const text = typeof after?.summary === 'string' ? after.summary : ''
     summary = `Vérifiée sur le portail par ${who} : ${text}`
+  } else if (event.action.startsWith('listing_link.')) {
+    // Lot 18 : un lien ajouté, retiré ou détaché, prix avant et après s'il change.
+    const facts = (record: Record<string, unknown> | null) =>
+      (record?.facts as Record<string, unknown> | undefined) ?? undefined
+    if (kind === 'price_change') {
+      from = formatActivityValue('price', facts(before)?.price, names)
+      to = formatActivityValue('price', facts(after)?.price, names)
+    }
   } else if (kind === 'new_listing') {
     summary = `Ajoutée par ${who}`
   } else if (kind === 'price_change') {
@@ -295,7 +315,10 @@ export function listingChangedFields(
       case 'listing.price_changed':
         fields.add('price')
         break
-      case 'listing.checked': {
+      case 'listing.checked':
+      case 'listing_link.added':
+      case 'listing_link.removed':
+      case 'listing_link.detached': {
         const before = event.before as Record<string, unknown> | null
         const after = event.after as Record<string, unknown> | null
         for (const change of activityChanges(
@@ -304,6 +327,8 @@ export function listingChangedFields(
         )) {
           fields.add(change.field)
         }
+        // Lot 18 : les liens de la fiche ont changé (« Où la trouver »).
+        if (event.action.startsWith('listing_link.')) fields.add('links')
         break
       }
       case 'listing.status_changed':

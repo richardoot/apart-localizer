@@ -36,6 +36,10 @@ const WHATS_NEW_ACTIONS = [
   'criteria.unmatched',
   // Lot 17 : une réponse de l'annonceur enregistrée.
   'agency_request.answered',
+  // Lot 18 : un lien ajouté, retiré ou détaché (prix de la fiche compris).
+  'listing_link.added',
+  'listing_link.removed',
+  'listing_link.detached',
 ]
 
 function toEvent(row: ActivityLog): WhatsNewEvent {

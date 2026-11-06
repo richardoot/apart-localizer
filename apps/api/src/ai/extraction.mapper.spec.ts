@@ -28,8 +28,16 @@ describe('extractionToListing', () => {
     expect(listing.propertyTax).toBe(780)
     expect(listing.feesPercent).toBe(0.045)
     expect(listing.feesPayer).toBe('buyer')
-    expect(listing.sourceLabel).toBe('Agence Fictive Talence')
-    expect(listing.externalId).toBe('AGF-12345')
+    // Lot 18 : le vendeur lu, la référence de l'agence (pas l'identifiant
+    // du portail).
+    expect(listing.sellerType).toBe('agency')
+    expect(listing.sellerName).toBe('Agence Fictive Talence')
+    expect(listing.sellerReference).toBe('AGF-12345')
+    expect(listing.fieldSources.sellerReference?.evidence).toBe(
+      'Réf. AGF-12345'
+    )
+    expect(listing.sourceLabel).toBeNull()
+    expect(listing.externalId).toBeNull()
     expect(listing.location.addressRaw).toBe('Rue du Forum, 33400 Talence')
     expect(listing.location.commune).toBe('Talence')
     expect(listing.location.district).toBe('Forum, tram B')
@@ -144,5 +152,51 @@ describe('extractionToListing', () => {
     expect(listing.feesPayer).toBe('seller')
     expect(listing.renovation).toBeNull()
     expect(listing.fieldSources.renovation).toBeUndefined()
+  })
+
+  it('lot 18 : un particulier n’a ni agence ni référence ; un vendeur absent reste inconnu', () => {
+    const privateSeller = extractionToListing(
+      sampleExtraction({
+        sellerType: {
+          value: 'private',
+          confidence: 0.9,
+          evidence: 'De particulier à particulier',
+        },
+      }),
+      { url: null, sourceText: null, now }
+    )
+    expect(privateSeller.listing.sellerType).toBe('private')
+    expect(privateSeller.listing.sellerName).toBeNull()
+    expect(privateSeller.listing.sellerReference).toBeNull()
+    expect(privateSeller.listing.fieldSources.sellerName).toBeUndefined()
+    expect(privateSeller.warnings).toContain(
+      'Vendu par un particulier : agence et référence écartées (un particulier n’en a pas).'
+    )
+    const unknown = extractionToListing(emptyExtraction(), {
+      url: null,
+      sourceText: null,
+      now,
+    })
+    expect(unknown.listing.sellerType).toBe('unknown')
+    expect(unknown.listing.sellerReference).toBeNull()
+    // Un identifiant de portail et un vendeur inconnu, mais une référence lue.
+    const portalId = extractionToListing(
+      emptyExtraction({
+        externalId: {
+          value: '0000000101',
+          confidence: 0.9,
+          evidence: 'n° 0000000101',
+        },
+        agencyReference: {
+          value: 'Réf. EX-7',
+          confidence: 0.9,
+          evidence: 'Réf. EX-7',
+        },
+      }),
+      { url: null, sourceText: null, now }
+    )
+    expect(portalId.listing.externalId).toBe('0000000101')
+    expect(portalId.listing.sellerType).toBe('unknown')
+    expect(portalId.listing.sellerReference).toBe('EX-7')
   })
 })

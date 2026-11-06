@@ -54,7 +54,9 @@ texte collé / captures ──► POST /listings/extract ──► AiService (An
 2. **Sortie structurée** (`AiListingExtractionSchema`) : un objet par champ, `{ value, confidence,
 evidence }`. `value` est `null` quand l'annonce ne dit rien ; `confidence` va de 0 à 1 (1 =
    écrit noir sur blanc, 0,5 = déduit, 0,2 = supposé) ; `evidence` est l'extrait exact qui
-   justifie la valeur. Les champs : titre, URL lue, portail, agence, référence, prix,
+   justifie la valeur. Les champs : titre, URL lue, portail, vendeur (lot 18 : agence,
+   mandataire ou particulier), agence ou réseau, référence de l'annonce chez l'agence,
+   identifiant de l'annonce sur le portail, prix,
    honoraires (inclus ou non, montant, pourcentage en fraction, à charge de qui), surfaces,
    pièces, chambres, étage et nombre d'étages, libellé d'étage, ascenseur, année ou époque de
    construction, DPE (classe, consommation, GES, date), chauffage, extérieur, stationnement,
@@ -72,7 +74,12 @@ evidence }`. `value` est `null` quand l'annonce ne dit rien ; `confidence` va de
    inclus » devient `feesPayer: buyer` ; des travaux évoqués deviennent une section travaux
    active sans poste chiffré ; un pourcentage d'honoraires lu « 5 » devient 0,05. Sans titre,
    un titre de repli (« T2 Talence ») ; sans prix, 0 et une remarque. Le texte collé est gardé
-   dans `sourceText` pour vérification (en base, non renvoyé par la fiche).
+   dans `sourceText` pour vérification (en base, non renvoyé par la fiche). Lot 18 (ADR 0028) :
+   `sellerType` est gardé tel que lu (`agency`, `mandatary`, `private`), sinon le vendeur reste
+   inconnu, jamais deviné ; `agencyName` devient `sellerName` (il remplissait `sourceLabel`
+   jusqu'au lot 17), `agencyReference` devient `sellerReference`, nettoyée de son préfixe
+   (« Réf. », « Mandat n° ») ; `externalId` est l'identifiant de l'annonce sur le portail, jamais
+   la référence de l'agence ; un particulier perd agence et référence, avec une remarque.
 4. **Géocodage** (`GeocodingService.locate`) : adresse exacte d'abord, sinon centroïde de la
    commune ; point, précision (`exact`, `street`, `district`, `commune`), adresse normalisée,
    identifiant BAN et code INSEE reçoivent la provenance `open_data`. Voir plus bas.
@@ -100,7 +107,11 @@ evidence }`. `value` est `null` quand l'annonce ne dit rien ; `confidence` va de
 - géocode l'adresse si aucun point n'est donné ;
 - cherche les doublons probables et les renvoie dans `duplicates` **sans bloquer** la création ;
   `ignoreDuplicates: true` (le membre a vu l'alerte et confirme) est journalisé dans
-  `listing.created` ;
+  `listing.created` ; lot 18 : un lien déjà celui d'une autre annonce est refusé (409, avec son
+  nom), même avec `ignoreDuplicates`, et une annonce de même agence et même référence aussi, sauf
+  `ignoreDuplicates` : c'est la même annonce sur un autre portail, son lien s'ajoute à la fiche
+  existante (« C'est la même : ajouter ce lien à la fiche », `add_listing_link`) ;
+- crée le lien d'origine de l'annonce (lot 18) ;
 - pose la checklist par défaut puis les tâches des champs manquants (`createdTasks`).
 
 La réponse est `ListingCreateResult` : l'annonce évaluée, `duplicates`, `createdTasks`.
@@ -180,15 +191,19 @@ annonce enregistrée qui est alors exclue) à toutes les annonces de l'espace, q
 statut (une annonce écartée est un doublon utile à connaître). Motifs, du plus fort au plus
 faible (`DUPLICATE_TOLERANCES` dans `contracts`) :
 
-| Motif                        | Règle                                                                                                                          | Score |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----- |
-| `same_url`                   | Même URL normalisée (https, hôte sans `www.`, chemin sans barre finale, paramètres de suivi retirés)                           | 1     |
-| `same_address`               | Même adresse normalisée (accents, ponctuation, abréviations, mots vides, code postal et commune retirés), communes compatibles | 0,9   |
-| `same_commune_price_surface` | Même commune, surface à ±3 %, prix à ±5 %                                                                                      | 0,8   |
-| `nearby_similar`             | À moins de 50 m (PostGIS, module `geo`), surface à ±5 %                                                                        | 0,7   |
+| Motif                         | Règle                                                                                                                                                        | Score |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
+| `same_url`                    | Même URL normalisée (https, hôte sans `www.`, chemin sans barre finale, paramètres de suivi retirés), comparée à tous les liens de chaque annonce (lot 18)   | 1     |
+| `same_reference`              | Lot 18 : même agence (mots génériques retirés, deux mots d'écart au plus) et même référence (espaces, tirets et points ignorés) ; jamais pour un particulier | 1     |
+| `same_reference_other_agency` | Lot 18 : même référence, autre agence, agence inconnue d'un côté ou autre type de vendeur                                                                    | 0,85  |
+| `same_address`                | Même adresse normalisée (accents, ponctuation, abréviations, mots vides, code postal et commune retirés), communes compatibles                               | 0,9   |
+| `same_commune_price_surface`  | Même commune, surface à ±3 %, prix à ±5 %                                                                                                                    | 0,8   |
+| `nearby_similar`              | À moins de 50 m (PostGIS, module `geo`), surface à ±5 %                                                                                                      | 0,7   |
 
-Chaque candidat porte tous ses motifs et le meilleur score. `POST /listings/duplicates` et
-l'outil MCP `find_duplicates` exposent la même recherche.
+Chaque candidat porte tous ses motifs et le meilleur score ; lot 18 : `certain` (même lien, ou
+même agence et même référence), le vendeur, la référence et le nombre de liens, les certains
+d'abord. `POST /listings/duplicates` et l'outil MCP `find_duplicates` exposent la même recherche ;
+les règles vivent dans `packages/domain` (`same-listing.ts`, déplacé de l'API au lot 18).
 
 ## Interface
 
@@ -215,6 +230,23 @@ tâches « IA · champ manquant ».
   fiches deviennent des brouillons à valider. Sans clé, ou si un appel échoue, l'analyseur
   simple de `contracts/share.ts` prend le lien, le prix, la surface, les pièces et la commune
   quand le texte les dit (provenance « annonce », confiance 0,6) : aucune valeur n'est devinée.
+- **Lot 18** : une annonce d'alerte lue avec la même agence et la même référence qu'une annonce
+  suivie est rattachée d'office à sa fiche (son lien s'ajoute, origine « reçu dans une alerte
+  e-mail », canal `system`) au lieu de devenir un brouillon ; un membre peut la détacher dans
+  « À valider ». Un lien déjà en brouillon, à valider ou reconnu, ne revient pas. L'analyseur
+  simple ne lit ni le vendeur ni la référence : sans IA, rien n'est rattaché d'office. Au partage
+  depuis le téléphone, un doublon certain propose d'ajouter le lien à la fiche existante.
+
+## Vendeur et référence (lot 18)
+
+L'invite système a une règle « Vendeur » : `sellerType` vaut `agency` pour une agence,
+`mandatary` pour un mandataire (conseiller indépendant d'un réseau, « agent commercial
+immobilier »), `private` pour un particulier (« de particulier à particulier », « sans frais
+d'agence »), `null` si l'annonce ne le dit pas ; `agencyName` est le nom de l'agence, ou du réseau
+pour un mandataire, jamais celui d'une personne ; `agencyReference` la référence sans son préfixe,
+`null` pour un particulier ; `externalId` le numéro de l'annonce sur le portail. Le nom d'un
+conseiller ou d'un interlocuteur n'est pas lu ici : il reste dans le contact de l'annonceur
+(lot 17), saisi par un membre ou complété par Claude.
 
 ## Vérification d'une annonce (lot 15)
 

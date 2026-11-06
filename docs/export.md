@@ -34,7 +34,8 @@ Taxe foncière (€), Loyer visé (€/mois), Loyer retenu (€/mois), Prix au m
 mensuel (€), Verdict, Location, Prix cible (€), Décote nécessaire (%), Note moyenne (/5), Tâches
 ouvertes, Visites, Dernière offre (€), Ajoutée le, Modifiée le, Identifiant, puis, en fin de ligne
 pour ne décaler aucune colonne existante, Vérifiée le, Vue en ligne le, Dernière vérification
-(lot 15) et Adéquation, Raisons de l'adéquation (lot 14).
+(lot 15), Adéquation, Raisons de l'adéquation (lot 14) et Vendeur, Agence, Référence, Liens
+(lot 18).
 
 « Vérifiée le » est la dernière vérification sur le portail, quel qu'en soit le résultat ;
 « Dernière vérification » en donne le résultat (« Inchangée », « Mise à jour », « Plus en ligne »,
@@ -45,6 +46,13 @@ fixe ce niveau, ses raisons chiffrées (« « Talence » : Prix +3,6 % (maximum 
 5 %) ») et, le cas échéant, « Gardée dans la liste : offre en cours ». L'export de tout l'espace
 (`scope=workspace`) prend toutes les annonces, hors critères comprises ; une sélection suit
 l'onglet de la liste (`fit`).
+
+Les quatre colonnes du lot 18 (ADR 0028) : « Vendeur » vaut « Agence », « Mandataire »,
+« Particulier » ou « Inconnu » ; « Agence » est l'agence ou le réseau du mandataire (vide pour un
+particulier), « Référence » la référence de l'annonce telle qu'enregistrée ; « Liens » donne
+tous les liens de l'annonce, le principal d'abord, séparés par « | » : « Leboncoin : <lien> |
+SeLoger : <lien> | Bien'ici : <lien> (plus en ligne) ». « Portail » et « Lien » restent ceux du
+lien principal (le plus ancien en ligne). « Dernière vérification » peut valoir « Lien ajouté ».
 
 La colonne « Coût total (€) » garde son nom depuis le lot 9, pour les tableurs qui la lisent :
 c'est le **coût tout compris** de l'interface (prix affiché + frais de notaire + travaux +
@@ -84,6 +92,15 @@ extrait de 1 000 caractères masqué ; liste vide par défaut) et, dans chaque t
 `requestedAt`, `requestId`, `answeredAt` (`null` par défaut). Le CSV ne change pas : une liste de
 demandes ne tient pas dans une cellule, et les coordonnées d'un tiers n'ont rien à faire dans un
 tableur partagé ; les tâches cochées par une réponse comptent déjà dans « Tâches ouvertes ».
+Le lot 18 non plus : `listing.sellerType` (`unknown` par défaut), `listing.sellerName`,
+`listing.sellerReference` et `listing.sellerReferenceKey` (`null` par défaut), `links` par
+annonce (un par portail : portail, lien et sa clé, identifiant sur le portail, prix affiché et
+sa date, première vue, dernière vue en ligne, dernière vérification, hors ligne depuis, en ligne
+ou non, principal ou non, origine, agence et référence lues, extrait court masqué ; le principal
+d'abord ; une liste vide dans un export antérieur, où `listing.url` est alors le seul lien),
+`link` de chaque vérification (le lien vérifié, `null` par défaut) et, dans les explorations, le
+compteur `attached` et le résultat « rattachée d'office » des lignes du compte rendu.
+`listing.url`, `source` et `externalId` restent ceux du lien principal.
 
 ```text
 {
@@ -106,7 +123,8 @@ tableur partagé ; les tâches cochées par une réponse comptent déjà dans «
     checks: ListingCheck[],                 // lot 15 : date, auteur, canal, résultat, écarts, extrait
     criteriaFit: ListingCriteriaFit,        // lot 14 : adéquation aux critères actifs
     contact: ListingContact | null,         // lot 17 : contact de l'annonceur
-    agencyRequests: AgencyRequest[]         // lot 17 : demandes, validation, envoi, réponses
+    agencyRequests: AgencyRequest[],        // lot 17 : demandes, validation, envoi, réponses
+    links: ListingLink[]                    // lot 18 : un lien par portail, le principal d'abord
   }],
   searchCriteria: SearchCriteria[],         // filtres, marge de tolérance, périmètre GeoJSON, portails (lot 16)
   scenarios: Scenario[],                    // de l'espace et des annonces exportées

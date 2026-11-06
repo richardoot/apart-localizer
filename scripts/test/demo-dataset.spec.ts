@@ -11,7 +11,9 @@ import {
 import {
   describeActivity,
   isFollowUpDue,
+  lowestOnlinePrice,
   notificationsForActivity,
+  primaryLink,
 } from '@apart/domain'
 import { describe, expect, it } from 'vitest'
 import { DEMO_ACCOUNTS } from '../lib/demo/accounts.js'
@@ -24,6 +26,12 @@ import { DEMO_WORKSPACE_ID, demoId } from '../lib/demo/ids.js'
 
 const NOW = new Date('2026-11-03T15:00:00Z')
 const dataset = buildDemoDataset(NOW)
+
+/** Lot 18 : un lien fictif (exemple.invalid, chemin « exemple », identifiant impossible). */
+const FICTIVE_LINK =
+  /^https:\/\/(exemple\.invalid\/|www\.(bienici|seloger)\.com\/annonces?\/.*exemple-\d+(\.htm)?$|www\.pap\.fr\/annonces\/.*-exemple-r\d+$|www\.leboncoin\.fr\/ad\/ventes_immobilieres\/0000000\d+$)/
+const plain = (value: string | undefined) =>
+  (value ?? '').replace(/[\u202f\u00a0]/g, ' ')
 
 /** Communes de Bordeaux Métropole utilisées par le jeu. */
 const METROPOLE = new Set([
@@ -272,7 +280,11 @@ describe('jeu de démonstration', () => {
     for (const listing of dataset.listings) {
       for (const check of listing.checks) {
         expect(check.evidence?.length ?? 0).toBeLessThanOrEqual(500)
-        expect(check.checkedUrl).toMatch(/^https:\/\/exemple\.invalid\//)
+        expect(check.checkedUrl).toMatch(FICTIVE_LINK)
+        // Lot 18 : chaque vérification porte sur un lien de l'annonce.
+        expect(listing.links.find(l => l.id === check.linkId)?.url).toBe(
+          check.checkedUrl
+        )
       }
     }
   })
@@ -293,6 +305,8 @@ describe('jeu de démonstration', () => {
       'out',
       'out',
       'out',
+      'attached',
+      'duplicate_probable',
     ])
     expect(recent?.lines.slice(0, 4).map(l => l.level)).toEqual([
       'in',
@@ -301,17 +315,18 @@ describe('jeu de démonstration', () => {
       'to_confirm',
     ])
     expect(recent?.counts).toMatchObject({
-      seen: 11,
-      toValidate: 4,
+      seen: 13,
+      toValidate: 5,
       known: 2,
+      attached: 1,
       dismissed: 2,
       out: 3,
-      draftsCreated: 4,
+      draftsCreated: 5,
       checksChanged: 1,
       blockedPortals: 1,
     })
     expect(recent?.summary).toBe(
-      '11 annonces vues : 4 à valider, 2 déjà suivies, 2 déjà écartées, 3 hors critères ; Logic-Immo bloqué'
+      '13 annonces vues : 5 à valider, 2 déjà suivies, 1 rattachée d’office, 2 déjà écartées, 3 hors critères ; Logic-Immo bloqué'
     )
     expect(recent?.portals.find(p => p.status === 'blocked')?.portal).toBe(
       'logicimmo'
@@ -319,22 +334,25 @@ describe('jeu de démonstration', () => {
     // La baisse de prix vue au même lien est une vérification (lot 15).
     const merignac = dataset.listings.find(l => l.key === 'merignac-t2')
     expect(merignac?.input.price).toBe(152_000)
-    expect(merignac?.checks.at(-1)).toMatchObject({
-      outcome: 'changed',
+    expect(merignac?.checks.find(c => c.outcome === 'changed')).toMatchObject({
       at: recent?.finishedAt,
       channel: 'mcp',
     })
     expect(
       dataset.listings.find(l => l.key === 'begles-t3')?.checks.at(-1)?.outcome
     ).toBe('unchanged')
-    // Brouillons : quatre à valider (dont un doublon), un écarté avec sa raison.
+    // Brouillons : cinq à valider (dont deux doublons), un écarté avec sa
+    // raison, un reconnu (lot 18 : rattaché d'office).
     const drafts = dataset.explorationDrafts
-    expect(drafts.filter(d => d.status === 'pending')).toHaveLength(4)
+    expect(drafts.filter(d => d.status === 'pending')).toHaveLength(5)
+    expect(drafts.filter(d => d.status === 'merged')).toHaveLength(1)
     expect(drafts.find(d => d.status === 'dismissed')).toMatchObject({
       dismissReason: 'rez-de-chaussée sur rue',
       decidedBy: 'demo2',
     })
-    expect(drafts.filter(d => d.duplicates.length)).toHaveLength(1)
+    expect(
+      drafts.filter(d => d.status === 'pending' && d.duplicates.length)
+    ).toHaveLength(2)
     for (const d of drafts) {
       expect(ListingInputSchema.parse(d.input)).toEqual(d.input)
       expect(d.input.title.startsWith('[Exemple]')).toBe(true)
@@ -345,9 +363,7 @@ describe('jeu de démonstration', () => {
         expect(
           line.title.startsWith('[Exemple]') || line.listingKey !== null
         ).toBe(true)
-        expect(line.url).toMatch(
-          /exemple|^https:\/\/www\.leboncoin\.fr\/ad\/ventes_immobilieres\/00000001\d\d$/
-        )
+        expect(line.url).toMatch(FICTIVE_LINK)
       }
     }
     // Sacha est prévenu de l'exploration de Camille (pas Camille).
@@ -371,14 +387,18 @@ describe('jeu de démonstration', () => {
       { members, listingTitle: null }
     )
     expect(sent.map(s => [s.recipientId, s.title])).toEqual([
-      [dataset.members[1]?.id, 'Claude a trouvé 4 annonces à valider'],
+      [dataset.members[1]?.id, 'Claude a trouvé 5 annonces à valider'],
     ])
   })
 
   it('lot 17 : contacts fictifs, une réponse qui a rempli les charges, un message à valider, une relance due', () => {
     expect(dataset.contacts).toHaveLength(3)
     for (const c of dataset.contacts) {
-      expect(c.agencyName).toMatch(/^Agence \[Exemple\]/)
+      expect(c.agencyName).toMatch(/\[Exemple\]/)
+      // Lot 18 : le nom de l'agence du contact est celui de l'annonce.
+      expect(c.agencyName).toBe(
+        dataset.listings.find(l => l.id === c.listingId)?.input.sellerName
+      )
       if (c.email) expect(c.email).toMatch(/@agence\.exemple\.invalid$/)
       if (c.portalMessageUrl)
         expect(c.portalMessageUrl).toMatch(/^https:\/\/exemple\.invalid\//)
@@ -453,6 +473,151 @@ describe('jeu de démonstration', () => {
       ])
     )
     expect(JSON.stringify(agency)).not.toContain('exemple.invalid')
+  })
+
+  it('lot 18 : une annonce sur trois portails, un particulier sur deux, un mandataire rattaché d’office, des vendeurs inconnus', () => {
+    const byKey = new Map(dataset.listings.map(l => [l.key, l]))
+    const chartrons = byKey.get('chartrons-t2')
+    expect(
+      chartrons?.links.map(l => [l.portal, l.origin, l.online, l.price])
+    ).toEqual([
+      ['seloger', 'original', true, 172_000],
+      ['bienici', 'manual', false, 172_000],
+      ['leboncoin', 'claude', true, 177_000],
+    ])
+    expect(chartrons?.input).toMatchObject({
+      price: 172_000,
+      sellerType: 'agency',
+      sellerName: '[Exemple] Immobilier des Chartrons',
+      sellerReference: 'EX-2041',
+    })
+    expect(chartrons?.sellerReferenceKey).toBe('EX2041')
+    expect(chartrons?.links[2]?.readReference).toBe('EX-2041')
+    // Un lien hors ligne parmi d'autres est une mise à jour, sans statut
+    // proposé ; l'écart entre portails est noté, jamais résolu.
+    expect(chartrons?.checks.map(c => c.outcome)).toEqual([
+      'link_added',
+      'changed',
+      'link_added',
+    ])
+    expect(chartrons?.checks[1]).toMatchObject({
+      suggestedStatus: null,
+      linkId: chartrons?.links[1]?.id,
+    })
+    expect(plain(chartrons?.checks[1]?.summary)).toBe(
+      'Plus en ligne sur Bien’ici (toujours en ligne sur SeLoger)'
+    )
+    const gap = chartrons?.checks[2]?.changes.find(c => c.field === 'priceGap')
+    expect(gap?.disposition).toBe('noted')
+    expect(plain(gap?.text)).toContain('+5 000 € par rapport à SeLoger')
+    expect(plain(gap?.text)).toContain('frais inclus ?')
+
+    // Partout : le lien d'origine en tête, le lien principal recopié dans la
+    // fiche, le prix de la fiche = le plus bas des liens en ligne, des liens
+    // fictifs et uniques dans l'espace.
+    const keys = new Set<string>()
+    for (const l of dataset.listings) {
+      expect(l.links[0]?.origin).toBe('original')
+      expect(primaryLink(l.links)?.url).toBe(l.input.url)
+      const lowest = lowestOnlinePrice(l.links)
+      if (lowest) expect(lowest.price).toBe(l.input.price)
+      for (const link of l.links) {
+        expect(link.url).toMatch(FICTIVE_LINK)
+        expect(keys.has(link.normalizedUrl)).toBe(false)
+        keys.add(link.normalizedUrl)
+      }
+    }
+
+    // Un particulier sur PAP et Leboncoin (partagé depuis le téléphone) : ni
+    // agence ni référence.
+    const cauderan = byKey.get('cauderan-t3')
+    expect(cauderan?.input).toMatchObject({
+      sellerType: 'private',
+      sellerName: null,
+      sellerReference: null,
+    })
+    expect(cauderan?.links.map(l => [l.portal, l.origin])).toEqual([
+      ['pap', 'original'],
+      ['leboncoin', 'share'],
+    ])
+
+    // Le mandataire : le lien Bien'ici rattaché d'office par l'exploration,
+    // avec son brouillon reconnu (« Ce n'est pas la même » le détache).
+    const merignac = byKey.get('merignac-t2')
+    expect(merignac?.input.sellerType).toBe('mandatary')
+    const attached = merignac?.links.find(l => l.origin === 'exploration')
+    const merged = dataset.explorationDrafts.find(d => d.status === 'merged')
+    expect(attached?.draftId).toBe(merged?.id)
+    expect(merged).toMatchObject({
+      listingId: merignac?.id,
+      attachedLinkId: attached?.id,
+      mergedCheckId: merignac?.checks.find(c => c.linkId === attached?.id)?.id,
+    })
+    expect(merged?.duplicates[0]).toMatchObject({
+      listingId: merignac?.id,
+      certain: true,
+    })
+    expect(merged?.duplicates[0]?.reasons.map(r => r.kind)).toContain(
+      'same_reference'
+    )
+    expect(
+      dataset.explorations[1]?.lines.find(l => l.outcome === 'attached')
+    ).toMatchObject({ listingKey: 'merignac-t2', draftId: merged?.id })
+
+    // Même référence, autre agence : un doublon probable à trancher.
+    const reference = dataset.explorationDrafts.find(
+      d => d.input.sellerName === '[Exemple] Agence du Jardin public'
+    )
+    expect(reference?.status).toBe('pending')
+    expect(reference?.duplicates[0]).toMatchObject({
+      listingId: chartrons?.id,
+      certain: false,
+    })
+    expect(reference?.duplicates[0]?.reasons[0]?.kind).toBe(
+      'same_reference_other_agency'
+    )
+
+    // Les autres : vendeur inconnu, jamais deviné.
+    expect(
+      dataset.listings.filter(l => l.input.sellerType === 'unknown').length
+    ).toBeGreaterThanOrEqual(8)
+
+    // Journal : les liens ajoutés ; l'autre membre est prévenu d'un lien
+    // ajouté par Claude, jamais d'un lien collé dans l'application.
+    const added = dataset.activity.filter(
+      a => a.action === 'listing_link.added'
+    )
+    expect(
+      added.map(a => [a.listingKey, a.channel, a.after?.origin, a.after?.auto])
+    ).toEqual([
+      ['chartrons-t2', 'web', 'manual', false],
+      ['chartrons-t2', 'mcp', 'claude', false],
+      ['merignac-t2', 'mcp', 'exploration', true],
+      ['cauderan-t3', 'web', 'share', false],
+    ])
+    const members = dataset.members.map(m => ({
+      id: m.id,
+      displayName: m.displayName,
+    }))
+    const sent = added.map(a =>
+      notificationsForActivity(
+        {
+          action: a.action,
+          channel: a.channel,
+          actorMemberId: demoId(`member:${a.actor}`),
+          before: a.before,
+          after: a.after,
+          listingId: null,
+        },
+        { members, listingTitle: '[Exemple]' }
+      ).map(s => [s.recipientId, s.type])
+    )
+    expect(sent).toEqual([
+      [],
+      [[dataset.members[1]?.id, 'listing_checked']],
+      [[dataset.members[1]?.id, 'listing_checked']],
+      [],
+    ])
   })
 
   it('laisse des annonces « nouvelles » à chacun : sans vue du membre', () => {

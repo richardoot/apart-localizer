@@ -1,6 +1,11 @@
 import { z } from 'zod'
 import { ExtractionImageSchema, ExtractionQualitySchema } from './ai.js'
-import { DpeClassSchema, ListingStatusSchema } from './enums.js'
+import {
+  DpeClassSchema,
+  ListingStatusSchema,
+  ObservedSellerTypeSchema,
+} from './enums.js'
+import { ListingPortalSchema } from './portals.js'
 
 /**
  * Suivi des mises à jour des annonces (lot 15, ADR 0025). Une vérification
@@ -34,9 +39,16 @@ export const LISTING_CHECK_TOLERANCES = {
 } as const
 
 export const ListingCheckOutcomeSchema = z
-  .enum(['unchanged', 'changed', 'offline', 'republished', 'inaccessible'])
+  .enum([
+    'unchanged',
+    'changed',
+    'offline',
+    'republished',
+    'inaccessible',
+    'link_added',
+  ])
   .describe(
-    "Résultat : inchangée, mise à jour (un fait a changé), plus en ligne, republiée (autre lien ou autre annonce), page inaccessible (captcha, blocage, introuvable : rien n'est vérifié)"
+    "Résultat : inchangée, mise à jour (un fait a changé), plus en ligne (sur tous ses portails), republiée (autre lien ou autre annonce), page inaccessible (captcha, blocage, introuvable : rien n'est vérifié), lien ajouté (lot 18 : la même annonce sur un autre portail, rattachée à la fiche)"
   )
 export type ListingCheckOutcome = z.infer<typeof ListingCheckOutcomeSchema>
 
@@ -47,12 +59,19 @@ export const LISTING_CHECK_OUTCOME_LABELS: Record<ListingCheckOutcome, string> =
     offline: 'Plus en ligne',
     republished: 'Republiée',
     inaccessible: 'Non vérifiée : page inaccessible',
+    link_added: 'Lien ajouté',
   }
 
-/** Canal d'une vérification : Claude par le connecteur, ou un membre dans l'application. */
+/**
+ * Canal d'une vérification : Claude par le connecteur, un membre dans
+ * l'application, ou le système (lot 18 : lien rattaché depuis une alerte
+ * e-mail).
+ */
 export const ListingCheckChannelSchema = z
-  .enum(['mcp', 'web'])
-  .describe('Canal : Claude par le connecteur MCP, ou un membre dans le web')
+  .enum(['mcp', 'web', 'system'])
+  .describe(
+    'Canal : Claude par le connecteur MCP, un membre dans le web, le système (alerte e-mail)'
+  )
 export type ListingCheckChannel = z.infer<typeof ListingCheckChannelSchema>
 
 export const ListingCheckFieldSchema = z
@@ -71,8 +90,17 @@ export const ListingCheckFieldSchema = z
     'url',
     'online',
     'status',
+    // Lot 18 : liens, prix par portail, vendeur.
+    'link',
+    'linkPrice',
+    'priceGap',
+    'sellerType',
+    'sellerName',
+    'sellerReference',
   ])
-  .describe('Champ comparé par une vérification')
+  .describe(
+    'Champ comparé par une vérification (lot 18 : link = un lien ajouté, linkPrice = le prix sur ce portail, priceGap = un écart entre portails, sellerType, sellerName, sellerReference = le vendeur lu)'
+  )
 export type ListingCheckField = z.infer<typeof ListingCheckFieldSchema>
 
 export const ListingCheckDispositionSchema = z
@@ -158,6 +186,27 @@ export const ListingObservedSchema = z
       .describe(
         'Lien actuel de l’annonce, s’il diffère du lien enregistré (annonce republiée sous un autre lien)'
       ),
+    // Lot 18 : le vendeur lu sur la page (appliqué s'il était inconnu,
+    // proposé s'il contredit la fiche).
+    sellerType: ObservedSellerTypeSchema.optional(),
+    sellerName: z
+      .string()
+      .trim()
+      .min(1)
+      .max(120)
+      .optional()
+      .describe(
+        "Agence, ou réseau pour un mandataire, affichés sur la page ; jamais le nom d'une personne"
+      ),
+    reference: z
+      .string()
+      .trim()
+      .min(1)
+      .max(60)
+      .optional()
+      .describe(
+        'Référence de l’annonce affichée (« Réf. EX-2041 », « Mandat n° 2041 ») ; jamais pour un particulier'
+      ),
   })
   .describe(
     'Valeurs lues sur la page par Claude (ou par le membre) ; seules celles fournies sont comparées'
@@ -192,6 +241,14 @@ export const LinkedListingSchema = z.object({
 })
 export type LinkedListing = z.infer<typeof LinkedListingSchema>
 
+/** Le lien d'une annonce vérifié (lot 18), en quelques champs. */
+export const CheckedLinkSchema = z.object({
+  id: z.string().uuid(),
+  portal: ListingPortalSchema,
+  url: z.string(),
+})
+export type CheckedLink = z.infer<typeof CheckedLinkSchema>
+
 /** Une vérification enregistrée : la chronologie « Mises à jour » de la fiche. */
 export const ListingCheckSchema = z.object({
   id: z.string().uuid(),
@@ -225,6 +282,11 @@ export const ListingCheckSchema = z.object({
   suggestedStatus: ListingStatusSchema.nullable().describe(
     'Statut proposé à la suite de la vérification ; jamais appliqué d’office'
   ),
+  link: CheckedLinkSchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 18 : le lien vérifié (portail, URL) ; null pour une vérification antérieure au lot 18 sans lien, ou un lien retiré depuis'
+    ),
 })
 export type ListingCheck = z.infer<typeof ListingCheckSchema>
 
@@ -250,6 +312,23 @@ export const ListingRepublicationSchema = z.object({
 })
 export type ListingRepublication = z.infer<typeof ListingRepublicationSchema>
 
+/** Les résultats qu'une vérification peut déclarer (« lien ajouté » vient d'un ajout de lien). */
+export const DeclaredCheckOutcomeSchema = ListingCheckOutcomeSchema.exclude([
+  'link_added',
+]).describe(
+  'Résultat constaté : unchanged, changed, offline, republished, inaccessible'
+)
+export type DeclaredCheckOutcome = z.infer<typeof DeclaredCheckOutcomeSchema>
+
+/** Le lien vérifié (lot 18). */
+const checkedLinkId = z
+  .string()
+  .uuid()
+  .optional()
+  .describe(
+    'Lot 18 : le lien vérifié (identifiant rendu par get_listing, `links`) ; absent = le lien dont l’URL est `checkedUrl`, sinon le lien principal'
+  )
+
 const evidenceInput = z
   .string()
   .max(5000)
@@ -265,9 +344,10 @@ const evidenceInput = z
  */
 export const ListingCheckInputSchema = z.object({
   observed: ListingObservedSchema.default({}),
-  outcome: ListingCheckOutcomeSchema.optional().describe(
-    'Résultat constaté ; absent = déduit des valeurs observées. « inaccessible » quand la page ne s’affiche pas (captcha, blocage) : rien n’est appliqué'
+  outcome: DeclaredCheckOutcomeSchema.optional().describe(
+    'Résultat constaté ; absent = déduit des valeurs observées. « inaccessible » quand la page ne s’affiche pas (captcha, blocage) : rien n’est appliqué. Avec plusieurs liens, « offline » ne vaut que pour le lien vérifié : l’annonce n’est proposée « Vendu ou retiré » que si plus aucun lien n’est en ligne'
   ),
+  linkId: checkedLinkId,
   evidence: evidenceInput,
   checkedUrl: z
     .string()
@@ -321,9 +401,10 @@ export const ListingCheckPreviewRequestSchema = z
       .default([])
       .describe('Captures de la page (base64), avec pageText'),
     quality: ExtractionQualitySchema.default('fast'),
-    outcome: ListingCheckOutcomeSchema.optional().describe(
+    outcome: DeclaredCheckOutcomeSchema.optional().describe(
       'Résultat envisagé, pour voir ce que apply_listing_check en ferait'
     ),
+    linkId: checkedLinkId,
     republishedListingId: z.string().uuid().optional(),
   })
   .refine(

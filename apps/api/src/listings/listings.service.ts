@@ -26,6 +26,7 @@ import type {
   ListingCreateResult,
   ListingFilters,
   ListingInput,
+  ListingLinkOrigin,
   ListingList,
   ListingLocationInput,
   ListingPlacement,
@@ -40,13 +41,21 @@ import type {
 import {
   checkReference,
   countFits,
+  detectLinkPortal,
   fitForCriteria,
   isStale,
+  linkKey,
   matchesFitFilter,
   mergeAssumptions,
+  normalizeSeller,
+  portalOfListingSource,
   priceTrigger,
+  primaryLink,
+  referenceKey,
+  referenceMatchOf,
+  sameUrlMatchOf,
 } from '@apart/domain'
-import type { CriteriaFitTrigger } from '@apart/domain'
+import type { CriteriaFitTrigger, LinkState } from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
@@ -65,7 +74,9 @@ import {
   REFERENCE_RENT_KEY,
 } from './enrichment.service'
 import { evaluateListing } from './evaluate'
+import { assertLinkFree, priceEventData, syncPrimaryLink } from './link-writes'
 import {
+  linkStateOf,
   listingInclude,
   toCriteriaMatchDtos,
   toLastCheck,
@@ -75,6 +86,7 @@ import {
   toOpinionDto,
   toPriceEventDto,
   toRepublication,
+  toListingLinkDtos,
   toTaskDto,
 } from './listing.mapper'
 import type { ListingRow } from './listing.mapper'
@@ -100,6 +112,13 @@ export interface WriteOptions {
 export interface CreateOptions extends WriteOptions {
   /** Le membre a vu les doublons probables et crée quand même (journalisé). */
   ignoreDuplicates?: boolean
+  /** Lot 18 : l'origine du lien de l'annonce (« original » par défaut). */
+  linkOrigin?: ListingLinkOrigin
+}
+
+/** Lot 18 : l'origine d'un lien saisi par une écriture d'annonce, selon le canal. */
+function linkOriginOf(channel: ActivityChannel): ListingLinkOrigin {
+  return channel === 'mcp' ? 'claude' : 'manual'
 }
 
 /** Les champs dont un changement relance le plafond, le marché et l'arrêt le plus proche. */
@@ -186,17 +205,30 @@ export class ListingsService {
     }
     if (filters.roomsMin !== undefined) where.rooms = { gte: filters.roomsMin }
     if (filters.newForMe) where.views = { none: { memberId: member.id } }
+    if (filters.sellerType?.length) {
+      // Lot 18 : le vendeur (« à relever » = inconnu).
+      where.sellerType = { in: filters.sellerType }
+    }
+    if (filters.reference !== undefined) {
+      // Lot 18 : la référence, sans espaces, tirets ni points.
+      // Une référence trop courte ne trouve rien (« # » n'est dans aucune clé).
+      where.sellerReferenceKey = referenceKey(filters.reference) ?? '#'
+    }
     if (filters.search) {
       const contains = {
         contains: filters.search,
         mode: 'insensitive' as const,
       }
+      const reference = referenceKey(filters.search)
       where.OR = [
         { title: contains },
         { commune: contains },
         { district: contains },
         { notes: contains },
         { addressRaw: contains },
+        // Lot 18 : l'agence, et la référence espaces et tirets ignorés.
+        { sellerName: contains },
+        ...(reference ? [{ sellerReferenceKey: { contains: reference } }] : []),
       ]
     }
 
@@ -259,6 +291,10 @@ export class ListingsService {
       const now = new Date()
       const days = filters.staleDays
       items = items.filter(item => isStale(item.listing, now, days))
+    }
+    if (filters.multiPortal) {
+      // Lot 18 : publiées sur plusieurs portails (deux liens ou plus).
+      items = items.filter(item => item.links.length >= 2)
     }
     // Lot 14 : sans critère actif, rien n'est filtré (tout est « dans »).
     const { counts, kept } = countFits(items.map(item => item.criteriaFit))
@@ -340,6 +376,21 @@ export class ListingsService {
     }
     const listing: ListingInput = { ...input, location, fieldSources }
     const duplicates = await this.duplicates.findForInput(member, listing)
+    // Lot 18 : un lien n'est que sur une fiche ; même agence et même
+    // référence, c'est la même annonce : on propose d'y ajouter le lien.
+    const sameUrl = sameUrlMatchOf(duplicates)
+    if (sameUrl) {
+      throw new ConflictException(
+        `Ce lien est déjà celui de l’annonce « ${sameUrl.title} » [id ${sameUrl.listingId}] : une même URL ne peut pas être sur deux fiches. Ouvrez cette annonce plutôt que d’en créer une autre.`
+      )
+    }
+    const sameReference = referenceMatchOf(duplicates)
+    if (sameReference && !options.ignoreDuplicates) {
+      throw new ConflictException(
+        `Même agence et même référence que « ${sameReference.title} » [id ${sameReference.listingId}] : c’est la même annonce, publiée sur un autre portail. Ajoutez ce lien à sa fiche (add_listing_link, ou « C’est la même : ajouter ce lien à la fiche »), ou confirmez qu’il s’agit d’une autre annonce (ignoreDuplicates).`
+      )
+    }
+    const seller = normalizeSeller(input)
     const aiSourced =
       provenance === 'ai' ||
       Object.values(fieldSources).some(p => p.source === 'ai')
@@ -354,6 +405,10 @@ export class ListingsService {
       const created = await tx.listing.create({
         data: {
           ...scalarData({ ...listing, fieldSources }),
+          sellerType: seller.sellerType,
+          sellerName: seller.sellerName,
+          sellerReference: seller.sellerReference,
+          sellerReferenceKey: seller.sellerReferenceKey,
           locationPlacement: placementJson(placement),
           title: input.title,
           price: new Prisma.Decimal(input.price),
@@ -412,6 +467,34 @@ export class ListingsService {
         },
         tx
       )
+      // Lot 18 : le lien de l'annonce devient son lien d'origine.
+      if (input.url) {
+        const normalizedUrl = linkKey(input.url) as string
+        await assertLinkFree(tx, member.workspaceId, normalizedUrl, null)
+        const now = new Date()
+        await tx.listingLink.create({
+          data: {
+            workspaceId: member.workspaceId,
+            listingId: created.id,
+            portal: portalOfListingSource(
+              input.source,
+              input.sourceLabel,
+              input.url
+            ),
+            url: input.url.trim(),
+            normalizedUrl,
+            externalId: input.externalId,
+            price: input.price > 0 ? new Prisma.Decimal(input.price) : null,
+            priceAt: input.price > 0 ? now : null,
+            firstSeenAt: now,
+            origin: options.linkOrigin ?? 'original',
+            readSellerName: seller.sellerName,
+            readReference: seller.sellerReference,
+            addedById: member.id,
+          },
+        })
+        await syncPrimaryLink(tx, created.id)
+      }
       return created.id
     })
     if (location.point) {
@@ -524,12 +607,46 @@ export class ListingsService {
         })
       }
     }
+    // Lot 18 : le vendeur, nettoyé (un particulier n'a ni agence ni référence).
+    const sellerTouched =
+      patch.sellerType !== undefined ||
+      patch.sellerName !== undefined ||
+      patch.sellerReference !== undefined
+    const seller = sellerTouched
+      ? normalizeSeller({
+          sellerType: patch.sellerType ?? before.sellerType,
+          sellerName:
+            patch.sellerName !== undefined
+              ? patch.sellerName
+              : before.sellerName,
+          sellerReference:
+            patch.sellerReference !== undefined
+              ? patch.sellerReference
+              : before.sellerReference,
+        })
+      : null
+    // Lot 18 : le lien principal suit `url`, `source` et `externalId`.
+    const links = row.links.map(linkStateOf)
+    const primary = primaryLink(links)
+    if (patch.url === null && links.length > 0) {
+      throw new BadRequestException(
+        'Le lien principal ne s’efface pas : retirez un lien dans « Où la trouver » (le dernier lien d’une annonce reste)'
+      )
+    }
     await this.prisma.$transaction(async tx => {
       const { renovation, rentalPlan, ...rest } = patch
       await tx.listing.update({
         where: { id },
         data: {
           ...scalarData({ ...rest, fieldSources }),
+          ...(seller
+            ? {
+                sellerType: seller.sellerType,
+                sellerName: seller.sellerName,
+                sellerReference: seller.sellerReference,
+                sellerReferenceKey: seller.sellerReferenceKey,
+              }
+            : {}),
           ...(location ? locationData(location) : {}),
           ...(placement !== undefined
             ? { locationPlacement: placementJson(placement) }
@@ -574,6 +691,15 @@ export class ListingsService {
           },
         })
       }
+      await this.syncMainLink(tx, {
+        listingId: id,
+        workspaceId: member.workspaceId,
+        primary,
+        patch,
+        provenance,
+        origin: linkOriginOf(channel),
+        memberId: member.id,
+      })
       await this.activity.record(
         {
           workspaceId: member.workspaceId,
@@ -694,11 +820,34 @@ export class ListingsService {
         `Le prix est déjà de ${currentPrice} € : rien à enregistrer`
       )
     }
+    const primary = primaryLink(row.links.map(linkStateOf))
     await this.prisma.$transaction(async tx => {
       await tx.listing.update({
         where: { id },
-        data: { price: new Prisma.Decimal(input.newPrice) },
+        data: {
+          price: new Prisma.Decimal(input.newPrice),
+          // Lot 18 : la provenance du prix suit l'écriture (un prix saisi à
+          // la main n'est plus remplacé par le plus bas en ligne sans
+          // proposition ; un prix lu sur le portail suit de nouveau les liens).
+          fieldSources: {
+            ...(toListingDto(row).fieldSources ?? {}),
+            price: {
+              source: input.source,
+              recordedAt: new Date().toISOString(),
+            },
+          } as Prisma.InputJsonValue,
+        },
       })
+      if (primary && input.source !== 'user') {
+        // Lu sur le portail : c'est le prix affiché du lien principal.
+        await tx.listingLink.update({
+          where: { id: primary.id },
+          data: {
+            price: new Prisma.Decimal(input.newPrice),
+            priceAt: input.occurredAt ? new Date(input.occurredAt) : new Date(),
+          },
+        })
+      }
       await tx.priceEvent.create({
         data: priceEventData(
           id,
@@ -820,7 +969,102 @@ export class ListingsService {
       lastCheck: toLastCheck(row),
       republication: toRepublication(row),
       criteriaFit: toListingCriteriaFit(row),
+      links: toListingLinkDtos(row.links),
     })
+  }
+
+  /**
+   * Lot 18 : le lien principal suit une modification de l'annonce. Une URL
+   * nouvelle remplace celle du lien principal (ou crée le premier lien),
+   * refusée si elle est déjà sur une autre fiche ; une URL qui est déjà un
+   * des liens de l'annonce ne crée rien. `source` et `externalId` modifiés
+   * vont au lien principal. Un prix lu sur le portail (provenance autre que
+   * « user ») devient le prix affiché du lien principal. Puis l'annonce
+   * recopie son lien principal.
+   */
+  private async syncMainLink(
+    tx: Prisma.TransactionClient,
+    input: {
+      listingId: string
+      workspaceId: string
+      primary: LinkState | null
+      patch: ListingUpdate
+      provenance: FieldSource
+      origin: ListingLinkOrigin
+      memberId: string
+    }
+  ): Promise<void> {
+    const { patch, primary } = input
+    const now = new Date()
+    let touched = false
+    if (patch.url !== undefined && patch.url !== null) {
+      const normalizedUrl = linkKey(patch.url) as string
+      const own = await assertLinkFree(
+        tx,
+        input.workspaceId,
+        normalizedUrl,
+        input.listingId
+      )
+      if (!own) {
+        const portal = detectLinkPortal(
+          patch.url,
+          patch.source !== undefined
+            ? portalOfListingSource(
+                patch.source,
+                patch.sourceLabel ?? null,
+                null
+              )
+            : (primary?.portal ?? null)
+        )
+        if (primary) {
+          await tx.listingLink.update({
+            where: { id: primary.id },
+            data: { url: patch.url.trim(), normalizedUrl, portal },
+          })
+        } else {
+          await tx.listingLink.create({
+            data: {
+              workspaceId: input.workspaceId,
+              listingId: input.listingId,
+              portal,
+              url: patch.url.trim(),
+              normalizedUrl,
+              externalId: patch.externalId ?? null,
+              firstSeenAt: now,
+              origin: input.origin,
+              addedById: input.memberId,
+            },
+          })
+        }
+        touched = true
+      }
+    } else if (patch.source !== undefined && primary) {
+      await tx.listingLink.update({
+        where: { id: primary.id },
+        data: {
+          portal: portalOfListingSource(
+            patch.source,
+            patch.sourceLabel ?? null,
+            primary.url
+          ),
+        },
+      })
+      touched = true
+    }
+    if (patch.externalId !== undefined && primary) {
+      await tx.listingLink.update({
+        where: { id: primary.id },
+        data: { externalId: patch.externalId },
+      })
+      touched = true
+    }
+    if (patch.price !== undefined && input.provenance !== 'user' && primary) {
+      await tx.listingLink.update({
+        where: { id: primary.id },
+        data: { price: new Prisma.Decimal(patch.price), priceAt: now },
+      })
+    }
+    if (touched) await syncPrimaryLink(tx, input.listingId)
   }
 
   /** Les statuts d'un critère de l'espace (404 s'il n'en est pas). */
@@ -930,28 +1174,6 @@ export class ListingsService {
     }
     await this.enrichment.enrich(member, id, { dpe: true, channel })
     return this.afterWrite(member, id, channel, 'location')
-  }
-}
-
-/**
- * Une ligne de l'historique des prix : ancien et nouveau prix, source
- * (`listing` quand le portail affiche le nouveau prix). Partagée par
- * `recordPriceChange` et la vérification d'une annonce (lot 15), pour que
- * le brief de négociation lise les mêmes baisses.
- */
-export function priceEventData(
-  listingId: string,
-  oldPrice: number | null,
-  newPrice: number,
-  source: FieldSource,
-  occurredAt?: Date
-): Prisma.PriceEventUncheckedCreateInput {
-  return {
-    listingId,
-    ...(occurredAt ? { occurredAt } : {}),
-    oldPrice: dec(oldPrice),
-    newPrice: new Prisma.Decimal(newPrice),
-    source,
   }
 }
 

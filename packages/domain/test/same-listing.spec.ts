@@ -1,6 +1,12 @@
+/**
+ * Reconnaître la même annonce (lot 2, déplacé de l'API dans domain au lot
+ * 18) : même lien, même adresse, même commune avec surface et prix proches,
+ * voisinage à 50 m. Les motifs du lot 18 (référence, tous les liens) sont
+ * dans lot18-listing-links.spec.ts. Données fictives.
+ */
 import { describe, expect, it } from 'vitest'
-import { duplicateReasons, matchDuplicates } from './duplicates'
-import type { DuplicateRow } from './duplicates'
+import { addressKey, duplicateReasons, matchDuplicates } from '../src/index.js'
+import type { DuplicateRow } from '../src/index.js'
 
 const row = (over: Partial<DuplicateRow> = {}): DuplicateRow => ({
   id: 'aaaaaaaa-0000-4000-8000-000000000001',
@@ -92,6 +98,16 @@ describe('duplicateReasons', () => {
     expect(
       duplicateReasons({ surface: 44 }, row({ surface: null }), 10)
     ).toEqual([])
+  })
+})
+
+describe('addressKey', () => {
+  it('les mots de la commune ne comptent pas', () => {
+    expect(addressKey('12 rue du Forum, 33400 Talence', 'Talence')).toBe(
+      addressKey('12 rue du Forum', null)
+    )
+    expect(addressKey('Talence', 'Talence')).toBeNull()
+    expect(addressKey(null, 'Talence')).toBeNull()
   })
 })
 

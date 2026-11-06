@@ -13,10 +13,16 @@ import type {
   InboundEmailResult,
   ListingInput,
 } from '@apart/contracts'
+import {
+  detectLinkPortal,
+  referenceMatchOf,
+  sameUrlMatchOf,
+} from '@apart/domain'
 import { ActivityService } from '../activity/activity.service'
 import { AiService } from '../ai/ai.service'
 import { DuplicatesService } from '../listings/duplicates.service'
 import { ExtractionService } from '../listings/extraction.service'
+import { ListingLinksService } from '../listings/listing-links.service'
 import { PrismaService } from '../prisma/prisma.service'
 import type { Prisma } from '../generated/prisma'
 
@@ -79,7 +85,8 @@ export class InboundEmailService {
     private readonly activity: ActivityService,
     private readonly ai: AiService,
     private readonly extraction: ExtractionService,
-    private readonly duplicates: DuplicatesService
+    private readonly duplicates: DuplicatesService,
+    private readonly links: ListingLinksService
   ) {}
 
   async receive(
@@ -93,7 +100,12 @@ export class InboundEmailService {
     if (!workspace) throw new NotFoundException('Espace introuvable')
     const candidates = parseAlertEmail(email, INBOUND_EMAIL_MAX_LISTINGS)
     const pending = await this.prisma.listingDraft.findMany({
-      where: { workspaceId, status: 'pending', url: { not: null } },
+      // Lot 18 : un lien déjà rattaché (brouillon reconnu) ne revient pas.
+      where: {
+        workspaceId,
+        status: { in: ['pending', 'merged'] },
+        url: { not: null },
+      },
       select: { url: true },
     })
     const known = new Set(pending.map(d => normalizeUrl(d.url)))
@@ -106,9 +118,27 @@ export class InboundEmailService {
     const receivedAt = email.receivedAt
       ? new Date(email.receivedAt)
       : new Date()
-    const ids = await this.prisma.$transaction(async tx => {
+    // Lot 18 : même agence et même référence qu'une annonce suivie (sous un
+    // autre lien) : le lien est rattaché d'office à sa fiche, comme à
+    // l'exploration ; « Ce n'est pas la même » le détache.
+    const attachTo = (draft: DraftCandidate) =>
+      sameUrlMatchOf(draft.duplicates)
+        ? null
+        : referenceMatchOf(
+            draft.duplicates.filter(
+              d => d.status !== 'discarded' && d.status !== 'sold_or_withdrawn'
+            )
+          )
+    const now = new Date()
+    const { ids, attached } = await this.prisma.$transaction(async tx => {
       const created: string[] = []
+      const attached: {
+        draftId: string
+        listingId: string
+        draft: DraftCandidate
+      }[] = []
       for (const draft of drafts) {
+        const target = attachTo(draft)
         const row = await tx.listingDraft.create({
           data: {
             workspaceId,
@@ -121,10 +151,22 @@ export class InboundEmailService {
             emailSubject: email.subject.slice(0, 300) || null,
             emailFrom: email.from?.slice(0, 320) ?? null,
             receivedAt,
+            ...(target
+              ? {
+                  status: 'merged' as const,
+                  listingId: target.listingId,
+                  attachedAt: now,
+                  decidedAt: now,
+                }
+              : {}),
           },
           select: { id: true },
         })
-        created.push(row.id)
+        if (target) {
+          attached.push({ draftId: row.id, listingId: target.listingId, draft })
+        } else {
+          created.push(row.id)
+        }
       }
       await this.activity.record(
         {
@@ -138,18 +180,75 @@ export class InboundEmailService {
             skipped: candidates.length - fresh.length,
             extractedBy,
             draftIds: created,
+            attached: attached.length,
           },
         },
         tx
       )
-      return created
+      return { ids: created, attached }
     })
+    // Chaque rattachement dans sa transaction (lien, vérification, journal) ;
+    // refusé (vendeur qui contredit, lien pris), le brouillon reste à valider.
+    let attachedCount = 0
+    for (const a of attached) {
+      const input = a.draft.input
+      try {
+        const result = await this.links.add(
+          { workspaceId, id: null },
+          a.listingId,
+          {
+            url: a.draft.url,
+            portal: detectLinkPortal(a.draft.url),
+            online: true,
+            ...(input.price > 0 ? { price: input.price } : {}),
+            ...(input.sellerType !== 'unknown'
+              ? { sellerType: input.sellerType }
+              : {}),
+            ...(input.sellerName ? { sellerName: input.sellerName } : {}),
+            ...(input.sellerReference
+              ? { reference: input.sellerReference }
+              : {}),
+            evidence: `Vue dans une alerte e-mail${email.subject ? ` (« ${email.subject.slice(0, 120)} »)` : ''}`,
+          },
+          {
+            channel: 'system',
+            origin: 'email',
+            auto: true,
+            draftId: a.draftId,
+            strictSeller: true,
+          }
+        )
+        await this.prisma.listingDraft.update({
+          where: { id: a.draftId },
+          data: {
+            attachedLinkId: result.link?.id ?? null,
+            mergedCheckId: result.check?.id ?? null,
+          },
+        })
+        attachedCount += 1
+      } catch (error) {
+        this.logger.warn(
+          `Rattachement d'une alerte refusé, brouillon à valider : ${error instanceof Error ? error.message : 'inconnu'}`
+        )
+        await this.prisma.listingDraft.update({
+          where: { id: a.draftId },
+          data: {
+            status: 'pending',
+            listingId: null,
+            attachedAt: null,
+            decidedAt: null,
+          },
+        })
+        ids.push(a.draftId)
+      }
+    }
     return {
       candidates: candidates.length,
       created: ids.length,
       skipped: candidates.length - fresh.length,
       draftIds: ids,
       extractedBy,
+      attached: attachedCount,
     }
   }
 

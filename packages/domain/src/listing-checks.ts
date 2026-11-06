@@ -88,6 +88,13 @@ export const LISTING_CHECK_FIELD_LABELS: Record<ListingCheckField, string> = {
   url: 'Lien de l’annonce',
   online: 'En ligne',
   status: 'Statut',
+  // Lot 18.
+  link: 'Lien de l’annonce',
+  linkPrice: 'Prix sur le portail',
+  priceGap: 'Écart entre portails',
+  sellerType: 'Vendeur',
+  sellerName: 'Agence ou réseau',
+  sellerReference: 'Référence de l’annonce',
 }
 
 /** Statuts pour lesquels « plus en ligne » ne propose rien : l'annonce est déjà sortie du suivi. */
@@ -514,6 +521,8 @@ export function listingCheckSummary(
       return texts.join(' · ') || 'Mise à jour'
     case 'offline':
       return texts.join(' · ') || 'Plus en ligne'
+    case 'link_added':
+      return texts.join(' · ') || 'Lien ajouté'
     case 'republished': {
       const head = linked
         ? linked.role === 'successor'

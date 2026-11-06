@@ -9,7 +9,6 @@ import {
   PORTAL_SEARCH_TEMPLATES_SOURCE,
   SEARCH_PORTALS,
   VERDICT_LABELS,
-  normalizeUrl,
 } from '@apart/contracts'
 import type {
   BriefCriteriaInput,
@@ -25,7 +24,6 @@ import type {
   ExplorationLineFilter,
   ExplorationListingRef,
   ExplorationOutcome,
-  ExplorationPortal,
   ExplorationPortalBilan,
   ExplorationPortalRun,
   ExplorationSummary,
@@ -49,6 +47,8 @@ import {
   toleranceThresholds,
 } from './criteria-fit.js'
 import { formatEuros } from './format.js'
+import { normalizeListingUrl } from './listing-urls.js'
+import { normalizeSeller } from './seller.js'
 import {
   formatCheckDay,
   normalizeCheckDate,
@@ -64,99 +64,6 @@ import {
  * réunis, et les compteurs et phrases du compte rendu. Le serveur ne
  * télécharge jamais une page de portail.
  */
-
-// ---------------------------------------------------------------------------
-// Liens
-// ---------------------------------------------------------------------------
-
-/** Les hôtes des portails, du plus précis au plus large. */
-const PORTAL_HOSTS: readonly [ExplorationPortal, RegExp][] = [
-  ['leboncoin', /(^|\.)leboncoin\.fr$/],
-  ['seloger', /(^|\.)seloger\.com$/],
-  ['bienici', /(^|\.)(bienici|bien-ici)\.com$/],
-  ['pap', /(^|\.)pap\.fr$/],
-  ['logicimmo', /(^|\.)logic-immo\.com$/],
-]
-
-/** Paramètres de suivi retirés en plus de ceux de `normalizeUrl` (préfixes compris). */
-const EXTRA_TRACKING = new Set([
-  'xtor',
-  'msclkid',
-  'gclsrc',
-  'dclid',
-  'yclid',
-  'ttclid',
-  'igshid',
-  'mc_cid',
-  'mc_eid',
-  '_gl',
-  'srsltid',
-  'cmp',
-  'campaign',
-])
-const TRACKING_PREFIXES = ['utm_', 'at_', 'mtm_', 'pk_']
-
-function hostOf(value: string | null | undefined): string | null {
-  if (!value) return null
-  try {
-    const url = new URL(value.trim())
-    return url.protocol === 'http:' || url.protocol === 'https:'
-      ? url.hostname.toLowerCase()
-      : null
-  } catch {
-    return null
-  }
-}
-
-/** Le portail d'un lien d'annonce, d'après son hôte ; « other » ailleurs. */
-export function portalFromUrl(
-  url: string | null | undefined
-): ExplorationPortal {
-  const host = hostOf(url)
-  if (!host) return 'other'
-  for (const [portal, pattern] of PORTAL_HOSTS) {
-    if (pattern.test(host)) return portal
-  }
-  return 'other'
-}
-
-/**
- * Le lien d'une annonce réduit à ce qui l'identifie, pour reconnaître une
- * annonce déjà vue : `normalizeUrl` (https, hôte sans `www.`, chemin sans
- * barre finale, paramètres de suivi retirés, fragment ôté), puis, sur un
- * portail connu, aucun paramètre de requête (l'annonce y est désignée par
- * son chemin ; la requête porte la recherche d'où l'on vient), et sur
- * Leboncoin la forme `/ad/<catégorie>/<numéro>` (l'ancienne forme
- * `/<catégorie>/<numéro>.htm` y revient). Ailleurs, les paramètres de suivi
- * courants sont aussi retirés. Null si ce n'est pas un lien http(s).
- */
-export function normalizeListingUrl(
-  value: string | null | undefined
-): string | null {
-  const base = normalizeUrl(value)
-  if (!base) return null
-  const url = new URL(base)
-  const portal = portalFromUrl(base)
-  if (portal !== 'other') {
-    url.search = ''
-    if (portal === 'leboncoin') {
-      const match = /^\/(?:ad\/)?([a-z_]+)\/(\d{6,})(?:\.htm)?$/.exec(
-        url.pathname
-      )
-      if (match) url.pathname = `/ad/${match[1]}/${match[2]}`
-    }
-  } else {
-    const kept = [...url.searchParams.entries()].filter(([key]) => {
-      const lower = key.toLowerCase()
-      return (
-        !EXTRA_TRACKING.has(lower) &&
-        !TRACKING_PREFIXES.some(prefix => lower.startsWith(prefix))
-      )
-    })
-    url.search = new URLSearchParams(kept).toString()
-  }
-  return url.toString().replace(/\?$/, '')
-}
 
 // ---------------------------------------------------------------------------
 // Le brief
@@ -672,6 +579,13 @@ export function candidateObserved(
     observed.propertyTax = candidate.propertyTax
   if (candidate.publishedAt !== undefined)
     observed.publishedAt = candidate.publishedAt
+  // Lot 18 : le vendeur lu (appliqué s'il était inconnu, proposé sinon).
+  if (candidate.sellerType !== undefined)
+    observed.sellerType = candidate.sellerType
+  if (candidate.sellerName !== undefined)
+    observed.sellerName = candidate.sellerName
+  if (candidate.reference !== undefined)
+    observed.reference = candidate.reference
   return observed
 }
 
@@ -718,17 +632,28 @@ export function draftInputFromCandidate(
     district: candidate.district,
     addressRaw: candidate.address,
     description: candidate.excerpt,
+    sellerType: candidate.sellerType,
+    sellerName: candidate.sellerName,
+    sellerReference: candidate.reference,
   }
   const fieldSources: Record<string, Provenance> = {}
   for (const [key, value] of Object.entries(read)) {
     if (value !== undefined) fieldSources[key] = provenance
   }
   const { source, sourceLabel } = PORTAL_LISTING_SOURCE[candidate.portal]
+  const seller = normalizeSeller({
+    sellerType: candidate.sellerType ?? 'unknown',
+    sellerName: candidate.sellerName ?? null,
+    sellerReference: candidate.reference ?? null,
+  })
   const input = ListingInputSchema.parse({
     title: candidateTitle(candidate),
     source,
     sourceLabel,
     url: candidate.url,
+    sellerType: seller.sellerType,
+    sellerName: seller.sellerName,
+    sellerReference: seller.sellerReference,
     price: candidate.price ?? 0,
     surface: candidate.surface ?? null,
     rooms: candidate.rooms ?? null,
@@ -830,6 +755,11 @@ export interface TriageFacts {
   fit: ListingCriteriaFit
   /** Pour une vérification déjà enregistrée : appliquée ou non (compte rendu). */
   applied?: boolean | null
+  /**
+   * Lot 18 : l'annonce suivie (non écartée) qui a la même agence et la même
+   * référence : le lien lui est rattaché d'office.
+   */
+  attachTo?: ExplorationListingRef | null
 }
 
 /** « le 30 octobre 2026 », « par Chloé le 30 octobre 2026 ». */
@@ -899,8 +829,10 @@ export interface TriageDecision {
  * 2. même lien qu'un brouillon écarté : « déjà écartée » (jamais
  *    reproposée) ; même lien qu'un brouillon à valider : pas de nouveau
  *    brouillon ;
- * 3. doublon probable d'une annonce ou d'un brouillon écartés : « déjà
- *    écartée » ;
+ * 3. lot 18 : même agence et même référence qu'une annonce suivie : lien
+ *    rattaché d'office à sa fiche (« Ce n'est pas la même » le détache) ;
+ *    puis doublon probable d'une annonce ou d'un brouillon écartés :
+ *    « déjà écartée » ;
  * 4. hors critères même avec la marge : une ligne du compte rendu ;
  * 5. doublon probable d'une annonce suivie : brouillon à trancher ;
  * 6. sinon nouvelle : brouillon « À valider ».
@@ -964,6 +896,14 @@ export function triageCandidate(facts: TriageFacts): TriageDecision {
     }
   }
   const pending = same?.kind === 'draft' ? same.draftId : null
+  if (!pending && facts.attachTo) {
+    return {
+      ...none,
+      outcome: 'attached',
+      why: `Même agence et même référence que « ${facts.attachTo.title} » : lien rattaché d’office à sa fiche`,
+      listing: facts.attachTo,
+    }
+  }
   const lookalike = facts.lookalikes[0]
   if (!pending && lookalike) {
     return {
@@ -1070,6 +1010,7 @@ export function explorationCounts(
     known: count('known'),
     dismissed: count('dismissed'),
     out: count('out'),
+    attached: count('attached'),
     draftsCreated: fresh,
     checksChanged: items.filter(
       i => i.outcome === 'known' && checkChanged(i.check)
@@ -1087,6 +1028,7 @@ export const EMPTY_EXPLORATION_COUNTS: ExplorationCounts = {
   known: 0,
   dismissed: 0,
   out: 0,
+  attached: 0,
   draftsCreated: 0,
   checksChanged: 0,
   blockedPortals: 0,
@@ -1101,6 +1043,9 @@ export function explorationSummaryText(
     counts.toValidate ? `${counts.toValidate} à valider` : null,
     counts.known
       ? `${plural(counts.known, 'déjà suivie', 'déjà suivies')}`
+      : null,
+    counts.attached
+      ? `${plural(counts.attached, 'rattachée d’office', 'rattachées d’office')}`
       : null,
     counts.dismissed
       ? `${plural(counts.dismissed, 'déjà écartée', 'déjà écartées')}`
@@ -1203,6 +1148,9 @@ export function portalBilan(
         ? plural(n('known') - updated, 'suivie', 'suivies')
         : null,
       updated ? plural(updated, 'mise à jour', 'mises à jour') : null,
+      n('attached')
+        ? plural(n('attached'), 'rattachée d’office', 'rattachées d’office')
+        : null,
       n('dismissed')
         ? plural(n('dismissed'), 'déjà écartée', 'déjà écartées')
         : null,
@@ -1232,7 +1180,7 @@ const FILTER_OUTCOMES: Record<
 > = {
   all: null,
   todo: ['new', 'duplicate_probable'],
-  known: ['known'],
+  known: ['known', 'attached'],
   dismissed: ['dismissed'],
   out: ['out'],
 }

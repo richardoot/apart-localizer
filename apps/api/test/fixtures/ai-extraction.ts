@@ -50,8 +50,9 @@ export function sampleExtraction(
       'Appartement T2 Talence Forum'
     ),
     portal: read('agence' as const, 'Agence Fictive Talence', 0.7),
+    sellerType: read('agency' as const, 'Agence Fictive Talence', 0.9),
     agencyName: read('Agence Fictive Talence', 'Agence Fictive Talence'),
-    externalId: read('AGF-12345', 'Réf. AGF-12345'),
+    agencyReference: read('AGF-12345', 'Réf. AGF-12345'),
     price: read(189_000, '189 000 € FAI'),
     feesIncluded: read(true, 'Honoraires inclus à charge acquéreur'),
     feesPercent: read(0.045, '4,5 %'),

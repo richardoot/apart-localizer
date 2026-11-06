@@ -34,10 +34,11 @@ export const ActivityKindSchema = z
     'check',
     'exploration',
     'agency',
+    'link',
     'other',
   ])
   .describe(
-    "Sorte d'événement : annonce, statut, prix, tâche, avis, offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon à valider, membres de l'espace (invitations, arrivées, retraits, rôles), vérification sur le portail (lot 15), exploration des portails par Claude (lot 16), échanges avec l'annonceur (contact, demandes, réponses ; lot 17), autre"
+    "Sorte d'événement : annonce, statut, prix, tâche, avis, offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon à valider, membres de l'espace (invitations, arrivées, retraits, rôles), vérification sur le portail (lot 15), exploration des portails par Claude (lot 16), échanges avec l'annonceur (contact, demandes, réponses ; lot 17), liens de l'annonce sur les portails (ajout, retrait, détachement ; lot 18), autre"
   )
 export type ActivityKind = z.infer<typeof ActivityKindSchema>
 
@@ -58,6 +59,7 @@ export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
   check: 'Vérification',
   exploration: 'Exploration',
   agency: 'Échanges',
+  link: 'Liens des portails',
   other: 'Autre',
 }
 
@@ -85,6 +87,7 @@ export const ACTIVITY_KIND_RULES: Record<
   member: { prefixes: ['member', 'workspace'] },
   exploration: { prefixes: ['exploration'] },
   agency: { prefixes: ['agency_request', 'contact'] },
+  link: { prefixes: ['listing_link'] },
 }
 
 /** La sorte d'une action (`listing.status_changed` → `status`). */
@@ -202,6 +205,12 @@ export const LISTING_FIELD_LABELS: Record<string, string> = {
   subject: 'Objet',
   body: 'Message',
   recipientName: 'Destinataire',
+  // Lot 18 : vendeur et liens.
+  sellerType: 'Vendeur',
+  sellerName: 'Agence ou réseau',
+  sellerReference: 'Référence de l’annonce',
+  portal: 'Portail',
+  linkPrice: 'Prix sur le portail',
 }
 
 /** Le libellé d'un champ, ou son nom. */

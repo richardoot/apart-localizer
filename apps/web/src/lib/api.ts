@@ -93,6 +93,10 @@ import type {
   ListingCreateRaw,
   ListingCreateResult,
   ListingFiltersInput,
+  ListingLinkInputRaw,
+  ListingLinkPatch,
+  ListingLinkWriteResult,
+  ListingLinksResult,
   ListingList,
   ListingPatch,
   ListingStatusChange,
@@ -403,6 +407,34 @@ export const api = {
       }),
   },
 
+  /**
+   * Lot 18 : les liens d'une annonce sur les portails (« Où la trouver »).
+   * Le serveur ne joint jamais un portail : un lien se colle, ce qui a été
+   * lu (prix, en ligne) est une vérification du lien.
+   */
+  links: {
+    list: (listingId: string) =>
+      apiFetch<ListingLinksResult>(`/listings/${listingId}/links`),
+    /** « Ajouter un lien » ; refusé (409) si l'URL est celle d'une autre fiche. */
+    add: (listingId: string, input: ListingLinkInputRaw) =>
+      apiFetch<ListingLinkWriteResult>(`/listings/${listingId}/links`, {
+        method: 'POST',
+        json: input,
+      }),
+    /** Prix ou état relevés à la main (une vérification de ce lien), ou portail corrigé. */
+    update: (listingId: string, linkId: string, patch: ListingLinkPatch) =>
+      apiFetch<ListingLinkWriteResult>(
+        `/listings/${listingId}/links/${linkId}`,
+        { method: 'PATCH', json: patch }
+      ),
+    /** Retire un lien ; jamais le dernier (409). */
+    remove: (listingId: string, linkId: string) =>
+      apiFetch<ListingLinkWriteResult>(
+        `/listings/${listingId}/links/${linkId}`,
+        { method: 'DELETE' }
+      ),
+  },
+
   /** Critères de recherche enregistrés et partagés (lot 4). */
   searchCriteria: {
     list: (includeArchived = false) =>
@@ -636,6 +668,9 @@ export const api = {
   drafts: {
     list: (status: ListingDraftStatus = 'pending') =>
       apiFetch<ListingDraft[]>(`/listing-drafts?status=${status}`),
+    /** Lot 18 : les liens rattachés d'office (même agence, même référence) des derniers jours. */
+    attached: () =>
+      apiFetch<ListingDraft[]>('/listing-drafts?status=merged&attached=true'),
     get: (id: string) => apiFetch<ListingDraft>(`/listing-drafts/${id}`),
     decide: (id: string, decision: ListingDraftDecision) =>
       apiFetch<ListingDraft>(`/listing-drafts/${id}`, {
@@ -653,11 +688,16 @@ export const api = {
         '/listing-drafts/accept-in-criteria',
         { method: 'POST', json: request }
       ),
-    /** « C'est la même : mettre à jour la fiche ». */
+    /** « C'est la même : ajouter ce lien à la fiche » (ou la mettre à jour, sans lien). */
     merge: (id: string, request: ListingDraftMerge) =>
       apiFetch<ListingDraft>(`/listing-drafts/${id}/merge`, {
         method: 'POST',
         json: request,
+      }),
+    /** Lot 18 : « Ce n'est pas la même » sur un lien rattaché d'office. */
+    detach: (id: string) =>
+      apiFetch<ListingDraft>(`/listing-drafts/${id}/detach`, {
+        method: 'POST',
       }),
     /** « C'en est une autre ». */
     distinct: (id: string) =>

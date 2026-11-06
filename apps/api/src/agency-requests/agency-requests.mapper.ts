@@ -20,10 +20,18 @@ import type { AgencyRequest, ListingContact } from '../generated/prisma'
  * de `domain` ; le mapper ne fait que l'assembler.
  */
 
-export function toListingContactDto(row: ListingContact): ListingContactDto {
+/**
+ * Le contact de l'annonceur. Lot 18 : le nom de l'agence est celui de
+ * l'annonce (`listings.seller_name`, une seule source) ; la colonne du
+ * contact n'est plus lue.
+ */
+export function toListingContactDto(
+  row: ListingContact,
+  agencyName: string | null
+): ListingContactDto {
   return ListingContactSchema.parse({
     listingId: row.listingId,
-    agencyName: row.agencyName,
+    agencyName,
     contactName: row.contactName,
     email: row.email,
     phone: row.phone,

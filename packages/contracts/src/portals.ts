@@ -72,6 +72,81 @@ export const PORTAL_LISTING_SOURCE: Record<
   other: { source: 'autre', sourceLabel: null },
 }
 
+// ---------------------------------------------------------------------------
+// Portail d'un lien d'annonce (lot 18, ADR 0028)
+// ---------------------------------------------------------------------------
+
+/**
+ * Le portail d'un lien d'annonce (`listing_links.portal`) : les cinq portails
+ * reconnus, le site d'une agence ou d'un réseau de mandataires, ou un autre
+ * site. Plus riche que la source d'une annonce (`ListingSource`, gardée pour
+ * le lien principal et l'export de version 1) : Logic-Immo y a sa valeur.
+ */
+export const ListingPortalSchema = z
+  .enum([
+    'leboncoin',
+    'seloger',
+    'bienici',
+    'pap',
+    'logicimmo',
+    'agence',
+    'autre',
+  ])
+  .describe(
+    'Portail du lien : leboncoin, seloger, bienici, pap, logicimmo, agence (site d’une agence ou d’un réseau de mandataires), autre (autre site)'
+  )
+export type ListingPortal = z.infer<typeof ListingPortalSchema>
+
+export const LISTING_PORTAL_LABELS: Record<ListingPortal, string> = {
+  leboncoin: 'Leboncoin',
+  seloger: 'SeLoger',
+  bienici: 'Bien’ici',
+  pap: 'PAP',
+  logicimmo: 'Logic-Immo',
+  agence: 'Site d’agence',
+  autre: 'Autre site',
+}
+
+/** Les pastilles courtes de la liste et du téléphone. */
+export const LISTING_PORTAL_SHORT_LABELS: Record<ListingPortal, string> = {
+  leboncoin: 'LBC',
+  seloger: 'SL',
+  bienici: 'BI',
+  pap: 'PAP',
+  logicimmo: 'LI',
+  agence: 'Ag.',
+  autre: 'Autre',
+}
+
+/**
+ * Le champ `source` d'une annonce tiré du portail de son lien principal :
+ * Logic-Immo n'a pas de valeur dans `ListingSource` (version 1 de l'export),
+ * il reste « autre » avec le libellé « Logic-Immo ».
+ */
+export const LISTING_PORTAL_SOURCE: Record<
+  ListingPortal,
+  { source: ListingSource; sourceLabel: string | null }
+> = {
+  leboncoin: { source: 'leboncoin', sourceLabel: null },
+  seloger: { source: 'seloger', sourceLabel: null },
+  bienici: { source: 'bienici', sourceLabel: null },
+  pap: { source: 'pap', sourceLabel: null },
+  logicimmo: { source: 'autre', sourceLabel: 'Logic-Immo' },
+  agence: { source: 'agence', sourceLabel: null },
+  autre: { source: 'autre', sourceLabel: null },
+}
+
+/** Le portail d'un lien lu pendant une exploration (« other » : le lien le dira, sinon « autre »). */
+export const EXPLORATION_LINK_PORTAL: Record<ExplorationPortal, ListingPortal> =
+  {
+    leboncoin: 'leboncoin',
+    seloger: 'seloger',
+    bienici: 'bienici',
+    pap: 'pap',
+    logicimmo: 'logicimmo',
+    other: 'autre',
+  }
+
 /** Une plage de valeurs dans l'URL de recherche : `min-max`, une borne absente valant `min` ou `max`. */
 export interface PortalRangeParameter {
   key: string

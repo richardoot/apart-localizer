@@ -3,12 +3,14 @@ import type {
   CandidateTriage,
   CriteriaFitLevel,
   DuplicateCandidate,
+  DuplicateProbe,
   ExplorationCounts,
   ExplorationOutcome,
   ExplorationPortal,
   ExplorationPortalRun,
   ListingInput,
   LocationPrecision,
+  SellerType,
 } from '@apart/contracts'
 import {
   explorationCounts,
@@ -17,6 +19,7 @@ import {
   sanitizeEvidence,
 } from '@apart/domain'
 import { demoId } from './ids.js'
+import type { DemoCheck, DemoLink } from './dataset.js'
 
 /**
  * Lot 16 : les explorations fictives du jeu de démonstration, marquées
@@ -27,7 +30,10 @@ import { demoId } from './ids.js'
  * et un portail bloqué. Les liens sont en `exemple.invalid` ou sur des
  * chemins fictifs ; aucun titre, aucune adresse réelle. Les vérifications
  * des annonces déjà suivies sont dans `CHECKS` (dataset.ts), à la même
- * heure que l'exploration.
+ * heure que l'exploration. Lot 18 : une annonce rattachée d'office (même
+ * réseau, même référence qu'une annonce suivie : son lien est dans `LINKS`,
+ * son brouillon est reconnu) et un doublon probable par la référence (même
+ * référence, autre agence), dont les motifs sont ceux de `domain`.
  */
 
 export interface DemoExplorationLine {
@@ -63,11 +69,11 @@ export interface DemoExploration {
   lines: DemoExplorationLine[]
 }
 
-/** Un brouillon né d'une exploration (en attente ou écarté). */
+/** Un brouillon né d'une exploration (en attente, écarté ou, lot 18, reconnu et rattaché d'office). */
 export interface DemoExplorationDraft {
   id: string
   explorationId: string
-  status: 'pending' | 'dismissed'
+  status: 'pending' | 'dismissed' | 'merged'
   input: ListingInput
   url: string
   portal: ExplorationPortal
@@ -78,6 +84,11 @@ export interface DemoExplorationDraft {
   dismissReason: string | null
   decidedBy: 'demo' | 'demo2' | null
   decidedAt: string | null
+  /** Lot 18 : l'annonce à laquelle son lien a été rattaché d'office. */
+  listingId: string | null
+  attachedLinkId: string | null
+  attachedAt: string | null
+  mergedCheckId: string | null
 }
 
 interface Context {
@@ -91,7 +102,14 @@ interface Context {
     surface: number | null
     commune: string | null
     url: string | null
+    sellerType: SellerType
+    sellerName: string | null
+    sellerReference: string | null
+    links: DemoLink[]
+    checks: DemoCheck[]
   }
+  /** Lot 18 : les doublons d'une annonce lue, par les règles de `domain`. */
+  duplicates: (probe: DuplicateProbe) => DuplicateCandidate[]
   criteria: {
     centre: { id: string; name: string }
     tramB: { id: string; name: string }
@@ -108,6 +126,13 @@ interface Context {
 
 const LBC = 'https://www.leboncoin.fr/ad/ventes_immobilieres/'
 
+const NOT_ATTACHED = {
+  listingId: null,
+  attachedLinkId: null,
+  attachedAt: null,
+  mergedCheckId: null,
+} as const
+
 interface DraftSpec {
   key: string
   title: string
@@ -122,6 +147,8 @@ interface DraftSpec {
   point: [number, number]
   precision: LocationPrecision
   excerpt: string
+  /** Lot 18 : le vendeur lu sur la page. */
+  seller?: { type: SellerType; name?: string; reference?: string }
 }
 
 function draftInput(spec: DraftSpec, at: string): ListingInput {
@@ -149,6 +176,9 @@ function draftInput(spec: DraftSpec, at: string): ListingInput {
       point: { type: 'Point', coordinates: spec.point },
       precision: spec.precision,
     },
+    sellerType: spec.seller?.type ?? 'unknown',
+    sellerName: spec.seller?.name ?? null,
+    sellerReference: spec.seller?.reference ?? null,
     fieldSources: Object.fromEntries(
       [
         'price',
@@ -159,6 +189,7 @@ function draftInput(spec: DraftSpec, at: string): ListingInput {
         'district',
         'title',
         'url',
+        ...(spec.seller ? ['sellerType', 'sellerName', 'sellerReference'] : []),
       ]
         .filter(k => k !== 'surface' || spec.surface !== null)
         .filter(k => k !== 'dpeClass' || spec.dpeClass !== null)
@@ -206,7 +237,7 @@ export function buildDemoExplorations(ctx: Context): {
   explorations: DemoExploration[]
   drafts: DemoExplorationDraft[]
 } {
-  const { at, listing, criteria, log } = ctx
+  const { at, listing, duplicates, criteria, log } = ctx
   const explorations: DemoExploration[] = []
   const drafts: DemoExplorationDraft[] = []
 
@@ -244,6 +275,7 @@ export function buildDemoExplorations(ctx: Context): {
     dismissReason: 'rez-de-chaussée sur rue',
     decidedBy: 'demo2',
     decidedAt: at(8, 21),
+    ...NOT_ATTACHED,
   })
   const oldPortals: ExplorationPortalRun[] = [
     {
@@ -381,7 +413,7 @@ export function buildDemoExplorations(ctx: Context): {
     margin: {
       key: 'margin',
       title: '[Exemple] T3 63 m², proche tram',
-      url: 'https://www.seloger.com/annonces/achat/appartement/bordeaux-33/exemple-990000111.htm',
+      url: 'https://www.seloger.com/annonces/achat/appartement/bordeaux-33/exemple-0000009111.htm',
       portal: 'seloger',
       price: 246_000,
       surface: 63,
@@ -428,6 +460,11 @@ export function buildDemoExplorations(ctx: Context): {
           'même surface (42 m²), même quartier, 4 000 € de moins, autre portail (exemple fictif)',
       },
     ],
+    certain: false,
+    sellerType: chartrons.sellerType,
+    sellerName: chartrons.sellerName,
+    sellerReference: chartrons.sellerReference,
+    linkCount: chartrons.links.length,
   }
   const draftIds = {
     inside: demoId('exploration-draft:inside'),
@@ -451,6 +488,7 @@ export function buildDemoExplorations(ctx: Context): {
       dismissReason: null,
       decidedBy: null,
       decidedAt: null,
+      ...NOT_ATTACHED,
     })
   }
   const draftLine = (
@@ -580,7 +618,7 @@ export function buildDemoExplorations(ctx: Context): {
     },
     {
       position: 8,
-      url: 'https://www.seloger.com/annonces/achat/appartement/bordeaux-33/exemple-990000115.htm',
+      url: 'https://www.seloger.com/annonces/achat/appartement/bordeaux-33/exemple-0000009115.htm',
       portal: 'seloger',
       title: '[Exemple] T4 94 m², séjour double',
       price: 289_000,
@@ -633,6 +671,160 @@ export function buildDemoExplorations(ctx: Context): {
       excerpt: null,
     },
   ]
+  // Lot 18 : la même annonce du mandataire sur Bien'ici (même réseau, même
+  // référence), rattachée d'office ; son lien et sa vérification « Lien
+  // ajouté » sont ceux de `LINKS` (dataset.ts).
+  const attachedLink = merignac.links.find(l => l.draftId !== null)
+  const attachedCheck = merignac.checks.find(
+    c => c.linkId === attachedLink?.id && c.outcome === 'link_added'
+  )
+  if (!attachedLink || !attachedCheck) {
+    throw new Error('Jeu de démo incohérent : lien rattaché d’office absent')
+  }
+  const attachedId = attachedLink.draftId as string
+  const attachedSpec: DraftSpec = {
+    key: 'attached',
+    title: '[Exemple] T2 47 m² avec parking',
+    url: attachedLink.url,
+    portal: 'bienici',
+    price: attachedLink.price ?? merignac.price,
+    surface: 47,
+    rooms: 2,
+    dpeClass: 'C',
+    commune: 'Mérignac',
+    district: 'Centre',
+    point: [-0.6455, 44.839],
+    precision: 'district',
+    excerpt:
+      'Exemple fictif : deux pièces avec parking, même mandat que l’annonce suivie (EX-3310).',
+    seller: {
+      type: 'mandatary',
+      name: '[Exemple] Réseau des conseillers',
+      reference: 'EX-3310',
+    },
+  }
+  drafts.push({
+    id: attachedId,
+    explorationId: id,
+    status: 'merged',
+    input: draftInput(attachedSpec, finishedAt),
+    url: attachedSpec.url,
+    portal: attachedSpec.portal,
+    excerpt: sanitizeEvidence(attachedSpec.excerpt),
+    receivedAt: finishedAt,
+    duplicates: duplicates({
+      url: attachedSpec.url,
+      commune: attachedSpec.commune,
+      price: attachedSpec.price,
+      surface: 47,
+      sellerType: 'mandatary',
+      sellerName: attachedSpec.seller?.name,
+      reference: attachedSpec.seller?.reference,
+    }),
+    warnings: [],
+    dismissReason: null,
+    decidedBy: 'demo',
+    decidedAt: finishedAt,
+    listingId: merignac.id,
+    attachedLinkId: attachedLink.id,
+    attachedAt: finishedAt,
+    mergedCheckId: attachedCheck.id,
+  })
+  // Lot 18 : même référence, autre agence : à trancher (deux agences ont
+  // parfois le même mandat).
+  const referenceId = demoId('exploration-draft:reference')
+  const referenceSpec: DraftSpec = {
+    key: 'reference',
+    title: '[Exemple] T2 42 m², Chartrons',
+    url: 'https://www.seloger.com/annonces/achat/appartement/bordeaux-33/exemple-0000009122.htm',
+    portal: 'seloger',
+    price: 174_000,
+    surface: 42,
+    rooms: 2,
+    dpeClass: 'D',
+    commune: 'Bordeaux',
+    district: 'Chartrons',
+    point: [-0.5736, 44.8549],
+    precision: 'street',
+    excerpt:
+      'Exemple fictif : même référence que l’annonce suivie, publiée par une autre agence.',
+    seller: {
+      type: 'agency',
+      name: '[Exemple] Agence du Jardin public',
+      reference: 'EX-2041',
+    },
+  }
+  drafts.push({
+    id: referenceId,
+    explorationId: id,
+    status: 'pending',
+    input: draftInput(referenceSpec, finishedAt),
+    url: referenceSpec.url,
+    portal: referenceSpec.portal,
+    excerpt: sanitizeEvidence(referenceSpec.excerpt),
+    receivedAt: finishedAt,
+    duplicates: duplicates({
+      url: referenceSpec.url,
+      commune: referenceSpec.commune,
+      price: referenceSpec.price,
+      surface: 42,
+      sellerType: 'agency',
+      sellerName: referenceSpec.seller?.name,
+      reference: referenceSpec.seller?.reference,
+    }),
+    warnings: warningsOf(referenceSpec),
+    dismissReason: null,
+    decidedBy: null,
+    decidedAt: null,
+    ...NOT_ATTACHED,
+  })
+  const lot18Line = (
+    position: number,
+    spec: DraftSpec,
+    draftId: string,
+    outcome: ExplorationOutcome,
+    why: string,
+    level: CriteriaFitLevel | null,
+    listingKey: string | null
+  ): DemoExplorationLine => ({
+    position,
+    url: spec.url,
+    portal: spec.portal,
+    title: spec.title,
+    price: spec.price,
+    surface: spec.surface,
+    rooms: spec.rooms,
+    commune: spec.commune,
+    district: spec.district,
+    outcome,
+    why,
+    reasons: [],
+    level,
+    listingKey,
+    draftId,
+    excerpt: sanitizeEvidence(spec.excerpt),
+  })
+  lines.push(
+    lot18Line(
+      11,
+      attachedSpec,
+      attachedId,
+      'attached',
+      `Même agence et même référence que « ${merignac.title} » : lien rattaché d’office à sa fiche : ${attachedCheck.summary}`,
+      null,
+      'merignac-t2'
+    ),
+    lot18Line(
+      12,
+      referenceSpec,
+      referenceId,
+      'duplicate_probable',
+      `Dans « ${criteria.centre.name} » ; doublon probable de « ${chartrons.title} » (même référence, autre agence), à trancher`,
+      'in',
+      null
+    )
+  )
+
   const portals: ExplorationPortalRun[] = [
     {
       portal: 'leboncoin',
@@ -644,14 +836,14 @@ export function buildDemoExplorations(ctx: Context): {
     {
       portal: 'seloger',
       status: 'read',
-      count: 3,
+      count: 4,
       note: null,
       searchUrl: null,
     },
     {
       portal: 'bienici',
       status: 'read',
-      count: 1,
+      count: 2,
       note: null,
       searchUrl: null,
     },
@@ -689,12 +881,13 @@ export function buildDemoExplorations(ctx: Context): {
     after: {
       explorationId: id,
       summary,
-      draftsCreated: 4,
+      draftsCreated: 5,
       counts,
       portals: ['Leboncoin', 'SeLoger', 'Bien’ici', 'PAP', 'Logic-Immo'],
       blocked: ['Logic-Immo'],
       criteria: [criteria.centre.name, criteria.tramB.name],
-      draftIds: Object.values(draftIds),
+      draftIds: [...Object.values(draftIds), referenceId],
+      attached: 1,
     },
   })
   return { explorations, drafts }

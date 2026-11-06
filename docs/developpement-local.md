@@ -138,9 +138,19 @@ hors du dépôt. Un nouveau fichier part du `.env.example` correspondant.
   Logic-Immo bloqué) ; des questions aux agences (lot 17 : trois contacts fictifs « Agence [Exemple] »
   en `exemple.invalid`, une demande envoyée par Claude dont la réponse a rempli les charges, coché les
   tâches et laissé la taxe foncière « proposée », un message à valider sur le T2 de Mérignac, une
-  relance due sur le T2 des Chartrons) ; le journal et les notifications qu'il fait naître. Les dates
-  sont relatives au jour du seed : il y a toujours des « nouvelles », une visite à venir et une
-  relance due.
+  relance due sur le T2 des Chartrons) ; une annonce sur plusieurs portails (lot 18 : le T2 des
+  Chartrons, agence « [Exemple] Immobilier des Chartrons », réf. EX-2041, sur SeLoger (lien
+  d'origine), Bien'ici (ajouté à la main par Sacha, plus en ligne) et Leboncoin (ajouté par
+  Claude, 5 000 € plus cher : écart noté dans « Mises à jour ») ; le T3 de Caudéran, vendu par un
+  particulier, sur PAP et Leboncoin (partagé depuis le téléphone) ; le T2 de Mérignac, chez un
+  mandataire (« [Exemple] Réseau des conseillers », réf. EX-3310), dont le lien Bien'ici a été rattaché d'office par l'exploration de la veille (bloc
+  « Liens rattachés d'office » de l'onglet « À valider ») ; le T2 de la Bastide chez « Agence
+  [Exemple] », réf. EX-1987 ; un brouillon SeLoger de « [Exemple] Agence du Jardin public » à la
+  même référence EX-2041, doublon probable « même référence, autre agence » à trancher ; les autres
+  annonces au vendeur « à relever ») ; le journal et les notifications qu'il fait naître. Les
+  liens sont fictifs (`exemple.invalid`, identifiants de portail impossibles « 0000000… »). Les
+  dates sont relatives au jour du seed : il y a toujours des « nouvelles », une visite à venir et
+  une relance due.
 - **`artifact`** : l'import de `data/private/artifact-export/` (vos annonces). Sans ce dossier,
   `stack:up` le dit et s'arrête. Les e-mails des membres viennent de `--richard-email` et
   `--chloe-email`, ou de `data/private/import.env` (ignoré par git) :
@@ -255,6 +265,13 @@ relance due des Chartrons ; `record_request_sent` sans validation répond « Ce 
 validé » ; validez dans l'onglet « Échanges » (ou passez `approvedInChat: true`) pour enregistrer
 un envoi fictif, sans rien envoyer (`threadRef` fictif). Les adresses du jeu sont en
 `exemple.invalid` : aucun e-mail ne peut partir.
+
+**Liens des portails (lot 18)** : avec le jeu `demo`, `get_listing` sur le T2 des Chartrons rend
+« Où la trouver » (trois liens, l'écart de 5 000 €, Bien'ici plus en ligne) et « Qui la vend » ;
+`list_listings` avec `multiPortal: true` ou `reference: "EX-2041"` le retrouve. `add_listing_link`
+se teste avec un lien fictif (`https://exemple.invalid/…`, ou un chemin de portail inventé à
+identifiant « 0000000… ») et la même agence et la même référence que la fiche ; une autre agence
+est refusée (« Ce n'est peut-être pas la même annonce »). Aucune page n'est ouverte par l'API.
 
 **claude.ai** ne peut pas joindre `localhost` : ses serveurs appellent l'URL du connecteur depuis
 Internet. Il faut une URL publique en https pour l'API **et** pour Supabase (un tunnel, avec

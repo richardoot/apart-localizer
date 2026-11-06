@@ -233,6 +233,57 @@ nouveaux à sa prochaine lecture de `tools/list` (nouvelle conversation ; le rec
 n'apparaissent pas) ; Gmail et Claude in Chrome sont les outils de l'utilisateur, à connecter de
 son côté.
 
+### Une annonce, plusieurs portails (lot 18)
+
+Migration `20261108100000_lot18_listing_links` : additive (table `listing_links` ; énumérations
+`ListingPortal`, `ListingLinkOrigin` et `SellerType` ; valeurs `link_added` de
+`ListingCheckOutcome` et `attached` de `ExplorationOutcome` ; colonnes `listings.seller_type`,
+inconnu par défaut, `seller_name`, `seller_reference`, `seller_reference_key`,
+`listing_checks.link_id`, `listing_drafts.attached_link_id`, `attached_at`, `detached_at`), avec
+un rattrapage SQL dans la migration elle-même : un lien d'origine par annonce qui a une URL
+(portail d'après l'hôte, à défaut la source ; prix = prix de la fiche ; hors ligne si la dernière
+vérification concluante le disait), les vérifications existantes rattachées à ce lien, le nom
+d'agence des contacts du lot 17 reporté sur l'annonce (« particulier… » donne le vendeur
+Particulier) ; le vendeur reste inconnu sinon. Appliquée par `prisma:deploy` (ou `build:vercel`).
+Ni variable, ni import, ni script de rattrapage à lancer. Sur la production (29 annonces), elle
+doit créer un lien d'origine par annonce qui a une URL, sans vendeur
+deviné.
+
+Avant, un pré-contrôle en lecture seule (connexion directe, éditeur SQL de Supabase) : le nombre
+d'annonces avec un lien, et les liens en double dans un espace (clé approchée : sans `www.`,
+requête, fragment ni barre finale), qui recevront une clé suffixée `#doublon-<id>` (la plus
+ancienne garde la clé ; rien ne bloque la migration) :
+
+```sql
+SELECT count(*) AS annonces,
+       count(*) FILTER (WHERE url IS NOT NULL AND btrim(url) <> '') AS avec_lien
+FROM app.listings;
+
+SELECT workspace_id,
+       regexp_replace(lower(split_part(split_part(btrim(url), '#', 1), '?', 1)),
+                      '^https?://(www\.)?|/+$', '', 'g') AS cle,
+       count(*) AS annonces,
+       string_agg(title, ' | ' ORDER BY created_at) AS titres
+FROM app.listings
+WHERE url IS NOT NULL AND btrim(url) <> ''
+GROUP BY 1, 2
+HAVING count(*) > 1;
+```
+
+Après, le contrôle : autant de liens que d'annonces avec un lien, les doublons suffixés, le
+vendeur, les vérifications sans lien (celles d'une annonce sans URL seulement) :
+
+```sql
+SELECT count(*) FROM app.listing_links;
+SELECT count(*) FROM app.listing_links WHERE normalized_url LIKE '%#doublon-%';
+SELECT seller_type, count(*) FROM app.listings GROUP BY 1;
+SELECT count(*) FROM app.listing_checks WHERE link_id IS NULL;
+```
+
+Le connecteur claude.ai découvre `add_listing_link` et les prompts mis à jour à sa prochaine
+lecture de `tools/list` (nouvelle conversation ; le reconnecter s'il n'apparaît pas). Après le
+déploiement du web, la première visite recharge la page une fois (service worker, ADR 0022).
+
 ### Adéquation aux critères (lot 14)
 
 Migration `20261106100000_lot14_criteria_fit` : purement additive (énumération
@@ -507,3 +558,13 @@ partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « C
       dans claude.ai, prompt « Questions aux agences » sur une annonce (accord donné dans la
       conversation, envoi par Gmail), puis « Réponses des agences » : valeurs appliquées ou
       proposées, tâches cochées, Chloé prévenue.
+- [ ] Lot 18 : pré-contrôle SQL relu (annonces avec un lien, liens en double), migration
+      `20261108100000_lot18_listing_links` appliquée, contrôle SQL après (un lien d'origine par
+      annonce qui a une URL, vendeur inconnu sauf contact repris) ; fiche d'une annonce :
+      « Où la trouver » (lien d'origine, « Ajouter un lien » avec un deuxième portail, prix le plus
+      bas en ligne, écart « frais inclus ? ») et « Qui la vend » (vendeur, agence, référence) ;
+      liste : colonnes Portails, Vendeur, Référence, filtres « Vendeur » et « Sur plusieurs
+      portails », recherche d'une référence ; dans claude.ai, prompt « Tournée de mise à jour »
+      sur une annonce d'agence (référence relevée, cherchée sur un autre portail, lien rattaché
+      seulement si même agence et même référence) ; onglet « À valider » : un lien rattaché
+      d'office et « Ce n'est pas la même » ; export CSV : quatre colonnes en fin de ligne.

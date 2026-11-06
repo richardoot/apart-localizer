@@ -45,6 +45,7 @@ const preview: ListingCheckPreview = {
   suggestion: null,
   duplicates: [],
   republication: { from: null, to: null },
+  link: null,
   extraction: null,
   persisted: false,
 }
@@ -101,6 +102,11 @@ describe('MCP lot 15 : suivi des mises à jour', () => {
           commune: 'Talence',
           url: null,
           score: 0.8,
+          certain: false,
+          sellerType: 'unknown',
+          sellerName: null,
+          sellerReference: null,
+          linkCount: 0,
           reasons: [
             {
               kind: 'same_commune_price_surface',
@@ -223,6 +229,8 @@ describe('MCP lot 15 : suivi des mises à jour', () => {
       listing: {
         listing: {
           title: 'T2 fictif',
+          sellerType: 'unknown',
+          sellerReference: null,
           status: 'to_study',
           price: 205000,
           surface: 45,
@@ -242,6 +250,7 @@ describe('MCP lot 15 : suivi des mises à jour', () => {
         distanceMeters: null,
         criteriaChanges: null,
         criteriaFit: NO_CRITERIA_FIT,
+        links: [],
       },
       suggestion: {
         listingId: ID,
