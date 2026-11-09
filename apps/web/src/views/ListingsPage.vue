@@ -30,10 +30,11 @@
   import ExportMenu from '@/components/listings/ExportMenu.vue'
   import ViewSwitch from '@/components/listings/ViewSwitch.vue'
   import OutOfCriteria from '@/components/workflow/OutOfCriteria.vue'
+  import PropertyFacts from '@/components/workflow/PropertyFacts.vue'
   import StageBar from '@/components/workflow/StageBar.vue'
   import StageRows from '@/components/workflow/StageRows.vue'
   import WorkflowAgenda from '@/components/workflow/WorkflowAgenda.vue'
-  import { useDrafts } from '@/composables/useDrafts'
+  import { useDismissedDrafts, useDrafts } from '@/composables/useDrafts'
   import {
     useListingAreas,
     useListingList,
@@ -58,14 +59,18 @@
   import { ApiError } from '@/lib/api'
   import {
     confirmLabel,
+    dismissedDraftRow,
     draftMapItem,
     draftMatchesFilters,
+    isDraftSortApplied,
     legacyStageRedirect,
     listingRow,
     orderedRows,
     outLabel,
     outReasonOfDraft,
     outReasonOfListing,
+    propertyFacts,
+    sortDrafts,
     stageCta,
     tabOfAction,
     STAGE_EMPTY_TEXT,
@@ -186,9 +191,27 @@
     items.value.filter(item => isFoldedOut(item.criteriaFit, item.decision))
   )
 
-  const { data: draftsData } = useDrafts()
+  const draftQueries = useDrafts()
+  const draftsData = draftQueries.data
   const filteredDrafts = computed(() =>
     (draftsData.value ?? []).filter(d => draftMatchesFilters(d, store.filters))
+  )
+  const sortedDrafts = computed(() =>
+    sortDrafts(filteredDrafts.value, store.filters.sort, store.filters.order)
+  )
+  const draftsKeepOrder = computed(() => isDraftSortApplied(store.filters.sort))
+
+  // Un brouillon écarté n'a jamais été une annonce suivie : les archives le
+  // montrent à côté des annonces écartées, et « Repêcher » le remet À valider.
+  const { data: dismissedData } = useDismissedDrafts(
+    computed(() => stage.value === 'archives')
+  )
+  const dismissedDrafts = computed(() =>
+    stage.value === 'archives'
+      ? (dismissedData.value ?? []).filter(d =>
+          draftMatchesFilters(d, store.filters)
+        )
+      : []
   )
 
   const communes = computed(() => {
@@ -212,12 +235,31 @@
   const listingRows = computed<StageRowView[]>(() =>
     mainItems.value.map(item => listingRow(stage.value, item, context.value))
   )
-  /** L'ordre de l'étape, sauf si un tri a été demandé dans les filtres. */
-  const rows = computed(() =>
-    store.filters.sort === 'score'
-      ? orderedRows(stage.value, listingRows.value)
-      : listingRows.value
+  const dismissedRows = computed<StageRowView[]>(() =>
+    dismissedDrafts.value.map(d => dismissedDraftRow(d, context.value))
   )
+  /** L'ordre de l'étape, sauf si un tri a été demandé dans les filtres. */
+  const rows = computed(() => {
+    const all = [...listingRows.value, ...dismissedRows.value]
+    return store.filters.sort === 'score' ? orderedRows(stage.value, all) : all
+  })
+  /** Le brouillon écarté déplié dans les archives (il n'a pas de fiche). */
+  const expandedDismissed = ref<string | null>(null)
+  const expandedDismissedIds = computed(() =>
+    expandedDismissed.value ? [expandedDismissed.value] : []
+  )
+  const factsOpen = ref(true)
+  const dismissedOf = (id: string) =>
+    dismissedDrafts.value.find(d => d.id === id) ?? null
+  /** Le titre d'une ligne : la fiche, ou le détail d'un brouillon écarté. */
+  function openRow(row: StageRowView): void {
+    if (row.kind === 'draft') {
+      expandedDismissed.value =
+        expandedDismissed.value === row.id ? null : row.id
+      return
+    }
+    open(row.id)
+  }
   /** Archives : les vingt plus récentes, puis « Voir les autres ». */
   const ARCHIVE_PAGE = 20
   const showAllArchives = ref(false)
@@ -336,9 +378,17 @@
     }
   }
 
-  /** « Repêcher » : un fait, appliqué tout de suite, retour À étudier. */
+  /** « Repêcher » : un fait, appliqué tout de suite, retour À étudier ou À valider. */
   async function rescue(row: StageRowView): Promise<void> {
     try {
+      if (row.kind === 'draft') {
+        await draftQueries.decide.mutateAsync({
+          id: row.id,
+          decision: { status: 'pending' },
+        })
+        pageMessage.value = `« ${row.title} » revient À valider.`
+        return
+      }
       await mutations.setStatus.mutateAsync({
         id: row.id,
         change: { status: 'to_study', reason: null },
@@ -506,7 +556,11 @@
     </p>
 
     <div v-if="filtersOpen" class="grid gap-2" data-testid="filters-panel">
-      <FiltersBar :communes="communes" :criteria="criteria" />
+      <FiltersBar
+        :communes="communes"
+        :criteria="criteria"
+        :drafts-only="draftsStage"
+      />
       <p
         v-if="activeCriteria.length"
         class="text-sm text-muted"
@@ -546,7 +600,8 @@
     <template v-if="draftsStage && store.view !== 'map'">
       <DraftsTab
         :view="store.view === 'cards' ? 'cards' : 'list'"
-        :drafts="filteredDrafts"
+        :drafts="sortedDrafts"
+        :keep-order="draftsKeepOrder"
         :agreement="agreement"
         :expanded="draftsExpandedId"
         @update:expanded="draftsExpandedId = $event"
@@ -597,9 +652,31 @@
       <StageRows
         v-if="store.view === 'list'"
         :rows="visibleRows"
-        @open="row => open(row.id)"
+        :expanded="expandedDismissedIds"
+        @open="openRow"
         @action="onRowAction"
-      />
+      >
+        <template #expanded="{ row }">
+          <div class="flex flex-col gap-2.5">
+            <a
+              v-if="dismissedOf(row.id)?.url"
+              :href="dismissedOf(row.id)?.url ?? undefined"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="w-fit font-semibold text-accent underline underline-offset-2"
+              >Voir l’annonce en ligne
+              <span aria-hidden="true">↗</span>
+              <span class="sr-only">(nouvel onglet)</span></a
+            >
+            <PropertyFacts
+              v-if="dismissedOf(row.id)"
+              v-model:open="factsOpen"
+              :facts="propertyFacts(dismissedOf(row.id)!.listing)"
+              :description="dismissedOf(row.id)!.listing.description"
+            />
+          </div>
+        </template>
+      </StageRows>
       <ListingsTable
         v-else-if="store.view === 'table'"
         :items="items"
@@ -625,6 +702,31 @@
         @update:near="onNear"
         @bounds="value => (bbox = value)"
       />
+      <section
+        v-if="
+          (store.view === 'table' || store.view === 'cards') &&
+          dismissedRows.length
+        "
+        class="grid gap-2"
+        data-testid="dismissed-drafts"
+      >
+        <h3 class="text-[15px] font-semibold">Écartées à l’étape À valider</h3>
+        <StageRows
+          :rows="dismissedRows"
+          :expanded="expandedDismissedIds"
+          @open="openRow"
+          @action="onRowAction"
+        >
+          <template #expanded="{ row }">
+            <PropertyFacts
+              v-if="dismissedOf(row.id)"
+              v-model:open="factsOpen"
+              :facts="propertyFacts(dismissedOf(row.id)!.listing)"
+              :description="dismissedOf(row.id)!.listing.description"
+            />
+          </template>
+        </StageRows>
+      </section>
       <button
         v-if="store.view === 'list' && hiddenArchives > 0"
         type="button"

@@ -17,6 +17,7 @@ import {
   defaultStage,
   finishLabel,
   isOutOfCriteria,
+  isWithinRadius,
   isWorkflowStage,
   listingRowKind,
   orderStageRows,
@@ -425,6 +426,7 @@ describe('les compteurs et « Ce qui t’attend »', () => {
     proposals?: DecisionProposal[]
     decideTogether?: boolean
     activeMembers?: typeof members
+    dismissedDrafts?: number
   }) =>
     workflowOverview({
       viewerId: RICHARD,
@@ -433,6 +435,7 @@ describe('les compteurs et « Ce qui t’attend »', () => {
       listings: input.listings ?? [],
       drafts: input.drafts ?? [],
       proposals: input.proposals ?? [],
+      dismissedDrafts: input.dismissedDrafts ?? 0,
     })
 
   const count = (o: ReturnType<typeof overview>, stage: string) =>
@@ -445,6 +448,17 @@ describe('les compteurs et « Ce qui t’attend »', () => {
       overview({ activeMembers: members.slice(0, 1) }).agreementRequired
     ).toBe(false)
     expect(overview({}).others).toEqual([members[1]])
+  })
+
+  it('les brouillons écartés comptent dans les archives', () => {
+    expect(count(overview({ dismissedDrafts: 3 }), 'archives')?.count).toBe(3)
+    expect(count(overview({}), 'archives')?.count).toBe(0)
+  })
+
+  it('un point est dans le rayon, ou non', () => {
+    const near = { longitude: -0.58, latitude: 44.84, radiusMeters: 500 }
+    expect(isWithinRadius({ coordinates: [-0.58, 44.843] }, near)).toBe(true)
+    expect(isWithinRadius({ coordinates: [-0.5, 44.9] }, near)).toBe(false)
   })
 
   it('compte chaque étape, les hors critères à part', () => {

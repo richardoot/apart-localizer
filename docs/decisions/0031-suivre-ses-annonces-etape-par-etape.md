@@ -73,3 +73,9 @@ t'attend », tri, passage du second membre, « À trancher ensemble », téléph
   « Décision en attente » en fin de ligne.
 - Une session non terminée laisse des propositions sans notification ; l'autre membre les voit tout
   de même, à sa prochaine visite de la page.
+- Un brouillon écarté n'est pas une annonce suivie : les archives le montrent à côté des annonces
+  écartées (`GET /listing-drafts?status=dismissed`, compté dans l'étape), sans fiche, et
+  « Repêcher » le remet À valider.
+- À valider filtre côté navigateur : le panneau n'y montre que ce qui existe pour un brouillon
+  (pas d'avis, de « nouvelles pour moi », de « à revérifier » ni de « plusieurs portails ») et les
+  tris possibles (prix, prix au m², surface, date) ; sans loyer visé, aucun verdict ne convient.

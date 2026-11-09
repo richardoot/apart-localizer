@@ -16,12 +16,18 @@ const listState = vi.hoisted(() => ({
   items: [] as unknown[],
   overview: null as unknown,
   listCalls: [] as unknown[],
+  dismissed: [] as unknown[],
+  decide: vi.fn(),
 }))
 
 vi.mock('@/composables/useDrafts', async () => {
   const { computed } = await import('vue')
   return {
-    useDrafts: () => ({ data: computed(() => listState.drafts) }),
+    useDrafts: () => ({
+      data: computed(() => listState.drafts),
+      decide: { mutateAsync: listState.decide },
+    }),
+    useDismissedDrafts: () => ({ data: computed(() => listState.dismissed) }),
   }
 })
 
@@ -63,6 +69,7 @@ vi.mock('@/composables/useWorkspace', () => ({
 import ListingsPage from './ListingsPage.vue'
 import { NO_CRITERIA_FIT } from '@apart/contracts'
 import { fakeEvaluated } from '@/test/fixtures'
+import { fakeDraft } from '@/test/exploration-fixtures'
 import { useFiltersStore } from '@/stores/filters'
 
 const ID = '11111111-1111-4111-8111-111111111111'
@@ -148,6 +155,33 @@ describe('ListingsPage : onglet de la fiche dans l’URL', () => {
     listState.items = []
     listState.overview = overviewOf([])
     listState.listCalls = []
+    listState.dismissed = []
+    listState.decide.mockReset()
+  })
+
+  it('lot 21 : un brouillon écarté se retrouve aux archives et se repêche', async () => {
+    listState.dismissed = [
+      fakeDraft({
+        status: 'dismissed',
+        dismissReason: 'Trop cher',
+        decidedAt: '2026-11-08T10:00:00.000Z',
+      }),
+    ]
+    const { wrapper } = await mountAt('/annonces?etape=archives')
+    const row = wrapper.get('[data-testid="stage-rows"]')
+    expect(row.text()).toContain('Écartée')
+    expect(row.text()).toContain('Trop cher')
+    await wrapper.get('[data-testid="row-title"]').trigger('click')
+    expect(wrapper.find('[data-testid="property-facts"]').exists()).toBe(true)
+    await wrapper.get('[data-action="rescue"]').trigger('click')
+    await flushPromises()
+    expect(listState.decide).toHaveBeenCalledWith({
+      id: 'dddddddd-dddd-4ddd-8ddd-dddddddddd01',
+      decision: { status: 'pending' },
+    })
+    expect(wrapper.get('[data-testid="page-message"]').text()).toContain(
+      'revient À valider'
+    )
   })
 
   it('lot 21 : la barre d’étapes vit dans l’URL ; le filtre garde sa place', async () => {

@@ -1,3 +1,5 @@
+import { computed, unref } from 'vue'
+import type { MaybeRef } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import type {
   ListingDraftBatchAccept,
@@ -7,6 +9,8 @@ import type {
 import { api } from '@/lib/api'
 
 export const draftsKey = ['listing-drafts', 'pending'] as const
+/** Lot 21 : les brouillons écartés, montrés dans les archives. */
+export const dismissedDraftsKey = ['listing-drafts', 'dismissed'] as const
 /** Lot 18 : les liens rattachés d'office des derniers jours. */
 export const attachedDraftsKey = ['listing-drafts', 'attached'] as const
 
@@ -25,7 +29,7 @@ export function useDrafts() {
     staleTime: 60_000,
   })
   function settle(): void {
-    void client.invalidateQueries({ queryKey: draftsKey })
+    void client.invalidateQueries({ queryKey: ['listing-drafts'] })
     void client.invalidateQueries({ queryKey: ['listings'] })
     void client.invalidateQueries({ queryKey: ['explorations'] })
     // Lot 21 : les compteurs des étapes et « Ce qui t'attend ».
@@ -60,6 +64,15 @@ export function useDrafts() {
     onSuccess: settle,
   })
   return { ...query, decide, accept, acceptInCriteria, merge, distinct }
+}
+
+/** Lot 21 : les brouillons écartés de l'étape Archives, lus quand elle est ouverte. */
+export function useDismissedDrafts(enabled: MaybeRef<boolean>) {
+  return useQuery({
+    queryKey: dismissedDraftsKey,
+    queryFn: () => api.drafts.list('dismissed'),
+    enabled: computed(() => unref(enabled)),
+  })
 }
 
 /**

@@ -35,8 +35,16 @@
       agreement?: boolean
       /** Le brouillon déplié dans la liste. */
       expanded?: string | null
+      /** Un tri est demandé : `drafts` est déjà dans l'ordre voulu. */
+      keepOrder?: boolean
     }>(),
-    { view: 'cards', drafts: undefined, agreement: false, expanded: null }
+    {
+      view: 'cards',
+      drafts: undefined,
+      agreement: false,
+      expanded: null,
+      keepOrder: false,
+    }
   )
   const emit = defineEmits<{ 'update:expanded': [id: string | null] }>()
 
@@ -51,24 +59,28 @@
   const errors = ref<Record<string, string>>({})
   const batchMessage = ref<string | null>(null)
 
-  const cards = computed(() =>
-    mergeDraftCards(
+  const cards = computed(() => {
+    const merged = mergeDraftCards(
       props.drafts ? [...props.drafts] : (draftQueries.data.value ?? []),
       decided.value
     )
-  )
+    if (!props.keepOrder || !props.drafts) return merged
+    const rank = new Map(props.drafts.map((d, index) => [d.id, index]))
+    const last = props.drafts.length
+    return merged.sort(
+      (a, b) => (rank.get(a.id) ?? last) - (rank.get(b.id) ?? last)
+    )
+  })
   /** Lot 21 : les hors critères sont repliés en bas de l'étape (lignes). */
   const listCards = computed(() =>
     cards.value.filter(d => !isFoldedOut(d.fit, d.decision))
   )
-  const rows = computed(() =>
-    orderedRows(
-      'a-valider',
-      listCards.value
-        .filter(d => d.status === 'pending')
-        .map(d => draftRow(d, { meId: me.value?.id ?? null }))
-    )
-  )
+  const rows = computed(() => {
+    const pending = listCards.value
+      .filter(d => d.status === 'pending')
+      .map(d => draftRow(d, { meId: me.value?.id ?? null }))
+    return props.keepOrder ? pending : orderedRows('a-valider', pending)
+  })
   const cardOf = (id: string): ListingDraft | undefined =>
     cards.value.find(d => d.id === id)
   const expandedIds = computed(() => (props.expanded ? [props.expanded] : []))

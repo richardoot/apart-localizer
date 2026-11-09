@@ -732,6 +732,23 @@ describe('Lot 21 : décider à plusieurs (e2e)', () => {
       })
       expect(stored.status).toBe('dismissed')
       expect(stored.dismissReason).toBe('Déjà vue')
+      // Il se retrouve aux archives, avec sa raison.
+      const overview = await api()
+        .get('/decisions/overview')
+        .set(ctx.auth(richard))
+        .expect(200)
+      expect(
+        overview.body.stages.find(
+          (s: { stage: string }) => s.stage === 'archives'
+        ).count
+      ).toBeGreaterThanOrEqual(1)
+      const archived = await api()
+        .get('/listing-drafts?status=dismissed')
+        .set(ctx.auth(richard))
+        .expect(200)
+      expect(
+        archived.body.find((d: { id: string }) => d.id === id).dismissReason
+      ).toBe('Déjà vue')
       // Annuler l'écart : le brouillon revient à valider, à confirmer.
       await api()
         .post(`/decisions/${proposed.body.proposal.id}/undo`)

@@ -19,6 +19,7 @@
   } from '@apart/contracts'
   import { SORT_LABELS, VERDICT_LABELS } from '@/lib/labels'
   import { formatDistance, parseNumberInput } from '@/lib/format'
+  import { DRAFT_SORTS } from '@/lib/workflow'
   import {
     SELLER_FILTER_CHOICES,
     sellerChoiceOf,
@@ -31,15 +32,23 @@
       communes: readonly string[]
       /** Les critères de recherche de l'espace, pour le sélecteur. */
       criteria?: readonly SearchCriteriaSummary[]
+      /** Lot 21 : À valider : seulement ce qui existe pour un brouillon. */
+      draftsOnly?: boolean
     }>(),
-    { criteria: () => [] }
+    { criteria: () => [], draftsOnly: false }
   )
 
   const store = useFiltersStore()
   const verdicts = VerdictSchema.options
   const dpeClasses = DpeClassSchema.options
   const precisions = LocationPrecisionFilterSchema.options
-  const sorts = ListingSortSchema.options
+  const sorts = computed(() =>
+    props.draftsOnly ? DRAFT_SORTS : ListingSortSchema.options
+  )
+  /** Un tri d'une autre étape, sans objet ici, s'affiche comme le tri par défaut. */
+  const shownSort = computed(() =>
+    sorts.value.includes(store.filters.sort) ? store.filters.sort : 'score'
+  )
 
   function toggleVerdict(verdict: Verdict): void {
     const current = store.filters.verdict ?? []
@@ -195,7 +204,7 @@
       <select
         id="f-sort"
         class="rounded-lg border border-line bg-bg px-3 py-1.5 text-sm"
-        :value="store.filters.sort"
+        :value="shownSort"
         @change="onSort"
       >
         <option v-for="sort in sorts" :key="sort" :value="sort">
@@ -275,7 +284,7 @@
       </div>
     </div>
 
-    <div class="grid gap-1 sm:col-span-2 lg:col-span-2">
+    <div v-if="!draftsOnly" class="grid gap-1 sm:col-span-2 lg:col-span-2">
       <span id="f-opinions-label" class="text-xs font-medium text-muted"
         >Avis</span
       >
@@ -331,7 +340,7 @@
     </div>
 
     <div class="flex flex-wrap items-end gap-2">
-      <label class="flex items-center gap-2 text-sm">
+      <label v-if="!draftsOnly" class="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
           class="accent-accent"
@@ -346,6 +355,7 @@
         Nouvelles pour moi
       </label>
       <label
+        v-if="!draftsOnly"
         class="flex items-center gap-2 text-sm"
         :title="`Annonces actives sans vérification sur le portail depuis plus de ${DEFAULT_STALE_DAYS} jours (à défaut, depuis leur ajout)`"
       >
@@ -365,6 +375,7 @@
         À revérifier
       </label>
       <label
+        v-if="!draftsOnly"
         class="flex items-center gap-2 text-sm"
         title="Annonces publiées sur au moins deux portails (lot 18)"
       >

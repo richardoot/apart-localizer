@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { ListingCriteriaFitSchema } from './criteria-fit.js'
 import { DecisionProposalSchema } from './decisions.js'
 import { DuplicateCandidateSchema } from './duplicates.js'
+import { LocationPrecisionSchema } from './enums.js'
 import { PointSchema } from './geojson.js'
 import { ListingInputSchema } from './listing.js'
 import { ListingEvaluationSchema } from './metrics.js'
@@ -198,11 +199,14 @@ export const ListingDraftSchema = z.object({
       'Lot 21 : les chiffres du brouillon (coût tout compris, mensualité, prix cible, verdict) avec les hypothèses de l’espace, calculés à la lecture d’un brouillon en attente ; null sinon'
     ),
   located: z
-    .object({ point: PointSchema.nullable() })
+    .object({
+      point: PointSchema.nullable(),
+      precision: LocationPrecisionSchema.nullable().default(null),
+    })
     .nullable()
     .default(null)
     .describe(
-      'Lot 21 : le repère du brouillon sur la carte, recalculé hors ligne à la lecture ; null sinon'
+      'Lot 21 : le repère du brouillon sur la carte et sa précision, recalculés hors ligne à la lecture ; null sinon'
     ),
 })
 export type ListingDraft = z.infer<typeof ListingDraftSchema>

@@ -35,6 +35,7 @@ vi.mock('@/composables/useDrafts', () => ({
     data: ref(state.drafts),
     merge: { mutateAsync: vi.fn() },
   }),
+  useDismissedDrafts: () => ({ data: ref([]) }),
 }))
 vi.mock('@/composables/useListings', () => ({
   useListingList: () => ({

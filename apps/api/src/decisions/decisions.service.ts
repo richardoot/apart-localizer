@@ -125,39 +125,43 @@ export class DecisionsService {
 
   /** Les compteurs de la barre, « Ce qui t'attend » et les propositions en cours. */
   async overview(member: Member): Promise<WorkflowOverview> {
-    const [ctx, opinions, listingRows, drafts, open] = await Promise.all([
-      this.context(member.workspaceId),
-      loadOpinionContext(this.prisma, member.workspaceId),
-      this.prisma.listing.findMany({
-        where: { workspaceId: member.workspaceId },
-        select: {
-          id: true,
-          status: true,
-          criteriaFitChangedAt: true,
-          criteriaFitOrigin: true,
-          criteriaMatches: listingInclude.criteriaMatches,
-          visits: { select: { status: true } },
-          opinions: {
-            where: { memberId: member.id },
-            include: { scores: true },
+    const [ctx, opinions, listingRows, drafts, open, dismissedDrafts] =
+      await Promise.all([
+        this.context(member.workspaceId),
+        loadOpinionContext(this.prisma, member.workspaceId),
+        this.prisma.listing.findMany({
+          where: { workspaceId: member.workspaceId },
+          select: {
+            id: true,
+            status: true,
+            criteriaFitChangedAt: true,
+            criteriaFitOrigin: true,
+            criteriaMatches: listingInclude.criteriaMatches,
+            visits: { select: { status: true } },
+            opinions: {
+              where: { memberId: member.id },
+              include: { scores: true },
+            },
+            offers: {
+              orderBy: { madeAt: 'desc' },
+              take: 1,
+              select: { response: true },
+            },
           },
-          offers: {
-            orderBy: { madeAt: 'desc' },
-            take: 1,
-            select: { response: true },
+        }),
+        this.drafts.list(member, 'pending'),
+        this.prisma.decisionProposal.findMany({
+          where: {
+            workspaceId: member.workspaceId,
+            state: { in: [...OPEN_STATES] },
           },
-        },
-      }),
-      this.drafts.list(member, 'pending'),
-      this.prisma.decisionProposal.findMany({
-        where: {
-          workspaceId: member.workspaceId,
-          state: { in: [...OPEN_STATES] },
-        },
-        include: decisionInclude,
-        orderBy: { createdAt: 'asc' },
-      }),
-    ])
+          include: decisionInclude,
+          orderBy: { createdAt: 'asc' },
+        }),
+        this.prisma.listingDraft.count({
+          where: { workspaceId: member.workspaceId, status: 'dismissed' },
+        }),
+      ])
     const views = open.map(row => decisionViewOf(row, member, ctx))
     const byListing = new Map(
       views.filter(v => v.listingId).map(v => [v.listingId, v])
@@ -198,6 +202,7 @@ export class DecisionsService {
           decision: draft.decision,
         })),
         proposals: views,
+        dismissedDrafts,
       })
     )
   }

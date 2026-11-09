@@ -26,6 +26,7 @@ import type {
   ListingEvaluation,
   ListingInput,
   ListingObserved,
+  LocationPrecision,
   Point,
 } from '@apart/contracts'
 import { detectLinkPortal, formatEuros, linkKey } from '@apart/domain'
@@ -82,7 +83,7 @@ const draftInclude = {
 interface DraftReading {
   fit: ListingCriteriaFit
   evaluation: ListingEvaluation
-  located: { point: Point | null }
+  located: { point: Point | null; precision: LocationPrecision | null }
   decision: DecisionProposal | null
 }
 
@@ -239,7 +240,8 @@ export class DraftsService {
       },
       include: draftInclude,
       orderBy: { receivedAt: 'desc' },
-      take: 100,
+      // Les écartés restent tous visibles dans les archives (lot 21).
+      take: status === 'dismissed' ? 500 : 100,
     })
     const readings =
       status === 'pending'
@@ -295,7 +297,10 @@ export class DraftsService {
       readings.set(item.key, {
         fit,
         evaluation: evaluateListing(item.listing, context.base),
-        located: { point: item.listing.location.point ?? null },
+        located: {
+          point: item.listing.location.point ?? null,
+          precision: item.listing.location.precision ?? null,
+        },
         decision: proposal ? decisionViewOf(proposal, member, decisions) : null,
       })
     }

@@ -44,6 +44,7 @@
   import type { TriageCardView } from '@/lib/workflow'
   import { stageApiFilters } from '@/stores/filters'
   import DiscardReasons from '@/components/workflow/DiscardReasons.vue'
+  import PropertyFacts from '@/components/workflow/PropertyFacts.vue'
   import { isWorkflowStage } from '@apart/domain'
 
   /**
@@ -192,6 +193,8 @@
   const announce = ref('')
   const busy = ref(false)
   const asking = ref(false)
+  /** Le volet « Les données du bien » reste ouvert d'une annonce à l'autre. */
+  const factsOpen = ref(false)
 
   async function run(action: () => Promise<void>): Promise<void> {
     if (busy.value) return
@@ -700,24 +703,29 @@
           </div>
 
           <div class="flex flex-col gap-1.5">
-            <h1
-              class="font-display text-[23px] leading-tight font-bold sm:text-[26px]"
-            >
-              {{ currentCard.title }}
-            </h1>
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <h1
+                class="min-w-0 flex-[1_1_320px] font-display text-[23px] leading-tight font-bold sm:text-[26px]"
+              >
+                {{ currentCard.title }}
+              </h1>
+              <a
+                v-if="currentCard.url"
+                :href="currentCard.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border-[1.5px] border-accent bg-accent-soft px-3.5 text-sm font-semibold whitespace-nowrap text-accent"
+                data-testid="triage-link"
+                >Voir l’annonce en ligne
+                <span aria-hidden="true">↗</span>
+                <span class="sr-only">(nouvel onglet)</span></a
+              >
+            </div>
             <div class="flex flex-wrap gap-x-3.5 gap-y-1 text-sm text-muted">
               <span>{{ currentCard.where }}</span>
               <span>{{ currentCard.size }}</span>
               <span>{{ currentCard.rooms }}</span>
               <span v-if="!confirmMode">{{ currentCard.source }}</span>
-              <a
-                v-if="currentCard.url && !confirmMode"
-                :href="currentCard.url"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-accent underline-offset-2 hover:underline"
-                >Voir l’annonce</a
-              >
               <RouterLink
                 v-if="current?.listing"
                 :to="{
@@ -798,6 +806,12 @@
               </ul>
             </section>
           </div>
+
+          <PropertyFacts
+            v-model:open="factsOpen"
+            :facts="currentCard.facts"
+            :description="currentCard.description"
+          />
 
           <div
             v-if="duplicate && !confirmMode"

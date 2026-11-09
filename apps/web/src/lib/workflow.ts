@@ -11,7 +11,11 @@ import type {
   EvaluatedListing,
   ListingDraft,
   ListingFilters,
+  ListingInput,
+  ListingSort,
+  ListingSortOrder,
   ListingStatus,
+  LocationPrecisionFilter,
   OpinionSummary,
   Member,
   WorkflowStage,
@@ -22,6 +26,7 @@ import {
   fitReasonsText,
   formatOpinionAverage,
   isAskableTask,
+  isWithinRadius,
   listingHighlights,
   listingRowKind,
   orderStageRows,
@@ -504,6 +509,7 @@ export function draftMatchesFilters(
       l.location.commune,
       l.location.district,
       l.sellerName,
+      l.sellerReference,
     ]
       .filter(Boolean)
       .join(' ')
@@ -543,14 +549,117 @@ export function draftMatchesFilters(
   ) {
     return false
   }
+  // Sans loyer visé, le verdict reste à confirmer (lot 16) : aucun ne convient.
   if (
     filters.verdict?.length &&
     (!draft.evaluation ||
+      !(l.rentalPlan?.targetRent ?? 0) ||
       !filters.verdict.includes(draft.evaluation.metrics.verdict))
   ) {
     return false
   }
+  if (
+    filters.precision?.length &&
+    !filters.precision.includes(draftPrecision(draft))
+  ) {
+    return false
+  }
+  if (filters.criteriaId) {
+    const entry = draft.fit?.criteria.find(
+      c => c.criteriaId === filters.criteriaId
+    )
+    if (!entry || entry.level === 'out') return false
+  }
+  if (filters.near) {
+    const point = draft.located?.point ?? l.location.point
+    if (!point || !isWithinRadius(point, filters.near)) return false
+  }
   return true
+}
+
+/** La précision du repère d'un brouillon, celle du filtre « Repère ». */
+function draftPrecision(draft: ListingDraft): LocationPrecisionFilter {
+  const point = draft.located?.point ?? draft.listing.location.point
+  const precision = draft.located?.precision ?? draft.listing.location.precision
+  return point && precision ? precision : 'none'
+}
+
+/** Les tris possibles sur des brouillons : les autres demandent une annonce suivie. */
+export const DRAFT_SORTS: readonly ListingSort[] = [
+  'score',
+  'price',
+  'pricePerM2',
+  'surface',
+  'createdAt',
+]
+
+/** Vrai si le tri demandé remplace l'ordre de l'étape « À valider ». */
+export function isDraftSortApplied(sort: ListingSort): boolean {
+  return sort !== 'score' && DRAFT_SORTS.includes(sort)
+}
+
+/** Les brouillons dans l'ordre demandé ; une valeur inconnue va à la fin. */
+export function sortDrafts(
+  drafts: readonly ListingDraft[],
+  sort: ListingSort,
+  order: ListingSortOrder
+): ListingDraft[] {
+  if (!isDraftSortApplied(sort)) return [...drafts]
+  const value = (draft: ListingDraft): number | null => {
+    const l = draft.listing
+    switch (sort) {
+      case 'price':
+        return l.price || null
+      case 'pricePerM2':
+        return l.price && l.surface ? l.price / l.surface : null
+      case 'surface':
+        return l.surface
+      default:
+        return Date.parse(draft.receivedAt)
+    }
+  }
+  const direction = order === 'asc' ? 1 : -1
+  return [...drafts].sort((a, b) => {
+    const va = value(a)
+    const vb = value(b)
+    if (va === null || vb === null) {
+      return va === vb ? 0 : va === null ? 1 : -1
+    }
+    return (va - vb) * direction
+  })
+}
+
+/** La ligne « Archives » d'un brouillon écarté : il n'a jamais été une annonce suivie. */
+export function dismissedDraftRow(
+  draft: ListingDraft,
+  context: { members: readonly Pick<Member, 'id' | 'displayName'>[] }
+): StageRowView {
+  const by = context.members.find(m => m.id === draft.decidedById)
+  return {
+    id: draft.id,
+    kind: 'draft',
+    title: draft.listing.title,
+    meta: draftMeta(draft),
+    stats: [
+      {
+        label: 'Prix',
+        value: draft.listing.price ? formatEuros(draft.listing.price) : '—',
+      },
+      {
+        label: 'Quand',
+        value: draft.decidedAt ? shortDay(draft.decidedAt) : '—',
+      },
+      { label: 'Par', value: by?.displayName ?? '—' },
+    ],
+    rowKind: 'archived_discarded',
+    pill: 'Écartée',
+    pillClass: rowPillClass('archived_discarded'),
+    detail: draft.dismissReason ?? 'Écartée à l’étape À valider',
+    action: { kind: 'rescue', label: 'Repêcher' },
+    decision: null,
+    nextVisitAt: null,
+    archivedAt: draft.decidedAt,
+  }
 }
 
 /**
@@ -624,6 +733,83 @@ export interface TriageCardView {
   whyTitle: string
   why: string[]
   missing: string[]
+  facts: PropertyFact[]
+  description: string | null
+}
+
+/** Une donnée du bien, affichée seulement si elle est connue. */
+export interface PropertyFact {
+  label: string
+  value: string
+}
+
+const yesNo = (value: boolean | null): string | null =>
+  value === null ? null : value ? 'Oui' : 'Non'
+
+/** Ce qu'on sait du bien, pour le volet « Les données du bien ». */
+export function propertyFacts(
+  l: Omit<ListingInput, 'sourceText'>
+): PropertyFact[] {
+  const money = (value: number | null): string | null =>
+    value === null ? null : formatEuros(value)
+  const floor =
+    l.floorLabel ??
+    (l.floor === null
+      ? null
+      : l.floor === 0
+        ? 'Rez-de-chaussée'
+        : `${l.floor}${l.floorsTotal === null ? '' : ` sur ${l.floorsTotal}`}`)
+  const dpe = l.dpeClass
+    ? `${l.dpeClass}${l.dpeConsumption === null ? '' : ` (${l.dpeConsumption} kWh/m²/an)`}`
+    : null
+  const heating = l.heatingType
+    ? `${l.heatingType}${l.heatingCollective === null ? '' : l.heatingCollective ? ', collectif' : ', individuel'}`
+    : null
+  const seller = [
+    l.sellerName,
+    l.sellerReference ? `réf. ${l.sellerReference}` : null,
+  ]
+    .filter(Boolean)
+    .join(', ')
+  const facts: Array<[string, string | number | null]> = [
+    [
+      'Adresse',
+      l.location.addressNormalized ??
+        l.location.addressRaw ??
+        (l.location.district
+          ? `${l.location.district}, ${l.location.commune ?? ''}`
+          : null),
+    ],
+    ['Surface Carrez', l.surface === null ? null : formatSurface(l.surface)],
+    [
+      'Surface au sol',
+      l.surfaceTotal === null ? null : formatSurface(l.surfaceTotal),
+    ],
+    ['Pièces', l.rooms],
+    ['Chambres', l.bedrooms],
+    ['Étage', floor],
+    ['Ascenseur', yesNo(l.elevator)],
+    ['Construction', l.constructionYear ?? l.constructionPeriod],
+    ['DPE', dpe],
+    ['GES', l.gesClass],
+    ['Chauffage', heating],
+    ['Extérieur', l.outdoor],
+    ['Stationnement', l.parking],
+    ['Cave', yesNo(l.cellar)],
+    ['Orientation', l.orientation],
+    ['État', l.condition],
+    ['Charges annuelles', money(l.annualCharges)],
+    ['Taxe foncière', money(l.propertyTax)],
+    ['Honoraires', money(l.feesAmount)],
+    ['Lots de la copropriété', l.lotsCount],
+    ['Syndic', l.syndic],
+    ['Travaux votés', l.votedWorks],
+    ['Procédures', l.proceedings],
+    ['Vendeur', seller || null],
+  ]
+  return facts.flatMap(([label, value]) =>
+    value === null || value === '' ? [] : [{ label, value: String(value) }]
+  )
 }
 
 const VERDICT_CLASSES: Record<string, string> = {
@@ -727,6 +913,8 @@ export function draftTriageCard(draft: ListingDraft): TriageCardView {
     fit: fitLevel ? CRITERIA_FIT_LEVEL_LABELS[fitLevel] : null,
     fitClass: fitLevel ? (FIT_CLASSES[fitLevel] ?? '') : '',
     dpe: l.dpeClass ? `DPE ${l.dpeClass}` : 'DPE inconnu',
+    facts: propertyFacts(l),
+    description: l.description,
     figures: evaluation
       ? figuresOf(evaluation, l.price, hasRent)
       : [
@@ -777,6 +965,8 @@ export function listingTriageCard(item: EvaluatedListing): TriageCardView {
     fit: fitLevel ? CRITERIA_FIT_LEVEL_LABELS[fitLevel] : null,
     fitClass: fitLevel ? (FIT_CLASSES[fitLevel] ?? '') : '',
     dpe: l.dpeClass ? `DPE ${l.dpeClass}` : 'DPE inconnu',
+    facts: propertyFacts(l),
+    description: l.description,
     figures: figuresOf(item.evaluation, l.price),
     whyTitle: 'Ce qui plaît',
     why: highlights.good.map(h => h.text),

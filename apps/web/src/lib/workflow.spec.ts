@@ -12,7 +12,11 @@ import {
   confirmLabel,
   draftFitText,
   draftMapItem,
+  dismissedDraftRow,
   draftMatchesFilters,
+  isDraftSortApplied,
+  propertyFacts,
+  sortDrafts,
   draftMeta,
   draftRow,
   draftTriageCard,
@@ -418,6 +422,113 @@ describe('les lignes d’un brouillon', () => {
     expect(row.detail).toBe('Doublon probable à trancher')
   })
 
+  it('les filtres propres aux brouillons : repère, critère, rayon, verdict', () => {
+    const point = {
+      type: 'Point' as const,
+      coordinates: [-0.58, 44.84] as [number, number],
+    }
+    const located = draft({ located: { point, precision: 'exact' } })
+    expect(draftMatchesFilters(located, { precision: ['exact'] })).toBe(true)
+    expect(draftMatchesFilters(located, { precision: ['none'] })).toBe(false)
+    expect(
+      draftMatchesFilters(draft({ located: null }), { precision: ['none'] })
+    ).toBe(true)
+    expect(
+      draftMatchesFilters(located, {
+        near: { longitude: -0.58, latitude: 44.841, radiusMeters: 500 },
+      })
+    ).toBe(true)
+    expect(
+      draftMatchesFilters(located, {
+        near: { longitude: -0.4, latitude: 44.9, radiusMeters: 500 },
+      })
+    ).toBe(false)
+    const entry = (criteriaId: string, level: 'in' | 'out') =>
+      ({ criteriaId, level }) as never
+    const fit = {
+      ...NO_CRITERIA_FIT,
+      criteria: [entry('c1', 'in'), entry('c2', 'out')],
+    }
+    const fitted = draft({ fit })
+    expect(draftMatchesFilters(fitted, { criteriaId: 'c1' })).toBe(true)
+    expect(draftMatchesFilters(fitted, { criteriaId: 'c2' })).toBe(false)
+    expect(draftMatchesFilters(fitted, { criteriaId: 'c3' })).toBe(false)
+    // Sans loyer visé, le verdict est à confirmer : aucun ne convient.
+    const noRent = draft({
+      evaluation: { metrics: { verdict: 'target' } } as never,
+    })
+    expect(draftMatchesFilters(noRent, { verdict: ['target'] })).toBe(false)
+  })
+
+  it('un tri sur les brouillons : les valeurs inconnues à la fin', () => {
+    const at = (id: string, price: number, surface: number | null) =>
+      draft({
+        id,
+        listing: { ...draft().listing, price, surface },
+      })
+    const list = [at('a', 300, 10), at('b', 100, null), at('c', 200, 20)]
+    const ids = (sorted: ListingDraft[]) => sorted.map(d => d.id).join('')
+    expect(ids(sortDrafts(list, 'price', 'asc'))).toBe('bca')
+    expect(ids(sortDrafts(list, 'surface', 'desc'))).toBe('cab')
+    expect(ids(sortDrafts(list, 'pricePerM2', 'asc'))).toBe('cab')
+    expect(ids(sortDrafts(list, 'score', 'desc'))).toBe('abc')
+    expect(isDraftSortApplied('score')).toBe(false)
+    expect(isDraftSortApplied('effort')).toBe(false)
+    expect(isDraftSortApplied('price')).toBe(true)
+  })
+
+  it('un brouillon écarté, aux archives : quand, par qui, pourquoi, repêcher', () => {
+    const row = dismissedDraftRow(
+      draft({
+        status: 'dismissed',
+        decidedById: RICHARD,
+        decidedAt: '2026-11-08T10:00:00.000Z',
+        dismissReason: 'Trop cher',
+      }),
+      { members: [{ id: RICHARD, displayName: 'Richard' }] }
+    )
+    expect(row.pill).toBe('Écartée')
+    expect(row.detail).toBe('Trop cher')
+    expect(row.action).toEqual({ kind: 'rescue', label: 'Repêcher' })
+    expect(row.archivedAt).toBe('2026-11-08T10:00:00.000Z')
+    expect(row.stats.at(-1)).toEqual({ label: 'Par', value: 'Richard' })
+  })
+
+  it('les données du bien : seulement ce qui est connu', () => {
+    const base = draft().listing
+    const labels = (over: Partial<ListingDraft['listing']>) =>
+      Object.fromEntries(
+        propertyFacts({ ...base, ...over }).map(f => [f.label, f.value])
+      )
+    const facts = labels({
+      floor: 2,
+      floorLabel: null,
+      floorsTotal: 5,
+      elevator: false,
+      dpeClass: 'C',
+      dpeConsumption: 120,
+      annualCharges: 1200,
+      sellerName: '[Exemple] Agence',
+      sellerReference: 'EX-1',
+    })
+    expect(facts['Étage']).toBe('2 sur 5')
+    expect(facts.Ascenseur).toBe('Non')
+    expect(facts.DPE).toBe('C (120 kWh/m²/an)')
+    expect(facts.Vendeur).toBe('[Exemple] Agence, réf. EX-1')
+    expect(facts['Charges annuelles']).toContain('1')
+    const bare = labels({
+      floor: 0,
+      floorLabel: null,
+      elevator: null,
+      cellar: null,
+      sellerName: null,
+      sellerReference: null,
+    })
+    expect(bare['Étage']).toBe('Rez-de-chaussée')
+    expect(bare).not.toHaveProperty('Ascenseur')
+    expect(bare).not.toHaveProperty('Vendeur')
+  })
+
   it('les filtres de la page s’appliquent aux brouillons', () => {
     const d = draft()
     expect(draftMatchesFilters(d, {})).toBe(true)
@@ -439,7 +550,10 @@ describe('les lignes d’un brouillon', () => {
   it('sur la carte, seulement avec un repère et des chiffres', () => {
     expect(draftMapItem(draft())).toBeNull()
     const located = draft({
-      located: { point: { type: 'Point', coordinates: [-0.57, 44.84] } },
+      located: {
+        point: { type: 'Point', coordinates: [-0.57, 44.84] },
+        precision: null,
+      },
       evaluation: fakeEvaluated().evaluation,
     })
     expect(draftMapItem(located)?.listing.id).toBe(located.id)

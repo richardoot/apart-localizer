@@ -290,6 +290,25 @@ export function isFoldedOut(
   return decision === null && isOutOfCriteria(fit)
 }
 
+/** Vrai si le point est dans le rayon (distance à vol d'oiseau, formule de haversine). */
+export function isWithinRadius(
+  point: { coordinates: readonly [number, number] },
+  near: { longitude: number; latitude: number; radiusMeters: number }
+): boolean {
+  const EARTH_RADIUS_METERS = 6_371_000
+  const rad = (degrees: number): number => (degrees * Math.PI) / 180
+  const [longitude, latitude] = point.coordinates
+  const dLat = rad(near.latitude - latitude)
+  const dLng = rad(near.longitude - longitude)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(latitude)) *
+      Math.cos(rad(near.latitude)) *
+      Math.sin(dLng / 2) ** 2
+  const distance = 2 * EARTH_RADIUS_METERS * Math.asin(Math.sqrt(a))
+  return distance <= near.radiusMeters
+}
+
 /** Une annonce suivie telle que les compteurs la lisent. */
 export interface WorkflowListingFact {
   id: string
@@ -318,6 +337,8 @@ export interface WorkflowOverviewInput {
   drafts: readonly WorkflowDraftFact[]
   /** Les propositions ouvertes ou à trancher, lues par ce membre. */
   proposals: readonly DecisionProposal[]
+  /** Les brouillons écartés : ils comptent dans les archives. */
+  dismissedDrafts?: number
 }
 
 const plural = (n: number, one: string, many: string): string =>
@@ -471,6 +492,7 @@ export function workflowOverview(
     bucket.total += 1
     if (!draft.decision) bucket.toSort += 1
   }
+  counts.archives.total += input.dismissedDrafts ?? 0
   let visitsToPlan = 0
   let opinionsToGive = 0
   for (const listing of input.listings) {
