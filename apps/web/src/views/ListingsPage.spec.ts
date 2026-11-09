@@ -42,6 +42,10 @@ vi.mock('@/composables/useMapLayers', () => ({
   DEFAULT_LAYER_TOGGLES: {},
   useMapLayers: () => ref({}),
 }))
+// Lot 20 : la liste lit les membres (une colonne d'avis chacun).
+vi.mock('@/composables/useWorkspace', () => ({
+  useWorkspace: () => ({ me: ref(null), activeMembers: ref([]) }),
+}))
 
 import ListingsPage from './ListingsPage.vue'
 import { useFiltersStore } from '@/stores/filters'

@@ -27,6 +27,7 @@ import {
   toExplorationDetail,
 } from '../exploration/exploration.mapper'
 import { AgencyRequestsService } from '../agency-requests/agency-requests.service'
+import { loadOpinionContext, toOpinionDto } from '../opinions/opinion-context'
 import { MEMBER_ORDER } from '../workspace/member-order'
 import type { Member } from '../generated/prisma'
 import { LISTING_CSV_COLUMNS, listingCsvRow, toCsv } from './csv'
@@ -184,6 +185,18 @@ export class ExportService {
       // Lot 17 : contact de l'annonceur et demandes.
       this.agency.forExport(member, items),
     ])
+    // Lot 20 : les avis exportés sont ceux que le membre voit (même règle
+    // de l'avis à l'aveugle qu'à l'écran), avec toutes leurs notes par
+    // critère, masqués compris ; et les critères de l'espace.
+    const opinionContext = await loadOpinionContext(
+      this.prisma,
+      member.workspaceId
+    )
+    const opinionRows = await this.prisma.opinion.findMany({
+      where: { id: { in: items.flatMap(i => i.opinions.map(o => o.id)) } },
+      include: { scores: { orderBy: { criterionKey: 'asc' } } },
+    })
+    const fullOpinions = new Map(opinionRows.map(row => [row.id, row]))
     const byListing = <T extends { listingId: string }>(rows: T[]) => {
       const map = new Map<string, T[]>()
       for (const row of rows) {
@@ -215,7 +228,16 @@ export class ExportService {
           rentalVerdict: item.evaluation.rental.verdict,
           targetPrice: item.evaluation.targetPrice,
         },
-        opinions: item.opinions,
+        opinions: item.opinions.map(opinion => {
+          const row = fullOpinions.get(opinion.id)
+          return row
+            ? {
+                ...opinion,
+                scores: toOpinionDto(row, { visibleKeys: null }).scores,
+              }
+            : opinion
+        }),
+        opinionSummary: item.opinionSummary,
         tasks: item.tasks,
         priceEvents: item.priceEvents,
         offers: item.offers,
@@ -233,6 +255,8 @@ export class ExportService {
       searchCriteria: criteria.map(toSearchCriteriaDto),
       scenarios: scenarios.map(toScenarioDto),
       explorations: explorations.map(toExplorationDetail),
+      opinionCriteria: opinionContext.criteria,
+      opinionSettings: { blind: opinionContext.blind },
     })
   }
 }

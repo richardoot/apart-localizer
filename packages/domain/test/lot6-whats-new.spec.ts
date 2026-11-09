@@ -601,7 +601,9 @@ describe('notifications', () => {
         })
       )
     ).toBeNull()
-    expect(notificationTypeOf(ev({ action: 'opinion.created' }))).toBeNull()
+    // Lot 20 : un avis donné prévient désormais les autres membres
+    // (`opinion_added`) ; « Voir quand même » ne prévient personne.
+    expect(notificationTypeOf(ev({ action: 'opinion.revealed' }))).toBeNull()
     expect(
       notificationsForActivity(ev({ action: 'visit.created' }), {
         members,

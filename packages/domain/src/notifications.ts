@@ -7,6 +7,7 @@ import type {
 import { activityActorName } from './activity.js'
 import type { ActivityRecord } from './activity.js'
 import { formatEuros } from './format.js'
+import { opinionNotificationText } from './opinion-activity.js'
 import { fitChangeFromListing } from './whats-new.js'
 
 /**
@@ -118,6 +119,10 @@ export function notificationTypeOf(
       // Lot 18 : un lien ajouté par Claude ou rattaché d'office (exploration,
       // alerte e-mail) ; jamais un lien collé par un membre dans l'application.
       return event.channel === 'web' ? null : 'listing_checked'
+    case 'opinion.created':
+    case 'opinion.updated':
+      // Lot 20 : un avis donné ou mis à jour prévient les autres membres.
+      return 'opinion_added'
     default:
       return null
   }
@@ -163,6 +168,31 @@ export function notificationsForActivity(
   const who = activityActorName(event, names)
   const title = context.listingTitle ?? 'une annonce'
   const url = event.listingId ? `/annonces/${event.listingId}` : null
+  if (type === 'opinion_added') {
+    // Lot 20 : une phrase par destinataire (désaccords avec lui, ou « à toi
+    // de noter » sans les notes) ; le prénom du membre, même par Claude.
+    const actorName =
+      (event.actorMemberId
+        ? names.get(event.actorMemberId)?.displayName
+        : null) ?? 'Un membre'
+    return notificationRecipients(
+      event,
+      type,
+      context.members.map(m => m.id)
+    ).map(recipientId => ({
+      recipientId,
+      type,
+      ...opinionNotificationText({
+        action: event.action,
+        after: event.after,
+        actorName,
+        recipientId,
+        listingTitle: title,
+      }),
+      url,
+      listingId: event.listingId,
+    }))
+  }
   let heading: string
   let body: string
   switch (type) {

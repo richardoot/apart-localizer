@@ -215,7 +215,7 @@ Détail des formules dans [modele-de-calcul.md](modele-de-calcul.md).
 | # | Besoin | Prio |
 | --- | --- | --- |
 | K1 | Espace de travail (foyer) avec membres authentifiés ; une annonce appartient à l'espace | M |
-| K2 | Avis par membre : note sur 5, texte, date ; moyenne affichée | M |
+| K2 | Avis par membre : note sur 5, texte, date ; moyenne affichée ; lot 20 : notes par critère de l'espace (huit par défaut, dix au plus, échelle en mots), avis à l'aveugle, confrontation (désaccords, note commune) | M |
 | K3 | Tâches partagées par annonce, checklist par défaut, assignation à un membre | M |
 | K4 | Vue « ce qui a changé depuis ma dernière visite » | S |
 | K5 | Invitation d'un nouveau membre par e-mail dans un espace existant (rattachement à sa première connexion Google, expiration, annulation) | L |
@@ -258,7 +258,7 @@ Lecture :
 | `create_listing` | Crée une annonce à partir du schéma normalisé, avec le texte source et la provenance par champ en option ; répond avec les doublons probables sans bloquer la création (`ignoreDuplicates` journalisé, ADR 0007) et les tâches posées pour les champs manquants |
 | `update_listing` | Met à jour des champs avec garde-fous sur les valeurs attendues |
 | `set_listing_status` | Change le statut avec raison |
-| `add_opinion` | Avis du membre connecté |
+| `add_opinion` | Avis du membre connecté : note globale, phrase et, lot 20, notes par critère dictées (fusionnées) ; jamais pour un autre membre |
 | `add_task`, `complete_task` | Tâches |
 | `record_price_change` | Baisse ou hausse constatée sur l'annonce source |
 | `record_offer` | Offre (montant, date, canal) et, pour une offre existante, réponse du vendeur et contre-proposition ; renvoie le statut proposé |
@@ -375,9 +375,14 @@ horizon, revalorisation, indexation (IRL), frais de revente, taux d'actualisatio
 fiscaux datés ; au lot 19 : type de location de la phase 2 ; versionnées (date d'effet) ; plus de
 surcharge par annonce depuis le lot 19 (colonne gardée, plus lue).
 
-**Opinion** : annonce, membre, note, texte, date.
+**Opinion** : annonce, membre, note, texte, date ; lot 20 : première note, avis vus avant de
+noter. **OpinionScore** (lot 20) : avis, clé du critère, note de 1 à 5 (ou aucune, avec un mot),
+mot. **OpinionCriterion** (lot 20) : espace, clé stable, libellé, aide, ordre, masqué, défaut ou
+ajouté ; aucune ligne = les huit par défaut. **OpinionReveal** (lot 20) : annonce, membre, date
+de « Voir quand même », avis visibles à ce moment. L'espace porte « avis à l'aveugle ».
 
-**Task** : annonce, libellé, fait, assigné, origine (défaut, manuelle, champ manquant).
+**Task** : annonce, libellé, fait, assigné, origine (défaut, manuelle, champ manquant, visite,
+« À revoir à la contre-visite » proposée depuis les avis au lot 20), contexte (lot 20).
 
 **PriceEvent** : annonce, date, ancien prix, nouveau prix, source.
 

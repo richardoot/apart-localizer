@@ -10,6 +10,12 @@ import {
   TaskOriginSchema,
 } from './enums.js'
 import { InvitationSchema } from './members.js'
+import {
+  OpinionScoreValueSchema,
+  OpinionScoresInputSchema,
+  OpinionVisitRefSchema,
+  TASK_DETAILS_MAX,
+} from './opinions.js'
 import { ListingQuestionFieldSchema } from './question-fields.js'
 
 /** Membre d'un espace de travail. */
@@ -72,23 +78,75 @@ export const WorkspaceMeSchema = z.object({
 })
 export type WorkspaceMe = z.infer<typeof WorkspaceMeSchema>
 
+const opinionRating = z
+  .number()
+  .int()
+  .min(0)
+  .max(5)
+  .describe(
+    'Note globale sur 5, le ressenti d’ensemble (pas une moyenne) ; 0 = pas de note'
+  )
+const opinionText = z
+  .string()
+  .max(5000)
+  .describe('L’avis en une phrase ; vide = pas de phrase')
+
+/**
+ * Mon avis sur une annonce (`PUT /listings/:id/opinions/me`) : la note
+ * globale et la phrase remplacent les miennes ; lot 20 : les notes par
+ * critère se fusionnent (seules les clés données changent, null efface).
+ */
 export const OpinionInputSchema = z.object({
-  rating: z
-    .number()
-    .int()
-    .min(0)
-    .max(5)
-    .describe('Note sur 5 ; 0 = pas de note, texte seul'),
-  text: z.string().max(5000).default(''),
+  rating: opinionRating,
+  text: opinionText.default(''),
+  scores: OpinionScoresInputSchema.default({}).describe(
+    'Lot 20 : notes par critère, par clé ; seules les clés données changent, null efface la note du critère'
+  ),
+  expectedUpdatedAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .optional()
+    .describe(
+      'Garde-fou optimiste : date de mise à jour de mon avis telle que lue (null = pas encore d’avis) ; refus si elle a changé'
+    ),
 })
 export type OpinionInput = z.infer<typeof OpinionInputSchema>
+export type OpinionInputRaw = z.input<typeof OpinionInputSchema>
 
-export const OpinionSchema = OpinionInputSchema.extend({
+export const OpinionSchema = z.object({
   id: z.string().uuid(),
   listingId: z.string().uuid(),
   memberId: z.string().uuid(),
+  rating: opinionRating,
+  text: opinionText,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
+  scores: z
+    .array(OpinionScoreValueSchema)
+    .default([])
+    .describe(
+      'Lot 20 : les notes par critère (les critères affichés de l’espace ; l’export les donne toutes)'
+    ),
+  ratedAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .default(null)
+    .describe(
+      'Lot 20 : première note (critère ou globale) ; null tant que le membre n’a rien noté'
+    ),
+  afterVisit: OpinionVisitRefSchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 20 : la dernière visite faite, à laquelle le membre participait, avant son avis (« après visite »)'
+    ),
+  seenBefore: z
+    .array(z.string().uuid())
+    .default([])
+    .describe(
+      'Lot 20 : membres dont il a vu l’avis avant de noter (« Voir quand même ») ; « après avoir vu celui de … »'
+    ),
 })
 export type Opinion = z.infer<typeof OpinionSchema>
 
@@ -100,6 +158,15 @@ export const TaskInputSchema = z.object({
     .default(null)
     .describe(
       "Lot 17 : le champ de la fiche que la tâche demande à l'annonceur ; null pour une tâche qui n'en demande aucun"
+    ),
+  details: z
+    .string()
+    .trim()
+    .max(TASK_DETAILS_MAX)
+    .nullable()
+    .default(null)
+    .describe(
+      'Lot 20 : le contexte de la tâche (une tâche proposée depuis « Nos avis » : les notes et les mots qui s’écartent) ; null sinon'
     ),
 })
 export type TaskInput = z.infer<typeof TaskInputSchema>

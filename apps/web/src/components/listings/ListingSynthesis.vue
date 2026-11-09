@@ -19,10 +19,11 @@
     locationApproximation,
     nextSteps,
   } from '@apart/domain'
-  import type { HighlightTab, NextStep } from '@apart/domain'
+  import type { Highlight, HighlightTab, NextStep } from '@apart/domain'
   import ListingChanges from '@/components/activity/ListingChanges.vue'
   import type { ListingTab } from '@/lib/listing-tabs'
   import { LISTING_TABS } from '@/lib/listing-tabs'
+  import type { OpinionActions } from '@/lib/opinions'
   import { fitLine, keyFigures } from '@/lib/synthesis'
   import CriteriaFitSection from './CriteriaFitSection.vue'
   import FitBadge from './FitBadge.vue'
@@ -35,7 +36,8 @@
    * (détail dépliable), « Ce qui plaît » et « À surveiller » (choisis par
    * `domain` dans les données), nos avis, les prochaines étapes et la
    * dernière vérification. Pendant une modification, les chiffres suivent
-   * l'aperçu en direct.
+   * l'aperçu en direct. Lot 20 : nos avis critère par critère nourrissent
+   * « Ce qui plaît », « À surveiller » (lien « Nos avis ») et « À rediscuter ».
    */
   const props = defineProps<{
     item: EvaluatedListing
@@ -53,11 +55,12 @@
     members?: Member[]
     meId?: string | null
     savingOpinion?: boolean
+    /** Lot 20 : enregistrer mon avis, « Voir quand même », ajouter la tâche de contre-visite. */
+    opinionActions?: OpinionActions | null
   }>()
   const emit = defineEmits<{
     go: [tab: ListingTab]
     precise: []
-    saveOpinion: [input: { rating: number; text: string }]
   }>()
 
   const listing = computed(() => props.item.listing)
@@ -93,10 +96,23 @@
       proceedings: listing.value.proceedings,
       askedFields: askedFields.value,
       approximate: locationApproximation(listing.value.location).approximate,
+      opinions: props.item.opinionSummary,
     })
   )
   const tabLabel = (tab: HighlightTab | ListingTab): string =>
     LISTING_TABS.find(t => t.id === tab)?.label ?? ''
+  /** Lot 20 : un point né des avis mène à « Nos avis », dans la Synthèse. */
+  const pointLabel = (point: Highlight): string =>
+    point.section === 'opinions' ? 'Nos avis' : tabLabel(point.tab)
+  function openPoint(point: Highlight): void {
+    if (point.section === 'opinions') {
+      const target = document.getElementById('nos-avis')
+      target?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+      target?.focus?.({ preventScroll: true })
+      return
+    }
+    emit('go', point.tab as ListingTab)
+  }
 
   const steps = computed(() =>
     nextSteps({
@@ -104,11 +120,13 @@
       requests: props.requests ?? [],
       visits: props.visits ?? [],
       now: new Date(),
+      opinions: props.item.opinionSummary,
     })
   )
   const STEP_KINDS: Record<NextStep['kind'], { label: string; tone: string }> =
     {
       visit: { label: 'Visite', tone: 'bg-info-soft text-info' },
+      discuss: { label: 'À rediscuter', tone: 'bg-ai-soft text-ai' },
       draft: { label: 'À valider', tone: 'bg-warn-soft text-warn' },
       follow_up: { label: 'Relance', tone: 'bg-warn-soft text-warn' },
       task: { label: 'Tâche', tone: 'bg-surface-2 text-fg' },
@@ -248,10 +266,14 @@
             <button
               type="button"
               :class="linkClass"
-              :aria-label="`${point.text} : voir l’onglet ${tabLabel(point.tab)}`"
-              @click="emit('go', point.tab)"
+              :aria-label="
+                point.section === 'opinions'
+                  ? `${point.text} : voir nos avis`
+                  : `${point.text} : voir l’onglet ${tabLabel(point.tab)}`
+              "
+              @click="openPoint(point)"
             >
-              {{ tabLabel(point.tab) }}
+              {{ pointLabel(point) }}
             </button>
           </li>
         </ul>
@@ -265,13 +287,14 @@
       </section>
     </div>
 
-    <div class="grid gap-4 @3xl:grid-cols-2 @3xl:items-start">
+    <div class="grid gap-4">
       <OpinionsSection
-        :opinions="item.opinions"
+        :item="item"
         :members="members ?? []"
         :me-id="meId ?? null"
+        :visits="visits ?? []"
+        :actions="opinionActions ?? null"
         :saving="savingOpinion"
-        @save="input => emit('saveOpinion', input)"
       />
       <section
         :class="[card, 'grid content-start gap-2.5']"

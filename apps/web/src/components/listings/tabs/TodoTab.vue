@@ -396,8 +396,9 @@
           <li v-for="point in checklist" :key="point.id">{{ point.label }}</li>
         </ul>
         <p class="text-xs text-muted">
-          Les tâches « Vérifier … » de la liste. Les photos et le compte rendu
-          se saisissent dans la visite.
+          Les tâches « Vérifier … » de la liste et les points à revoir à la
+          contre-visite (« Nos avis »). Les photos et le compte rendu se
+          saisissent dans la visite.
         </p>
       </section>
       <div class="rounded-2xl border border-line bg-surface p-4 sm:px-5">

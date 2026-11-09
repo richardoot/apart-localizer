@@ -65,6 +65,7 @@ const task = (over: Partial<TaskDto> = {}): TaskDto => ({
   requestedAt: null,
   requestId: null,
   answeredAt: null,
+  details: null,
   ...over,
 })
 

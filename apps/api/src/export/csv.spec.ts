@@ -4,7 +4,12 @@ import {
   EvaluatedListingSchema,
   ListingInputSchema,
 } from '@apart/contracts'
-import { mergeAssumptions, precisionBadge } from '@apart/domain'
+import {
+  confrontOpinions,
+  defaultOpinionCriteria,
+  mergeAssumptions,
+  precisionBadge,
+} from '@apart/domain'
 import { evaluateListing } from '../listings/evaluate'
 import {
   LISTING_CSV_COLUMNS,
@@ -223,8 +228,12 @@ describe('CSV pour un tableur français', () => {
       },
       0
     )
-    expect(kept.at(-6)).toBe('Hors critères')
-    expect(kept.at(-5)).toBe(
+    const fitAt = (
+      row: unknown[],
+      column: (typeof LISTING_CSV_COLUMNS)[number]
+    ) => row[LISTING_CSV_COLUMNS.indexOf(column)]
+    expect(fitAt(kept, 'Adéquation')).toBe('Hors critères')
+    expect(fitAt(kept, 'Raisons de l’adéquation')).toBe(
       '« Talence » : Prix +19 % (maximum 220 000 €, marge 5 %) : Gardée dans la liste : offre en cours'
     )
     const inside = listingCsvRow(
@@ -239,12 +248,16 @@ describe('CSV pour un tableur français', () => {
       },
       0
     )
-    expect(inside.at(-6)).toBe('Dans les critères')
-    expect(inside.at(-5)).toBe('')
+    expect(fitAt(inside, 'Adéquation')).toBe('Dans les critères')
+    expect(fitAt(inside, 'Raisons de l’adéquation')).toBe('')
+    // Lot 20 : sans confrontation, les trois cellules des avis sont vides.
+    expect(cell('Note commune (/5)')).toBe('')
+    expect(cell('Désaccords')).toBe('')
+    expect(cell('Notes par critère')).toBe('')
   })
 
-  it('les colonnes des lots 15, 14 et 18 viennent après « Identifiant » : aucune colonne ne se décale', () => {
-    expect(LISTING_CSV_COLUMNS.slice(-10)).toEqual([
+  it('les colonnes des lots 15, 14, 18 et 20 viennent après « Identifiant » : aucune colonne ne se décale', () => {
+    expect(LISTING_CSV_COLUMNS.slice(-13)).toEqual([
       'Identifiant',
       'Vérifiée le',
       'Vue en ligne le',
@@ -255,6 +268,109 @@ describe('CSV pour un tableur français', () => {
       'Agence',
       'Référence',
       'Liens',
+      'Note commune (/5)',
+      'Désaccords',
+      'Notes par critère',
     ])
+  })
+})
+
+describe('CSV : nos avis (lot 20)', () => {
+  const R = '44444444-4444-4444-8444-444444444444'
+  const C = '55555555-5555-4555-8555-555555555555'
+  const score = (key: string, value: number) => ({
+    key,
+    score: value,
+    word: null,
+  })
+  const summary = (
+    visible: Parameters<typeof confrontOpinions>[0]['visible']
+  ) =>
+    confrontOpinions({
+      criteria: defaultOpinionCriteria(),
+      members: [
+        { id: R, displayName: 'Richard' },
+        { id: C, displayName: 'Chloé' },
+      ],
+      visible,
+      masked: [],
+      blind: true,
+      revealed: false,
+      viewerRated: true,
+    })
+  const base = (opinionSummary: ReturnType<typeof confrontOpinions>) => {
+    const input = ListingInputSchema.parse({
+      title: 'T3 fictif',
+      price: 210_000,
+    })
+    const listing = {
+      ...input,
+      id: '11111111-1111-4111-8111-111111111111',
+      workspaceId: '22222222-2222-4222-8222-222222222222',
+      renovation: null,
+      rentalPlan: null,
+      discardedAt: null,
+      createdById: null,
+      createdAt: '2026-11-03T10:00:00.000Z',
+      updatedAt: '2026-11-03T11:00:00.000Z',
+      views: [],
+      openDataContext: null,
+    }
+    return EvaluatedListingSchema.parse({
+      listing,
+      evaluation: evaluateListing(
+        listing as never,
+        mergeAssumptions(DEFAULT_ASSUMPTIONS, null)
+      ),
+      isNewForMe: false,
+      opinionSummary,
+    })
+  }
+  const at = (row: unknown[], column: (typeof LISTING_CSV_COLUMNS)[number]) =>
+    row[LISTING_CSV_COLUMNS.indexOf(column)]
+
+  it('note commune, désaccords et notes par critère, en fin de ligne', () => {
+    const row = listingCsvRow(
+      base(
+        summary([
+          {
+            memberId: R,
+            rating: 4,
+            scores: [score('quiet', 4), score('luminosity', 5)],
+          },
+          {
+            memberId: C,
+            rating: 3,
+            scores: [score('quiet', 2), score('luminosity', 4)],
+          },
+        ])
+      ),
+      0
+    )
+    expect(at(row, 'Note commune (/5)')).toBe('3,8')
+    expect(at(row, 'Désaccords')).toBe('calme (2 points)')
+    expect(at(row, 'Notes par critère')).toBe(
+      'Luminosité : Richard 5, Chloé 4 | Calme : Richard 4, Chloé 2'
+    )
+  })
+
+  it('« en attente » tant qu’un avis manque', () => {
+    const row = listingCsvRow(
+      base(summary([{ memberId: R, rating: 4, scores: [score('quiet', 4)] }])),
+      0
+    )
+    expect(at(row, 'Note commune (/5)')).toBe('en attente')
+    expect(at(row, 'Désaccords')).toBe('')
+    expect(at(row, 'Notes par critère')).toBe('Calme : Richard 4')
+    const none = listingCsvRow(
+      base(
+        summary([
+          { memberId: R, rating: 4, scores: [] },
+          { memberId: C, rating: 3, scores: [] },
+        ])
+      ),
+      0
+    )
+    expect(at(none, 'Note commune (/5)')).toBe('')
   })
 })

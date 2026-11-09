@@ -100,6 +100,13 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Espace', requiresAuth: true },
   },
   {
+    // Lot 20 : les critères des avis et l'avis à l'aveugle (réglage de l'espace).
+    path: '/espace/criteres-des-avis',
+    name: 'opinion-criteria',
+    component: () => import('@/views/OpinionCriteriaPage.vue'),
+    meta: { title: 'Critères des avis', requiresAuth: true },
+  },
+  {
     path: '/notifications',
     name: 'notifications',
     component: () => import('@/views/NotificationsPage.vue'),

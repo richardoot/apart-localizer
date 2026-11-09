@@ -34,8 +34,8 @@ Taxe foncière (€), Loyer visé (€/mois), Loyer retenu (€/mois), Prix au m
 mensuel (€), Verdict, Location, Prix cible (€), Décote nécessaire (%), Note moyenne (/5), Tâches
 ouvertes, Visites, Dernière offre (€), Ajoutée le, Modifiée le, Identifiant, puis, en fin de ligne
 pour ne décaler aucune colonne existante, Vérifiée le, Vue en ligne le, Dernière vérification
-(lot 15), Adéquation, Raisons de l'adéquation (lot 14) et Vendeur, Agence, Référence, Liens
-(lot 18).
+(lot 15), Adéquation, Raisons de l'adéquation (lot 14), Vendeur, Agence, Référence, Liens
+(lot 18) et Note commune (/5), Désaccords, Notes par critère (lot 20).
 
 « Vérifiée le » est la dernière vérification sur le portail, quel qu'en soit le résultat ;
 « Dernière vérification » en donne le résultat (« Inchangée », « Mise à jour », « Plus en ligne »,
@@ -53,6 +53,15 @@ particulier), « Référence » la référence de l'annonce telle qu'enregistré
 tous les liens de l'annonce, le principal d'abord, séparés par « | » : « Leboncoin : <lien> |
 SeLoger : <lien> | Bien'ici : <lien> (plus en ligne) ». « Portail » et « Lien » restent ceux du
 lien principal (le plus ancien en ligne). « Dernière vérification » peut valoir « Lien ajouté ».
+
+Les trois colonnes du lot 20 (ADR 0030) suivent l'avis à l'aveugle, comme l'écran : elles ne
+lisent que les avis visibles par le membre qui exporte. « Note commune (/5) » vaut la note
+commune au dixième (« 3,6 »), « en attente » quand un avis manque ou est masqué, vide quand
+personne n'a noté ; « Désaccords » cite les critères dont les notes s'écartent de 2 points ou
+plus (« calme (2 points), on s’y voit (2 points) ») ; « Notes par critère » donne les notes
+visibles de chacun, séparées par « | » (« Luminosité : Richard 5, Chloé 4 | Calme : Richard 4,
+Chloé 2 »). « Note moyenne (/5) » reste la moyenne des notes globales visibles. Les mots par
+critère et les phrases ne sont que dans le JSON.
 
 La colonne « Coût total (€) » garde son nom depuis le lot 9, pour les tableurs qui la lisent :
 c'est le **coût tout compris** de l'interface (prix affiché + frais de notaire + travaux +
@@ -107,6 +116,17 @@ type de location de la phase 2 (ADR 0029) ; `listing.assumptionsOverride`, `rent
 `history[].values`) portent `leaseType` (`unfurnished` pour une version antérieure). Un export
 antérieur se relit avec `ExportDocumentSchema.parse` (les clés retirées sont ignorées) ; le CSV
 ne change pas.
+Le lot 20 garde aussi la version 1 (ajouts seulement) : chaque avis porte ses notes par
+critère (`opinions[].scores` : clé, note de 1 à 5 ou `null` pour un mot seul, mot, date ; toutes,
+critères masqués compris), `ratedAt`, `afterVisit` et `seenBefore` (valeurs par défaut pour un
+export antérieur) ; `opinionSummary` par annonce (la confrontation des avis visibles, informative,
+`null` par défaut) ; `opinionCriteria` (les critères de l'espace, masqués compris, dans l'ordre :
+clé, libellé, aide, position, masqué, défaut ou ajouté ; liste vide par défaut) et
+`opinionSettings` (`blind`, vrai par défaut). **Avis à l'aveugle** : l'export applique la règle
+de l'écran au membre qui exporte ; l'avis d'un autre membre qu'il ne peut pas encore voir n'est
+pas dans le fichier (ni ses notes, ni sa phrase, ni ses désaccords). C'est le choix le plus
+prudent : un fichier circule plus facilement qu'un écran. Les tâches portent `details` (le
+contexte d'une tâche proposée depuis « Nos avis », `null` par défaut).
 
 ```text
 {
@@ -120,7 +140,8 @@ ne change pas.
   listings: [{
     listing: Listing,                       // champs, provenance, travaux, phase 2, « vu par »
     indicators: { metrics, rentalVerdict, targetPrice },   // calculés à l'export
-    opinions: Opinion[],
+    opinions: Opinion[],                    // lot 20 : visibles par qui exporte, avec `scores` par critère
+    opinionSummary: OpinionSummary | null,  // lot 20 : note commune, désaccords, bilan
     tasks: Task[],
     priceEvents: PriceEvent[],
     offers: Offer[],
@@ -134,7 +155,9 @@ ne change pas.
   }],
   searchCriteria: SearchCriteria[],         // filtres, marge de tolérance, périmètre GeoJSON, portails (lot 16)
   scenarios: Scenario[],                    // de l'espace et des annonces exportées
-  explorations: Exploration[]               // lot 16 : explorations des portails et lignes du compte rendu
+  explorations: Exploration[],              // lot 16 : explorations des portails et lignes du compte rendu
+  opinionCriteria: OpinionCriterion[],      // lot 20 : critères des avis de l'espace, masqués compris
+  opinionSettings: { blind: boolean }       // lot 20 : avis à l'aveugle
 }
 ```
 

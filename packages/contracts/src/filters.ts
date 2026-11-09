@@ -7,6 +7,7 @@ import {
   VerdictSchema,
 } from './enums.js'
 import { PointRadiusSchema } from './geojson.js'
+import { OpinionsFilterSchema } from './opinions.js'
 import { LocationPrecisionFilterSchema } from './placement.js'
 
 export const ListingSortSchema = z
@@ -23,9 +24,11 @@ export const ListingSortSchema = z
     'createdAt',
     'discount',
     'lastCheckedAt',
+    'commonScore',
+    'disagreement',
   ])
   .describe(
-    'Clé de tri : score (meilleur verdict), rendement brut ou net, effort, prix au m², prix, surface, compatibilité location, avis moyen, date d’ajout, décote, dernière vérification sur le portail (à défaut, date d’ajout ; croissant = la plus ancienne d’abord)'
+    'Clé de tri : score (meilleur verdict), rendement brut ou net, effort, prix au m², prix, surface, compatibilité location, avis moyen, date d’ajout, décote, dernière vérification sur le portail (à défaut, date d’ajout ; croissant = la plus ancienne d’abord), note commune des avis, plus gros désaccord (lot 20 ; en attente en fin de liste)'
   )
 export type ListingSort = z.infer<typeof ListingSortSchema>
 
@@ -114,6 +117,9 @@ export const ListingFiltersSchema = z.object({
     .describe(
       'Lot 18 : seulement les annonces publiées sur plusieurs portails (deux liens ou plus)'
     ),
+  opinions: OpinionsFilterSchema.optional().describe(
+    'Lot 20 : to_discuss = « À rediscuter » (un désaccord de 2 points ou plus) ; pending = « Avis en attente » (un avis manque ou est masqué pour le membre connecté)'
+  ),
   reference: z
     .string()
     .trim()
@@ -206,6 +212,7 @@ export const ListingListQuerySchema = z.object({
   sellerType: csv(SellerTypeSchema),
   multiPortal: bool,
   reference: z.string().trim().min(1).max(60).optional(),
+  opinions: OpinionsFilterSchema.optional(),
   lng: optionalNumber(z.coerce.number().min(-180).max(180)),
   lat: optionalNumber(z.coerce.number().min(-90).max(90)),
   radius: integer(1, 50_000),
@@ -251,6 +258,7 @@ export function listingFiltersFromQuery(
       ? { multiPortal: query.multiPortal }
       : {}),
     ...(query.reference ? { reference: query.reference } : {}),
+    ...(query.opinions ? { opinions: query.opinions } : {}),
     ...(near ? { near } : {}),
     ...(query.search ? { search: query.search } : {}),
     sort: query.sort,
@@ -292,6 +300,7 @@ export function listingFiltersToQuery(
   list('sellerType', filters.sellerType)
   if (filters.multiPortal) query.multiPortal = 'true'
   if (filters.reference) query.reference = filters.reference
+  if (filters.opinions) query.opinions = filters.opinions
   if (filters.near) {
     query.lng = String(filters.near.longitude)
     query.lat = String(filters.near.latitude)

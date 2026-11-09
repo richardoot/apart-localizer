@@ -5,7 +5,9 @@ import {
   LISTING_LINK_EVIDENCE_MAX,
   ListingInputSchema,
   OfferInputSchema,
+  OpinionCriterionSchema,
   OpinionInputSchema,
+  OpinionScoresInputSchema,
   RentComparableInputSchema,
   ScenarioInputSchema,
   SearchCriteriaInputSchema,
@@ -30,6 +32,7 @@ import type {
   LocationPrecision,
   OfferChannel,
   OfferResponse,
+  OpinionCriterionOrigin,
   Point,
   RenovationLevel,
   RentalDemand,
@@ -41,6 +44,8 @@ import type {
 } from '@apart/contracts'
 import {
   compute,
+  customCriterionKey,
+  defaultOpinionCriteria,
   detectLinkPortal,
   effectiveObserved,
   financialsFromListing,
@@ -50,14 +55,24 @@ import {
   listingCheckSummary,
   matchDuplicates,
   normalizeSeller,
+  opinionAfterVisit,
+  opinionJournalPayload,
+  opinionSnapshot,
   portalOfListingSource,
   portalWhere,
   primaryLink,
   republicationProposal,
   resolveLinkCheckOutcome,
   sanitizeEvidence,
+  visibleCriterionKeys,
 } from '@apart/domain'
-import type { DuplicateRow, LinkState, SellerFacts } from '@apart/domain'
+import type {
+  DuplicateRow,
+  LinkState,
+  OpinionLike,
+  OpinionVisitLike,
+  SellerFacts,
+} from '@apart/domain'
 import { DEMO_ACCOUNTS, DEMO_WORKSPACE_NAME } from './accounts.js'
 import { buildDemoExplorations } from './exploration.js'
 import type { DemoExploration, DemoExplorationDraft } from './exploration.js'
@@ -107,6 +122,40 @@ export interface DemoTask {
   requestedAt?: string | null
   requestId?: string | null
   answeredAt?: string | null
+}
+
+/** Lot 20 : la note d'un critère dans un avis (fictive). */
+export interface DemoOpinionScore {
+  key: string
+  score: number | null
+  word: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** Un avis : note globale, phrase et (lot 20) notes par critère. */
+export interface DemoOpinion {
+  handle: DemoHandle
+  rating: number
+  text: string
+  /** Création de l'avis. */
+  at: string
+  updatedAt: string
+  /** Lot 20 : première note (critère ou globale). */
+  ratedAt: string | null
+  scores: DemoOpinionScore[]
+}
+
+/** Lot 20 : un critère des avis de l'espace Démo. */
+export interface DemoOpinionCriterion {
+  id: string
+  key: string
+  label: string
+  hint: string
+  position: number
+  hidden: boolean
+  origin: OpinionCriterionOrigin
+  createdAt: string
 }
 
 export interface DemoOffer {
@@ -194,12 +243,7 @@ export interface DemoListing {
     status: ListingStatus
     reason?: string
   }>
-  opinions: Array<{
-    handle: DemoHandle
-    rating: number
-    text: string
-    at: string
-  }>
+  opinions: DemoOpinion[]
   tasks: DemoTask[]
   offers: DemoOffer[]
   visits: DemoVisit[]
@@ -279,6 +323,10 @@ export interface DemoDataset {
   /** Lot 17 : contacts des annonceurs et demandes (fictifs). */
   contacts: DemoContact[]
   agencyRequests: DemoAgencyRequest[]
+  /** Lot 20 : les huit critères par défaut et un critère ajouté par l'espace. */
+  opinionCriteria: DemoOpinionCriterion[]
+  /** Lot 20 : avis à l'aveugle (vrai, le défaut). */
+  opinionsBlind: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -930,6 +978,177 @@ const OPINIONS: Record<string, Array<[DemoHandle, number, string, number]>> = {
   'lormont-t3': [['demo2', 1, 'Beaucoup trop de travaux pour nous.', 28]],
 }
 
+/** Lot 20 : les notes par critère d'un avis (1 à 5) et ses mots facultatifs. */
+interface OpinionScoreSpec {
+  scores: Record<string, number>
+  words?: Record<string, string>
+}
+
+/**
+ * Lot 20 : les notes par critère, fictives. Saint-Michel : deux désaccords
+ * (calme, « on s'y voit ») ; Chartrons : un désaccord (luminosité) ;
+ * Talence Forum et Le Bouscat : d'accord partout (« Cuisine », le critère
+ * ajouté par l'espace, noté au Bouscat) ; Bastide : seul Sacha a noté, l'avis
+ * de Camille est « en attente » (et celui de Sacha masqué pour Camille, à
+ * l'aveugle). Les autres annonces gardent leur seule note globale.
+ */
+const OPINION_SCORES: Record<
+  string,
+  Partial<Record<DemoHandle, OpinionScoreSpec>>
+> = {
+  'chartrons-t2': {
+    demo: {
+      scores: {
+        luminosity: 4,
+        layout: 4,
+        condition: 3,
+        quiet: 4,
+        outdoor: 3,
+        building: 4,
+        street: 5,
+        feel: 4,
+      },
+      words: { condition: 'cuisine à refaire' },
+    },
+    demo2: {
+      scores: {
+        luminosity: 2,
+        layout: 4,
+        condition: 3,
+        quiet: 4,
+        outdoor: 3,
+        building: 4,
+        street: 5,
+        feel: 3,
+      },
+      words: { luminosity: 'sombre côté cour' },
+    },
+  },
+  'saint-michel-t3': {
+    demo: {
+      scores: {
+        luminosity: 4,
+        layout: 4,
+        condition: 3,
+        quiet: 2,
+        outdoor: 3,
+        building: 3,
+        street: 3,
+        feel: 2,
+      },
+      words: {
+        quiet: 'simple vitrage, bruit le samedi',
+        condition: 'isolation à refaire',
+      },
+    },
+    demo2: {
+      scores: {
+        luminosity: 5,
+        layout: 4,
+        condition: 3,
+        quiet: 4,
+        outdoor: 3,
+        building: 3,
+        street: 4,
+        feel: 4,
+      },
+      words: { quiet: 'côté cour, ça va', feel: 'la place est vivante' },
+    },
+  },
+  'bastide-t2': {
+    demo2: {
+      scores: {
+        luminosity: 5,
+        layout: 4,
+        condition: 5,
+        quiet: 4,
+        outdoor: 4,
+        building: 5,
+        street: 3,
+        feel: 3,
+        custom_cuisine: 5,
+      },
+      words: { condition: 'neuf, rien à prévoir' },
+    },
+  },
+  'talence-forum-t2': {
+    demo: {
+      scores: {
+        luminosity: 4,
+        layout: 5,
+        condition: 5,
+        quiet: 4,
+        outdoor: 3,
+        building: 5,
+        street: 4,
+        feel: 5,
+      },
+      words: { outdoor: 'vis-à-vis sur la cour' },
+    },
+    demo2: {
+      scores: {
+        luminosity: 4,
+        layout: 5,
+        condition: 5,
+        quiet: 4,
+        outdoor: 3,
+        building: 4,
+        street: 4,
+        feel: 5,
+      },
+      words: { street: 'le tram au pied de l’immeuble' },
+    },
+  },
+  'le-bouscat-t2': {
+    demo: {
+      scores: {
+        luminosity: 4,
+        layout: 4,
+        condition: 4,
+        quiet: 3,
+        outdoor: 4,
+        building: 4,
+        street: 3,
+        feel: 5,
+        custom_cuisine: 3,
+      },
+      words: { feel: 'coup de cœur pour le parquet' },
+    },
+    demo2: {
+      scores: {
+        luminosity: 4,
+        layout: 5,
+        condition: 4,
+        quiet: 2,
+        outdoor: 4,
+        building: 3,
+        street: 3,
+        feel: 4,
+        custom_cuisine: 3,
+      },
+      words: {
+        quiet: 'bruit de la rue le matin',
+        custom_cuisine: 'à rafraîchir',
+      },
+    },
+  },
+}
+
+/** Lot 20 : un avis mis à jour après coup (Camille revoit l'état à Saint-Michel). */
+const OPINION_UPDATES: Record<
+  string,
+  Array<{
+    handle: DemoHandle
+    days: number
+    hour: number
+    scores: Record<string, number>
+  }>
+> = {
+  'saint-michel-t3': [
+    { handle: 'demo', days: 18, hour: 20, scores: { condition: 2 } },
+  ],
+}
+
 // ---------------------------------------------------------------------------
 // Construction
 // ---------------------------------------------------------------------------
@@ -1012,7 +1231,41 @@ export function buildDemoDataset(now: Date = new Date()): DemoDataset {
     },
   })
 
-  const listings = SPECS.map(spec => buildListing(spec, at, since, log))
+  // Lot 20 : les critères des avis. Le propriétaire ajoute « Cuisine » il y a
+  // quinze jours : les huit critères par défaut s'écrivent à ce moment-là
+  // (premier réglage de l'espace), le critère ajouté en dernier.
+  const settingsAt = at(15, 20)
+  const defaults = defaultOpinionCriteria()
+  const custom = OpinionCriterionSchema.parse({
+    key: customCriterionKey(
+      'Cuisine',
+      defaults.map(c => c.key)
+    ),
+    label: 'Cuisine',
+    hint: 'équipée, refaite, à revoir',
+    position: defaults.length,
+    hidden: false,
+    origin: 'custom',
+  })
+  const opinionCriteria: DemoOpinionCriterion[] = [...defaults, custom].map(
+    c => ({
+      ...OpinionCriterionSchema.parse(c),
+      id: demoId(`opinion-criterion:${c.key}`),
+      createdAt: settingsAt,
+    })
+  )
+  log({
+    at: settingsAt,
+    actor: 'demo',
+    channel: 'web',
+    action: 'opinion_settings.criterion_added',
+    listingKey: null,
+    after: { key: custom.key, label: custom.label, hint: custom.hint },
+  })
+
+  const listings = SPECS.map(spec =>
+    buildListing(spec, at, since, log, opinionCriteria)
+  )
   // Lot 17 : questions aux agences (contacts, demandes, une réponse).
   const exchanges = buildAgencyExchanges(listings, members, at, log)
 
@@ -1245,6 +1498,8 @@ export function buildDemoDataset(now: Date = new Date()): DemoDataset {
     explorationDrafts,
     contacts: exchanges.contacts,
     agencyRequests: exchanges.agencyRequests,
+    opinionCriteria,
+    opinionsBlind: true,
   }
 }
 
@@ -1257,7 +1512,8 @@ function buildListing(
       before?: Record<string, unknown> | null
       after?: Record<string, unknown> | null
     }
-  ) => void
+  ) => void,
+  opinionCriteria: readonly DemoOpinionCriterion[]
 ): DemoListing {
   const id = demoId(`listing:${spec.key}`)
   const createdDays = spec.prices[0]?.[0] ?? 0
@@ -1413,22 +1669,12 @@ function buildListing(
     return { at: entryAt, by, status, ...(reason ? { reason } : {}) }
   })
 
-  // Avis.
-  const opinions = (OPINIONS[spec.key] ?? []).map(
-    ([handle, rating, text, days]) => {
-      const parsed = OpinionInputSchema.parse({ rating, text })
-      const opinionAt = at(days, 21)
-      log({
-        at: opinionAt,
-        actor: handle,
-        channel: 'web',
-        action: 'opinion.created',
-        listingKey: spec.key,
-        after: { rating: parsed.rating, text: parsed.text },
-      })
-      return { handle, rating: parsed.rating, text: parsed.text, at: opinionAt }
-    }
-  )
+  // Avis : note globale et phrase, et (lot 20) notes par critère pour
+  // quelques annonces. Le journal garde ce que l'API garde
+  // (`opinionJournalPayload` de `domain`) : notes, mots, libellés du moment,
+  // « après la visite » (visite faite avec le membre, avant l'avis),
+  // désaccords avec l'avis déjà noté.
+  const opinions = buildOpinions(spec, at, log, opinionCriteria)
 
   // Tâches : celles de l'API à la création, puis quelques tâches à la main.
   const done = new Set(spec.doneDefaults ?? [])
@@ -1940,6 +2186,159 @@ const LINKS: Record<string, LinkSpec[]> = {
 }
 
 /** Le prix `index` de l'annonce est-il trouvé par une de ses vérifications (même jour, même prix) ? */
+/** L'identifiant d'un membre de démo. */
+const memberIdOfHandle = (handle: DemoHandle): string =>
+  demoId(`member:${handle}`)
+
+/** Les visites d'une annonce telles que `opinionAfterVisit` les lit. */
+function visitRefs(
+  spec: ListingSpec,
+  at: ReturnType<typeof clock>
+): OpinionVisitLike[] {
+  return (VISITS[spec.key] ?? []).map((v, index) => ({
+    id: demoId(`visit:${spec.key}:${index}`),
+    visitedAt: at(v.daysAgo, v.hour ?? 18, v.minute ?? 0),
+    status: v.status,
+    participantIds: v.participants.map(memberIdOfHandle),
+  }))
+}
+
+/**
+ * Lot 20 : les avis d'une annonce, dans l'ordre où ils ont été donnés (le
+ * second une demi-heure après le premier), puis les mises à jour. Les notes
+ * passent par `OpinionScoresInputSchema` ; un critère n'est noté qu'une fois
+ * qu'il existe (« Cuisine » est ajouté il y a quinze jours).
+ */
+function buildOpinions(
+  spec: ListingSpec,
+  at: ReturnType<typeof clock>,
+  log: (
+    entry: Omit<DemoActivity, 'id' | 'before' | 'after'> & {
+      before?: Record<string, unknown> | null
+      after?: Record<string, unknown> | null
+    }
+  ) => void,
+  opinionCriteria: readonly DemoOpinionCriterion[]
+): DemoOpinion[] {
+  const visits = visitRefs(spec, at)
+  const criteriaAt = (iso: string) =>
+    opinionCriteria.filter(c => c.origin === 'default' || c.createdAt <= iso)
+  const opinionLike = (o: DemoOpinion): OpinionLike => ({
+    memberId: memberIdOfHandle(o.handle),
+    rating: o.rating,
+    text: o.text,
+    scores: o.scores,
+  })
+  const scoresOf = (
+    entry: OpinionScoreSpec | undefined,
+    iso: string
+  ): DemoOpinionScore[] => {
+    if (!entry) return []
+    const known = new Set(criteriaAt(iso).map(c => c.key))
+    const parsed = OpinionScoresInputSchema.parse(
+      Object.fromEntries(
+        Object.entries(entry.scores).map(([key, score]) => [
+          key,
+          { score, word: entry.words?.[key] ?? null },
+        ])
+      )
+    )
+    return Object.entries(parsed).map(([key, value]) => {
+      if (!known.has(key)) {
+        throw new Error(`Critère d’avis inconnu à cette date : ${key}`)
+      }
+      return {
+        key,
+        score: value?.score ?? null,
+        word: value?.word ?? null,
+        createdAt: iso,
+        updatedAt: iso,
+      }
+    })
+  }
+
+  const written: DemoOpinion[] = []
+  ;(OPINIONS[spec.key] ?? []).forEach(([handle, rating, text, days], i) => {
+    const parsed = OpinionInputSchema.parse({ rating, text })
+    const opinionAt = at(days, 21, i * 30)
+    const scores = scoresOf(OPINION_SCORES[spec.key]?.[handle], opinionAt)
+    const opinion: DemoOpinion = {
+      handle,
+      rating: parsed.rating,
+      text: parsed.text,
+      at: opinionAt,
+      updatedAt: opinionAt,
+      ratedAt:
+        parsed.rating > 0 || scores.some(s => s.score !== null)
+          ? opinionAt
+          : null,
+      scores,
+    }
+    const criteria = criteriaAt(opinionAt)
+    const payload = opinionJournalPayload({
+      before: null,
+      opinion: opinionLike(opinion),
+      criteria,
+      visibleKeys: visibleCriterionKeys(criteria),
+      afterVisit:
+        opinionAfterVisit(visits, memberIdOfHandle(handle), opinionAt) !== null,
+      seenBefore: [],
+      others: written.map(opinionLike),
+      blind: true,
+    })
+    log({
+      at: opinionAt,
+      actor: handle,
+      channel: 'web',
+      action: 'opinion.created',
+      listingKey: spec.key,
+      after: { ...payload.after },
+    })
+    written.push(opinion)
+  })
+
+  for (const update of OPINION_UPDATES[spec.key] ?? []) {
+    const opinion = written.find(o => o.handle === update.handle)
+    if (!opinion) throw new Error(`Avis de démo absent : ${spec.key}`)
+    const updatedAt = at(update.days, update.hour)
+    const criteria = criteriaAt(updatedAt)
+    const visibleKeys = visibleCriterionKeys(criteria)
+    const before = opinionSnapshot(opinionLike(opinion), visibleKeys)
+    for (const [key, score] of Object.entries(update.scores)) {
+      const current = opinion.scores.find(s => s.key === key)
+      if (!current) throw new Error(`Note de démo absente : ${key}`)
+      current.score = score
+      current.updatedAt = updatedAt
+    }
+    opinion.updatedAt = updatedAt
+    const payload = opinionJournalPayload({
+      before,
+      opinion: opinionLike(opinion),
+      criteria,
+      visibleKeys,
+      afterVisit:
+        opinionAfterVisit(
+          visits,
+          memberIdOfHandle(update.handle),
+          updatedAt
+        ) !== null,
+      seenBefore: [],
+      others: written.filter(o => o !== opinion).map(opinionLike),
+      blind: true,
+    })
+    log({
+      at: updatedAt,
+      actor: update.handle,
+      channel: 'web',
+      action: 'opinion.updated',
+      listingKey: spec.key,
+      before: { ...payload.before },
+      after: { ...payload.after },
+    })
+  }
+  return written
+}
+
 function foundByCheck(spec: ListingSpec, index: number): boolean {
   const entry = spec.prices[index]
   if (!entry || index === 0) return false

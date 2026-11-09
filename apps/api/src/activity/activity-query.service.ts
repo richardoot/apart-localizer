@@ -9,6 +9,7 @@ import type {
 import { PrismaService } from '../prisma/prisma.service'
 import type { Member, Prisma } from '../generated/prisma'
 import { toActivityEntry } from './activity.mapper'
+import { redactOpinionRows } from '../opinions/opinion-context'
 
 /** La condition SQL d'une sorte d'événement, d'après la table de `contracts`. */
 export function kindWhere(kind: ActivityKind): Prisma.ActivityLogWhereInput {
@@ -43,6 +44,7 @@ export function kindWhere(kind: ActivityKind): Prisma.ActivityLogWhereInput {
 /**
  * La lecture du journal (besoin S6) : par espace ou par annonce, filtré par
  * membre, canal et sorte, paginé, chaque ligne mise en français par `domain`.
+ * Lot 20 : les avis masqués à l'aveugle restent masqués dans le journal.
  */
 @Injectable()
 export class ActivityQueryService {
@@ -79,8 +81,11 @@ export class ActivityQueryService {
       this.prisma.activityLog.count({ where }),
       this.membersOf(member.workspaceId),
     ])
+    // Lot 20 : l'avis d'un autre, sur une annonce où le membre n'a pas
+    // encore noté (avis à l'aveugle), se lit sans ses notes.
+    const readable = await redactOpinionRows(this.prisma, member, rows)
     return {
-      items: rows.map(row => toActivityEntry(row, members)),
+      items: readable.map(row => toActivityEntry(row, members)),
       total,
       page: query.page,
       limit: query.limit,

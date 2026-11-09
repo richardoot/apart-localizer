@@ -38,7 +38,7 @@ export const ActivityKindSchema = z
     'other',
   ])
   .describe(
-    "Sorte d'événement : annonce, statut, prix, tâche, avis, offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon à valider, membres de l'espace (invitations, arrivées, retraits, rôles), vérification sur le portail (lot 15), exploration des portails par Claude (lot 16), échanges avec l'annonceur (contact, demandes, réponses ; lot 17), liens de l'annonce sur les portails (ajout, retrait, détachement ; lot 18), autre"
+    "Sorte d'événement : annonce, statut, prix, tâche, avis (lot 20 : notes par critère, « Voir quand même », réglage des critères de l'espace), offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon à valider, membres de l'espace (invitations, arrivées, retraits, rôles), vérification sur le portail (lot 15), exploration des portails par Claude (lot 16), échanges avec l'annonceur (contact, demandes, réponses ; lot 17), liens de l'annonce sur les portails (ajout, retrait, détachement ; lot 18), autre"
   )
 export type ActivityKind = z.infer<typeof ActivityKindSchema>
 
@@ -76,7 +76,7 @@ export const ACTIVITY_KIND_RULES: Record<
   check: { actions: ['listing.checked'] },
   listing: { prefixes: ['listing'] },
   task: { prefixes: ['task'] },
-  opinion: { prefixes: ['opinion'] },
+  opinion: { prefixes: ['opinion', 'opinion_settings'] },
   offer: { prefixes: ['offer'] },
   visit: { prefixes: ['visit'] },
   criteria: { prefixes: ['criteria'] },
@@ -165,6 +165,11 @@ export const LISTING_FIELD_LABELS: Record<string, string> = {
   fieldSources: 'Provenance',
   rating: 'Note',
   text: 'Texte',
+  // Lot 20 : avis par critère, réglages des avis.
+  blind: 'Avis à l’aveugle',
+  hint: 'Aide',
+  hidden: 'Masqué',
+  details: 'Contexte',
   label: 'Libellé',
   done: 'Faite',
   assigneeId: 'Assignée à',

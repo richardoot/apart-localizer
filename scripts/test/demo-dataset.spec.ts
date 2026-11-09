@@ -1,19 +1,26 @@
 import {
   AssumptionsSchema,
+  DEFAULT_OPINION_CRITERIA,
   ListingInputSchema,
+  OPINION_CRITERIA_MAX,
   OfferInputSchema,
+  OpinionCriterionSchema,
   OpinionInputSchema,
+  OpinionScoresInputSchema,
   RentComparableInputSchema,
   ScenarioInputSchema,
   SearchCriteriaInputSchema,
   VisitInputSchema,
 } from '@apart/contracts'
 import {
+  confrontOpinions,
   describeActivity,
   isFollowUpDue,
   lowestOnlinePrice,
   notificationsForActivity,
   primaryLink,
+  splitOpinionsForViewer,
+  visibleCriterionKeys,
 } from '@apart/domain'
 import { describe, expect, it } from 'vitest'
 import { DEMO_ACCOUNTS } from '../lib/demo/accounts.js'
@@ -627,5 +634,188 @@ describe('jeu de démonstration', () => {
           .length
       ).toBeGreaterThanOrEqual(2)
     }
+  })
+})
+
+describe('lot 20 : nos avis, critère par critère', () => {
+  const members = dataset.members.map(m => ({
+    id: m.id,
+    displayName: m.displayName,
+  }))
+  const names = new Map(
+    members.map(m => [m.id, { displayName: m.displayName }])
+  )
+  const memberOf = (handle: string) => demoId(`member:${handle}`)
+  const byKey = new Map(dataset.listings.map(l => [l.key, l]))
+  const opinionsOf = (key: string) =>
+    (byKey.get(key)?.opinions ?? []).map(o => ({
+      memberId: memberOf(o.handle),
+      rating: o.rating,
+      text: o.text,
+      scores: o.scores,
+      updatedAt: o.updatedAt,
+    }))
+  const confront = (key: string, viewer: 'demo' | 'demo2' | null = null) => {
+    const opinions = opinionsOf(key)
+    const visibleKeys = visibleCriterionKeys(dataset.opinionCriteria)
+    const split = viewer
+      ? splitOpinionsForViewer(opinions, {
+          viewerId: memberOf(viewer),
+          blind: dataset.opinionsBlind,
+          revealed: false,
+          visibleKeys,
+        })
+      : { visible: opinions, masked: [], viewerRated: true }
+    return confrontOpinions({
+      criteria: dataset.opinionCriteria,
+      members,
+      visible: split.visible,
+      masked: split.masked,
+      blind: dataset.opinionsBlind,
+      revealed: false,
+      viewerRated: split.viewerRated,
+    })
+  }
+
+  it('les huit critères par défaut et « Cuisine », ajouté par l’espace, dix au plus', () => {
+    const criteria = dataset.opinionCriteria
+    expect(criteria.length).toBeLessThanOrEqual(OPINION_CRITERIA_MAX)
+    expect(criteria.map(c => c.key)).toEqual([
+      ...DEFAULT_OPINION_CRITERIA.map(c => c.key),
+      'custom_cuisine',
+    ])
+    expect(criteria.map(c => c.position)).toEqual(criteria.map((_, i) => i))
+    for (const c of criteria) {
+      const { id: _id, createdAt: _at, ...criterion } = c
+      expect(OpinionCriterionSchema.parse(criterion)).toEqual(criterion)
+    }
+    expect(criteria.filter(c => c.origin === 'custom')).toEqual([
+      expect.objectContaining({ label: 'Cuisine', hidden: false }),
+    ])
+    expect(dataset.opinionsBlind).toBe(true)
+    const added = dataset.activity.filter(
+      a => a.action === 'opinion_settings.criterion_added'
+    )
+    expect(added).toHaveLength(1)
+    expect(
+      describeActivity(
+        {
+          action: added[0]?.action ?? '',
+          channel: 'web',
+          actorMemberId: memberOf('demo'),
+          before: null,
+          after: added[0]?.after ?? null,
+        },
+        names
+      ).summary
+    ).toBe('a ajouté le critère d’avis « Cuisine »')
+  })
+
+  it('des notes valides (1 à 5, mots courts), jamais avant que le critère existe', () => {
+    const cuisine = dataset.opinionCriteria.find(c => c.origin === 'custom')
+    let scored = 0
+    for (const l of dataset.listings) {
+      for (const o of l.opinions) {
+        OpinionScoresInputSchema.parse(
+          Object.fromEntries(
+            o.scores.map(s => [s.key, { score: s.score, word: s.word }])
+          )
+        )
+        for (const s of o.scores) {
+          expect(dataset.opinionCriteria.some(c => c.key === s.key)).toBe(true)
+          if (s.key === cuisine?.key) {
+            expect(s.createdAt >= (cuisine?.createdAt ?? '')).toBe(true)
+            scored += 1
+          }
+        }
+        if (o.rating > 0 || o.scores.length > 0)
+          expect(o.ratedAt).not.toBeNull()
+      }
+    }
+    expect(scored).toBeGreaterThanOrEqual(3)
+  })
+
+  it('Saint-Michel : deux désaccords (calme, « on s’y voit ») après la visite', () => {
+    const s = confront('saint-michel-t3')
+    expect(s.status).toBe('ready')
+    expect(s.disagreementKeys).toEqual(['quiet', 'feel'])
+    expect(s.commonScore).not.toBeNull()
+    expect(s.members.every(m => m.state === 'rated')).toBe(true)
+    const journal = dataset.activity.filter(
+      a => a.listingKey === 'saint-michel-t3' && a.action.startsWith('opinion.')
+    )
+    expect(journal.map(a => a.action)).toEqual([
+      'opinion.created',
+      'opinion.created',
+      'opinion.updated',
+    ])
+    const say = (index: number) => {
+      const a = journal[index]
+      return describeActivity(
+        {
+          action: a?.action ?? '',
+          channel: 'web',
+          actorMemberId: a?.actor ? memberOf(a.actor) : null,
+          before: a?.before ?? null,
+          after: a?.after ?? null,
+        },
+        names
+      ).summary
+    }
+    expect(say(0)).toBe('a donné son avis après la visite : 3/5, 8 critères.')
+    expect(say(1)).toBe(
+      'a donné son avis après la visite : 4/5, 8 critères. Deux désaccords avec Camille (démo) : calme, on s’y voit.'
+    )
+    expect(say(2)).toBe(
+      'a mis à jour son avis après la visite : 3/5, 8 critères (état 3 → 2). Deux désaccords avec Sacha (démo) : calme, on s’y voit.'
+    )
+    // Les notifications ne disent jamais les notes.
+    const after = journal[1]?.after ?? null
+    const sent = notificationsForActivity(
+      {
+        action: 'opinion.created',
+        channel: 'web',
+        actorMemberId: memberOf('demo2'),
+        before: null,
+        after,
+        listingId: byKey.get('saint-michel-t3')?.id ?? null,
+      },
+      { members, listingTitle: '[Exemple] T3' }
+    )
+    expect(sent.map(n => [n.recipientId, n.type, n.title, n.body])).toEqual([
+      [
+        memberOf('demo'),
+        'opinion_added',
+        'Sacha (démo) a donné son avis',
+        '[Exemple] T3 : 2 désaccords à discuter.',
+      ],
+    ])
+  })
+
+  it('Bastide : en attente de Camille, et masqué pour elle à l’aveugle', () => {
+    expect(confront('bastide-t2').status).toBe('pending')
+    const forCamille = confront('bastide-t2', 'demo')
+    expect(forCamille.masked).toBe(true)
+    const sacha = forCamille.members.find(m => m.memberId === memberOf('demo2'))
+    expect(sacha).toMatchObject({
+      state: 'masked',
+      rating: null,
+      ratedCount: 9,
+    })
+    expect(JSON.stringify(forCamille)).not.toContain('rien à prévoir')
+    expect(confront('bastide-t2', 'demo2').masked).toBe(false)
+  })
+
+  it('d’accord ailleurs : Talence Forum et Le Bouscat sans désaccord, Chartrons sur la luminosité', () => {
+    for (const key of ['talence-forum-t2', 'le-bouscat-t2']) {
+      const s = confront(key)
+      expect(s.status).toBe('ready')
+      expect(s.disagreementKeys).toEqual([])
+      expect(s.agreements).toBeGreaterThanOrEqual(8)
+    }
+    expect(confront('le-bouscat-t2').rows.map(r => r.key)).toContain(
+      'custom_cuisine'
+    )
+    expect(confront('chartrons-t2').disagreementKeys).toEqual(['luminosity'])
   })
 })

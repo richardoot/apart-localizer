@@ -8,7 +8,12 @@ import {
   VERDICT_LABELS,
 } from '@apart/contracts'
 import type { EvaluatedListing } from '@apart/contracts'
-import { fitReasonsText, keptLabel, precisionBadge } from '@apart/domain'
+import {
+  criterionLower,
+  fitReasonsText,
+  keptLabel,
+  precisionBadge,
+} from '@apart/domain'
 
 /**
  * Le CSV pour un tableur français : séparateur « ; », UTF-8 avec BOM (Excel
@@ -117,6 +122,10 @@ export const LISTING_CSV_COLUMNS = [
   'Agence',
   'Référence',
   'Liens',
+  // Lot 20, en fin de ligne : nos avis critère par critère.
+  'Note commune (/5)',
+  'Désaccords',
+  'Notes par critère',
 ] as const
 
 /** Une ligne par annonce, dans l'ordre de `LISTING_CSV_COLUMNS`. */
@@ -183,7 +192,51 @@ export function listingCsvRow(
     l.sellerName,
     l.sellerReference,
     linksCell(item),
+    commonScoreCell(item),
+    disagreementsCell(item),
+    criteriaScoresCell(item),
   ]
+}
+
+/** Lot 20 : la note commune, « en attente » si un avis manque ou est masqué, vide sinon. */
+function commonScoreCell(item: EvaluatedListing): string {
+  const summary = item.opinionSummary
+  if (!summary) return ''
+  if (summary.commonScore !== null) return csvNumber(summary.commonScore, 1)
+  return summary.status === 'pending' ? 'en attente' : ''
+}
+
+/** Lot 20 : les critères en désaccord (écart de 2 points ou plus). */
+function disagreementsCell(item: EvaluatedListing): string {
+  const summary = item.opinionSummary
+  if (!summary) return ''
+  return summary.disagreementKeys
+    .map(key => {
+      const row = summary.rows.find(r => r.key === key)
+      return row ? `${criterionLower(row.label)} (${row.gap} points)` : key
+    })
+    .join(', ')
+}
+
+/**
+ * Lot 20 : les notes visibles de chacun, critère par critère, séparées par
+ * « | » : « Luminosité : Richard 5, Chloé 4 | Calme : Richard 4, Chloé 2 ».
+ */
+function criteriaScoresCell(item: EvaluatedListing): string {
+  const summary = item.opinionSummary
+  if (!summary) return ''
+  const name = (id: string) =>
+    summary.members.find(m => m.memberId === id)?.displayName ?? '?'
+  return summary.rows
+    .filter(r => r.scores.some(s => s.score !== null))
+    .map(
+      r =>
+        `${r.label} : ${r.scores
+          .filter(s => s.score !== null)
+          .map(s => `${name(s.memberId)} ${s.score}`)
+          .join(', ')}`
+    )
+    .join(' | ')
 }
 
 /**

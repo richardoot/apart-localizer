@@ -147,6 +147,8 @@ enum TaskOrigin {
   manual
   missing_field
   visit
+  /// Lot 20 : « À revoir à la contre-visite », proposée depuis « Nos avis ».
+  opinion
 
   @@schema("app")
 }
@@ -204,6 +206,16 @@ enum NotificationType {
   member_joined
   listing_checked
   agency_answer
+  /// Lot 20 : avis donné ou mis à jour par un autre membre.
+  opinion_added
+
+  @@schema("app")
+}
+
+/// Lot 20 : critère par défaut (clé stable) ou ajouté par l'espace.
+enum OpinionCriterionOrigin {
+  default
+  custom
 
   @@schema("app")
 }
@@ -381,6 +393,12 @@ model Workspace {
   /// Lot 18 : les liens des annonces sur les portails.
   listingLinks    ListingLink[]
 
+  /// Lot 20 : avis à l'aveugle (l'avis des autres masqué tant qu'on n'a pas
+  /// noté) ; vrai par défaut.
+  opinionsBlind   Boolean            @default(true) @map("opinions_blind")
+  /// Lot 20 : les critères des avis ; aucune ligne = les huit par défaut.
+  opinionCriteria OpinionCriterion[]
+
   @@map("workspaces")
   @@schema("app")
 }
@@ -429,6 +447,8 @@ model Member {
 
   workspace              Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   opinions               Opinion[]
+  /// Lot 20 : les « Voir quand même » du membre.
+  opinionReveals         OpinionReveal[]
   assignedTasks          Task[]             @relation("TaskAssignee")
   listingViews           ListingView[]
   createdListings        Listing[]          @relation("ListingCreator")
@@ -616,6 +636,8 @@ model Listing {
   renovation       Renovation?
   rentalPlan       RentalPlan?
   opinions         Opinion[]
+  /// Lot 20 : les « Voir quand même » des membres sur l'annonce.
+  opinionReveals   OpinionReveal[]
   tasks            Task[]
   priceEvents      PriceEvent[]
   offers           Offer[]
@@ -787,11 +809,84 @@ model Opinion {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  /// Lot 20 : première note (un critère ou la note globale) ; null tant que
+  /// le membre n'a rien noté (une ligne d'avant le lot 20 se lit par
+  /// `rating` et `created_at`).
+  ratedAt       DateTime? @map("rated_at") @db.Timestamptz(6)
+  /// Lot 20 : les membres dont il avait vu l'avis (« Voir quand même »)
+  /// avant sa première note : « après avoir vu celui de … ».
+  seenMemberIds String[]  @default([]) @map("seen_member_ids")
+
+  listing Listing        @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  member  Member         @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  /// Lot 20 : les notes par critère.
+  scores  OpinionScore[]
+
+  @@unique([listingId, memberId])
+  @@map("opinions")
+  @@schema("app")
+}
+
+/// Lot 20 (ADR 0030) : un critère des avis de l'espace. Clé stable unique
+/// dans l'espace (les huit par défaut : luminosity, layout, condition, quiet,
+/// outdoor, building, street, feel ; un ajout : `custom_…`), libellé et aide
+/// renommables, ordre, masqué (retiré des fiches et des calculs, ses notes
+/// restent). Un espace sans ligne a les huit par défaut ; les lignes
+/// s'écrivent au premier réglage. Dix critères au plus (règle de `domain`).
+model OpinionCriterion {
+  id          String                 @id @default(uuid())
+  workspaceId String                 @map("workspace_id")
+  key         String
+  label       String
+  hint        String                 @default("")
+  position    Int
+  hidden      Boolean                @default(false)
+  origin      OpinionCriterionOrigin @default(custom)
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, key])
+  @@map("opinion_criteria")
+  @@schema("app")
+}
+
+/// Lot 20 : la note d'un critère dans un avis, de 1 à 5 (contrainte en
+/// base) ; null = « — » avec un mot seulement ; pas de ligne = pas d'avis.
+/// La clé est celle du critère de l'espace (masqué compris).
+model OpinionScore {
+  id           String   @id @default(uuid())
+  opinionId    String   @map("opinion_id")
+  criterionKey String   @map("criterion_key")
+  score        Int?
+  word         String?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  opinion Opinion @relation(fields: [opinionId], references: [id], onDelete: Cascade)
+
+  @@unique([opinionId, criterionKey])
+  @@index([criterionKey])
+  @@map("opinion_scores")
+  @@schema("app")
+}
+
+/// Lot 20 : « Voir quand même » : un membre qui n'a pas encore noté a choisi
+/// de voir l'avis des autres sur une annonce (avis à l'aveugle). Une ligne
+/// par annonce et membre ; `memberIds` : les avis visibles à ce moment.
+model OpinionReveal {
+  id         String   @id @default(uuid())
+  listingId  String   @map("listing_id")
+  memberId   String   @map("member_id")
+  revealedAt DateTime @default(now()) @map("revealed_at") @db.Timestamptz(6)
+  memberIds  String[] @default([]) @map("member_ids")
+
   listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
   member  Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
   @@unique([listingId, memberId])
-  @@map("opinions")
+  @@map("opinion_reveals")
   @@schema("app")
 }
 
@@ -814,6 +909,9 @@ model Task {
   requestedAt DateTime? @map("requested_at") @db.Timestamptz(6)
   requestId   String?   @map("request_id")
   answeredAt  DateTime? @map("answered_at") @db.Timestamptz(6)
+  /// Lot 20 : le contexte de la tâche (proposée depuis « Nos avis » : les
+  /// notes et les mots qui s'écartent) ; null sinon.
+  details     String?
 
   listing  Listing        @relation(fields: [listingId], references: [id], onDelete: Cascade)
   assignee Member?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)

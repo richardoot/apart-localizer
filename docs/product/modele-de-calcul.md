@@ -540,3 +540,27 @@ dans `contracts`, remplaçable par une ligne `reference_data` de sorte `regulato
 Verdict comme la louabilité : incompatible dès un bloquant, sous conditions dès une attention ou
 à partir de trois points à vérifier, sinon compatible. Chaque point porte sa date et sa source
 (table de référence, donnée ouverte ou fiche).
+
+## 12. Nos avis : confrontation (lot 20, besoin K2, ADR 0030)
+
+Chaque membre `m` note les critères affichés de l'espace : `s(m, c) ∈ {1, 2, 3, 4, 5}` (1
+rédhibitoire, 2 bof, 3 correct, 4 bien, 5 excellent), ou rien (« — »). Sa note globale `g(m)`
+(sur 5, 0 = aucune) est à part. `confrontOpinions` (`packages/domain/src/opinions.ts`) ne lit
+que les avis visibles par le membre connecté (avis à l'aveugle : tant qu'il n'a rien noté, l'avis
+des autres n'entre que par son nombre de critères).
+
+| Quantité | Définition |
+| --- | --- |
+| Moyenne d'un membre (indicative) | moyenne de ses `s(m, c)` donnés ; jamais recopiée dans `g(m)` |
+| Écart d'un critère | `max − min` des notes données, s'il y en a au moins deux |
+| Accord | écart de 0 (« d'accord ») ou de 1 (« 1 point ») |
+| Désaccord | écart de **2 points ou plus** (`OPINION_DISAGREEMENT_GAP`) ; avec plus de deux membres, l'écart est `max − min` |
+| Note commune | moyenne, sur les critères notés par **tous** les membres actifs (tous avis visibles), des moyennes par critère ; « en attente » quand un avis manque ou est masqué ; aucune si aucun critère n'est noté par tous |
+| Plus gros désaccord | le plus grand écart (tri de la liste) |
+
+Exemple (maquette validée, deux membres, huit critères) : Richard 5, 4, 3, 4, 5, 3, 4, 4 ;
+Chloé 4, 4, 2, 2, 5, 3, —, 2. Moyennes 4,0 et 3,1 ; sept critères notés par les deux, moyennes
+par critère 4,5, 4, 2,5, 3, 5, 3, 3 ; note commune 25 / 7 ≈ **3,6** ; accords sur 5 critères ;
+désaccords sur le calme (4 et 2) et « on s'y voit » (4 et 2). Arrondi au dixième à l'affichage
+seulement. Le verdict « Cible / À creuser / Hors cible » ne dépend pas des avis ; aucun poids par
+personne.

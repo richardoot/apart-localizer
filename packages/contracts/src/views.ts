@@ -22,6 +22,7 @@ import {
   TargetPriceSchema,
 } from './metrics.js'
 import { NegotiationBriefSchema } from './negotiation.js'
+import { OpinionSummarySchema } from './opinions.js'
 import {
   CriteriaFitCountsSchema,
   EMPTY_FIT_COUNTS,
@@ -51,7 +52,17 @@ export const EvaluatedListingSchema = z.object({
   isNewForMe: z
     .boolean()
     .describe("Vrai si le membre connecté n'a pas encore ouvert l'annonce"),
-  opinions: z.array(OpinionSchema).default([]),
+  opinions: z
+    .array(OpinionSchema)
+    .default([])
+    .describe(
+      'Les avis visibles par le membre connecté : le sien, et ceux des autres sauf à l’aveugle (lot 20 : un avis masqué n’est jamais dans la réponse)'
+    ),
+  opinionSummary: OpinionSummarySchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 20 : la confrontation des avis visibles (moyennes, écarts, désaccords, note commune, bilan ; qui a noté sans montrer ses notes quand elles sont masquées)'
+    ),
   tasks: z.array(TaskSchema).default([]),
   priceEvents: z
     .array(PriceEventSchema)

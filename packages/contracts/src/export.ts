@@ -12,6 +12,7 @@ import { ListingLinkSchema } from './listing-links.js'
 import { ListingMetricsSchema, TargetPriceSchema } from './metrics.js'
 import { RentalVerdictSchema } from './enums.js'
 import { ListingCriteriaFitSchema } from './criteria-fit.js'
+import { OpinionCriterionSchema, OpinionSummarySchema } from './opinions.js'
 import { ListingListQuerySchema } from './filters.js'
 import { RentComparableSchema } from './rent-market.js'
 import { SearchCriteriaSchema } from './search-criteria.js'
@@ -79,7 +80,16 @@ export const ExportListingSchema = z.object({
     .describe(
       "Indicateurs calculés à l'export par `domain` avec les hypothèses en vigueur ; informatifs"
     ),
-  opinions: z.array(OpinionSchema),
+  opinions: z
+    .array(OpinionSchema)
+    .describe(
+      'Les avis visibles par le membre qui exporte (lot 20 : même règle qu’à l’écran, un avis masqué à l’aveugle n’est pas exporté), avec toutes leurs notes par critère (`scores`, critères masqués compris)'
+    ),
+  opinionSummary: OpinionSummarySchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 20 : la confrontation des avis visibles à l’export (note commune, désaccords, bilan) ; informative, null dans un export antérieur'
+    ),
   tasks: z.array(TaskSchema),
   priceEvents: z.array(PriceEventSchema),
   offers: z.array(OfferSchema),
@@ -150,5 +160,15 @@ export const ExportDocumentSchema = z.object({
     .describe(
       'Lot 16 : explorations des portails par Claude, de la plus récente à la plus ancienne, avec leurs lignes (absent dans un export antérieur)'
     ),
+  opinionCriteria: z
+    .array(OpinionCriterionSchema)
+    .default([])
+    .describe(
+      'Lot 20 : les critères des avis de l’espace, masqués compris, dans l’ordre des fiches (absent dans un export antérieur)'
+    ),
+  opinionSettings: z
+    .object({ blind: z.boolean() })
+    .default({ blind: true })
+    .describe('Lot 20 : avis à l’aveugle (vrai par défaut)'),
 })
 export type ExportDocument = z.infer<typeof ExportDocumentSchema>

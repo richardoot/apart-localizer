@@ -39,7 +39,9 @@ import { demoId } from './ids.js'
  *    explorations fictives, leurs brouillons et les lignes de leur compte
  *    rendu, journal et notifications (règles de `domain`) ; lot 18 : les
  *    liens de chaque annonce sur les portails, le vendeur, le lien
- *    rattaché d'office par une exploration ;
+ *    rattaché d'office par une exploration ; lot 20 : les critères des
+ *    avis de l'espace (huit par défaut et un ajouté), les notes par critère
+ *    de chaque avis, l'avis à l'aveugle ;
  * 4. vérifie que les autres espaces n'ont pas bougé, sinon annule tout.
  */
 
@@ -53,6 +55,9 @@ export interface DemoSeedReport {
   offers: number
   visits: number
   opinions: number
+  /** Lot 20 : notes par critère, et critères des avis de l'espace. */
+  opinionScores: number
+  opinionCriteria: number
   criteria: number
   /** Entrées : lignes d'adéquation qui ne sont pas « hors critères ». */
   criteriaMatches: number
@@ -108,7 +113,23 @@ export async function writeDemoDataset(
           id: workspaceId,
           name: dataset.workspace.name,
           createdAt: new Date(dataset.workspace.createdAt),
+          opinionsBlind: dataset.opinionsBlind,
         },
+      })
+      // Lot 20 : les critères des avis (huit par défaut, un ajouté).
+      await tx.opinionCriterion.createMany({
+        data: dataset.opinionCriteria.map(c => ({
+          id: c.id,
+          workspaceId,
+          key: c.key,
+          label: c.label,
+          hint: c.hint,
+          position: c.position,
+          hidden: c.hidden,
+          origin: c.origin,
+          createdAt: new Date(c.createdAt),
+          updatedAt: new Date(c.createdAt),
+        })),
       })
       const memberIds = new Map(dataset.members.map(m => [m.handle, m.id]))
       const idOf = (handle: DemoHandle): string =>
@@ -140,7 +161,13 @@ export async function writeDemoDataset(
       })
 
       const geo = new GeoService(tx as unknown as PrismaService)
-      let counts = { tasks: 0, offers: 0, visits: 0, opinions: 0 }
+      let counts = {
+        tasks: 0,
+        offers: 0,
+        visits: 0,
+        opinions: 0,
+        opinionScores: 0,
+      }
       for (const listing of dataset.listings) {
         await createListing(tx, workspaceId, listing, idOf)
         await geo.setListingPoint(
@@ -153,6 +180,9 @@ export async function writeDemoDataset(
           offers: counts.offers + listing.offers.length,
           visits: counts.visits + listing.visits.length,
           opinions: counts.opinions + listing.opinions.length,
+          opinionScores:
+            counts.opinionScores +
+            listing.opinions.reduce((n, o) => n + o.scores.length, 0),
         }
       }
 
@@ -592,6 +622,7 @@ export async function writeDemoDataset(
         listings: dataset.listings.length,
         members: dataset.members.length,
         ...counts,
+        opinionCriteria: dataset.opinionCriteria.length,
         criteria: dataset.criteria.length,
         criteriaMatches,
         criteriaFit,
@@ -802,7 +833,21 @@ async function createListing(
           rating: o.rating,
           text: o.text,
           createdAt: new Date(o.at),
-          updatedAt: new Date(o.at),
+          updatedAt: new Date(o.updatedAt),
+          // Lot 20 : première note et notes par critère.
+          ratedAt: o.ratedAt ? new Date(o.ratedAt) : null,
+          scores: {
+            create: o.scores.map(score => ({
+              id: demoId(
+                `opinion-score:${listing.key}:${o.handle}:${score.key}`
+              ),
+              criterionKey: score.key,
+              score: score.score,
+              word: score.word,
+              createdAt: new Date(score.createdAt),
+              updatedAt: new Date(score.updatedAt),
+            })),
+          },
         })),
       },
       views: {

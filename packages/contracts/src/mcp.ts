@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { ExtractionRequestSchema } from './ai.js'
 import { AssumptionsOverrideSchema } from './assumptions.js'
-import { OpinionInputSchema, PriceEventInputSchema } from './collaboration.js'
+import { PriceEventInputSchema } from './collaboration.js'
 import { DuplicateProbeSchema } from './duplicates.js'
 import { OfferChannelSchema, OfferResponseSchema } from './enums.js'
 import { ListingFiltersSchema } from './filters.js'
@@ -13,6 +13,11 @@ import {
 } from './listing.js'
 import { SensitivityRequestSchema } from './metrics.js'
 import { MarketContextRequestSchema } from './opendata.js'
+import {
+  OPINION_CRITERIA_MAX,
+  OpinionScoreSchema,
+  OpinionWordSchema,
+} from './opinions.js'
 import { RentComparableInputSchema } from './rent-market.js'
 import { VisitInputSchema } from './visits.js'
 import {
@@ -108,9 +113,71 @@ export type McpSetListingStatusInput = z.infer<
   typeof McpSetListingStatusInputSchema
 >
 
+/**
+ * Lot 20 : une note de critère dictée par le membre, par la clé du critère
+ * ou son libellé dans l'espace (« quiet », « Calme »).
+ */
+export const McpOpinionCriterionInputSchema = z
+  .object({
+    criterion: z
+      .string()
+      .trim()
+      .min(1)
+      .max(60)
+      .describe(
+        'Le critère, par sa clé (« quiet ») ou son libellé dans l’espace (« Calme », sans tenir compte des accents ni de la casse)'
+      ),
+    score: OpinionScoreSchema.nullable().describe(
+      'Note dictée de 1 à 5 (1 rédhibitoire, 2 bof, 3 correct, 4 bien, 5 excellent) ; null efface la note'
+    ),
+    word: OpinionWordSchema.optional().describe(
+      'Un mot dicté sur le critère (80 caractères au plus) ; absent = inchangé, null ou vide = effacé'
+    ),
+  })
+  .strict()
+export type McpOpinionCriterionInput = z.infer<
+  typeof McpOpinionCriterionInputSchema
+>
+
 export const McpAddOpinionInputSchema = z.object({
   listingId,
-  ...OpinionInputSchema.shape,
+  rating: z
+    .number()
+    .int()
+    .min(0)
+    .max(5)
+    .optional()
+    .describe(
+      'Note globale dictée sur 5 (0 = pas de note) ; absent = inchangée. Jamais la moyenne des critères'
+    ),
+  text: z
+    .string()
+    .max(5000)
+    .optional()
+    .describe('La phrase dictée ; absent = inchangée'),
+  criteria: z
+    .array(McpOpinionCriterionInputSchema)
+    .max(OPINION_CRITERIA_MAX)
+    .optional()
+    .describe(
+      'Lot 20 : notes par critère dictées par le membre ; seuls les critères donnés changent'
+    ),
+  member: z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .describe(
+      'Pour qui (identifiant court ou prénom) : seulement le membre connecté ; un autre membre est refusé'
+    ),
+  expectedUpdatedAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .optional()
+    .describe(
+      'Garde-fou optimiste : date de mise à jour de l’avis lue dans get_listing (null = pas encore d’avis) ; refus si elle a changé'
+    ),
 })
 export type McpAddOpinionInput = z.infer<typeof McpAddOpinionInputSchema>
 

@@ -18,6 +18,7 @@ import type { VisitState, WhatsNewEvent } from '@apart/domain'
 import { ActivityQueryService } from '../activity/activity-query.service'
 import { toActivityEntry } from '../activity/activity.mapper'
 import { PrismaService } from '../prisma/prisma.service'
+import { redactOpinionRows } from '../opinions/opinion-context'
 import type { ActivityLog, Member } from '../generated/prisma'
 
 /** Actions lues par « ce qui a changé » (le reste du journal n'en est pas). */
@@ -117,12 +118,14 @@ export class WhatsNewService {
       }),
       this.activity.membersOf(member.workspaceId),
     ])
+    // Lot 20 : un avis masqué à l'aveugle reste masqué ici aussi.
+    const readable = await redactOpinionRows(this.prisma, member, rows)
     return computeWhatsNew({
       memberId: member.id,
       since,
       sinceSource,
       now: new Date().toISOString(),
-      events: rows.map(toEvent),
+      events: readable.map(toEvent),
       listings: new Map(
         listings.map(l => [
           l.id,
@@ -217,8 +220,9 @@ export class WhatsNewService {
       }),
       this.activity.membersOf(member.workspaceId),
     ])
-    const events = rows.map(toEvent)
-    const others = rows.filter(
+    const readable = await redactOpinionRows(this.prisma, member, rows)
+    const events = readable.map(toEvent)
+    const others = readable.filter(
       row => !(row.actorMemberId === member.id && row.channel === 'web')
     )
     return {

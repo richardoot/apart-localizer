@@ -9,7 +9,6 @@ import {
   ListingQuestionFieldSchema,
   ListingSchema,
   OfferSchema,
-  OpinionSchema,
   PointSchema,
   PriceEventSchema,
   TaskSchema,
@@ -28,7 +27,6 @@ import type {
   Listing as ListingDto,
   ListingPlacement,
   Offer as OfferDto,
-  Opinion as OpinionDto,
   Point,
   PriceEvent as PriceEventDto,
   Task as TaskDto,
@@ -39,11 +37,17 @@ import type {
   ListingCheck,
   ListingLink,
   Offer,
-  Opinion,
   PriceEvent,
   Prisma,
   Task,
 } from '../generated/prisma'
+
+/** Les visites prévues d'une annonce (lot 14 : elles la gardent dans la liste). */
+export function plannedVisitCount(row: {
+  visits: readonly { status: string }[]
+}): number {
+  return row.visits.filter(v => v.status === 'planned').length
+}
 
 /** Une annonce liée, en quelques champs (republication, vérification). */
 const linkedSelect = { id: true, title: true, status: true } as const
@@ -53,7 +57,9 @@ export const listingInclude = {
   renovation: { include: { items: { orderBy: { position: 'asc' } } } },
   rentalPlan: true,
   views: true,
-  opinions: { orderBy: { createdAt: 'asc' } },
+  // Lot 20 : les notes par critère, et les « Voir quand même ».
+  opinions: { include: { scores: true }, orderBy: { createdAt: 'asc' } },
+  opinionReveals: { select: { memberId: true } },
   tasks: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] },
   priceEvents: { orderBy: { occurredAt: 'desc' } },
   offers: { orderBy: { madeAt: 'desc' } },
@@ -68,8 +74,12 @@ export const listingInclude = {
   checks: { orderBy: { checkedAt: 'desc' }, take: 1 },
   republishedFrom: { select: linkedSelect },
   republishedAs: { select: linkedSelect },
-  // Lot 14 : une visite prévue garde une annonce hors critères dans la liste.
-  visits: { where: { status: 'planned' }, select: { id: true } },
+  // Lot 14 : une visite prévue garde une annonce hors critères dans la liste ;
+  // lot 20 : une visite faite avec un membre marque son avis « après visite ».
+  visits: {
+    select: { id: true, status: true, visitedAt: true, participantIds: true },
+    orderBy: { visitedAt: 'asc' },
+  },
   // Lot 18 : les liens de l'annonce sur les portails.
   links: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
 } satisfies Prisma.ListingInclude
@@ -96,18 +106,6 @@ function pointOf(row: ListingRow): Point | null {
   return null
 }
 
-export function toOpinionDto(opinion: Opinion): OpinionDto {
-  return OpinionSchema.parse({
-    id: opinion.id,
-    listingId: opinion.listingId,
-    memberId: opinion.memberId,
-    rating: opinion.rating,
-    text: opinion.text,
-    createdAt: opinion.createdAt.toISOString(),
-    updatedAt: opinion.updatedAt.toISOString(),
-  })
-}
-
 export function toTaskDto(task: Task): TaskDto {
   // Lot 17 : un champ inconnu (colonne texte) se lit comme « aucun champ ».
   const field = ListingQuestionFieldSchema.safeParse(task.field)
@@ -125,6 +123,7 @@ export function toTaskDto(task: Task): TaskDto {
     requestedAt: task.requestedAt?.toISOString() ?? null,
     requestId: task.requestId,
     answeredAt: task.answeredAt?.toISOString() ?? null,
+    details: task.details,
   })
 }
 
@@ -473,6 +472,6 @@ export function toListingCriteriaFit(row: ListingRow): ListingCriteriaFit {
     since: row.criteriaFitChangedAt?.toISOString() ?? null,
     origin: originOf(row.criteriaFitOrigin),
     status: row.status,
-    plannedVisits: row.visits.length,
+    plannedVisits: plannedVisitCount(row),
   })
 }

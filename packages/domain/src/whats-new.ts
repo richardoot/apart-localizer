@@ -195,11 +195,16 @@ function itemOf(
     to = formatActivityValue('status', after?.status, names)
     summary = `Statut : ${from ?? '—'} → ${to ?? '—'} (${who})`
   } else if (kind === 'opinion') {
-    to = activityChanges(null, after, names)
-      .map(c => c.after)
-      .filter(Boolean)
-      .join(' — ')
-    summary = `Avis de ${who}${to ? ` : ${to}` : ''}`
+    if (after && ('scores' in after || after.masked === true)) {
+      // Lot 20 : la phrase du journal (sans les notes si l'avis est masqué).
+      summary = `${who} ${description.summary}`
+    } else {
+      to = activityChanges(null, after, names)
+        .map(c => c.after)
+        .filter(Boolean)
+        .join(' — ')
+      summary = `Avis de ${who}${to ? ` : ${to}` : ''}`
+    }
   } else if (kind === 'agency_answer') {
     const text = typeof after?.summary === 'string' ? after.summary : ''
     summary = `Réponse de l'annonceur enregistrée par ${who}${text ? ` : ${text}` : ''}`

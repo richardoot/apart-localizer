@@ -176,7 +176,14 @@ describe('Invitations, rôles et retrait (e2e)', () => {
       const listings = await get(lea, '/listings').expect(200)
       expect(listings.body.total).toBe(1)
       const detail = await get(lea, `/listings/${listingId}`).expect(200)
-      expect(detail.body.opinions).toHaveLength(1)
+      // Lot 20 : Léa n'a pas encore noté ; l'avis de Chloé lui est masqué
+      // (avis à l'aveugle), seulement compté.
+      expect(detail.body.opinions).toHaveLength(0)
+      expect(
+        detail.body.opinionSummary.members.find(
+          (m: { displayName: string }) => m.displayName === 'Chloé'
+        )?.state
+      ).toBe('masked')
       expect(
         detail.body.tasks.some(
           (t: { label: string }) => t.label === 'Appeler le syndic'
@@ -473,11 +480,17 @@ describe('Invitations, rôles et retrait (e2e)', () => {
       expect(elsewhere.workspace.id).not.toBe(workspaceId)
       expect(elsewhere.workspace.name).toBe('Mon espace')
 
-      // L'historique reste à son nom.
+      // L'historique reste à son nom (lot 20 : visible une fois que Richard
+      // a noté, avis à l'aveugle).
+      await request(ctx.server)
+        .put(`/listings/${listingId}/opinions/me`)
+        .set(ctx.auth(richard))
+        .send({ rating: 3 })
+        .expect(200)
       const detail = await get(richard, `/listings/${listingId}`).expect(200)
       expect(
         detail.body.opinions.map((o: { memberId: string }) => o.memberId)
-      ).toEqual([chloeId])
+      ).toContain(chloeId)
       const roster = await workspaceOf(richard)
       expect(
         roster.workspace.members.find(m => m.id === chloeId)
@@ -534,8 +547,15 @@ describe('Invitations, rôles et retrait (e2e)', () => {
         .send({ rating: 4, text: 'Revu' })
         .expect(200)
       expect(mine.body.memberId).toBe(chloeId)
+      // Sa ligne d'avant, retrouvée (pas de second avis) ; Richard n'a pas
+      // noté : à l'aveugle, il ne la lit pas encore.
+      expect(await ctx.prisma.opinion.count({ where: { listingId } })).toBe(1)
       const opinions = await get(richard, `/listings/${listingId}/opinions`)
-      expect(opinions.body).toHaveLength(1)
+      expect(opinions.body).toHaveLength(0)
+      const own = await get(chloe, `/listings/${listingId}/opinions`)
+      expect(own.body.map((o: { memberId: string }) => o.memberId)).toEqual([
+        chloeId,
+      ])
     })
   })
 

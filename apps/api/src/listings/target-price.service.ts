@@ -167,9 +167,16 @@ export class TargetPriceService {
         `Annonce(s) introuvable(s) : ${missing.join(', ')}`
       )
     }
-    const base = await this.assumptions.currentValues(member.workspaceId)
+    const [base, opinions] = await Promise.all([
+      this.assumptions.currentValues(member.workspaceId),
+      // Lot 20 : les avis visibles par ce membre (avis à l'aveugle).
+      this.listings.opinionContext(member),
+    ])
     const byId = new Map(
-      rows.map(row => [row.id, this.listings.evaluateRow(row, member, base)])
+      rows.map(row => [
+        row.id,
+        this.listings.evaluateRow(row, member, base, opinions),
+      ])
     )
     const items = listingIds.map(id => byId.get(id) as EvaluatedListing)
     const { ranks, best } = compareRankings(
@@ -241,9 +248,12 @@ export class TargetPriceService {
       },
       include: listingInclude,
     })
-    const base = await this.assumptions.currentValues(member.workspaceId)
+    const [base, opinions] = await Promise.all([
+      this.assumptions.currentValues(member.workspaceId),
+      this.listings.opinionContext(member),
+    ])
     const ranked = rows.map(row => {
-      const item = this.listings.evaluateRow(row, member, base)
+      const item = this.listings.evaluateRow(row, member, base, opinions)
       return { id: row.id, value: item.evaluation.targetPrice.discount }
     })
     const position = rankValues(ranked, 'asc').get(id) ?? null

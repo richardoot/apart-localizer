@@ -3,6 +3,7 @@
   import { useRoute, useRouter } from 'vue-router'
   import CompareTable from '@/components/listings/CompareTable.vue'
   import { useCompare } from '@/composables/useListings'
+  import { useWorkspace } from '@/composables/useWorkspace'
 
   const route = useRoute()
   const router = useRouter()
@@ -21,6 +22,7 @@
     ].slice(0, 6)
   })
   const { data, isPending, error } = useCompare(ids)
+  const { me } = useWorkspace()
 
   function open(id: string): void {
     void router.push({ name: 'listing', params: { id } })
@@ -54,6 +56,11 @@
       {{ error.message }}
     </p>
     <p v-else-if="isPending" class="text-sm text-muted">Comparaison…</p>
-    <CompareTable v-else-if="data" :result="data" @open="open" />
+    <CompareTable
+      v-else-if="data"
+      :result="data"
+      :me-id="me?.id ?? null"
+      @open="open"
+    />
   </section>
 </template>

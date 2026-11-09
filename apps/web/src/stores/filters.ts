@@ -180,6 +180,7 @@ export const useFiltersStore = defineStore('filters', () => {
     if (f.sellerType?.length) count += 1
     if (f.multiPortal) count += 1
     if (f.reference) count += 1
+    if (f.opinions) count += 1
     return count
   })
 

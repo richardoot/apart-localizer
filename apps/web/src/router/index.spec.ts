@@ -68,6 +68,15 @@ describe('router guard', () => {
     expect(document.title).toBe('Espace — apart-localizer')
   })
 
+  it('lot 20 : protects the opinion criteria page (workspace settings) and titles it', async () => {
+    await router.push('/espace/criteres-des-avis')
+    expect(router.currentRoute.value.name).toBe('login')
+    authState.isAuthenticated = true
+    await router.push('/espace/criteres-des-avis')
+    expect(router.currentRoute.value.name).toBe('opinion-criteria')
+    expect(document.title).toBe('Critères des avis — apart-localizer')
+  })
+
   it('protects the OAuth consent page and keeps authorization_id through the login', async () => {
     await router.push('/oauth/consent?authorization_id=abc123')
     expect(router.currentRoute.value.name).toBe('login')

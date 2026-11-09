@@ -1,177 +1,492 @@
 <script setup lang="ts">
-  import { computed, nextTick, ref, watch } from 'vue'
-  import type { Member, Opinion } from '@apart/contracts'
-  import { formatDate } from '@/lib/format'
+  import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+  import type {
+    EvaluatedListing,
+    Member,
+    OpinionSummary,
+    Visit,
+  } from '@apart/contracts'
+  import {
+    confrontOpinions,
+    effectiveOpinionCriteria,
+    formatOpinionAverage,
+    opinionAfterVisit,
+    opinionHasRating,
+    visibleCriterionKeys,
+  } from '@apart/domain'
+  import { useOptionalListingEditor } from '@/composables/useListingEditor'
+  import { useMediaQuery } from '@/composables/useMediaQuery'
+  import { useOpinionDraft } from '@/composables/useOpinionDraft'
+  import { ApiError } from '@/lib/api'
+  import {
+    maskedText,
+    memberMeta,
+    seenBeforeText,
+    shortDay,
+  } from '@/lib/opinions'
+  import type { OpinionActions } from '@/lib/opinions'
+  import MyOpinionForm from './opinions/MyOpinionForm.vue'
+  import OpinionsDetail from './opinions/OpinionsDetail.vue'
 
   /**
-   * « Nos avis » (lot 19 : dans la Synthèse, là où l'on décide) : une ligne
-   * par membre actif, sa note sur 5 et son mot, « Pas encore donné » sinon.
-   * Mon avis se donne ou se modifie sur place : la note (boutons 1 à 5,
-   * `aria-pressed`, un second clic l'enlève) et un mot.
+   * « Nos avis » (lot 20, ADR 0030 ; dans la Synthèse depuis le lot 19) : une
+   * carte par membre (note globale, moyenne des critères à titre indicatif,
+   * phrase, « 8 critères sur 8 · après la visite du 14 nov. »), le bilan et
+   * la note commune, le détail critère par critère qui se déplie, les
+   * désaccords et la tâche de contre-visite proposée. À l'aveugle, l'avis
+   * des autres reste masqué tant que je n'ai pas noté (le serveur ne l'envoie
+   * pas) : on dit qui a noté et combien de critères, et « Voir quand même »
+   * l'affiche. Mon avis se donne sur place (« Mon avis »), par la même garde
+   * des modifications non enregistrées que les sections de la fiche.
    */
-  const props = defineProps<{
-    opinions: Opinion[]
-    members: Member[]
-    meId: string | null
-    saving?: boolean
-  }>()
-  const emit = defineEmits<{
-    save: [input: { rating: number; text: string }]
-  }>()
-
-  const mine = computed(
-    () => props.opinions.find(o => o.memberId === props.meId) ?? null
+  const props = withDefaults(
+    defineProps<{
+      item: EvaluatedListing
+      members: Member[]
+      meId: string | null
+      visits?: Visit[]
+      actions?: OpinionActions | null
+      saving?: boolean
+    }>(),
+    { visits: () => [], actions: null, saving: false }
   )
-  /** Les membres actifs, puis les anciens qui ont laissé un avis. */
-  const rows = computed(() => {
-    const active = props.members.filter(m => m.status === 'active')
-    const former = props.members.filter(
-      m =>
-        m.status !== 'active' && props.opinions.some(o => o.memberId === m.id)
-    )
-    return [...active, ...former].map(member => ({
-      member,
-      opinion: props.opinions.find(o => o.memberId === member.id) ?? null,
-      isMe: member.id === props.meId,
-    }))
-  })
 
-  const editing = ref(false)
-  const rating = ref(mine.value?.rating ?? 0)
-  const text = ref(mine.value?.text ?? '')
-  const firstStar = ref<HTMLButtonElement | null>(null)
-  watch(mine, value => {
-    if (editing.value) return
-    rating.value = value?.rating ?? 0
-    text.value = value?.text ?? ''
-  })
+  const active = computed(() =>
+    props.members.filter(m => m.status === 'active')
+  )
+  /**
+   * La confrontation du serveur (avis visibles seulement) ; sans elle (fiche
+   * d'avant le lot 20), celle des avis reçus avec les critères par défaut.
+   */
+  const summary = computed<OpinionSummary>(
+    () =>
+      props.item.opinionSummary ??
+      confrontOpinions({
+        criteria: effectiveOpinionCriteria(null),
+        members: active.value.map(m => ({
+          id: m.id,
+          displayName: m.displayName,
+        })),
+        visible: props.item.opinions,
+        masked: [],
+        blind: false,
+        revealed: false,
+        viewerRated: opinionHasRating(
+          props.item.opinions.find(o => o.memberId === props.meId),
+          visibleCriterionKeys(effectiveOpinionCriteria(null))
+        ),
+      })
+  )
+  const mine = computed(
+    () => props.item.opinions.find(o => o.memberId === props.meId) ?? null
+  )
+  const me = computed(
+    () => summary.value.members.find(m => m.memberId === props.meId) ?? null
+  )
+  const meName = computed(
+    () => props.members.find(m => m.id === props.meId)?.displayName ?? 'moi'
+  )
+  const others = computed(() =>
+    summary.value.members.filter(m => m.memberId !== props.meId)
+  )
+  const masked = computed(() => others.value.filter(m => m.state === 'masked'))
+  const rows = computed(() => summary.value.rows)
+  const textOf = (memberId: string): string =>
+    props.item.opinions.find(o => o.memberId === memberId)?.text ?? ''
+  /** Les anciens membres dont l'avis reste visible (historique). */
+  const former = computed(() =>
+    props.item.opinions.filter(
+      o =>
+        !summary.value.members.some(m => m.memberId === o.memberId) &&
+        (o.rating > 0 || o.text)
+    )
+  )
+  const nameOf = (id: string): string =>
+    props.members.find(m => m.id === id)?.displayName ?? 'Ancien membre'
+
+  /** La dernière visite faite avec moi (« après visite », « notez pendant que c'est frais »). */
+  const myVisit = computed(() =>
+    props.meId
+      ? opinionAfterVisit(
+          props.visits.map(v => ({
+            id: v.id,
+            visitedAt: v.visitedAt,
+            status: v.status,
+            participantIds: v.participantIds,
+          })),
+          props.meId,
+          new Date()
+        )
+      : null
+  )
+
+  // Mon avis : un brouillon, ouvert par la garde de la fiche s'il y en a une.
+  const editor = useOptionalListingEditor()
+  const localEditing = ref(false)
+  const editing = computed(() =>
+    editor ? editor.editing.value === 'opinion' : localEditing.value
+  )
+  const state = useOpinionDraft(() => ({
+    opinion: mine.value,
+    keys: rows.value.map(r => r.key),
+  }))
+  if (editor) {
+    const unregister = editor.registerSection('opinion', {
+      title: 'Mon avis',
+      isDirty: () => state.dirty.value,
+      reset: () => state.load(),
+    })
+    onBeforeUnmount(unregister)
+  }
+  const compact = useMediaQuery('(max-width: 639px)')
+  const formError = ref<string | null>(null)
 
   function start(): void {
-    rating.value = mine.value?.rating ?? 0
-    text.value = mine.value?.text ?? ''
-    editing.value = true
-    void nextTick(() => firstStar.value?.focus())
+    state.load()
+    formError.value = null
+    if (editor) editor.start('opinion')
+    else localEditing.value = true
+    void nextTick(() => {
+      const first = document.querySelector<HTMLElement>(
+        '#my-opinion [role="radio"][tabindex="0"]'
+      )
+      first?.focus({ preventScroll: true })
+      document
+        .getElementById('nos-avis')
+        ?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+    })
   }
-  function submit(): void {
-    emit('save', { rating: rating.value, text: text.value.trim() })
-    editing.value = false
+  function close(): void {
+    if (editor) editor.finish('opinion')
+    localEditing.value = false
+  }
+  function cancel(): void {
+    if (editor) editor.cancel()
+    else {
+      state.load()
+      localEditing.value = false
+    }
+    formError.value = null
+  }
+  async function submit(): Promise<void> {
+    if (!state.dirty.value) {
+      close()
+      return
+    }
+    if (!props.actions) return
+    formError.value = null
+    try {
+      await props.actions.save(state.payload())
+      close()
+    } catch (error) {
+      formError.value =
+        error instanceof ApiError || error instanceof Error
+          ? error.message
+          : 'L’avis n’a pas pu être enregistré.'
+    }
   }
 
+  // « Voir quand même ».
+  const revealing = ref(false)
+  const revealError = ref<string | null>(null)
+  async function reveal(): Promise<void> {
+    if (!props.actions) return
+    revealing.value = true
+    revealError.value = null
+    try {
+      await props.actions.reveal()
+    } catch (error) {
+      revealError.value =
+        error instanceof Error
+          ? error.message
+          : 'Les avis n’ont pas pu être affichés.'
+    } finally {
+      revealing.value = false
+    }
+  }
+
+  const detailOpen = ref(false)
+  const hasScores = computed(() =>
+    rows.value.some(r => r.scores.some(s => s.score !== null))
+  )
+  const commonText = computed(() => {
+    const s = summary.value
+    if (s.status === 'empty') return null
+    return s.status === 'ready' ? formatOpinionAverage(s.commonScore) : null
+  })
+  /** Mon avis porte « après avoir vu celui de … » : « Voir quand même » avant de noter. */
+  const revealedNote = computed(() => {
+    const s = summary.value
+    if (!s.revealed || s.viewerRated) return null
+    const names = others.value
+      .filter(m => m.state === 'rated')
+      .map(m => m.displayName)
+    const seen = seenBeforeText(names)
+    return seen
+      ? `Vu avant d’avoir noté : ton avis portera la mention « ${seen} ».`
+      : null
+  })
+  const blindNote = computed(() => {
+    const names = masked.value.map(m => m.displayName)
+    if (names.length === 0) return null
+    const list =
+      names.length === 1
+        ? names[0]
+        : `${names.slice(0, -1).join(', ')} et ${names[names.length - 1]}`
+    return `Note de ton côté d’abord : tu verras ensuite ${names.length > 1 ? 'ceux' : 'celui'} de ${list}, sans influence.`
+  })
+
+  const myCardText = computed(() =>
+    ['Tu n’as pas encore donné ton avis.', blindNote.value]
+      .filter(Boolean)
+      .join(' ')
+  )
+
+  const card = 'grid content-start gap-1.5 rounded-xl px-3.5 py-3'
   const button =
-    'inline-flex min-h-11 items-center rounded-lg border px-3 text-sm sm:min-h-10'
+    'inline-flex min-h-11 items-center rounded-lg px-3.5 text-sm sm:min-h-10'
 </script>
 
 <template>
-  <section
-    class="grid content-start gap-3 rounded-2xl border border-line bg-surface p-4 sm:px-5"
-    aria-labelledby="opinions-title"
-    data-testid="opinions"
-  >
-    <h2 id="opinions-title" class="text-base font-semibold">Nos avis</h2>
-    <ul class="grid gap-2.5">
-      <li
-        v-for="row in rows"
-        :key="row.member.id"
-        class="grid grid-cols-[4.5rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1"
-        :data-member="row.member.id"
-      >
-        <strong class="truncate">{{ row.member.displayName }}</strong>
-        <div class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1.5">
-          <template v-if="row.opinion">
-            <span
-              v-if="row.opinion.rating > 0"
-              class="font-semibold text-accent tabular-nums"
-              :aria-label="`${row.opinion.rating} sur 5`"
-              >{{ row.opinion.rating }}/5</span
-            >
-            <span class="min-w-0 break-words whitespace-pre-line">{{
-              row.opinion.text || 'Pas de mot.'
-            }}</span>
-            <span class="text-xs text-muted">{{
-              formatDate(row.opinion.updatedAt)
-            }}</span>
-          </template>
-          <span v-else class="text-muted">Pas encore donné</span>
+  <div class="grid gap-4">
+    <section
+      id="nos-avis"
+      tabindex="-1"
+      class="grid scroll-mt-28 gap-3.5 rounded-2xl bg-surface p-4 outline-none sm:px-5"
+      :class="editing ? 'border-[1.5px] border-accent' : 'border border-line'"
+      :aria-labelledby="editing ? 'my-opinion-title' : 'opinions-title'"
+      data-testid="opinions"
+      :data-editing="editing ? 'true' : undefined"
+    >
+      <MyOpinionForm
+        v-if="editing"
+        :state="state"
+        :rows="rows"
+        :me-name="meName"
+        :other-names="others.map(m => m.displayName)"
+        :visit="myVisit"
+        :saving="saving"
+        :error="formError"
+        :compact="compact"
+        @submit="submit"
+        @cancel="cancel"
+      />
+      <template v-else>
+        <div
+          class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+        >
+          <h2 id="opinions-title" class="text-base font-semibold">Nos avis</h2>
           <button
-            v-if="row.isMe && !editing"
+            v-if="me?.state === 'rated'"
             type="button"
             :class="[
               button,
-              'border-accent bg-surface font-semibold text-accent',
+              'border border-accent bg-surface font-semibold text-accent',
             ]"
-            :aria-expanded="false"
-            aria-controls="my-opinion"
+            aria-controls="nos-avis"
             data-testid="opinion-edit"
             @click="start"
           >
-            {{ row.opinion ? 'Modifier mon avis' : 'Donner mon avis' }}
+            Modifier mon avis
           </button>
         </div>
-      </li>
-    </ul>
 
-    <form
-      v-if="editing"
-      id="my-opinion"
-      class="grid gap-2 rounded-xl bg-bg p-3"
-      aria-label="Mon avis"
-      @submit.prevent="submit"
-    >
-      <fieldset class="m-0 grid gap-1.5 border-0 p-0">
-        <legend class="mb-1 p-0 text-xs font-medium text-muted">
-          Ma note sur 5 (un second clic l’enlève)
-        </legend>
-        <div class="flex flex-wrap gap-1.5">
-          <button
-            v-for="n in 5"
-            :key="n"
-            :ref="
-              el => {
-                if (n === 1) firstStar = el as HTMLButtonElement
-              }
-            "
-            type="button"
-            class="size-11 rounded-lg border text-sm font-semibold tabular-nums"
-            :class="
-              rating === n
-                ? 'border-accent bg-accent text-accent-fg'
-                : 'border-line bg-surface text-fg hover:bg-surface-2'
-            "
-            :aria-pressed="rating === n"
-            :aria-label="`${n} sur 5`"
-            @click="rating = rating === n ? 0 : n"
+        <div class="grid gap-3 @xl:grid-cols-2">
+          <template v-for="member in summary.members" :key="member.memberId">
+            <div
+              v-if="member.memberId === meId && member.state !== 'rated'"
+              :class="[
+                card,
+                'gap-2.5 border-[1.5px] border-dashed border-accent',
+              ]"
+              :data-member="member.memberId"
+              data-state="me-missing"
+            >
+              <strong class="text-[15px]">{{ member.displayName }}</strong>
+              <template v-if="myVisit">
+                <span class="font-semibold"
+                  >Visite faite le {{ shortDay(myVisit.visitedAt) }}</span
+                >
+                <p class="leading-snug" data-testid="fresh-visit">
+                  Notez pendant que c’est frais. Ce que vous ne savez pas,
+                  laissez « — ».
+                </p>
+              </template>
+              <p class="leading-snug" data-testid="my-card-text">
+                {{ myCardText }}
+              </p>
+              <p
+                v-if="textOf(member.memberId)"
+                class="leading-snug whitespace-pre-line text-muted"
+              >
+                « {{ textOf(member.memberId) }} »
+              </p>
+              <p
+                v-if="revealedNote"
+                class="text-xs text-muted"
+                data-testid="revealed-note"
+              >
+                {{ revealedNote }}
+              </p>
+              <button
+                type="button"
+                :class="[
+                  button,
+                  'min-h-11 justify-self-start bg-accent font-semibold text-accent-fg',
+                ]"
+                data-testid="opinion-edit"
+                @click="start"
+              >
+                Donner mon avis
+              </button>
+            </div>
+            <div
+              v-else-if="member.state === 'masked'"
+              :class="[card, 'gap-2.5 bg-bg']"
+              :data-member="member.memberId"
+              data-state="masked"
+            >
+              <strong class="text-[15px]">{{ member.displayName }}</strong>
+              <p class="leading-snug">{{ maskedText(member) }}</p>
+              <div aria-hidden="true" class="flex flex-wrap gap-1.5">
+                <span
+                  v-for="n in member.ratedCount"
+                  :key="n"
+                  class="h-6 w-[5.75rem] rounded-lg bg-surface-2"
+                />
+              </div>
+              <button
+                type="button"
+                :class="[
+                  button,
+                  'justify-self-start border border-line bg-surface hover:bg-surface-2 disabled:opacity-60',
+                ]"
+                :disabled="revealing || !actions"
+                data-testid="opinion-reveal"
+                @click="reveal"
+              >
+                Voir quand même
+              </button>
+              <p v-if="revealError" role="alert" class="text-sm text-bad">
+                {{ revealError }}
+              </p>
+            </div>
+            <div
+              v-else-if="member.state === 'rated'"
+              :class="[card, 'bg-bg']"
+              :data-member="member.memberId"
+              data-state="rated"
+            >
+              <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <strong class="text-[15px]">{{ member.displayName }}</strong>
+                <span
+                  v-if="member.rating"
+                  class="font-display text-[22px] font-bold text-accent tabular-nums"
+                  :aria-label="`note globale ${member.rating} sur 5`"
+                  >{{ member.rating }}/5</span
+                >
+                <span
+                  v-if="member.average !== null"
+                  class="text-sm text-fg"
+                  data-testid="member-average"
+                  >critères : {{ formatOpinionAverage(member.average) }} en
+                  moyenne</span
+                >
+              </div>
+              <p class="leading-snug whitespace-pre-line break-words">
+                {{ textOf(member.memberId) || 'Pas de phrase.' }}
+              </p>
+              <span class="text-xs text-muted" data-testid="member-meta">{{
+                memberMeta(member)
+              }}</span>
+            </div>
+            <div
+              v-else
+              :class="[card, 'bg-bg']"
+              :data-member="member.memberId"
+              data-state="missing"
+            >
+              <strong class="text-[15px]">{{ member.displayName }}</strong>
+              <p class="text-muted">Pas encore donné</p>
+            </div>
+          </template>
+          <div
+            v-for="opinion in former"
+            :key="opinion.id"
+            :class="[card, 'bg-bg']"
+            :data-member="opinion.memberId"
+            data-state="former"
           >
-            {{ n }}
-          </button>
+            <div class="flex flex-wrap items-baseline gap-x-3">
+              <strong>{{ nameOf(opinion.memberId) }}</strong>
+              <span v-if="opinion.rating" class="font-semibold text-accent"
+                >{{ opinion.rating }}/5</span
+              >
+            </div>
+            <p class="leading-snug whitespace-pre-line">{{ opinion.text }}</p>
+          </div>
         </div>
-      </fieldset>
-      <label for="opinion-text" class="text-xs font-medium text-muted"
-        >Un mot</label
+
+        <div
+          v-if="
+            summary.status !== 'empty' &&
+            !(summary.masked && !summary.viewerRated)
+          "
+          class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-t border-line pt-3"
+        >
+          <p
+            class="min-w-0 flex-[1_1_28rem] leading-normal"
+            data-testid="opinions-sentence"
+          >
+            {{ summary.sentence }}
+          </p>
+          <div class="flex flex-wrap items-center gap-2.5">
+            <span class="text-sm text-muted" data-testid="common-score"
+              >Note commune
+              <strong v-if="commonText" class="text-fg">{{ commonText }}</strong
+              ><template v-if="commonText"> / 5</template
+              ><template v-else> en attente</template></span
+            >
+            <button
+              v-if="hasScores"
+              type="button"
+              :class="[
+                button,
+                'border border-line bg-surface hover:bg-surface-2',
+              ]"
+              :aria-expanded="detailOpen"
+              aria-controls="opinions-detail"
+              data-testid="opinions-toggle"
+              @click="detailOpen = !detailOpen"
+            >
+              {{ detailOpen ? 'Masquer le détail' : 'Voir le détail' }}
+            </button>
+          </div>
+        </div>
+        <OpinionsDetail
+          v-if="detailOpen && hasScores"
+          :summary="summary"
+          :tasks="item.tasks"
+          :add-task="actions?.addTask"
+        />
+      </template>
+    </section>
+
+    <aside
+      v-if="!editing && summary.masked && !summary.viewerRated"
+      class="grid gap-1.5 rounded-2xl border border-line bg-surface px-4 py-3.5 text-sm leading-normal text-fg sm:px-5"
+      data-testid="blind-why"
+    >
+      <strong>Pourquoi masquer ?</strong>
+      <span class="text-muted"
+        >Voir l’avis de l’autre avant de noter pousse à s’aligner. Les
+        désaccords n’apparaissent qu’une fois que vous avez noté tous les deux,
+        ou quand quelqu’un choisit « Voir quand même ».</span
       >
-      <textarea
-        id="opinion-text"
-        v-model="text"
-        rows="2"
-        class="rounded-lg border border-line bg-surface px-3 py-2 text-sm"
-        placeholder="Ce qui vous plaît ou vous gêne"
-      />
-      <div class="flex flex-wrap justify-end gap-2">
-        <button
-          type="button"
-          :class="[button, 'border-line bg-surface hover:bg-surface-2']"
-          @click="editing = false"
-        >
-          Annuler
-        </button>
-        <button
-          type="submit"
-          class="inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-accent-fg disabled:opacity-60 sm:min-h-10"
-          :disabled="saving"
-          data-testid="opinion-save"
-        >
-          {{ saving ? 'Enregistrement…' : 'Enregistrer mon avis' }}
-        </button>
-      </div>
-    </form>
-  </section>
+      <span class="text-muted"
+        >Ailleurs (liste, comparaison, Claude), la note commune ne se calcule
+        qu’avec les avis visibles par celui qui regarde.</span
+      >
+    </aside>
+  </div>
 </template>

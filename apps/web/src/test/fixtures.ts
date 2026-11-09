@@ -14,10 +14,15 @@ import type {
   Member,
   Offer,
   Opinion,
+  OpinionSummary,
   TargetPriceReport,
   Task,
 } from '@apart/contracts'
 import {
+  confrontOpinions,
+  effectiveOpinionCriteria,
+  splitOpinionsForViewer,
+  visibleCriterionKeys,
   compute,
   financialsFromListing,
   negotiationBrief,
@@ -172,6 +177,7 @@ export function fakeTask(over: Partial<Task> = {}): Task {
     requestedAt: null,
     requestId: null,
     answeredAt: null,
+    details: null,
     ...over,
   }
 }
@@ -185,6 +191,10 @@ export function fakeOpinion(over: Partial<Opinion> = {}): Opinion {
     text: 'Lumineux',
     createdAt: now,
     updatedAt: now,
+    scores: [],
+    ratedAt: now,
+    afterVisit: null,
+    seenBefore: [],
     ...over,
   }
 }
@@ -212,6 +222,7 @@ export function fakeEvaluated(
     distanceMeters: null,
     isNewForMe: false,
     opinions: [],
+    opinionSummary: null,
     tasks: [fakeTask()],
     priceEvents: [
       {
@@ -536,4 +547,96 @@ export function fakeExchanges(
     followUpBusinessDays: 5,
     ...over,
   }
+}
+
+/**
+ * Lot 20 : des notes par critère fictives (`{ quiet: 2 }`, `{ quiet: [2,
+ * 'bus devant la chambre'] }`), comme l'API les renvoie.
+ */
+export function fakeScores(
+  scores: Record<string, number | null | [number | null, string]>
+): Opinion['scores'] {
+  return Object.entries(scores).map(([key, value]) => ({
+    key,
+    score: Array.isArray(value) ? value[0] : value,
+    word: Array.isArray(value) ? value[1] : null,
+    updatedAt: now,
+  }))
+}
+
+/**
+ * Lot 20 : la confrontation telle que le serveur la calcule pour un membre
+ * (avis à l'aveugle compris), par le vrai paquet `domain`.
+ */
+export function fakeOpinionSummary(
+  opinions: Opinion[],
+  options: {
+    viewerId?: string
+    blind?: boolean
+    revealed?: boolean
+    members?: Member[]
+  } = {}
+): { visible: Opinion[]; summary: OpinionSummary } {
+  const criteria = effectiveOpinionCriteria(null)
+  const keys = visibleCriterionKeys(criteria)
+  const viewerId = options.viewerId ?? MEMBERS[0]?.id ?? ''
+  const blind = options.blind ?? true
+  const revealed = options.revealed ?? false
+  const split = splitOpinionsForViewer(opinions, {
+    viewerId,
+    blind,
+    revealed,
+    visibleKeys: keys,
+  })
+  return {
+    visible: split.visible,
+    summary: confrontOpinions({
+      criteria,
+      members: (options.members ?? MEMBERS)
+        .filter(m => m.status === 'active')
+        .map(m => ({ id: m.id, displayName: m.displayName })),
+      visible: split.visible,
+      masked: split.masked,
+      blind,
+      revealed,
+      viewerRated: split.viewerRated,
+    }),
+  }
+}
+
+/** Les avis de la maquette validée (Richard 4/5, Chloé 3/5, deux désaccords). */
+export function mockupOpinions(): Opinion[] {
+  return [
+    fakeOpinion({
+      id: 'dddddddd-dddd-4ddd-8ddd-000000000001',
+      memberId: MEMBERS[0]?.id ?? '',
+      rating: 4,
+      text: 'Lumineux, balcon agréable ; cuisine à refaire.',
+      scores: fakeScores({
+        luminosity: 5,
+        layout: 4,
+        condition: 3,
+        quiet: [4, 'fenêtres fermées, ça va'],
+        outdoor: 5,
+        building: 3,
+        street: 4,
+        feel: 4,
+      }),
+    }),
+    fakeOpinion({
+      id: 'dddddddd-dddd-4ddd-8ddd-000000000002',
+      memberId: MEMBERS[1]?.id ?? '',
+      rating: 3,
+      text: 'Belle lumière mais trop de bruit côté chambre.',
+      scores: fakeScores({
+        luminosity: [4, 'chambre 2 un peu sombre'],
+        layout: 4,
+        condition: 2,
+        quiet: [2, 'bus devant la chambre'],
+        outdoor: 5,
+        building: 3,
+        feel: 2,
+      }),
+    }),
+  ]
 }

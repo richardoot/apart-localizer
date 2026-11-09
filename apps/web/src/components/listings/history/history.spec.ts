@@ -329,7 +329,7 @@ describe('onglet « Historique » (lot 19)', () => {
     )
   })
 
-  it('filtres Tout, Prix, Vérifications, Échanges, Fiche ; rien de ce type', async () => {
+  it('filtres Tout, Prix, Vérifications, Échanges, Avis, Fiche ; rien de ce type', async () => {
     apiMock.listings.checks.mockResolvedValue([])
     const wrapper = mountTab()
     await flushPromises()
@@ -339,6 +339,7 @@ describe('onglet « Historique » (lot 19)', () => {
       'Prix(1)',
       'Vérifications(0)',
       'Échanges(1)',
+      'Avis(0)',
       'Fiche(3)',
     ])
     await filters.get('[data-filter="talk"]').trigger('click')

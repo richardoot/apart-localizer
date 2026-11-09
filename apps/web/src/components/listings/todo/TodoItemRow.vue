@@ -130,7 +130,10 @@
         >{{ stateText }}</span
       >
       <button
-        v-if="task?.origin === 'manual' && !confirmingRemove"
+        v-if="
+          (task?.origin === 'manual' || task?.origin === 'opinion') &&
+          !confirmingRemove
+        "
         type="button"
         class="-my-2 inline-flex size-11 flex-none items-center justify-center rounded-lg text-muted hover:text-bad"
         aria-label="Supprimer la tâche"
@@ -140,6 +143,21 @@
         <span aria-hidden="true">✕</span>
       </button>
     </div>
+
+    <p
+      v-if="task?.details"
+      class="text-sm leading-snug text-muted"
+      data-testid="todo-details"
+    >
+      {{ task.details }}
+    </p>
+    <p
+      v-if="task?.origin === 'opinion'"
+      class="text-xs text-muted"
+      data-testid="todo-from-opinions"
+    >
+      Proposée depuis « Nos avis », ajoutée d’un clic.
+    </p>
 
     <div
       v-if="confirmingRemove"

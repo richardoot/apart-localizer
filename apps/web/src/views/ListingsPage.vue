@@ -22,6 +22,7 @@
   } from '@/composables/useMapLayers'
   import type { MapLayerToggles } from '@/composables/useMapLayers'
   import { useSearchCriteriaList } from '@/composables/useSearchCriteria'
+  import { useWorkspace } from '@/composables/useWorkspace'
   import {
     legacyTabRedirect,
     listingTabFromQuery,
@@ -35,6 +36,8 @@
   const route = useRoute()
   const router = useRouter()
   const store = useFiltersStore()
+  // Lot 20 : une colonne d'avis par membre actif.
+  const { me, activeMembers } = useWorkspace()
 
   /** L'onglet de la fiche ouverte, lu et écrit dans l'URL : le retour et un lien partagé le gardent. */
   const panelTab = computed<ListingTab>({
@@ -244,6 +247,8 @@
         v-if="store.view === 'table'"
         :items="items"
         :out-tab="outTab"
+        :members="activeMembers"
+        :me-id="me?.id ?? null"
         @open="open"
         @compare="compare"
       />

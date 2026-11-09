@@ -61,7 +61,8 @@ export class TasksController {
   @Delete(':taskId')
   @HttpCode(204)
   @ApiOperation({
-    summary: 'Supprime une tâche saisie à la main (jamais la checklist)',
+    summary:
+      'Supprime une tâche ajoutée par un membre, à la main ou depuis « Nos avis » (jamais la checklist)',
   })
   remove(
     @CurrentMember() member: Member,

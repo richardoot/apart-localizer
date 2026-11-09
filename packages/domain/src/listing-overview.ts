@@ -4,8 +4,10 @@ import type {
   ListingMetrics,
   ListingOpenDataContext,
   ListingQuestionField,
+  OpinionSummary,
   RentalChecksResult,
   TargetPrice,
+  TaskOrigin,
   VisitStatus,
 } from '@apart/contracts'
 import {
@@ -16,6 +18,7 @@ import {
 } from './agency-requests.js'
 import { formatEuros, formatPercent } from './format.js'
 import { marketGap } from './listing-reading.js'
+import { opinionHighlights, opinionNextStepText } from './opinions.js'
 
 /**
  * Lot 19 (ADR 0029) : la fiche répond à sept questions. Ce module choisit,
@@ -31,15 +34,20 @@ import { marketGap } from './listing-reading.js'
 // Ce qui plaît, à surveiller
 // ---------------------------------------------------------------------------
 
-/** L'onglet où un point se détaille (identifiant d'URL de la fiche). */
+/**
+ * L'onglet où un point se détaille (identifiant d'URL de la fiche) ; lot 20 :
+ * `synthese` pour un point né des avis, détaillé dans « Nos avis ».
+ */
 export type HighlightTab =
-  'bien' | 'budget' | 'negocier' | 'quartier' | 'a-faire'
+  'synthese' | 'bien' | 'budget' | 'negocier' | 'quartier' | 'a-faire'
 
 export interface Highlight {
   /** Clé stable du point (`tram`, `works`, `rental_dpe_ban`…). */
   key: string
   text: string
   tab: HighlightTab
+  /** Lot 20 : la section de l'onglet (« Nos avis » de la Synthèse). */
+  section?: 'opinions'
 }
 
 export interface ListingHighlights {
@@ -60,6 +68,8 @@ export interface HighlightsInput {
   askedFields?: readonly ListingQuestionField[]
   /** Le repère est approché (quartier, commune) : les distances sont « ≈ ». */
   approximate?: boolean
+  /** Lot 20 : la confrontation des avis visibles par le membre connecté. */
+  opinions?: OpinionSummary | null
 }
 
 /** Trois points au plus de chaque côté. */
@@ -98,6 +108,10 @@ const withoutFinalDot = (text: string): string => text.replace(/\.\s*$/, '')
 /**
  * « Ce qui plaît » et « À surveiller » : trois points au plus chacun, du plus
  * important au moins important, chacun avec l'onglet qui le détaille.
+ * Lot 20 : les avis viennent juste après ce qui tranche (le verdict d'un
+ * côté, les contrôles de louabilité bloquants de l'autre) et avant le reste :
+ * ce que vous en pensez tous les deux compte plus que les détails qu'on
+ * retrouve dans les onglets.
  */
 export function listingHighlights(input: HighlightsInput): ListingHighlights {
   const m = input.metrics
@@ -109,6 +123,8 @@ export function listingHighlights(input: HighlightsInput): ListingHighlights {
     ? marketGap(m.pricePerM2, input.openData?.market?.medianPricePerM2 ?? null)
     : null
 
+  const opinions = opinionHighlights(input.opinions)
+
   // Ce qui plaît
   if (m && m.verdict === 'target') {
     good.push({
@@ -117,6 +133,7 @@ export function listingHighlights(input: HighlightsInput): ListingHighlights {
       tab: 'budget',
     })
   }
+  good.push(...opinions.good)
   if (gap !== null && gap <= -MARKET_GAP_NOTABLE) {
     good.push({
       key: 'below_market',
@@ -179,6 +196,7 @@ export function listingHighlights(input: HighlightsInput): ListingHighlights {
       })
     }
   }
+  watch.push(...opinions.watch)
   if (m && m.renovationTotal > 0) {
     watch.push({
       key: 'works',
@@ -302,6 +320,8 @@ export type TodoState =
 /** Ce que la liste lit d'une tâche. */
 export interface TodoTaskLike extends QuestionTask {
   position: number
+  /** Lot 20 : une tâche « À revoir à la contre-visite » se range avec les visites. */
+  origin?: TaskOrigin
 }
 
 /** Ce que la liste lit d'une demande à l'annonceur. */
@@ -394,7 +414,7 @@ function taskItem(
   if (!isAskableTask(task)) {
     return {
       ...base,
-      group: 'us',
+      group: task.origin === 'opinion' ? 'visit' : 'us',
       state: task.done ? 'done' : 'open',
       stateLabel: null,
       requestId: null,
@@ -503,7 +523,8 @@ export function todoPendingCount(input: {
 
 /** Une ligne des « Prochaines étapes » de la Synthèse. */
 export interface NextStep {
-  kind: 'visit' | 'draft' | 'follow_up' | 'task'
+  /** Lot 20 : `discuss`, « À rediscuter » (un désaccord dans nos avis). */
+  kind: 'visit' | 'discuss' | 'draft' | 'follow_up' | 'task'
   /** La visite, la demande ou la tâche concernée. */
   id: string
   text: string
@@ -529,12 +550,13 @@ export function requestTopic(
 }
 
 /**
- * Les prochaines étapes : la prochaine visite planifiée, les messages à
- * valider, les relances dues, puis les tâches ouvertes qu'aucune demande ne
- * porte encore ; trois au plus.
+ * Les prochaines étapes : la prochaine visite planifiée, « À rediscuter »
+ * quand nos avis s'écartent (lot 20), les messages à valider, les relances
+ * dues, puis les tâches ouvertes qu'aucune demande ne porte encore ; trois
+ * au plus.
  */
 export function nextSteps(
-  input: TodoInput & { now: Date },
+  input: TodoInput & { now: Date; opinions?: OpinionSummary | null },
   max: number = NEXT_STEPS_MAX
 ): NextStep[] {
   const steps: NextStep[] = []
@@ -550,6 +572,10 @@ export function nextSteps(
       id: visit.id,
       text: `Visite ${visitWhen(visit.visitedAt)}`,
     })
+  }
+  const discuss = opinionNextStepText(input.opinions)
+  if (discuss) {
+    steps.push({ kind: 'discuss', id: 'opinions', text: discuss })
   }
   for (const r of input.requests) {
     if (r.status === 'draft') {

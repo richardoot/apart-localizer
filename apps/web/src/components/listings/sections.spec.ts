@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 import { MEMBERS, fakeEvaluated, fakeOpinion } from '@/test/fixtures'
 import MetricsPreview from './MetricsPreview.vue'
 import OpinionsSection from './OpinionsSection.vue'
@@ -10,64 +10,84 @@ const other = MEMBERS[1]?.id ?? ''
 
 // Lot 19 : les tâches sont dans la liste « À faire » (`todo/todo.spec.ts`).
 
-describe('OpinionsSection (lot 19 : « Nos avis » de la Synthèse)', () => {
-  it('une ligne par membre : note et mot, « Pas encore donné » ; mon avis se modifie sur place', async () => {
+describe('OpinionsSection (lot 19, refaite au lot 20)', () => {
+  it('une carte par membre : note globale et phrase, « Pas encore donné » ; mon avis se modifie sur place', async () => {
+    const save = vi.fn().mockResolvedValue(undefined)
     const wrapper = mount(OpinionsSection, {
       props: {
-        opinions: [
-          fakeOpinion({ memberId: other, rating: 4, text: 'Lumineux' }),
-          fakeOpinion({
-            id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
-            memberId: me,
-            rating: 2,
-            text: 'Trop loin du tram',
-          }),
-        ],
+        // Une fiche lue sans confrontation du serveur : celle des avis reçus.
+        item: fakeEvaluated(
+          {},
+          {
+            opinions: [
+              fakeOpinion({ memberId: other, rating: 4, text: 'Lumineux' }),
+              fakeOpinion({
+                id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+                memberId: me,
+                rating: 2,
+                text: 'Trop loin du tram',
+              }),
+            ],
+          }
+        ),
         members: MEMBERS,
         meId: me,
+        actions: { save, reveal: vi.fn(), addTask: vi.fn() },
       },
     })
-    const rows = wrapper.findAll('li[data-member]')
-    expect(rows.map(r => r.text())).toEqual([
-      expect.stringContaining('Richard2/5Trop loin du tram'),
-      expect.stringContaining('Chloé4/5Lumineux'),
+    const cards = wrapper.findAll('[data-member]')
+    expect(cards.map(c => c.text())).toEqual([
+      expect.stringContaining('Richard2/5'),
+      expect.stringContaining('Chloé4/5'),
     ])
+    expect(cards[0]?.text()).toContain('Trop loin du tram')
+    expect(cards[1]?.text()).toContain('Lumineux')
     const edit = wrapper.get('[data-testid="opinion-edit"]')
     expect(edit.text()).toBe('Modifier mon avis')
-    expect(rows[1]?.find('[data-testid="opinion-edit"]').exists()).toBe(false)
     await edit.trigger('click')
     expect(
       (wrapper.get('#opinion-text').element as HTMLTextAreaElement).value
     ).toBe('Trop loin du tram')
     const two = wrapper.get('button[aria-label="2 sur 5"]')
-    expect(two.attributes('aria-pressed')).toBe('true')
+    expect(two.attributes('aria-checked')).toBe('true')
     await wrapper.get('button[aria-label="5 sur 5"]').trigger('click')
     await wrapper.get('#opinion-text').setValue('Revu : très bien')
     await wrapper.get('form').trigger('submit')
-    expect(wrapper.emitted('save')).toEqual([
-      [{ rating: 5, text: 'Revu : très bien' }],
-    ])
+    await flushPromises()
+    expect(save).toHaveBeenCalledWith({
+      rating: 5,
+      text: 'Revu : très bien',
+      scores: {},
+      expectedUpdatedAt: '2026-11-03T10:00:00.000Z',
+    })
     expect(wrapper.find('form').exists()).toBe(false)
   })
 
   it('un avis pas encore donné ; un second clic enlève la note ; Annuler referme', async () => {
+    const save = vi.fn()
     const wrapper = mount(OpinionsSection, {
-      props: { opinions: [], members: MEMBERS, meId: me },
+      props: {
+        item: fakeEvaluated(),
+        members: MEMBERS,
+        meId: me,
+        actions: { save, reveal: vi.fn(), addTask: vi.fn() },
+      },
     })
-    expect(wrapper.findAll('li[data-member]').map(r => r.text())).toEqual([
-      'RichardPas encore donnéDonner mon avis',
-      'ChloéPas encore donné',
-    ])
+    expect(
+      wrapper.findAll('[data-member]').map(r => r.attributes('data-state'))
+    ).toEqual(['me-missing', 'missing'])
+    expect(wrapper.get(`[data-member="${other}"]`).text()).toBe(
+      'ChloéPas encore donné'
+    )
     await wrapper.get('[data-testid="opinion-edit"]').trigger('click')
     const three = wrapper.get('button[aria-label="3 sur 5"]')
     await three.trigger('click')
-    expect(three.attributes('aria-pressed')).toBe('true')
+    expect(three.attributes('aria-checked')).toBe('true')
     await three.trigger('click')
-    expect(three.attributes('aria-pressed')).toBe('false')
-    const cancel = wrapper.findAll('button').find(b => b.text() === 'Annuler')
-    await cancel?.trigger('click')
+    expect(three.attributes('aria-checked')).toBe('false')
+    await wrapper.get('[data-testid="opinion-cancel"]').trigger('click')
     expect(wrapper.find('form').exists()).toBe(false)
-    expect(wrapper.emitted('save')).toBeUndefined()
+    expect(save).not.toHaveBeenCalled()
   })
 })
 

@@ -8,12 +8,14 @@
     ListingSortSchema,
     ListingStatusSchema,
     LocationPrecisionFilterSchema,
+    OPINIONS_FILTER_LABELS,
     VerdictSchema,
   } from '@apart/contracts'
   import type {
     DpeClass,
     ListingSort,
     LocationPrecisionFilter,
+    OpinionsFilter,
     SearchCriteriaSummary,
     Verdict,
   } from '@apart/contracts'
@@ -120,6 +122,19 @@
         ? 'desc'
         : 'desc'
   }
+
+  /**
+   * Lot 20 : « Avis » : toutes, « À rediscuter » (un désaccord de 2 points ou
+   * plus), « Avis en attente » (un avis manque ou est masqué pour moi).
+   */
+  const OPINION_CHOICES: ReadonlyArray<{
+    value: OpinionsFilter | undefined
+    label: string
+  }> = [
+    { value: undefined, label: 'Toutes' },
+    { value: 'to_discuss', label: OPINIONS_FILTER_LABELS.to_discuss },
+    { value: 'pending', label: OPINIONS_FILTER_LABELS.pending },
+  ]
 
   /** Lot 18 : le choix « Vendeur » courant. */
   const sellerChoice = computed(() => sellerChoiceOf(store.filters.sellerType))
@@ -302,7 +317,36 @@
       </div>
     </div>
 
-    <div class="grid gap-1 sm:col-span-2 lg:col-span-4">
+    <div class="grid gap-1 sm:col-span-2 lg:col-span-2">
+      <span id="f-opinions-label" class="text-xs font-medium text-muted"
+        >Avis</span
+      >
+      <div
+        class="flex flex-wrap gap-1.5"
+        role="group"
+        aria-labelledby="f-opinions-label"
+        data-testid="filter-opinions"
+      >
+        <button
+          v-for="option in OPINION_CHOICES"
+          :key="option.label"
+          type="button"
+          class="inline-flex min-h-11 items-center rounded-full border px-3 text-xs sm:min-h-8"
+          :class="
+            store.filters.opinions === option.value
+              ? 'border-accent bg-accent-soft text-fg'
+              : 'border-line text-muted hover:text-fg'
+          "
+          :aria-pressed="store.filters.opinions === option.value"
+          :data-opinions="option.value ?? 'all'"
+          @click="store.patch({ opinions: option.value })"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+    </div>
+
+    <div class="grid gap-1 sm:col-span-2 lg:col-span-2">
       <span class="text-xs font-medium text-muted">Repère</span>
       <div
         class="flex flex-wrap gap-1.5"

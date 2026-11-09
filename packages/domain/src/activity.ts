@@ -22,6 +22,7 @@ import type {
 import { formatEuros } from './format.js'
 import { describeAgencyActivity } from './agency-activity.js'
 import { describeLinkActivity, portalWhere } from './link-activity.js'
+import { describeOpinionActivity } from './opinion-activity.js'
 
 /**
  * Le journal d'activité en français (besoin S6) : à partir d'une ligne
@@ -484,14 +485,6 @@ export function describeActivity(
       )
     case 'task.deleted':
       return describe(`a supprimé la tâche${quoted(text(before, 'label'))}`)
-    case 'opinion.created':
-    case 'opinion.updated':
-      return describe(
-        action === 'opinion.created'
-          ? 'a donné son avis'
-          : 'a modifié son avis',
-        activityChanges(before, after, members)
-      )
     case 'offer.created':
       return describe(
         `a enregistré une offre de ${formatEuros(num(after, 'amount') ?? 0)}`,
@@ -656,6 +649,15 @@ export function describeActivity(
         change('name', text(before, 'name'), text(after, 'name')),
       ])
     default: {
+      // Lot 20 : avis par critère, « Voir quand même », réglages des critères.
+      const opinion = describeOpinionActivity(
+        action,
+        before,
+        after,
+        members,
+        (b, a) => activityChanges(b, a, members)
+      )
+      if (opinion) return describe(opinion.summary, opinion.changes)
       // Lot 17 : échanges avec l'annonceur (contact, demandes, réponses).
       const agency = describeAgencyActivity(action, before, after, (b, a) =>
         activityChanges(b, a, members)

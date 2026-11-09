@@ -147,7 +147,11 @@ hors du dépôt. Un nouveau fichier part du `.env.example` correspondant.
   « Liens rattachés d'office » de l'onglet « À valider ») ; le T2 de la Bastide chez « Agence
   [Exemple] », réf. EX-1987 ; un brouillon SeLoger de « [Exemple] Agence du Jardin public » à la
   même référence EX-2041, doublon probable « même référence, autre agence » à trancher ; les autres
-  annonces au vendeur « à relever ») ; le journal et les notifications qu'il fait naître. Les
+  annonces au vendeur « à relever ») ; des avis par critère (lot 20 : neuf critères, dont
+  « Cuisine » ajouté par l'espace ; avis à l'aveugle activé ; deux désaccords sur le T3 de
+  Saint-Michel, un sur le T2 des Chartrons, d'accord sur le T2 de Talence Forum et celui du
+  Bouscat ; le T2 de la Bastide noté par Sacha seulement, masqué pour Camille tant qu’elle n’a pas
+  noté) ; le journal et les notifications qu'il fait naître. Les
   liens sont fictifs (`exemple.invalid`, identifiants de portail impossibles « 0000000… »). Les
   dates sont relatives au jour du seed : il y a toujours des « nouvelles », une visite à venir et
   une relance due.
@@ -272,6 +276,13 @@ un envoi fictif, sans rien envoyer (`threadRef` fictif). Les adresses du jeu son
 se teste avec un lien fictif (`https://exemple.invalid/…`, ou un chemin de portail inventé à
 identifiant « 0000000… ») et la même agence et la même référence que la fiche ; une autre agence
 est refusée (« Ce n'est peut-être pas la même annonce »). Aucune page n'est ouverte par l'API.
+
+**Avis par critère (lot 20)** : avec le jeu `demo`, connectée en Camille, la Synthèse du T2 de
+la Bastide montre l'avis de Sacha masqué (« Voir quand même ») ; celle du T3 de Saint-Michel, la
+confrontation (deux désaccords, note commune, « À revoir à la contre-visite »). Au MCP,
+`get_listing` en Camille sur la Bastide ne rend pas les notes de Sacha ; `add_opinion` avec
+`criteria: [{ criterion: "Calme", score: 3 }]` les révèle (Camille a noté). La page
+« Critères des avis » est sous Espace (Camille est propriétaire, Sacha la lit).
 
 **claude.ai** ne peut pas joindre `localhost` : ses serveurs appellent l'URL du connecteur depuis
 Internet. Il faut une URL publique en https pour l'API **et** pour Supabase (un tunnel, avec

@@ -3,14 +3,16 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
-État au 6 novembre 2026 : **les lots 0 à 19 sont livrés** côté code, tests et documentation ; les
+État au 9 novembre 2026 : **les lots 0 à 20 sont livrés** côté code, tests et documentation ; les
 lots 0 à 17 sont déployés (Vercel et Supabase cloud ; imports du lot 11, `import:places` et
 `relocate:listings` du lot 12 faits en production ; migrations des lots 14 à 17 appliquées, le
 rattrapage `refresh:criteria-fit` attend les critères de Richard). Le lot 18 (une annonce,
 plusieurs portails) attend son déploiement : migration additive
 `20261108100000_lot18_listing_links`, avec le rattrapage des liens d'origine des annonces
 existantes dans la migration, sans variable ni import nouveau. Le lot 19 (une fiche, sept
-questions) attend aussi son déploiement, sans migration. Restent les actions
+questions) attend aussi son déploiement, sans migration. Le lot 20 (nos avis, critère par
+critère) attend son déploiement : migration additive `20261110100000_lot20_opinion_criteria`,
+sans rattrapage ni variable nouvelle. Restent les actions
 d'exploitation (Supabase cloud, Vercel, clés et connecteur :
 [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard » dans chaque lot, et
 les critères « Fini quand » qui demandent le déploiement ou un usage réel (lot 1 : déploiement et
@@ -25,7 +27,8 @@ lot 16 : une vraie exploration lancée depuis claude.ai dans le navigateur de Ri
 « À valider » relu à deux ; lot 17 : une vraie série de questions envoyée par Claude après
 validation, et sa réponse enregistrée ; lot 18 : une vraie tournée qui retrouve une annonce
 d'agence sur un deuxième portail par sa référence ; lot 19 : une lecture des sept onglets par
-Richard et Chloé sur ordinateur et sur téléphone), à constater après la mise en ligne.
+Richard et Chloé sur ordinateur et sur téléphone ; lot 20 : une vraie visite notée à deux, à
+l'aveugle, puis confrontée), à constater après la mise en ligne.
 
 ## Lot 0 : socle
 
@@ -805,3 +808,58 @@ se modifient en tête du bien ; plus aucun réglage de l'espace dans la fiche ; 
 lot 19 ouvre le bon onglet. (Vérifié en tests automatisés, e2e REST et MCP JSON-RPC compris, et
 sur captures Chromium, jeu fictif ; à confirmer par Richard et Chloé sur la vraie fiche après le
 déploiement.)
+
+## Lot 20 : nos avis, critère par critère
+
+Statut : livré (à déployer : migration additive `20261110100000_lot20_opinion_criteria`, sans
+variable nouvelle).
+
+- Précise le lot 1 (avis, besoin K2) et le lot 19 (Synthèse). Demande de Richard : dans « Nos
+  avis », que chaque membre note plusieurs critères, pour ensuite confronter les avis. Maquette et
+  règles validées (Synthèse confrontée, saisie, avis à l'aveugle, téléphone, liste et comparaison,
+  réglage des critères, À faire, Historique, notification, MCP). ADR 0030.
+- Livré :
+  - **Critères de l'espace** : huit par défaut (luminosité, agencement, état, calme, extérieur et
+    vue, immeuble, rue et ambiance, « on s'y voit »), clés stables ; page « Critères des avis »
+    (`/espace/criteres-des-avis`, reliée depuis la page Espace) : renommer, masquer ou afficher,
+    monter et descendre, ajouter (dix au plus, masqués compris), retirer un critère ajouté jamais
+    noté, case « Avis à l'aveugle » ; propriétaires seulement, lecture seule pour un membre ;
+    chaque changement au journal.
+  - **Saisie « Mon avis »** : par critère, six choix (« — » puis 1 rédhibitoire à 5 excellent,
+    groupe de boutons radio au clavier), un mot facultatif, la note globale à part (le ressenti,
+    pas une moyenne), la moyenne des critères recalculée en direct à titre indicatif, la phrase ;
+    mention « après visite » quand le membre était à une visite faite ; même garde des
+    modifications non enregistrées que les sections de la fiche. Au téléphone : une grille de six
+    boutons par critère, « Notez pendant que c'est frais » après une visite faite.
+  - **Avis à l'aveugle** (par défaut, côté serveur partout : fiche, liste, comparaison, MCP,
+    journal, « ce qui a changé », export) : tant qu'on n'a rien noté, l'avis des autres est masqué
+    (on sait qui a noté, combien de critères, après quelle visite) ; « Voir quand même » le
+    révèle, et l'avis porte ensuite « après avoir vu celui de … ».
+  - **Confrontation** (`domain`) : cartes par personne (note globale, moyenne des critères,
+    phrase, après visite), bilan (« D'accord sur 5 critères. Désaccord sur le calme (Richard 4,
+    Chloé 2) et « on s'y voit » (4 et 2). »), note commune, détail par critère dépliable avec les
+    désaccords surlignés ; « À revoir à la contre-visite : le calme » propose une tâche (titre et
+    contexte des notes et des mots) confirmée d'un clic, jamais créée d'office, rangée avec les
+    visites et « Pendant la visite ».
+  - **Effets** : « Ce qui plaît » (un critère noté au moins « bien » par tous), « À surveiller »
+    (un « rédhibitoire », un désaccord), « À rediscuter » dans les prochaines étapes ; journal
+    (« Chloé a donné son avis : 3/5, 7 critères. Deux désaccords avec Richard : calme, on s'y
+    voit. »), filtre « Avis » de l'Historique ; notification à l'autre membre (désaccords, ou « à
+    toi de noter » sans les notes) ; liste : colonnes par membre, note commune, désaccords, filtres
+    « À rediscuter » et « Avis en attente », tris par note commune et plus gros désaccord ;
+    comparaison : une ligne par critère, la meilleure note commune en gras. Le verdict ne change
+    pas.
+  - **MCP** : `add_opinion` prend des notes par critère dictées (clé ou libellé), fusionnées,
+    toujours pour le membre connecté ; lectures à l'aveugle avec la confrontation. Trente-neuf
+    outils.
+  - **Export** : version 1 (notes par critère, confrontation, critères de l'espace) ; CSV : note
+    commune, désaccords, notes par critère.
+  - **Jeu de démo** : neuf critères (dont « Cuisine », ajouté), avis à critères fictifs, une
+    annonce à deux désaccords, une en attente d'un membre.
+- Plus tard : des poids par critère pour la note commune, une notification « noter la visite »,
+  des critères qui varient selon le type de bien.
+
+Fini quand : chacun note de son côté sans voir l'autre, puis la Synthèse dit où l'on est d'accord
+et où l'on ne l'est pas ; un désaccord devient, d'un clic, un point de la contre-visite ; la liste
+trie par note commune. (Vérifié en tests automatisés, e2e REST et MCP JSON-RPC compris, et sur
+captures Chromium, jeu fictif ; à confirmer par Richard et Chloé après une vraie visite.)

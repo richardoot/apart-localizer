@@ -214,29 +214,47 @@ describe('Historique (lot 19) : une seule chronologie', () => {
     expect(journalKind({ kind: 'agency' })).toBe('talk')
     expect(journalKind({ kind: 'status' })).toBe('edit')
     expect(journalKind({ kind: 'visit' })).toBe('edit')
+    // Lot 20 : les avis ont leur type et leur filtre.
+    expect(journalKind({ kind: 'opinion' })).toBe('opinion')
     expect(TIMELINE_FILTERS.map(f => f.label)).toEqual([
       'Tout',
       'Prix',
       'Vérifications',
       'Échanges',
+      'Avis',
       'Fiche',
     ])
     const entries = listingTimeline({
-      journal: [journal({ kind: 'agency', action: 'contact.updated' })],
+      journal: [
+        journal({ kind: 'agency', action: 'contact.updated' }),
+        journal({
+          id: '99999999-9999-4999-8999-999999999901',
+          kind: 'opinion',
+          action: 'opinion.created',
+          summary:
+            'a donné son avis : 3/5, 7 critères. Deux désaccords avec Richard : calme, on s’y voit.',
+        }),
+      ],
       checks: [check({})],
       priceEvents: [price({})],
       fitHistory: [],
     })
     expect(timelineCounts(entries)).toEqual({
-      all: 3,
+      all: 4,
       price: 1,
       check: 1,
       talk: 1,
+      opinion: 1,
       edit: 0,
     })
     expect(filterTimeline(entries, 'talk')).toHaveLength(1)
+    expect(filterTimeline(entries, 'opinion').map(e => e.text)).toEqual([
+      expect.stringContaining(
+        'a donné son avis : 3/5, 7 critères. Deux désaccords avec Richard'
+      ),
+    ])
     expect(filterTimeline(entries, 'edit')).toEqual([])
-    expect(filterTimeline(entries, 'all')).toHaveLength(3)
+    expect(filterTimeline(entries, 'all')).toHaveLength(4)
   })
 
   it('qui, textes des prix et des vérifications', () => {

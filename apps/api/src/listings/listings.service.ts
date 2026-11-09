@@ -78,12 +78,12 @@ import { assertLinkFree, priceEventData, syncPrimaryLink } from './link-writes'
 import {
   linkStateOf,
   listingInclude,
+  plannedVisitCount,
   toCriteriaMatchDtos,
   toLastCheck,
   toListingCriteriaFit,
   toListingDto,
   toOfferDto,
-  toOpinionDto,
   toPriceEventDto,
   toRepublication,
   toListingLinkDtos,
@@ -98,6 +98,8 @@ import {
   withOpenDataProvenance,
 } from './location'
 import { missingFieldTaskLabels } from './missing-field-tasks'
+import { loadOpinionContext, opinionViewOf } from '../opinions/opinion-context'
+import type { OpinionWorkspaceContext } from '../opinions/opinion-context'
 import { provenanceAfterPatch, withProvenance } from './provenance'
 
 const dec = (value: number | null | undefined): Prisma.Decimal | null =>
@@ -265,10 +267,19 @@ export class ListingsService {
         select: { id: true, name: true },
       }),
     ])
-    const base = await this.assumptions.currentValues(member.workspaceId)
+    const [base, opinions] = await Promise.all([
+      this.assumptions.currentValues(member.workspaceId),
+      this.opinionContext(member),
+    ])
     const criteriaId = filters.criteriaId
     let items = rows.map(row => {
-      const item = this.evaluateRow(row, member, base, distances.get(row.id))
+      const item = this.evaluateRow(
+        row,
+        member,
+        base,
+        opinions,
+        distances.get(row.id)
+      )
       return criteriaId
         ? {
             ...item,
@@ -276,7 +287,7 @@ export class ListingsService {
               item.criteriaFit,
               criteriaId,
               row.status,
-              row.visits.length
+              plannedVisitCount(row)
             ),
           }
         : item
@@ -295,6 +306,15 @@ export class ListingsService {
     if (filters.multiPortal) {
       // Lot 18 : publiées sur plusieurs portails (deux liens ou plus).
       items = items.filter(item => item.links.length >= 2)
+    }
+    if (filters.opinions) {
+      // Lot 20 : « À rediscuter » (un désaccord) ou « Avis en attente »
+      // (un avis manque ou est masqué), selon ce que le membre voit.
+      items = items.filter(item =>
+        filters.opinions === 'to_discuss'
+          ? (item.opinionSummary?.disagreementKeys.length ?? 0) > 0
+          : item.opinionSummary?.status === 'pending'
+      )
     }
     // Lot 14 : sans critère actif, rien n'est filtré (tout est « dans »).
     const { counts, kept } = countFits(items.map(item => item.criteriaFit))
@@ -328,8 +348,16 @@ export class ListingsService {
 
   async get(member: Member, id: string): Promise<EvaluatedListing> {
     const row = await this.findRow(member, id)
-    const base = await this.assumptions.currentValues(member.workspaceId)
-    return this.evaluateRow(row, member, base)
+    const [base, opinions] = await Promise.all([
+      this.assumptions.currentValues(member.workspaceId),
+      this.opinionContext(member),
+    ])
+    return this.evaluateRow(row, member, base, opinions)
+  }
+
+  /** Lot 20 : les critères des avis, l'avis à l'aveugle et les membres de l'espace. */
+  opinionContext(member: Member): Promise<OpinionWorkspaceContext> {
+    return loadOpinionContext(this.prisma, member.workspaceId)
   }
 
   /**
@@ -941,20 +969,27 @@ export class ListingsService {
     return row
   }
 
-  /** La forme « vue » d'une ligne : contrat, calculs, drapeaux pour le membre, avis, tâches, prix. */
+  /**
+   * La forme « vue » d'une ligne : contrat, calculs, drapeaux pour le
+   * membre, avis, tâches, prix. Lot 20 : seulement les avis que ce membre
+   * peut voir (avis à l'aveugle), et leur confrontation.
+   */
   evaluateRow(
     row: ListingRow,
     member: Member,
     base: Assumptions,
+    opinions: OpinionWorkspaceContext,
     distanceMeters?: number
   ): EvaluatedListing {
     const listing = toListingDto(row)
+    const view = opinionViewOf(row, member, opinions)
     return EvaluatedListingSchema.parse({
       listing,
       evaluation: evaluateListing(listing, base),
       distanceMeters: distanceMeters ?? null,
       isNewForMe: !listing.views.some(view => view.memberId === member.id),
-      opinions: row.opinions.map(toOpinionDto),
+      opinions: view.opinions,
+      opinionSummary: view.summary,
       tasks: row.tasks.map(toTaskDto),
       priceEvents: row.priceEvents.map(toPriceEventDto),
       offers: row.offers.map(toOfferDto),
@@ -1426,6 +1461,11 @@ const SORT_KEYS = {
   // Lot 15 : dernière vérification, à défaut date d'ajout (croissant = la plus ancienne d'abord).
   lastCheckedAt: (item: EvaluatedListing) =>
     Date.parse(checkReference(item.listing)),
+  // Lot 20 : note commune et plus gros désaccord ; en attente en fin de liste.
+  commonScore: (item: EvaluatedListing) =>
+    item.opinionSummary?.commonScore ?? Number.NaN,
+  disagreement: (item: EvaluatedListing) =>
+    item.opinionSummary?.maxGap ?? Number.NaN,
 } as const
 
 export function comparator(

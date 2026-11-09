@@ -239,6 +239,36 @@
 
     <section
       v-if="workspace"
+      class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4"
+      aria-labelledby="opinion-criteria-title"
+      data-testid="opinion-criteria-link"
+    >
+      <div class="grid min-w-0 flex-[1_1_20rem] gap-1">
+        <h2
+          id="opinion-criteria-title"
+          class="font-display text-base font-semibold"
+        >
+          Critères des avis
+        </h2>
+        <p class="text-sm text-muted">
+          Les critères que chacun note sur une annonce (luminosité, calme…) et
+          l’avis à l’aveugle.
+          {{
+            isOwner
+              ? 'Renommer, masquer, réordonner, ajouter.'
+              : 'Réglés par les propriétaires.'
+          }}
+        </p>
+      </div>
+      <RouterLink
+        :to="{ name: 'opinion-criteria' }"
+        class="inline-flex min-h-11 items-center rounded-lg border border-accent px-3 text-sm font-semibold text-accent hover:bg-accent-soft"
+        >{{ isOwner ? 'Régler les critères' : 'Voir les critères' }}</RouterLink
+      >
+    </section>
+
+    <section
+      v-if="workspace"
       class="grid gap-3 rounded-xl border border-line bg-surface p-4"
       aria-labelledby="members-title"
     >

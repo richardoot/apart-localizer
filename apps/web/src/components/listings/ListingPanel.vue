@@ -26,6 +26,7 @@
   import { criteriaChangesMessage } from '@/lib/criteria'
   import { parseNumberInput } from '@/lib/format'
   import { ADDRESS_FIELD_ID } from '@/lib/listing-sections'
+  import type { OpinionActions } from '@/lib/opinions'
   import { DEFAULT_LISTING_TAB, listingTabQuestion } from '@/lib/listing-tabs'
   import type { ListingTab } from '@/lib/listing-tabs'
   import ListingHeader from './ListingHeader.vue'
@@ -152,7 +153,10 @@
   })
   provideListingEditor(editor)
 
-  const live = computed(() => editor.editing.value !== null)
+  // Lot 20 : « Mon avis » passe par la même garde, sans aperçu en direct.
+  const live = computed(
+    () => editor.editing.value !== null && editor.editing.value !== 'opinion'
+  )
   const shownEvaluation = computed(() =>
     live.value
       ? editor.preview.value.evaluation
@@ -353,12 +357,35 @@
     )
   }
 
-  function saveOpinion(input: { rating: number; text: string }): void {
-    if (!item.value) return
-    void run(
-      mutations.upsertOpinion.mutateAsync({ id: item.value.listing.id, input }),
-      'Avis enregistré.'
-    )
+  /**
+   * Lot 20 : les actions de « Nos avis ». Chacune lance en cas d'échec : la
+   * section garde la saisie et dit pourquoi ; la tâche de contre-visite n'est
+   * créée qu'à la confirmation du membre.
+   */
+  const opinionActions: OpinionActions = {
+    save: async input => {
+      if (!item.value) return
+      failure.value = null
+      await mutations.upsertOpinion.mutateAsync({
+        id: item.value.listing.id,
+        input,
+      })
+      message.value = 'Avis enregistré.'
+    },
+    reveal: async () => {
+      if (!item.value) return
+      await mutations.revealOpinions.mutateAsync(item.value.listing.id)
+    },
+    addTask: async task => {
+      if (!item.value) return
+      await mutations.addTask.mutateAsync({
+        id: item.value.listing.id,
+        label: task.label,
+        details: task.details,
+        origin: 'opinion',
+      })
+      message.value = `Tâche ajoutée dans À faire : « ${task.label} ».`
+    },
   }
 </script>
 
@@ -455,9 +482,9 @@
           :members="members"
           :me-id="me?.id ?? null"
           :saving-opinion="mutations.upsertOpinion.isPending.value"
+          :opinion-actions="opinionActions"
           @go="go"
           @precise="preciseAddress"
-          @save-opinion="saveOpinion"
         />
 
         <PropertyTab v-else-if="tab === 'bien'" :item="item" @go="go" />

@@ -23,15 +23,18 @@ import { formatDate, formatEuros } from './format'
  * le changement de prix du journal laisse la place à l'historique des prix,
  * la vérification du journal à la vérification détaillée, l'adéquation du
  * journal à son historique lisible, un lien ajouté à sa vérification « Lien
- * ajouté ». Du plus récent au plus ancien. Pur, testé.
+ * ajouté ». Du plus récent au plus ancien. Pur, testé. Lot 20 : les avis
+ * (« Chloé a donné son avis : 3/5, 7 critères… ») ont leur type et leur
+ * filtre « Avis » ; à l'aveugle, la phrase reçue ne dit pas les notes.
  */
-export type TimelineKind = 'price' | 'check' | 'talk' | 'edit'
+export type TimelineKind = 'price' | 'check' | 'talk' | 'opinion' | 'edit'
 export type TimelineFilter = 'all' | TimelineKind
 
 export const TIMELINE_KIND_LABELS: Record<TimelineKind, string> = {
   price: 'Prix',
   check: 'Vérification',
   talk: 'Échange',
+  opinion: 'Avis',
   edit: 'Fiche',
 }
 
@@ -44,6 +47,7 @@ export const TIMELINE_FILTERS: ReadonlyArray<{
   { id: 'price', label: 'Prix' },
   { id: 'check', label: 'Vérifications' },
   { id: 'talk', label: 'Échanges' },
+  { id: 'opinion', label: 'Avis' },
   { id: 'edit', label: 'Fiche' },
 ]
 
@@ -52,6 +56,7 @@ export const TIMELINE_KIND_CLASSES: Record<TimelineKind, string> = {
   price: 'bg-warn-soft text-warn',
   check: 'bg-info-soft text-info',
   talk: 'bg-ai-soft text-ai',
+  opinion: 'bg-opinion-soft text-opinion',
   edit: 'bg-surface-2 text-fg',
 }
 
@@ -101,6 +106,8 @@ export function journalKind(entry: Pick<ActivityEntry, 'kind'>): TimelineKind {
       return 'check'
     case 'agency':
       return 'talk'
+    case 'opinion':
+      return 'opinion'
     default:
       return 'edit'
   }
@@ -252,6 +259,7 @@ export function timelineCounts(
     price: 0,
     check: 0,
     talk: 0,
+    opinion: 0,
     edit: 0,
   }
   for (const e of entries) counts[e.kind] += 1

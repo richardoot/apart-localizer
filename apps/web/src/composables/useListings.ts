@@ -9,7 +9,7 @@ import type {
   ListingStatusChange,
   OfferInputRaw,
   OfferUpdate,
-  OpinionInput,
+  OpinionInputRaw,
   PriceEventInput,
   SensitivityRequestInput,
   TaskUpdate,
@@ -174,14 +174,43 @@ export function useListingMutations() {
       api.listings.recordPriceChange(id, input),
     onSuccess: settle,
   })
+  /** Lot 20 : un avis change la fiche, la liste et le journal (filtre « Avis »). */
+  function refreshOpinions(listingId: string): void {
+    refresh(listingId)
+    void client.invalidateQueries({
+      queryKey: ['listings', 'activity', listingId],
+    })
+    void client.invalidateQueries({ queryKey: ['listings', 'compare'] })
+  }
+
   const upsertOpinion = useMutation({
-    mutationFn: ({ id, input }: { id: string; input: OpinionInput }) =>
+    mutationFn: ({ id, input }: { id: string; input: OpinionInputRaw }) =>
       api.opinions.upsertMine(id, input),
-    onSuccess: (_opinion, { id }) => refresh(id),
+    onSuccess: (_opinion, { id }) => refreshOpinions(id),
+  })
+  /** Lot 20 : « Voir quand même ». */
+  const revealOpinions = useMutation({
+    mutationFn: (id: string) => api.opinions.reveal(id),
+    onSuccess: (_reveal, id) => refreshOpinions(id),
   })
   const addTask = useMutation({
-    mutationFn: ({ id, label }: { id: string; label: string }) =>
-      api.tasks.create(id, { label }),
+    mutationFn: ({
+      id,
+      label,
+      details,
+      origin,
+    }: {
+      id: string
+      label: string
+      /** Lot 20 : le contexte d'une tâche proposée depuis « Nos avis ». */
+      details?: string | null
+      origin?: 'manual' | 'opinion'
+    }) =>
+      api.tasks.create(id, {
+        label,
+        ...(details ? { details } : {}),
+        ...(origin ? { origin } : {}),
+      }),
     onSuccess: (_task, { id }) => refresh(id),
   })
   const updateTask = useMutation({
@@ -226,6 +255,7 @@ export function useListingMutations() {
     markSeen,
     recordPriceChange,
     upsertOpinion,
+    revealOpinions,
     addTask,
     updateTask,
     removeTask,

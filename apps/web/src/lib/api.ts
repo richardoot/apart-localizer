@@ -106,7 +106,13 @@ import type {
   OfferUpdate,
   OfferWriteResult,
   Opinion,
-  OpinionInput,
+  OpinionCriteriaOrder,
+  OpinionCriterionCreate,
+  OpinionCriterionUpdate,
+  OpinionInputRaw,
+  OpinionReveal,
+  OpinionSettings,
+  OpinionSettingsUpdate,
   PriceEventInput,
   SensitivityGrid,
   SensitivityRequestInput,
@@ -732,11 +738,46 @@ export const api = {
     ),
 
   opinions: {
-    upsertMine: (listingId: string, input: OpinionInput) =>
+    upsertMine: (listingId: string, input: OpinionInputRaw) =>
       apiFetch<Opinion>(`/listings/${listingId}/opinions/me`, {
         method: 'PUT',
         json: input,
       }),
+    /** Lot 20 : « Voir quand même » (avis à l'aveugle), enregistré. */
+    reveal: (listingId: string) =>
+      apiFetch<OpinionReveal>(`/listings/${listingId}/opinions/reveal`, {
+        method: 'POST',
+      }),
+  },
+
+  /** Lot 20 : critères des avis et avis à l'aveugle (propriétaire pour les écritures). */
+  opinionSettings: {
+    get: () => apiFetch<OpinionSettings>('/workspace/opinion-criteria'),
+    update: (update: OpinionSettingsUpdate) =>
+      apiFetch<OpinionSettings>('/workspace/opinion-settings', {
+        method: 'PATCH',
+        json: update,
+      }),
+    addCriterion: (input: OpinionCriterionCreate) =>
+      apiFetch<OpinionSettings>('/workspace/opinion-criteria', {
+        method: 'POST',
+        json: input,
+      }),
+    updateCriterion: (key: string, update: OpinionCriterionUpdate) =>
+      apiFetch<OpinionSettings>(
+        `/workspace/opinion-criteria/${encodeURIComponent(key)}`,
+        { method: 'PATCH', json: update }
+      ),
+    reorder: (order: OpinionCriteriaOrder) =>
+      apiFetch<OpinionSettings>('/workspace/opinion-criteria/order', {
+        method: 'PUT',
+        json: order,
+      }),
+    removeCriterion: (key: string) =>
+      apiFetch<OpinionSettings>(
+        `/workspace/opinion-criteria/${encodeURIComponent(key)}`,
+        { method: 'DELETE' }
+      ),
   },
 
   tasks: {

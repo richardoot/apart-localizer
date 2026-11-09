@@ -617,8 +617,9 @@ describe('Adéquation aux critères (e2e, lot 14)', () => {
       .expect(200)
     const lines = csv.text.slice(1).trim().split('\r\n')
     const header = lines[0]?.split(';') ?? []
-    // Après les colonnes du lot 15, en fin de ligne (puis celles du lot 18).
-    expect(header.slice(-10)).toEqual([
+    // Après les colonnes du lot 15, en fin de ligne (puis celles des lots 18
+    // et 20).
+    expect(header.slice(-13)).toEqual([
       'Identifiant',
       'Vérifiée le',
       'Vue en ligne le',
@@ -629,6 +630,9 @@ describe('Adéquation aux critères (e2e, lot 14)', () => {
       'Agence',
       'Référence',
       'Liens',
+      'Note commune (/5)',
+      'Désaccords',
+      'Notes par critère',
     ])
     expect(lines).toHaveLength(3)
     expect(

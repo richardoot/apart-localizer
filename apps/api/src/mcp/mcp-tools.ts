@@ -126,6 +126,11 @@ import type { WhatsNewService } from '../whats-new/whats-new.service'
 import type { ExplorationsService } from '../exploration/explorations.service'
 import type { ListingLinksService } from '../listings/listing-links.service'
 import { describeLinksAndSeller } from './mcp-links'
+import {
+  addOpinion,
+  describeOpinions,
+  describeOpinionsShort,
+} from './mcp-opinions'
 import { answer, dataResult, refusal, writeRefusal } from './tool-results'
 
 /** Ce dont les outils ont besoin : le membre, ses portées, les services métier. */
@@ -268,6 +273,9 @@ export function describeListing(item: EvaluatedListing): string {
       `adéquation : ${CRITERIA_FIT_LEVEL_LABELS[fit.level]}${fit.reasons.length ? ` (${fitReasonsText(fit.reasons)})` : ''}${fit.kept ? ` — ${keptLabel(fit.kept).toLowerCase()}` : ''}`
     )
   }
+  // Lot 20 : nos avis (ce que le membre voit, avis à l'aveugle compris).
+  const opinions = describeOpinionsShort(item.opinionSummary)
+  if (opinions) parts.push(opinions)
   if (item.isNewForMe) parts.push('nouvelle pour vous')
   if (item.distanceMeters !== null)
     parts.push(`à ${Math.round(item.distanceMeters)} m`)
@@ -910,7 +918,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         'Lot 15 : chaque annonce porte `listing.lastCheckedAt` (dernière vérification sur le portail), `listing.lastSeenOnlineAt` (dernière fois vue en ligne) et `lastCheck` (date, résultat, résumé) ; `staleDays: 7` ne garde que les annonces à revérifier (actives, sans vérification depuis plus de N jours, à défaut depuis leur ajout) et `sort: "lastCheckedAt"`, `order: "asc"` les range de la plus ancienne vérification à la plus récente : la file de la tournée de mise à jour (prompt review_listings). ' +
         'Lot 14 : chaque annonce porte son adéquation aux critères actifs (`criteriaFit` : meilleur niveau in « dans les critères », to_confirm « à confirmer » (adresse au quartier ou à la commune dont le contour touche le périmètre, ou donnée manquante), margin « à la marge » (dépassement dans la marge de tolérance), out « hors critères » ; raisons chiffrées ; détail par critère ; `kept` quand une annonce hors critères reste dans la liste pour une offre en cours ou une visite prévue). ' +
         'Lot 18 : chaque annonce porte ses liens (`links` : un par portail, prix affiché, en ligne ou non, lien principal d’abord) et son vendeur (`listing.sellerType` agency, mandatary, private, unknown ; `sellerName` agence ou réseau ; `sellerReference`) ; filtres `sellerType` (unknown = à relever), `multiPortal: true` (deux liens ou plus) et `reference` (la référence de l’agence, espaces et tirets ignorés) ; `search` trouve aussi une référence. ' +
-        'Sans filtre `fit`, la réponse est l’onglet « Dans les critères » de l’application (in, to_confirm, margin, plus les hors critères gardées) ; `fit: ["out"]` donne l’onglet « Hors critères » (rien n’est perdu), `fit` liste exactement les niveaux voulus. Sans critère actif, tout est « dans les critères ». `fit` de la réponse compte les annonces par niveau.',
+        'Sans filtre `fit`, la réponse est l’onglet « Dans les critères » de l’application (in, to_confirm, margin, plus les hors critères gardées) ; `fit: ["out"]` donne l’onglet « Hors critères » (rien n’est perdu), `fit` liste exactement les niveaux voulus. Sans critère actif, tout est « dans les critères ». `fit` de la réponse compte les annonces par niveau. ' +
+        'Lot 20 : chaque annonce porte les avis visibles par le membre connecté et leur confrontation (`opinionSummary` : note commune, désaccords à partir de 2 points, en attente) ; filtre `opinions` (to_discuss : « À rediscuter », un désaccord ; pending : « Avis en attente », un avis manque ou est masqué) ; tris `commonScore` (note commune) et `disagreement` (plus gros désaccord). À l’aveugle, l’avis d’un autre membre reste masqué tant que le membre connecté n’a pas noté.',
       inputSchema: McpListListingsInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -939,7 +948,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         'et (lot 11) son quartier (quartier officiel, IRIS ou commune, avec sa source), la piste d’athlétisme, le drive le plus proche de chaque enseigne préférée (Carrefour, Auchan, Intermarché) et toutes enseignes, et la salle Fitness Park les plus proches, distances à vol d’oiseau (« non disponible » si la source n’est pas importée). ' +
         'Lot 12 : la précision du repère et son placement (`listing.location.placement` : adresse, quartier reconnu dans `district` avec sa zone et son texte, lieu-dit OpenStreetMap, centre de la commune ou point saisi) ; `context.approximation` dit quand les distances partent du centre du quartier ou de la commune (à lire « ≈ »). Dites-le au membre et proposez de préciser l’adresse. ' +
         'Lot 14 : `criteriaFit`, l’adéquation aux critères actifs : meilleur niveau, raisons, « depuis », et pour chaque critère le niveau, les raisons et le détail filtre par filtre (`checks` : valeur de l’annonce, seuil, marge appliquée). Une annonce « à confirmer » à cause de l’adresse (`locationPending`) sera tranchée en précisant l’adresse (update_listing). ' +
-        'Lot 18 : « Où la trouver » (`links` : chaque portail avec son prix affiché, l’écart au plus bas, en ligne ou non, l’origine du lien et son identifiant `id` à passer en `linkId` à check_listing et apply_listing_check) et « Qui la vend » (`listing.sellerType`, `sellerName`, `sellerReference` : la référence à chercher sur les autres portails). Le prix de la fiche est le plus bas des liens en ligne.',
+        'Lot 18 : « Où la trouver » (`links` : chaque portail avec son prix affiché, l’écart au plus bas, en ligne ou non, l’origine du lien et son identifiant `id` à passer en `linkId` à check_listing et apply_listing_check) et « Qui la vend » (`listing.sellerType`, `sellerName`, `sellerReference` : la référence à chercher sur les autres portails). Le prix de la fiche est le plus bas des liens en ligne. ' +
+        'Lot 20 : « Nos avis », critère par critère : les avis visibles par le membre connecté (`opinions` : note globale, phrase, `scores` par critère de 1 rédhibitoire à 5 excellent avec un mot, `afterVisit`, `seenBefore`, `updatedAt` à repasser en `expectedUpdatedAt` à add_opinion) et leur confrontation (`opinionSummary` : moyenne par personne, écart et accord par critère, désaccords à partir de 2 points, note commune, bilan). À l’aveugle, l’avis d’un autre membre est masqué tant que le membre connecté n’a pas noté : seuls son prénom et son nombre de critères sont donnés ; ne cherchez pas à le deviner. Le verdict ne dépend pas des avis.',
       inputSchema: McpGetListingInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -951,7 +961,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           .map(c => `  - [${c.level}] ${c.message}`)
           .join('\n')
         return dataResult(
-          `${describeListing(item)}\n${describeLinksAndSeller(item)}\n${describeFitDetail(item)}\n${describePlacement(item)}\nContrôles de louabilité :\n${checks}\n${describeContext(context)}`,
+          `${describeListing(item)}\n${describeLinksAndSeller(item)}\n${describeFitDetail(item)}\n${describeOpinions(item)}\n${describePlacement(item)}\nContrôles de louabilité :\n${checks}\n${describeContext(context)}`,
           { ...item, context }
         )
       })
@@ -1188,7 +1198,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     {
       title: 'Donner mon avis',
       description:
-        'Enregistre ou remplace l’avis du membre connecté sur une annonce : note sur 5 (0 = pas de note) et texte. Un seul avis par membre et par annonce ; l’avis de l’autre membre n’est pas touché. Portée listings:write.',
+        'Enregistre l’avis du membre connecté sur une annonce, tel qu’il le dicte : note globale sur 5 (`rating`, 0 = pas de note ; son ressenti d’ensemble, jamais la moyenne des critères), phrase (`text`) et, lot 20, notes par critère de l’espace (`criteria` : le critère par sa clé ou son libellé — luminosité, agencement, état, calme, extérieur et vue, immeuble, rue et ambiance, on s’y voit, et ceux ajoutés par l’espace —, une note de 1 rédhibitoire, 2 bof, 3 correct, 4 bien à 5 excellent, null pour l’effacer, un mot facultatif). Seuls les champs et les critères donnés changent ; les autres restent tels quels. ' +
+        'Claude n’enregistre que des notes dictées par le membre, pour lui seul : il ne note jamais à sa place, ne déduit aucune note d’une annonce, d’une photo ou d’une conversation, et n’écrit jamais l’avis d’un autre membre (`member`, s’il est donné, doit être le membre connecté ; sinon refus). Un critère inconnu ou masqué est refusé. Garde-fou `expectedUpdatedAt` : la date de mise à jour de l’avis lue dans get_listing (null s’il n’y en a pas encore). L’avis de l’autre membre n’est pas touché ; il est prévenu. Le verdict ne change pas. Portée listings:write.',
       inputSchema: McpAddOpinionInputSchema,
       annotations: {
         readOnlyHint: false,
@@ -1197,20 +1208,11 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         openWorldHint: false,
       },
     },
-    async ({ listingId, rating, text }) =>
+    async input =>
       answer(async () => {
         const denied = writeRefusal(ctx.scopes)
         if (denied) return denied
-        const opinion = await ctx.opinions.upsert(
-          ctx.member,
-          listingId,
-          { rating, text },
-          CHANNEL
-        )
-        return dataResult(
-          `Avis de ${ctx.member.displayName} enregistré : ${rating > 0 ? `${rating}/5` : 'sans note'}${text ? ` — ${text}` : ''}`,
-          { opinion }
-        )
+        return addOpinion(ctx, input)
       })
   )
 
@@ -1248,7 +1250,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         const task = await ctx.tasks.create(
           ctx.member,
           listingId,
-          { label, assigneeId, origin: 'manual', field: null },
+          { label, assigneeId, origin: 'manual', field: null, details: null },
           CHANNEL
         )
         return dataResult(`Tâche ajoutée : ${task.label} [id ${task.id}]`, {
@@ -1322,7 +1324,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     {
       title: 'Comparer des annonces',
       description:
-        "Compare 2 à 6 annonces de l'espace côte à côte : indicateurs (coût, mensualité, rendements, effort, prix au m²), verdicts, prix cibles et décotes, rang de chacune par indicateur (1 = meilleure) et meilleure annonce par indicateur. Répond : « laquelle visiter en premier ? ».",
+        "Compare 2 à 6 annonces de l'espace côte à côte : indicateurs (coût, mensualité, rendements, effort, prix au m²), verdicts, prix cibles et décotes, rang de chacune par indicateur (1 = meilleure) et meilleure annonce par indicateur ; lot 20 : nos avis côte à côte (`opinionSummary` de chaque annonce : notes par critère de chacun, note commune, désaccords), tels que le membre connecté les voit (avis à l'aveugle compris). Répond : « laquelle visiter en premier ? ».",
       inputSchema: McpCompareListingsInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },

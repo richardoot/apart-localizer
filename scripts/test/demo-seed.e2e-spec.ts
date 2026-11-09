@@ -72,6 +72,9 @@ describe('seed de démonstration (e2e, PostGIS)', () => {
          (SELECT count(*)::int FROM app.listing_contacts WHERE workspace_id = $1) AS contacts,
          (SELECT count(*)::int FROM app.tasks t JOIN app.listings l ON l.id = t.listing_id WHERE l.workspace_id = $1 AND t.request_id IS NOT NULL) AS requested_tasks,
          (SELECT count(*)::int FROM app.notifications WHERE workspace_id = $1 AND type = 'agency_answer') AS agency_answers,
+         (SELECT count(*)::int FROM app.opinion_criteria WHERE workspace_id = $1) AS opinion_criteria,
+         (SELECT count(*)::int FROM app.opinion_scores s JOIN app.opinions o ON o.id = s.opinion_id JOIN app.listings l ON l.id = o.listing_id WHERE l.workspace_id = $1) AS opinion_scores,
+         (SELECT count(*)::int FROM app.notifications WHERE workspace_id = $1 AND type = 'opinion_added') AS opinion_notifications,
          (SELECT count(*)::int FROM app.listings WHERE workspace_id <> $1) AS other_listings,
          (SELECT count(*)::int FROM app.members WHERE workspace_id <> $1) AS other_members,
          (SELECT count(*)::int FROM app.activity_logs WHERE workspace_id <> $1) AS other_activity`,
@@ -175,6 +178,46 @@ describe('seed de démonstration (e2e, PostGIS)', () => {
     expect(c.contacts).toBe(3)
     expect(c.requested_tasks).toBe(3)
     expect(c.agency_answers).toBe(1)
+    // Lot 20 : les critères des avis (huit par défaut, « Cuisine » ajouté),
+    // les notes par critère, l'avis à l'aveugle, la première note, et une
+    // notification « avis d'un autre membre » quand le second avis arrive.
+    expect(report.opinionCriteria).toBe(9)
+    expect(c.opinion_criteria).toBe(9)
+    expect(report.opinionScores).toBe(
+      dataset.listings.reduce(
+        (n, l) => n + l.opinions.reduce((m, o) => m + o.scores.length, 0),
+        0
+      )
+    )
+    expect(c.opinion_scores).toBe(report.opinionScores)
+    expect(c.opinion_notifications).toBeGreaterThan(0)
+    const workspace = await db.prisma.workspace.findUniqueOrThrow({
+      where: { id: DEMO_WORKSPACE_ID },
+      include: { opinionCriteria: { orderBy: { position: 'asc' } } },
+    })
+    expect(workspace.opinionsBlind).toBe(true)
+    expect(workspace.opinionCriteria.at(-1)).toMatchObject({
+      key: 'custom_cuisine',
+      label: 'Cuisine',
+      origin: 'custom',
+      position: 8,
+    })
+    const saintMichel = await db.prisma.opinion.findMany({
+      where: { listingId: demoId('listing:saint-michel-t3') },
+      include: { scores: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    expect(saintMichel.map(o => o.scores.length)).toEqual([8, 8])
+    expect(saintMichel.every(o => o.ratedAt !== null)).toBe(true)
+    expect(
+      saintMichel[0]?.scores.find(s => s.criterionKey === 'condition')?.score
+    ).toBe(2)
+    // La base refuse une note hors de 1 à 5.
+    await expect(
+      db.query(`UPDATE app.opinion_scores SET score = 0 WHERE id = $1`, [
+        saintMichel[0]?.scores[0]?.id,
+      ])
+    ).rejects.toThrow(/opinion_scores_score_range/)
     const members = await db.prisma.member.findMany({
       where: { workspaceId: DEMO_WORKSPACE_ID },
       orderBy: { handle: 'asc' },

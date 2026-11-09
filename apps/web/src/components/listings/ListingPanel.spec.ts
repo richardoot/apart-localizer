@@ -42,7 +42,7 @@ const apiMock = vi.hoisted(() => ({
   searchCriteria: { list: vi.fn() },
   study: { compliance: vi.fn(), comparables: vi.fn() },
   scenarios: { list: vi.fn() },
-  opinions: { upsertMine: vi.fn() },
+  opinions: { upsertMine: vi.fn(), reveal: vi.fn() },
   tasks: { create: vi.fn(), update: vi.fn(), remove: vi.fn() },
   offers: { create: vi.fn(), update: vi.fn() },
   whatsNew: { listingChanges: vi.fn() },
@@ -316,6 +316,35 @@ describe('ListingPanel (lot 19 : une fiche, sept questions)', () => {
       )
     ).toEqual([2500, 3000])
     expect(text()).toContain('« Travaux avant d’emménager » enregistré.')
+  })
+
+  it('lot 20 : « Mon avis » passe par la même garde ; enregistré, la fiche le dit', async () => {
+    apiMock.opinions.upsertMine.mockResolvedValue({})
+    const wrapper = mountPanel()
+    await flushPromises()
+    await click('[data-testid="opinion-edit"]')
+    expect(query('[data-testid="my-opinion-form"]')).not.toBeNull()
+    // Pas d'aperçu en direct pour un avis : les chiffres ne bougent pas.
+    expect(query('[data-testid="live-badge"]')).toBeNull()
+    await click('[data-criterion="quiet"] [role="radio"][data-value="3"]')
+    await openTab('budget')
+    expect(wrapper.emitted('update:tab')).toBeUndefined()
+    expect(text()).toContain(
+      'La section « Mon avis » a des modifications qui seront perdues.'
+    )
+    await click('[data-testid="unsaved-stay"]')
+    query<HTMLFormElement>('[data-testid="my-opinion-form"]')?.dispatchEvent(
+      new Event('submit', { cancelable: true })
+    )
+    await flushPromises()
+    expect(apiMock.opinions.upsertMine).toHaveBeenCalledWith(item.listing.id, {
+      rating: 0,
+      text: '',
+      scores: { quiet: { score: 3, word: null } },
+      expectedUpdatedAt: null,
+    })
+    expect(text()).toContain('Avis enregistré.')
+    expect(query('[data-testid="my-opinion-form"]')).toBeNull()
   })
 
   it('quitter une section modifiée (autre onglet, fermeture) demande confirmation, sans window.confirm', async () => {

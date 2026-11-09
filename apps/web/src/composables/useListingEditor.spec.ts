@@ -110,4 +110,64 @@ describe('édition par section (lot 19)', () => {
       expect(editor.draft.value.surface).toBe('50')
     })
   })
+
+  it('lot 20 : une section externe (« Mon avis ») passe par la même garde', () => {
+    const { editor } = editorFor()
+    let dirty = false
+    const reset = vi.fn(() => {
+      dirty = false
+    })
+    // Sans enregistrement : « Mon avis » s'ouvre, sans modification ni titre propre.
+    editor.start('opinion')
+    expect(editor.editing.value).toBe('opinion')
+    expect(editor.dirty.value).toBe(false)
+    expect(editor.titleOf('opinion')).toBe('Mon avis')
+    editor.cancel()
+
+    const unregister = editor.registerSection('opinion', {
+      title: 'Mon avis',
+      isDirty: () => dirty,
+      reset,
+    })
+    editor.start('opinion')
+    dirty = true
+    expect(editor.dirty.value).toBe(true)
+    // Ouvrir une section de la fiche : confirmation d'abord.
+    editor.start('works')
+    expect(editor.editing.value).toBe('opinion')
+    expect(editor.pending.value?.section).toBe('opinion')
+    editor.confirmLeave()
+    expect(reset).toHaveBeenCalled()
+    expect(editor.editing.value).toBe('works')
+    // Une section de la fiche modifiée garde « Mon avis » fermé.
+    editor.draft.value.renovation.items.push({
+      key: 'k-lot20',
+      label: 'Cuisine',
+      amount: '6000',
+    })
+    editor.start('opinion')
+    expect(editor.editing.value).toBe('works')
+    expect(editor.pending.value?.section).toBe('works')
+    editor.confirmLeave()
+    expect(editor.editing.value).toBe('opinion')
+    // Enregistré par elle-même : `finish` referme sans confirmation.
+    editor.finish('works' as never)
+    expect(editor.editing.value).toBe('opinion')
+    editor.finish('opinion')
+    expect(editor.editing.value).toBeNull()
+    // Démontée en cours d'édition : la garde l'oublie.
+    editor.start('opinion')
+    unregister()
+    expect(editor.editing.value).toBeNull()
+    expect(editor.titleOf('opinion')).toBe('Mon avis')
+    // Un retrait périmé ne retire pas la section suivante.
+    const again = editor.registerSection('opinion', {
+      title: 'Mon avis (bis)',
+      isDirty: () => false,
+      reset: vi.fn(),
+    })
+    unregister()
+    expect(editor.titleOf('opinion')).toBe('Mon avis (bis)')
+    again()
+  })
 })

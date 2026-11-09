@@ -65,6 +65,15 @@ elles sont protégées.
   que le nom de l'espace, celui du propriétaire, l'adresse invitée et le lien de l'application.
   Le rattachement exige une adresse vérifiée par le fournisseur (Google). Le MCP (`list_members`)
   ne rend aucune adresse.
+- **Avis à l'aveugle (lot 20, ADR 0030)** : un avis (note globale, phrase, notes et mots par
+  critère) est lisible par les membres de l'espace, sauf à l'aveugle (réglage de l'espace, actif
+  par défaut) : tant qu'un membre n'a rien noté sur une annonce, l'avis des autres ne lui est
+  jamais envoyé, ni à l'écran, ni au MCP, ni au journal, ni dans « ce qui a changé », ni dans son
+  export ; il sait seulement qui a noté, combien de critères et si c'était après la visite. Ses
+  « Voir quand même » sont gardés (annonce, date, avis visibles à ce moment) et lisibles des
+  membres : son avis porte ensuite « après avoir vu celui de … ». Une notification d'avis ne
+  contient jamais de note. Notes et révélations partent avec l'avis, l'annonce ou le membre
+  (cascade).
 - **Retrait d'un membre** : sa ligne reste (nom, adresse, rôle) pour que ses avis, tâches, visites
   et le journal gardent son nom ; son identité est détachée (l'accès est coupé dès la requête
   suivante, MCP compris), ses abonnements push sont supprimés. Un espace quitté pour en rejoindre

@@ -59,6 +59,8 @@ export class TasksService {
           origin: input.origin,
           // Lot 17 : le champ donné, sinon celui du libellé s'il est connu.
           field: input.field ?? taskFieldForLabel(input.label),
+          // Lot 20 : le contexte d'une tâche proposée depuis « Nos avis ».
+          details: input.details,
           position: (last?.position ?? -1) + 1,
         },
       })
@@ -75,6 +77,7 @@ export class TasksService {
             origin: task.origin,
             assigneeId: task.assigneeId,
             ...(task.field ? { field: task.field } : {}),
+            ...(task.details ? { details: task.details } : {}),
           },
         },
         tx
@@ -133,7 +136,11 @@ export class TasksService {
     return toTaskDto(saved)
   }
 
-  /** REST seulement, et seulement une tâche saisie à la main : la checklist se coche, elle ne s'efface pas. */
+  /**
+   * REST seulement, et seulement une tâche ajoutée par un membre (à la main,
+   * ou depuis « Nos avis » au lot 20, après sa confirmation) : la checklist
+   * se coche, elle ne s'efface pas.
+   */
   async remove(
     member: Member,
     listingId: string,
@@ -141,9 +148,9 @@ export class TasksService {
     channel: ActivityChannel = 'web'
   ): Promise<void> {
     const task = await this.findTask(member, listingId, taskId)
-    if (task.origin !== 'manual') {
+    if (task.origin !== 'manual' && task.origin !== 'opinion') {
       throw new BadRequestException(
-        'Seules les tâches saisies à la main peuvent être supprimées ; cochez les autres.'
+        'Seules les tâches saisies à la main ou ajoutées depuis « Nos avis » peuvent être supprimées ; cochez les autres.'
       )
     }
     await this.prisma.$transaction(async tx => {

@@ -105,6 +105,7 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     },
     views: [],
     opinions: [],
+    opinionReveals: [],
     tasks: [],
     priceEvents: [],
     offers: [],

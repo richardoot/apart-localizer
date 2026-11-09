@@ -5,8 +5,8 @@
  * à surveiller, nos avis, les prochaines étapes, la dernière vérification.
  * Les annonces sont fictives et évaluées par le vrai paquet `domain`.
  */
-import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 import { DEFAULT_ASSUMPTIONS } from '@apart/contracts'
 import type { Visit } from '@apart/contracts'
 import {
@@ -14,8 +14,10 @@ import {
   fakeAgencyRequest,
   fakeEvaluated,
   fakeOpinion,
+  fakeOpinionSummary,
   fakeTargetPriceReport,
   fakeTask,
+  mockupOpinions,
 } from '@/test/fixtures'
 import CostBasisBadge from './CostBasisBadge.vue'
 import ListingSynthesis from './ListingSynthesis.vue'
@@ -286,7 +288,7 @@ describe('ListingSynthesis (lot 19)', () => {
     expect(opinions.text()).toContain('Chloé')
     expect(opinions.text()).toContain('4/5')
     expect(opinions.text()).toContain('Lumineux')
-    expect(opinions.text()).toContain('Pas encore donné')
+    expect(opinions.text()).toContain('Tu n’as pas encore donné ton avis')
     expect(opinions.get('[data-testid="opinion-edit"]').text()).toBe(
       'Donner mon avis'
     )
@@ -306,20 +308,75 @@ describe('ListingSynthesis (lot 19)', () => {
     expect(wrapper.emitted('go')).toEqual([['a-faire'], ['historique']])
   })
 
-  it('mon avis se donne sur place : note 1 à 5 (aria-pressed), un mot, enregistré', async () => {
-    const wrapper = mountSynthesis()
+  it('mon avis se donne sur place : note globale 1 à 5 (radiogroup), une phrase, enregistré', async () => {
+    const save = vi.fn().mockResolvedValue(undefined)
+    const wrapper = mountSynthesis({
+      opinionActions: { save, reveal: vi.fn(), addTask: vi.fn() },
+    })
     await wrapper.get('[data-testid="opinion-edit"]').trigger('click')
     const notes = wrapper
       .findAll('[aria-label$="sur 5"]')
       .filter(b => b.element.tagName === 'BUTTON')
     expect(notes).toHaveLength(5)
     await notes[3]?.trigger('click')
-    expect(notes[3]?.attributes('aria-pressed')).toBe('true')
+    expect(notes[3]?.attributes('aria-checked')).toBe('true')
     await wrapper.get('#opinion-text').setValue('  Lumineux, balcon agréable  ')
-    await wrapper.get('form[aria-label="Mon avis"]').trigger('submit')
-    expect(wrapper.emitted('saveOpinion')).toEqual([
-      [{ rating: 4, text: 'Lumineux, balcon agréable' }],
-    ])
+    await wrapper
+      .get('form[aria-labelledby="my-opinion-title"]')
+      .trigger('submit')
+    await flushPromises()
+    expect(save).toHaveBeenCalledWith({
+      rating: 4,
+      text: 'Lumineux, balcon agréable',
+      scores: {},
+      expectedUpdatedAt: null,
+    })
+  })
+
+  it('lot 20 : nos avis nourrissent « Ce qui plaît », « À surveiller » et « À rediscuter »', async () => {
+    const { visible, summary } = fakeOpinionSummary(mockupOpinions())
+    const item = fakeEvaluated(
+      {},
+      { opinions: visible, opinionSummary: summary, tasks: [] }
+    )
+    const scroll = vi.fn()
+    const wrapper = mount(ListingSynthesis, {
+      attachTo: document.body,
+      global: { stubs: { CriteriaFitSection: true, RouterLink: true } },
+      props: {
+        item,
+        evaluation: item.evaluation,
+        targetPrice: item.evaluation.targetPrice,
+        negotiation: null,
+        assumptions: A,
+        members: MEMBERS,
+        meId: MEMBERS[0]?.id ?? null,
+      },
+    })
+    const target = document.getElementById('nos-avis') as HTMLElement
+    target.scrollIntoView = scroll
+    const good = wrapper.get('[data-testid="highlights-good"]')
+    const liked = good.get('[data-highlight="opinions_liked"]')
+    expect(liked.text()).toContain(
+      'Vous aimez tous les deux : extérieur et vue (5 et 5), luminosité (5 et 4), agencement (4 et 4)'
+    )
+    const link = liked.get('button')
+    expect(link.text()).toBe('Nos avis')
+    expect(link.attributes('aria-label')).toContain(': voir nos avis')
+    await link.trigger('click')
+    expect(scroll).toHaveBeenCalled()
+    expect(wrapper.emitted('go')).toBeUndefined()
+    const watch = wrapper.get('[data-testid="highlights-watch"]')
+    expect(
+      watch.get('[data-highlight="opinions_disagreement"]').text()
+    ).toContain(
+      'Vous n’êtes pas d’accord sur le calme (Richard 4, Chloé 2) et « on s’y voit » (4 et 2)'
+    )
+    const discuss = wrapper.get('[data-step="discuss"]')
+    expect(discuss.text()).toBe(
+      'À rediscuterLe calme et « on s’y voit » : vos notes s’écartent de 2 points'
+    )
+    wrapper.unmount()
   })
 
   it('sans évaluation, invite à saisir ; sans données, rien d’inventé', () => {

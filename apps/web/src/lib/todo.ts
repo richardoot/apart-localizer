@@ -74,13 +74,21 @@ const CHECK = /^vérifier\b/i
 
 /**
  * « Pendant la visite » : ce qui reste à vérifier sur place, soit les tâches
- * à nous, ouvertes, libellées « Vérifier … ». Rien d'autre n'est inventé.
+ * à nous, ouvertes, libellées « Vérifier … », et (lot 20) les points « À
+ * revoir à la contre-visite » proposés depuis « Nos avis ». Rien d'autre
+ * n'est inventé.
  */
 export function visitChecklist(
-  tasks: readonly Pick<Task, 'id' | 'label' | 'field' | 'done' | 'position'>[]
+  tasks: readonly (Pick<Task, 'id' | 'label' | 'field' | 'done' | 'position'> &
+    Partial<Pick<Task, 'origin'>>)[]
 ): Array<{ id: string; label: string }> {
   return [...tasks]
-    .filter(t => !t.done && !isAskableTask(t) && CHECK.test(t.label.trim()))
+    .filter(
+      t =>
+        !t.done &&
+        !isAskableTask(t) &&
+        (t.origin === 'opinion' || CHECK.test(t.label.trim()))
+    )
     .sort((a, b) => a.position - b.position)
     .map(t => ({ id: t.id, label: t.label }))
 }

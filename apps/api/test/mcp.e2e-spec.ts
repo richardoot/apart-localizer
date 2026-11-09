@@ -728,7 +728,7 @@ describe('MCP (e2e)', () => {
         rating: 4,
         text: 'Lumineux',
       })
-      expect(opinion.content[0]?.text).toContain('Avis de Chloé')
+      expect(opinion.content[0]?.text).toContain("C'est noté pour Chloé")
       expect(
         (fenced(opinion) as { opinion: { rating: number } }).opinion.rating
       ).toBe(4)
@@ -768,7 +768,14 @@ describe('MCP (e2e)', () => {
         .set(ctx.auth(richard))
         .expect(200)
       expect(detail.body.listing.status).toBe('to_visit')
-      expect(detail.body.opinions).toHaveLength(1)
+      // Lot 20 : Richard n'a pas noté, l'avis de Chloé lui est masqué
+      // (avis à l'aveugle) ; Chloé lit le sien.
+      expect(detail.body.opinions).toHaveLength(0)
+      const own = await request(ctx.server)
+        .get(`/listings/${id}`)
+        .set(ctx.auth(chloe))
+        .expect(200)
+      expect(own.body.opinions).toHaveLength(1)
       expect(detail.body.tasks).toHaveLength(DEFAULT_TASKS.length + 1)
       expect(detail.body.tasks.at(-1).assigneeId).toBe(
         (fenced(task) as { task: { assigneeId: string } }).task.assigneeId

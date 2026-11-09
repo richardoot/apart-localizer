@@ -20,11 +20,23 @@
     VERDICT_LABELS,
   } from '@/lib/labels'
   import type { CostBasis } from '@/lib/labels'
-  import { precisionBadge } from '@apart/domain'
+  import { bestCommonIndexes, precisionBadge } from '@apart/domain'
+  import {
+    commonScoreText,
+    compareCell,
+    disagreementsText,
+  } from '@/lib/opinions'
   import CostBasisBadge from './CostBasisBadge.vue'
   import PrecisionBadge from './PrecisionBadge.vue'
 
-  const props = defineProps<{ result: CompareResult }>()
+  const props = withDefaults(
+    defineProps<{
+      result: CompareResult
+      /** Lot 20 : le membre connecté (« à toi de noter »). */
+      meId?: string | null
+    }>(),
+    { meId: null }
+  )
   const emit = defineEmits<{ open: [id: string] }>()
 
   interface Row {
@@ -155,15 +167,74 @@
       label: 'Tâches à faire',
       value: i => String(i.tasks.filter(t => !t.done).length),
     },
-    {
-      key: 'opinions',
-      label: 'Avis',
-      value: i => {
-        const rated = i.opinions.filter(o => o.rating > 0)
-        return rated.length ? rated.map(o => `${o.rating}★`).join(' · ') : '—'
-      },
-    },
   ])
+
+  /**
+   * Lot 20 : nos avis côte à côte, une ligne par critère (« 4 / 2 » dans
+   * l'ordre des membres, « masqué » à l'aveugle) ; en gras, la meilleure
+   * note commune de la ligne (critère noté par tous, avis visibles).
+   */
+  interface OpinionCompareRow {
+    key: string
+    label: string
+    cells: string[]
+    best: number[]
+  }
+  const reference = computed(
+    () => props.result.items.find(i => i.opinionSummary)?.opinionSummary ?? null
+  )
+  const memberNames = computed(() =>
+    (reference.value?.members ?? []).map(m => m.displayName)
+  )
+  const opinionRows = computed<OpinionCompareRow[]>(() => {
+    const ref0 = reference.value
+    if (!ref0) return []
+    const items = props.result.items
+    const summaries = items.map(i => i.opinionSummary)
+    const global: OpinionCompareRow = {
+      key: 'opinion-global',
+      label: 'Notes globales',
+      cells: summaries.map(s =>
+        s && s.members.length
+          ? s.members
+              .map(m =>
+                m.state === 'masked'
+                  ? 'masqué'
+                  : m.state === 'rated' && m.rating
+                    ? `${m.rating}/5`
+                    : '—'
+              )
+              .join(' / ')
+          : '—'
+      ),
+      best: [],
+    }
+    const criteria = ref0.rows.map(row => {
+      const means = summaries.map(s => {
+        const r = s?.rows.find(x => x.key === row.key)
+        return r && r.common ? r.mean : null
+      })
+      return {
+        key: `opinion-${row.key}`,
+        label: row.label,
+        cells: summaries.map(s => compareCell(s, row.key)),
+        best: bestCommonIndexes(means),
+      }
+    })
+    const common: OpinionCompareRow = {
+      key: 'opinion-common',
+      label: 'Note commune',
+      cells: summaries.map(s => commonScoreText(s)),
+      best: bestCommonIndexes(summaries.map(s => s?.commonScore ?? null)),
+    }
+    const disagreements: OpinionCompareRow = {
+      key: 'opinion-disagreements',
+      label: 'Désaccords',
+      cells: summaries.map(s => disagreementsText(s, props.meId)),
+      best: [],
+    }
+    return [global, ...criteria, common, disagreements]
+  })
 
   const isBest = (row: Row, item: CompareItem): boolean =>
     row.best !== undefined &&
@@ -223,7 +294,45 @@
             <span v-if="isBest(row, item)" aria-label="meilleure">★</span>
           </td>
         </tr>
+        <template v-if="opinionRows.length">
+          <tr class="border-t-2 border-line bg-surface-2">
+            <th
+              scope="colgroup"
+              :colspan="result.items.length + 1"
+              class="px-3 py-2 text-left text-xs font-semibold text-muted"
+            >
+              Nos avis côte à côte
+            </th>
+          </tr>
+          <tr
+            v-for="row in opinionRows"
+            :key="row.key"
+            class="border-t border-line"
+            :data-row="row.key"
+          >
+            <th scope="row" class="px-3 py-2 text-left font-medium text-muted">
+              {{ row.label }}
+            </th>
+            <td
+              v-for="(cell, index) in row.cells"
+              :key="index"
+              class="px-3 py-2 tabular-nums"
+              :class="row.best.includes(index) ? 'font-bold text-fg' : ''"
+              :data-best="row.best.includes(index) ? 'true' : undefined"
+            >
+              {{ cell }}
+            </td>
+          </tr>
+        </template>
       </tbody>
     </table>
+    <p
+      v-if="opinionRows.length && memberNames.length"
+      class="border-t border-line px-3 py-2 text-xs text-muted"
+      data-testid="compare-opinions-legend"
+    >
+      Chaque case : {{ memberNames.join(' / ') }} ; en gras, la meilleure note
+      commune de la ligne.
+    </p>
   </div>
 </template>

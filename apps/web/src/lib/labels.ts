@@ -211,6 +211,9 @@ export const SORT_LABELS: Record<ListingSort, string> = {
   createdAt: "Date d'ajout",
   discount: 'Décote nécessaire',
   lastCheckedAt: 'Dernière vérification',
+  // Lot 20 : nos avis critère par critère.
+  commonScore: 'Note commune',
+  disagreement: 'Plus gros désaccord',
 }
 
 /** Communes de Bordeaux Métropole proposées dans le formulaire (liste ouverte). */

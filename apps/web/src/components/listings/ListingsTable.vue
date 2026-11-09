@@ -10,7 +10,7 @@
     useTable,
   } from '@tanstack/vue-table'
   import type { ColumnDef } from '@tanstack/vue-table'
-  import type { EvaluatedListing } from '@apart/contracts'
+  import type { EvaluatedListing, Member } from '@apart/contracts'
   import {
     fitRank,
     keptLabel,
@@ -26,6 +26,12 @@
     formatSurface,
   } from '@/lib/format'
   import { DISCOUNT_CLASS_CLASSES, DISCOUNT_CLASS_LABELS } from '@/lib/labels'
+  import {
+    commonScoreText,
+    disagreementsText,
+    memberCell,
+    memberSortValue,
+  } from '@/lib/opinions'
   import type { CostBasis } from '@/lib/labels'
   import CostBasisBadge from './CostBasisBadge.vue'
   import DpeBadge from './DpeBadge.vue'
@@ -43,8 +49,12 @@
       items: EvaluatedListing[]
       /** Lot 14 : l'onglet « Hors critères » (depuis quand). */
       outTab?: boolean
+      /** Lot 20 : les membres actifs (une colonne d'avis chacun). */
+      members?: readonly Member[]
+      /** Lot 20 : le membre connecté (« à toi de noter »). */
+      meId?: string | null
     }>(),
-    { outTab: false }
+    { outTab: false, members: () => [], meId: null }
   )
   const emit = defineEmits<{ open: [id: string]; compare: [ids: string[]] }>()
 
@@ -90,16 +100,77 @@
       h(CostBasisBadge, { basis, compact: true }),
     ])
 
-  const averageRating = (item: EvaluatedListing): number => {
-    const rated = item.opinions.filter(o => o.rating > 0)
-    return rated.length
-      ? rated.reduce((s, o) => s + o.rating, 0) / rated.length
-      : Number.NEGATIVE_INFINITY
-  }
+  /** Lot 20 : la note commune pour le tri (en attente en bas). */
+  const commonValue = (item: EvaluatedListing): number =>
+    item.opinionSummary?.commonScore ?? Number.NEGATIVE_INFINITY
+
+  /**
+   * Lot 20 : nos avis, une colonne par membre actif (note globale · moyenne
+   * des critères, « masqué » à l'aveugle), la note commune et les
+   * désaccords ; à la place de l'ancienne colonne « Avis ».
+   */
+  const opinionColumns = computed(() => [
+    ...props.members
+      .filter(m => m.status === 'active')
+      .map(member =>
+        helper.accessor(row => memberSortValue(row.opinionSummary, member.id), {
+          id: `opinion-${member.id}`,
+          header: member.displayName,
+          cell: ctx => {
+            const text = memberCell(ctx.row.original.opinionSummary, member.id)
+            return h(
+              'span',
+              {
+                class: text === 'masqué' || text === '—' ? 'text-muted' : '',
+                'data-testid': 'opinion-member',
+              },
+              text
+            )
+          },
+          sortFn: 'basic',
+        })
+      ),
+    helper.accessor(row => commonValue(row), {
+      id: 'commonScore',
+      header: 'Note commune',
+      cell: ctx => {
+        const text = commonScoreText(ctx.row.original.opinionSummary)
+        return h(
+          'strong',
+          {
+            class:
+              text === 'en attente' || text === '—'
+                ? 'font-normal text-muted'
+                : 'font-display text-base',
+            'data-testid': 'common-score',
+          },
+          text
+        )
+      },
+      sortFn: 'basic',
+    }),
+    helper.accessor(row => row.opinionSummary?.maxGap ?? -1, {
+      id: 'disagreements',
+      header: 'Désaccords',
+      cell: ctx => {
+        const summary = ctx.row.original.opinionSummary
+        const text = disagreementsText(summary, props.meId)
+        return h(
+          'span',
+          {
+            class: `whitespace-normal ${summary?.disagreementKeys.length ? 'text-warn' : 'text-muted'}`,
+            'data-testid': 'disagreements',
+          },
+          text
+        )
+      },
+      sortFn: 'basic',
+    }),
+  ])
 
   // Les accesseurs rendent des types différents (texte, nombre) : la liste
   // est rapportée au type de colonne générique que `useTable` attend.
-  const columns = [
+  const baseColumns = [
     helper.display({
       id: 'select',
       header: () =>
@@ -391,16 +462,17 @@
       },
       sortFn: 'basic',
     }),
-    helper.accessor(row => averageRating(row), {
-      id: 'opinion',
-      header: 'Avis',
-      cell: ctx => {
-        const rated = ctx.row.original.opinions.filter(o => o.rating > 0)
-        return rated.length ? rated.map(o => `${o.rating}★`).join(' · ') : '—'
-      },
-      sortFn: 'basic',
-    }),
-  ] as unknown as ColumnDef<typeof features, EvaluatedListing, unknown>[]
+  ]
+  /** Les colonnes d'avis juste après le prix (maquette : prix, verdict, avis). */
+  const priceIndex = baseColumns.findIndex(c => c.id === 'price')
+  const columns = computed(
+    () =>
+      [
+        ...baseColumns.slice(0, priceIndex + 1),
+        ...opinionColumns.value,
+        ...baseColumns.slice(priceIndex + 1),
+      ] as unknown as ColumnDef<typeof features, EvaluatedListing, unknown>[]
+  )
 
   const data = computed(() => props.items)
 
