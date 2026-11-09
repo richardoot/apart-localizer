@@ -96,6 +96,7 @@ describe('Lot 6 : confort (e2e)', () => {
     const workspace = await ctx.prisma.workspace.create({
       data: {
         name: 'Richard et Chloé',
+        decideTogether: false,
         members: {
           create: [
             {

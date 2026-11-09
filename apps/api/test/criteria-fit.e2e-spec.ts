@@ -619,7 +619,7 @@ describe('Adéquation aux critères (e2e, lot 14)', () => {
     const header = lines[0]?.split(';') ?? []
     // Après les colonnes du lot 15, en fin de ligne (puis celles des lots 18
     // et 20).
-    expect(header.slice(-13)).toEqual([
+    expect(header.slice(-14)).toEqual([
       'Identifiant',
       'Vérifiée le',
       'Vue en ligne le',
@@ -633,6 +633,7 @@ describe('Adéquation aux critères (e2e, lot 14)', () => {
       'Note commune (/5)',
       'Désaccords',
       'Notes par critère',
+      'Décision en attente',
     ])
     expect(lines).toHaveLength(3)
     expect(

@@ -67,7 +67,7 @@ import {
   portalLastRunText,
 } from '@/lib/exploration'
 import {
-  inboxFromQuery,
+  stageFromQuery,
   queryFromFilters,
   filtersFromQuery,
   useFiltersStore,
@@ -304,23 +304,21 @@ describe('les textes d’une carte « À valider »', () => {
   })
 })
 
-describe('le store : « À valider » dans l’URL', () => {
+describe('le store : « À valider » dans l’URL (lot 21 : une étape)', () => {
   it('lu, écrit et basculé', () => {
-    expect(inboxFromQuery({ vue: 'a-valider' })).toBe(true)
-    expect(inboxFromQuery({ vue: ['a-valider'] })).toBe(true)
-    expect(inboxFromQuery({})).toBe(false)
-    expect(queryFromFilters(filtersFromQuery({}), 'cards', true)).toEqual({
+    expect(stageFromQuery({ etape: 'a-valider' })).toBe('a-valider')
+    expect(stageFromQuery({})).toBeNull()
+    expect(
+      queryFromFilters(filtersFromQuery({}), 'cards', 'a-valider')
+    ).toEqual({
       view: 'cards',
-      vue: 'a-valider',
+      etape: 'a-valider',
     })
     const store = useFiltersStore()
-    store.loadFromQuery({ vue: 'a-valider', fit: 'out' })
-    expect(store.fitTab).toBe('drafts')
-    store.setFitTab('out')
-    expect(store.fitTab).toBe('out')
-    expect(store.routeQuery).toEqual({ fit: 'out' })
-    store.setFitTab('drafts')
-    expect(store.routeQuery).toEqual({ fit: 'out', vue: 'a-valider' })
+    store.loadFromQuery({ etape: 'a-valider' })
+    expect(store.stage).toBe('a-valider')
+    store.setStage('a-etudier')
+    expect(store.routeQuery).toEqual({ etape: 'a-etudier' })
   })
 })
 

@@ -469,7 +469,7 @@ describe('Lot 18 : liens des portails et vendeur (e2e, REST)', () => {
       .expect(200)
     const row = csv.text.split('\r\n').find(line => line.includes('balcon sud'))
     expect(row).toMatch(
-      /;Agence;\[Exemple\] Immobilier des Chartrons;EX-2041;Leboncoin : https:\/\/www\.leboncoin\.fr\/[^|]+ \| SeLoger : https:\/\/www\.seloger\.com\/[^;]+;;;$/
+      /;Agence;\[Exemple\] Immobilier des Chartrons;EX-2041;Leboncoin : https:\/\/www\.leboncoin\.fr\/[^|]+ \| SeLoger : https:\/\/www\.seloger\.com\/[^;]+;;;;$/
     )
   })
 

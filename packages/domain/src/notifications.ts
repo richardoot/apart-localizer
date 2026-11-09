@@ -6,6 +6,12 @@ import type {
 } from '@apart/contracts'
 import { activityActorName } from './activity.js'
 import type { ActivityRecord } from './activity.js'
+import {
+  createdByDecision,
+  decisionNotificationText,
+  decisionNotificationType,
+  decisionRecipients,
+} from './decision-activity.js'
 import { formatEuros } from './format.js'
 import { opinionNotificationText } from './opinion-activity.js'
 import { fitChangeFromListing } from './whats-new.js'
@@ -27,8 +33,8 @@ import { fitChangeFromListing } from './whats-new.js'
  * Les préférences par type et par canal s'appliquent ensuite, côté API.
  */
 
-/** Lot 16 : l'onglet « À valider » de la page Annonces. */
-export const DRAFTS_INBOX_URL = '/annonces?vue=a-valider'
+/** Lot 16 : l'étape « À valider » de la page Annonces (lot 21 : `?etape=`). */
+export const DRAFTS_INBOX_URL = '/annonces?etape=a-valider'
 
 export interface NotificationEvent extends ActivityRecord {
   listingId: string | null
@@ -57,6 +63,11 @@ function field(record: unknown, key: string): unknown {
     : undefined
 }
 
+/** Lot 21 : une décision à plusieurs a sa propre notification. */
+function isQuietCriteriaChange(after: unknown): boolean {
+  return field(after, 'quiet') === true
+}
+
 function str(record: unknown, key: string): string | null {
   const value = field(record, key)
   return typeof value === 'string' ? value : null
@@ -66,9 +77,13 @@ function str(record: unknown, key: string): string | null {
 export function notificationTypeOf(
   event: NotificationEvent
 ): NotificationType | null {
+  // Lot 21 : les décisions à plusieurs (une notification par session de tri).
+  const decisionType = decisionNotificationType(event.action, event.after)
+  if (decisionType !== undefined) return decisionType
   switch (event.action) {
     case 'listing.created':
-      return 'listing_created'
+      // Lot 21 : un brouillon gardé à plusieurs : la décision a sa notification.
+      return createdByDecision(event.after) ? null : 'listing_created'
     case 'listing.status_changed':
       return 'status_changed'
     case 'task.created':
@@ -82,7 +97,10 @@ export function notificationTypeOf(
     case 'criteria.matched':
       // Lot 14 : seulement quand l'annonce a bougé ; une entrée due à un
       // critère ou aux hypothèses modifiés, ou au rattrapage, n'alerte pas.
-      return fitChangeFromListing(event.after) ? 'criteria_matched' : null
+      return fitChangeFromListing(event.after) &&
+        !isQuietCriteriaChange(event.after)
+        ? 'criteria_matched'
+        : null
     case 'offer.updated': {
       const response = str(event.after, 'response')
       return response &&
@@ -168,6 +186,31 @@ export function notificationsForActivity(
   const who = activityActorName(event, names)
   const title = context.listingTitle ?? 'une annonce'
   const url = event.listingId ? `/annonces/${event.listingId}` : null
+  if (type === 'decision_proposed' || type === 'decision_resolved') {
+    // Lot 21 : le texte d'un retour de tri est propre à chaque auteur.
+    return decisionRecipients(
+      event.action,
+      event.after,
+      event.actorMemberId,
+      context.members.map(m => m.id)
+    ).map(recipientId => ({
+      recipientId,
+      type,
+      ...decisionNotificationText({
+        action: event.action,
+        before: event.before,
+        after: event.after,
+        actorName:
+          (event.actorMemberId
+            ? names.get(event.actorMemberId)?.displayName
+            : null) ?? 'Un membre',
+        listingId: event.listingId,
+        listingTitle: context.listingTitle,
+        recipientId,
+      }),
+      listingId: event.listingId,
+    }))
+  }
   if (type === 'opinion_added') {
     // Lot 20 : une phrase par destinataire (désaccords avec lui, ou « à toi
     // de noter » sans les notes) ; le prénom du membre, même par Claude.

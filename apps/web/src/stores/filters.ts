@@ -1,60 +1,38 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import {
+  CriteriaFitLevelSchema,
   ListingFiltersSchema,
-  MAIN_TAB_FIT_LEVELS,
   ListingListQuerySchema,
   listingFiltersFromQuery,
   listingFiltersToQuery,
 } from '@apart/contracts'
 import type {
-  CriteriaFitLevel,
   ListingFilters,
   ListingFiltersInput,
-  ListingStatus,
   PointRadius,
   SellerType,
+  WorkflowStage,
 } from '@apart/contracts'
+import { isWorkflowStage, statusesOfStage } from '@apart/domain'
 import type { LocationQueryRaw } from 'vue-router'
 
-export type ListingView = 'table' | 'cards' | 'map'
+/** Liste (lignes de l'étape, par défaut), cartes, carte ; le tableau complet garde la comparaison. */
+export type ListingView = 'list' | 'table' | 'cards' | 'map'
 
 /**
- * L'onglet de la liste : « Dans les critères » ou « Hors critères » (lot 14),
- * ou « À valider » (lot 16 : brouillons reçus par e-mail ou trouvés par
- * Claude, `?vue=a-valider`).
+ * Lot 21 (ADR 0031) : la page Annonces par étapes (`?etape=`). Les anciens
+ * liens (`?vue=a-valider`, `?fit=`, `?status=`) sont redirigés
+ * (`legacyStageRedirect`) ; `filters.status` et `filters.fit` restent lus
+ * pour cela, l'étape les remplace à l'écran.
  */
-export type FitTab = 'main' | 'out' | 'drafts'
 
-/** Lot 16 : le paramètre de l'onglet « À valider ». */
-export const DRAFTS_TAB_QUERY = { vue: 'a-valider' } as const
-
-/** L'onglet d'un filtre `fit` : « Hors critères » dès que le niveau out est demandé. */
-export function fitTabOf(fit: readonly CriteriaFitLevel[] | undefined): FitTab {
-  return fit?.includes('out') ? 'out' : 'main'
-}
-
-/**
- * Les niveaux de l'onglet principal après une pastille cochée ou décochée :
- * tous (ou aucun) = pas de filtre, l'onglet par défaut avec les annonces
- * gardées.
- */
-export function toggledFitLevels(
-  current: readonly CriteriaFitLevel[] | undefined,
-  level: CriteriaFitLevel
-): CriteriaFitLevel[] | undefined {
-  const base: CriteriaFitLevel[] = (current ?? MAIN_TAB_FIT_LEVELS).filter(
-    l => l !== 'out'
-  )
-  const next = base.includes(level)
-    ? base.filter(l => l !== level)
-    : [...base, level]
-  const all = MAIN_TAB_FIT_LEVELS.every(l => next.includes(l))
-  return next.length === 0 || all
-    ? undefined
-    : MAIN_TAB_FIT_LEVELS.filter(l => next.includes(l))
-}
-export const LISTING_VIEWS: readonly ListingView[] = ['table', 'cards', 'map']
+export const LISTING_VIEWS: readonly ListingView[] = [
+  'list',
+  'cards',
+  'map',
+  'table',
+]
 
 /**
  * Lot 18 : le filtre « Vendeur » de la liste, en quatre choix ; chacun est
@@ -126,28 +104,39 @@ export function filtersFromQuery(query: Query): FilterState {
   return rest
 }
 
-/** Lot 16 : l'onglet « À valider » est ouvert (`?vue=a-valider`). */
-export function inboxFromQuery(query: Query): boolean {
-  return firstValue(query.vue) === DRAFTS_TAB_QUERY.vue
+/** Lot 21 : l'étape de l'URL (`?etape=`), ou null si elle n'y est pas. */
+export function stageFromQuery(query: Query): WorkflowStage | null {
+  const stage = firstValue(query.etape)
+  return isWorkflowStage(stage) ? stage : null
 }
 
 export function viewFromQuery(query: Query): ListingView {
   const view = firstValue(query.view)
   return LISTING_VIEWS.includes(view as ListingView)
     ? (view as ListingView)
-    : 'table'
+    : 'list'
 }
 
 /** L'inverse : la chaîne de requête de la page, vue comprise, défauts omis. */
 export function queryFromFilters(
   filters: FilterState,
   view: ListingView,
-  inbox = false
+  stage: WorkflowStage | null = null
 ): LocationQueryRaw {
   const query: LocationQueryRaw = listingFiltersToQuery(filters)
-  if (view !== 'table') query.view = view
-  if (inbox) query.vue = DRAFTS_TAB_QUERY.vue
+  if (view !== 'list') query.view = view
+  if (stage) query.etape = stage
   return query
+}
+
+/** Lot 21 : ce qu'une étape demande à l'API : ses statuts, toute l'adéquation. */
+export function stageApiFilters(
+  stage: WorkflowStage
+): Pick<ListingFilters, 'status' | 'fit'> {
+  return {
+    status: statusesOfStage(stage),
+    fit: [...CriteriaFitLevelSchema.options],
+  }
 }
 
 /**
@@ -157,9 +146,9 @@ export function queryFromFilters(
  */
 export const useFiltersStore = defineStore('filters', () => {
   const filters = ref<FilterState>(filtersFromQuery({}))
-  const view = ref<ListingView>('table')
-  /** Lot 16 : l'onglet « À valider » est ouvert. */
-  const inbox = ref(false)
+  const view = ref<ListingView>('list')
+  /** Lot 21 : l'étape ouverte ; null tant que l'URL n'en dit rien. */
+  const stage = ref<WorkflowStage | null>(null)
 
   const activeCount = computed(() => {
     const f = filters.value
@@ -197,14 +186,6 @@ export const useFiltersStore = defineStore('filters', () => {
     filters.value = next
   }
 
-  function toggleStatus(status: ListingStatus): void {
-    const current = filters.value.status ?? []
-    const next = current.includes(status)
-      ? current.filter(s => s !== status)
-      : [...current, status]
-    patch({ status: next.length ? next : undefined })
-  }
-
   function setNear(near: PointRadius | undefined): void {
     patch({ near })
   }
@@ -215,25 +196,9 @@ export const useFiltersStore = defineStore('filters', () => {
     patch({ sellerType: types ? [...types] : undefined })
   }
 
-  const fitTab = computed<FitTab>(() =>
-    inbox.value ? 'drafts' : fitTabOf(filters.value.fit)
-  )
-
-  /**
-   * Lot 14 : change d'onglet ; « Hors critères » = le niveau out seulement.
-   * Lot 16 : « À valider » garde les filtres de la liste pour le retour.
-   */
-  function setFitTab(tab: FitTab): void {
-    if (tab === 'drafts') {
-      inbox.value = true
-      return
-    }
-    inbox.value = false
-    patch({ fit: tab === 'out' ? ['out'] : undefined })
-  }
-
-  function toggleFitLevel(level: CriteriaFitLevel): void {
-    patch({ fit: toggledFitLevels(filters.value.fit, level) })
+  /** Lot 21 : change d'étape, les filtres restent. */
+  function setStage(next: WorkflowStage): void {
+    stage.value = next
   }
 
   function setSort(
@@ -250,27 +215,24 @@ export const useFiltersStore = defineStore('filters', () => {
   function loadFromQuery(query: Query): void {
     filters.value = filtersFromQuery(query)
     view.value = viewFromQuery(query)
-    inbox.value = inboxFromQuery(query)
+    stage.value = stageFromQuery(query)
   }
 
   const routeQuery = computed(() =>
-    queryFromFilters(filters.value, view.value, inbox.value)
+    queryFromFilters(filters.value, view.value, stage.value)
   )
 
   return {
     filters,
     view,
-    inbox,
+    stage,
     activeCount,
     routeQuery,
     apiFilters,
     patch,
-    toggleStatus,
     setNear,
     setSellerChoice,
-    fitTab,
-    setFitTab,
-    toggleFitLevel,
+    setStage,
     setSort,
     reset,
     loadFromQuery,

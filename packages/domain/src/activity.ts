@@ -22,6 +22,11 @@ import type {
 import { formatEuros } from './format.js'
 import { describeAgencyActivity } from './agency-activity.js'
 import { describeLinkActivity, portalWhere } from './link-activity.js'
+import {
+  describeDecisionActivity,
+  draftDecisionSummary,
+  statusChangeSummary,
+} from './decision-activity.js'
 import { describeOpinionActivity } from './opinion-activity.js'
 
 /**
@@ -399,7 +404,11 @@ export function describeActivity(
       ]
       const reason = text(after, 'reason')
       if (reason) changes.push(change('discardReason', null, reason))
-      return describe('a changé le statut', changes)
+      // Lot 21 : une décision appliquée cite son auteur et qui confirme.
+      return describe(
+        statusChangeSummary(before, after) ?? 'a changé le statut',
+        changes
+      )
     }
     case 'listing.price_changed':
       return describe('a enregistré un nouveau prix', [
@@ -582,11 +591,15 @@ export function describeActivity(
       )
     }
     case 'draft.accepted':
-      return describe(`a ajouté à la liste une annonce ${draftOrigin(after)}`)
+      return describe(
+        draftDecisionSummary(action, after) ??
+          `a ajouté à la liste une annonce ${draftOrigin(after)}`
+      )
     case 'draft.dismissed': {
       const reason = text(after, 'reason')
+      const decided = draftDecisionSummary(action, after)
       return describe(
-        `a écarté une annonce ${draftOrigin(after)}${reason ? ` : « ${reason} »` : ''}`
+        `${decided ?? `a écarté une annonce ${draftOrigin(after)}`}${reason ? ` : « ${reason} »` : ''}`
       )
     }
     // Lot 16 : brouillons nés d'une exploration des portails par Claude.
@@ -649,6 +662,9 @@ export function describeActivity(
         change('name', text(before, 'name'), text(after, 'name')),
       ])
     default: {
+      // Lot 21 : propositions, réponses, sessions de tri.
+      const decision = describeDecisionActivity(action, after)
+      if (decision) return describe(decision.summary, decision.changes)
       // Lot 20 : avis par critère, « Voir quand même », réglages des critères.
       const opinion = describeOpinionActivity(
         action,

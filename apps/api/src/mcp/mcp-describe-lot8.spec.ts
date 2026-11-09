@@ -29,6 +29,7 @@ const me: WorkspaceMe = {
     id: WS,
     name: 'Appartement',
     createdAt: AT,
+    decideTogether: true,
     members: [
       richard,
       member({

@@ -3,6 +3,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import {
   filtersFromQuery,
   queryFromFilters,
+  stageApiFilters,
+  stageFromQuery,
   useFiltersStore,
   viewFromQuery,
 } from './filters'
@@ -37,12 +39,31 @@ describe('filtres ⇄ URL', () => {
     expect(filters.status).toBeUndefined()
     expect(filters.sort).toBe('score')
     expect(viewFromQuery({ view: 'map' })).toBe('map')
-    expect(viewFromQuery({ view: 'x' })).toBe('table')
-    expect(viewFromQuery({})).toBe('table')
+    expect(viewFromQuery({ view: 'table' })).toBe('table')
+    expect(viewFromQuery({ view: 'x' })).toBe('list')
+    expect(viewFromQuery({})).toBe('list')
   })
 
-  it('écrit une URL courte : défauts omis, vue seulement hors tableau', () => {
-    expect(queryFromFilters(filtersFromQuery({}), 'table')).toEqual({})
+  it('lot 21 : l’étape se lit et s’écrit dans l’URL ; ce qu’elle demande à l’API', () => {
+    expect(stageFromQuery({ etape: 'a-visiter' })).toBe('a-visiter')
+    expect(stageFromQuery({ etape: ['offres'] })).toBe('offres')
+    expect(stageFromQuery({ etape: 'autre' })).toBeNull()
+    expect(stageFromQuery({})).toBeNull()
+    expect(queryFromFilters(filtersFromQuery({}), 'list', 'archives')).toEqual({
+      etape: 'archives',
+    })
+    expect(stageApiFilters('offres')).toEqual({
+      status: ['offer_made', 'offer_accepted'],
+      fit: ['in', 'to_confirm', 'margin', 'out'],
+    })
+    expect(stageApiFilters('a-valider').status).toEqual([])
+  })
+
+  it('écrit une URL courte : défauts omis, vue seulement hors liste', () => {
+    expect(queryFromFilters(filtersFromQuery({}), 'list')).toEqual({})
+    expect(queryFromFilters(filtersFromQuery({}), 'table')).toEqual({
+      view: 'table',
+    })
     expect(
       queryFromFilters(
         { ...filtersFromQuery({}), commune: ['Pessac'], newForMe: true },
@@ -57,16 +78,12 @@ describe('store des filtres', () => {
     setActivePinia(createPinia())
   })
 
-  it('bascule un statut, compte les filtres actifs et produit la requête API', () => {
+  it('l’étape, le compte des filtres actifs et la requête API', () => {
     const store = useFiltersStore()
     expect(store.activeCount).toBe(0)
-    store.toggleStatus('to_visit')
-    store.toggleStatus('visited')
-    expect(store.filters.status).toEqual(['to_visit', 'visited'])
-    store.toggleStatus('to_visit')
-    expect(store.filters.status).toEqual(['visited'])
-    store.toggleStatus('visited')
-    expect(store.filters.status).toBeUndefined()
+    store.setStage('a-visiter')
+    expect(store.stage).toBe('a-visiter')
+    expect(store.routeQuery).toMatchObject({ etape: 'a-visiter' })
     store.setNear({ longitude: -0.59, latitude: 44.8, radiusMeters: 500 })
     store.patch({ search: 'tram', priceMax: 250_000 })
     expect(store.activeCount).toBe(3)

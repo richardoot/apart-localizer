@@ -5,7 +5,6 @@ import {
   HttpCode,
   Param,
   ParseUUIDPipe,
-  Patch,
   Post,
   Query,
   UseGuards,
@@ -27,10 +26,6 @@ import { InboundEmailService } from './inbound.service'
 import {
   InboundEmailDto,
   InboundEmailResultDto,
-  ListingDraftAcceptResultDto,
-  ListingDraftBatchAcceptDto,
-  ListingDraftBatchAcceptResultDto,
-  ListingDraftDecisionDto,
   ListingDraftDto,
   ListingDraftMergeDto,
   ListingDraftQueryDto,
@@ -89,20 +84,6 @@ export class DraftsController {
     )
   }
 
-  @Post('accept-in-criteria')
-  @HttpCode(200)
-  @ApiOperation({
-    summary:
-      'Lot 16 : ajoute à la liste les brouillons à valider « dans les critères », sans doublon probable à trancher ; les autres restent à valider',
-  })
-  @ZodResponse({ status: 200, type: ListingDraftBatchAcceptResultDto })
-  acceptInCriteria(
-    @CurrentMember() member: Member,
-    @Body() body: ListingDraftBatchAcceptDto
-  ): Promise<ListingDraftBatchAcceptResultDto> {
-    return this.drafts.acceptInCriteria(member, body)
-  }
-
   @Get(':id')
   @ApiOperation({ summary: 'Un brouillon : fiche pré-remplie et doublons' })
   @ZodResponse({ status: 200, type: ListingDraftDto })
@@ -111,20 +92,6 @@ export class DraftsController {
     @Param('id', ParseUUIDPipe) id: string
   ): Promise<ListingDraftDto> {
     return this.drafts.get(member, id)
-  }
-
-  @Post(':id/accept')
-  @HttpCode(200)
-  @ApiOperation({
-    summary:
-      'Lot 16 : « Ajouter à la liste » sans repasser par le formulaire : l’annonce est créée depuis la fiche pré-remplie ; journalisé',
-  })
-  @ZodResponse({ status: 200, type: ListingDraftAcceptResultDto })
-  accept(
-    @CurrentMember() member: Member,
-    @Param('id', ParseUUIDPipe) id: string
-  ): Promise<ListingDraftAcceptResultDto> {
-    return this.drafts.accept(member, id)
   }
 
   @Post(':id/merge')
@@ -168,19 +135,5 @@ export class DraftsController {
     @Param('id', ParseUUIDPipe) id: string
   ): Promise<ListingDraftDto> {
     return this.drafts.distinct(member, id)
-  }
-
-  @Patch(':id')
-  @ApiOperation({
-    summary:
-      "Valide (avec l'annonce créée), écarte (raison facultative) ou remet « à valider » un brouillon écarté ; journalisé",
-  })
-  @ZodResponse({ status: 200, type: ListingDraftDto })
-  decide(
-    @CurrentMember() member: Member,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: ListingDraftDecisionDto
-  ): Promise<ListingDraftDto> {
-    return this.drafts.decide(member, id, body)
   }
 }

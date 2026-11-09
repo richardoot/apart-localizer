@@ -28,6 +28,11 @@ import {
 } from '../exploration/exploration.mapper'
 import { AgencyRequestsService } from '../agency-requests/agency-requests.service'
 import { loadOpinionContext, toOpinionDto } from '../opinions/opinion-context'
+import {
+  decisionInclude,
+  decisionViewOf,
+  loadDecisionContext,
+} from '../decisions/decision-context'
 import { MEMBER_ORDER } from '../workspace/member-order'
 import type { Member } from '../generated/prisma'
 import { LISTING_CSV_COLUMNS, listingCsvRow, toCsv } from './csv'
@@ -197,6 +202,14 @@ export class ExportService {
       include: { scores: { orderBy: { criterionKey: 'asc' } } },
     })
     const fullOpinions = new Map(opinionRows.map(row => [row.id, row]))
+    const [decisionContext, decisionRows] = await Promise.all([
+      loadDecisionContext(this.prisma, member.workspaceId),
+      this.prisma.decisionProposal.findMany({
+        where: { workspaceId: member.workspaceId },
+        include: decisionInclude,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ])
     const byListing = <T extends { listingId: string }>(rows: T[]) => {
       const map = new Map<string, T[]>()
       for (const row of rows) {
@@ -257,6 +270,16 @@ export class ExportService {
       explorations: explorations.map(toExplorationDetail),
       opinionCriteria: opinionContext.criteria,
       opinionSettings: { blind: opinionContext.blind },
+      // Lot 21 : les décisions à plusieurs, tous états, réponses comprises.
+      decideTogether: decisionContext.decideTogether,
+      decisions: decisionRows.map(row => {
+        const { viewer: _viewer, ...decision } = decisionViewOf(
+          row,
+          member,
+          decisionContext
+        )
+        return decision
+      }),
     })
   }
 }

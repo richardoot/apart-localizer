@@ -515,6 +515,45 @@ export async function writeDemoDataset(
         })),
       })
       const listingIdByKey = new Map(dataset.listings.map(l => [l.key, l.id]))
+      // Lot 21 : les décisions à plusieurs.
+      await tx.decisionProposal.createMany({
+        data: dataset.decisions.map(d => ({
+          id: d.id,
+          workspaceId,
+          listingId: d.listingKey
+            ? (listingIdByKey.get(d.listingKey) ?? null)
+            : null,
+          draftId: d.draftId,
+          authorId: idOf(d.author),
+          choice: d.choice,
+          reason: d.reason,
+          state: d.state,
+          resolution: d.resolution,
+          appliedChoice: d.appliedChoice,
+          fromStatus: d.fromStatus,
+          channel: 'web' as const,
+          sessionId: null,
+          notifiedAt: new Date(d.createdAt),
+          closedAt: d.closedAt ? new Date(d.closedAt) : null,
+          closedById: d.closedBy ? idOf(d.closedBy) : null,
+          createdAt: new Date(d.createdAt),
+          updatedAt: new Date(d.closedAt ?? d.createdAt),
+        })),
+      })
+      await tx.decisionResponse.createMany({
+        data: dataset.decisions.flatMap(d =>
+          d.responses.map(r => ({
+            proposalId: d.id,
+            memberId: idOf(r.by),
+            agrees: r.agrees,
+            choice: r.choice,
+            reason: r.reason,
+            notifiedAt: new Date(r.at),
+            createdAt: new Date(r.at),
+            updatedAt: new Date(r.at),
+          }))
+        ),
+      })
       await tx.explorationCandidate.createMany({
         data: dataset.explorations.flatMap(e =>
           e.lines.map(line => ({

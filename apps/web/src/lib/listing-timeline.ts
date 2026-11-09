@@ -27,7 +27,8 @@ import { formatDate, formatEuros } from './format'
  * (« Chloé a donné son avis : 3/5, 7 critères… ») ont leur type et leur
  * filtre « Avis » ; à l'aveugle, la phrase reçue ne dit pas les notes.
  */
-export type TimelineKind = 'price' | 'check' | 'talk' | 'opinion' | 'edit'
+export type TimelineKind =
+  'price' | 'check' | 'talk' | 'opinion' | 'decision' | 'edit'
 export type TimelineFilter = 'all' | TimelineKind
 
 export const TIMELINE_KIND_LABELS: Record<TimelineKind, string> = {
@@ -35,6 +36,7 @@ export const TIMELINE_KIND_LABELS: Record<TimelineKind, string> = {
   check: 'Vérification',
   talk: 'Échange',
   opinion: 'Avis',
+  decision: 'Décision',
   edit: 'Fiche',
 }
 
@@ -48,6 +50,7 @@ export const TIMELINE_FILTERS: ReadonlyArray<{
   { id: 'check', label: 'Vérifications' },
   { id: 'talk', label: 'Échanges' },
   { id: 'opinion', label: 'Avis' },
+  { id: 'decision', label: 'Décisions' },
   { id: 'edit', label: 'Fiche' },
 ]
 
@@ -57,6 +60,7 @@ export const TIMELINE_KIND_CLASSES: Record<TimelineKind, string> = {
   check: 'bg-info-soft text-info',
   talk: 'bg-ai-soft text-ai',
   opinion: 'bg-opinion-soft text-opinion',
+  decision: 'bg-accent-soft text-accent',
   edit: 'bg-surface-2 text-fg',
 }
 
@@ -108,6 +112,10 @@ export function journalKind(entry: Pick<ActivityEntry, 'kind'>): TimelineKind {
       return 'talk'
     case 'opinion':
       return 'opinion'
+    case 'decision':
+    case 'status':
+      // Lot 21 : les propositions et les changements de statut.
+      return 'decision'
     default:
       return 'edit'
   }
@@ -260,6 +268,7 @@ export function timelineCounts(
     check: 0,
     talk: 0,
     opinion: 0,
+    decision: 0,
     edit: 0,
   }
   for (const e of entries) counts[e.kind] += 1

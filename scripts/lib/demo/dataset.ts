@@ -77,6 +77,8 @@ import { DEMO_ACCOUNTS, DEMO_WORKSPACE_NAME } from './accounts.js'
 import { buildDemoExplorations } from './exploration.js'
 import type { DemoExploration, DemoExplorationDraft } from './exploration.js'
 import { buildAgencyExchanges } from './agency.js'
+import { buildDemoDecisions } from './decisions.js'
+import type { DemoDecision } from './decisions.js'
 import type { DemoAgencyRequest, DemoContact } from './agency.js'
 import { DEMO_WORKSPACE_ID, demoId } from './ids.js'
 
@@ -315,6 +317,8 @@ export interface DemoDataset {
   criteria: DemoCriteria[]
   scenarios: DemoScenario[]
   drafts: DemoDraft[]
+  /** Lot 21 : les décisions à plusieurs, une dans chaque état. */
+  decisions: DemoDecision[]
   /** Le journal hors entrées dans les critères (calculées par PostGIS à l'écriture). */
   activity: DemoActivity[]
   /** Lot 16 : explorations fictives et brouillons qu'elles ont déposés. */
@@ -1480,6 +1484,34 @@ export function buildDemoDataset(now: Date = new Date()): DemoDataset {
     log,
   })
 
+  // Lot 21 : les décisions à plusieurs.
+  const allDraftInputs = [...drafts, ...explorationDrafts]
+  const decisions = buildDemoDecisions({
+    at,
+    names: {
+      demo: members.find(m => m.handle === 'demo')?.displayName ?? 'demo',
+      demo2: members.find(m => m.handle === 'demo2')?.displayName ?? 'demo2',
+    },
+    listing: key => listingRef(key),
+    draft: title => {
+      const found = allDraftInputs.find(d => d.input.title === title)
+      if (!found) throw new Error(`Brouillon de démo inconnu : ${title}`)
+      return { id: found.id, title }
+    },
+    log,
+    markStatusLine: (listingKey, decision) => {
+      const line = [...activity]
+        .reverse()
+        .find(
+          a =>
+            a.listingKey === listingKey && a.action === 'listing.status_changed'
+        )
+      if (line) {
+        line.after = { ...(line.after as object), decision }
+      }
+    },
+  })
+
   activity.sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id))
   return {
     workspace: {
@@ -1493,6 +1525,7 @@ export function buildDemoDataset(now: Date = new Date()): DemoDataset {
     criteria,
     scenarios,
     drafts,
+    decisions,
     activity,
     explorations,
     explorationDrafts,

@@ -10,22 +10,10 @@ describe('FiltersBar', () => {
     setActivePinia(createPinia())
   })
 
-  it('bascule un statut à partir de la sélection active implicite', async () => {
-    const store = useFiltersStore()
+  it('lot 21 : plus de pastilles de statut, c’est l’étape qui décide', () => {
     const wrapper = mount(FiltersBar, { props: { communes: ['Talence'] } })
-    const discarded = wrapper.get('button[data-status="discarded"]')
-    expect(discarded.attributes('aria-pressed')).toBe('false')
-    await discarded.trigger('click')
-    expect(store.filters.status).toEqual([
-      'to_study',
-      'to_visit',
-      'visited',
-      'offer_made',
-      'offer_accepted',
-      'discarded',
-    ])
-    await wrapper.get('button[data-status="to_study"]').trigger('click')
-    expect(store.filters.status).not.toContain('to_study')
+    expect(wrapper.find('button[data-status]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Statut')
   })
 
   it('commune, verdict, DPE, prix et tri écrivent dans le store', async () => {

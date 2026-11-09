@@ -238,6 +238,8 @@ export function fakeEvaluated(
     criteriaMatches: [],
     criteriaFit: { ...NO_CRITERIA_FIT },
     criteriaChanges: null,
+    decision: null,
+    stage: null,
     lastCheck: null,
     republication: { from: null, to: null },
     links: [],

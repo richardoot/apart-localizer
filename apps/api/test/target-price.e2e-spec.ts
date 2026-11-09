@@ -50,6 +50,7 @@ describe('Prix cible et négociation (e2e)', () => {
     await ctx.prisma.workspace.create({
       data: {
         name: 'Richard et Chloé',
+        decideTogether: false,
         members: {
           create: [
             {

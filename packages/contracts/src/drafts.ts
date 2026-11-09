@@ -1,7 +1,10 @@
 import { z } from 'zod'
 import { ListingCriteriaFitSchema } from './criteria-fit.js'
+import { DecisionProposalSchema } from './decisions.js'
 import { DuplicateCandidateSchema } from './duplicates.js'
+import { PointSchema } from './geojson.js'
 import { ListingInputSchema } from './listing.js'
+import { ListingEvaluationSchema } from './metrics.js'
 import { ExplorationPortalSchema, ListingPortalSchema } from './portals.js'
 
 /**
@@ -183,6 +186,24 @@ export const ListingDraftSchema = z.object({
     .describe(
       'Lot 18 : date à laquelle un membre a détaché le lien rattaché d’office (« Ce n’est pas la même ») : le brouillon est revenu « À valider »'
     ),
+  // Lot 21 : le tri et la décision à plusieurs.
+  decision: DecisionProposalSchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 21 : la proposition en cours sur ce brouillon (ouverte ou à trancher), telle que le membre connecté la lit ; null sinon'
+    ),
+  evaluation: ListingEvaluationSchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 21 : les chiffres du brouillon (coût tout compris, mensualité, prix cible, verdict) avec les hypothèses de l’espace, calculés à la lecture d’un brouillon en attente ; null sinon'
+    ),
+  located: z
+    .object({ point: PointSchema.nullable() })
+    .nullable()
+    .default(null)
+    .describe(
+      'Lot 21 : le repère du brouillon sur la carte, recalculé hors ligne à la lecture ; null sinon'
+    ),
 })
 export type ListingDraft = z.infer<typeof ListingDraftSchema>
 
@@ -267,7 +288,13 @@ export type ListingDraftBatchAccept = z.infer<
 /** Ce qu'un ajout direct a créé. */
 export const ListingDraftAcceptResultSchema = z.object({
   draft: ListingDraftSchema,
-  listingId: z.string().uuid(),
+  listingId: z
+    .string()
+    .uuid()
+    .nullable()
+    .describe(
+      'L’annonce créée ; lot 21 : null tant que l’accord des membres n’est pas complet (le brouillon porte alors sa proposition)'
+    ),
   title: z.string(),
 })
 export type ListingDraftAcceptResult = z.infer<
@@ -278,10 +305,24 @@ export const ListingDraftBatchAcceptResultSchema = z.object({
   accepted: z.array(
     z.object({
       draftId: z.string().uuid(),
-      listingId: z.string().uuid(),
+      listingId: z
+        .string()
+        .uuid()
+        .nullable()
+        .describe(
+          'L’annonce créée ; null si l’accord reste à obtenir (lot 21)'
+        ),
       title: z.string(),
     })
   ),
+  proposed: z
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .describe(
+      'Lot 21 : brouillons proposés aux autres membres plutôt que créés'
+    ),
   skipped: z
     .number()
     .int()

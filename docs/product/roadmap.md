@@ -3,7 +3,7 @@
 Lots courts, chacun livrable et testé. Les numéros renvoient aux besoins de
 [etude-du-besoin.md](etude-du-besoin.md). Lancement validé le 3 novembre 2026.
 
-État au 9 novembre 2026 : **les lots 0 à 20 sont livrés** côté code, tests et documentation ; les
+État au 9 novembre 2026 : **les lots 0 à 21 sont livrés** côté code, tests et documentation ; les
 lots 0 à 17 sont déployés (Vercel et Supabase cloud ; imports du lot 11, `import:places` et
 `relocate:listings` du lot 12 faits en production ; migrations des lots 14 à 17 appliquées, le
 rattrapage `refresh:criteria-fit` attend les critères de Richard). Le lot 18 (une annonce,
@@ -12,7 +12,9 @@ plusieurs portails) attend son déploiement : migration additive
 existantes dans la migration, sans variable ni import nouveau. Le lot 19 (une fiche, sept
 questions) attend aussi son déploiement, sans migration. Le lot 20 (nos avis, critère par
 critère) attend son déploiement : migration additive `20261110100000_lot20_opinion_criteria`,
-sans rattrapage ni variable nouvelle. Restent les actions
+sans rattrapage ni variable nouvelle. Le lot 21 (suivre ses annonces, étape par étape) attend
+son déploiement : migration additive `20261111100000_lot21_decisions`, sans rattrapage ni
+variable nouvelle. Restent les actions
 d'exploitation (Supabase cloud, Vercel, clés et connecteur :
 [docs/deploiement.md](../deploiement.md) § 11), ce qui est noté « plus tard » dans chaque lot, et
 les critères « Fini quand » qui demandent le déploiement ou un usage réel (lot 1 : déploiement et
@@ -28,7 +30,8 @@ lot 16 : une vraie exploration lancée depuis claude.ai dans le navigateur de Ri
 validation, et sa réponse enregistrée ; lot 18 : une vraie tournée qui retrouve une annonce
 d'agence sur un deuxième portail par sa référence ; lot 19 : une lecture des sept onglets par
 Richard et Chloé sur ordinateur et sur téléphone ; lot 20 : une vraie visite notée à deux, à
-l'aveugle, puis confrontée), à constater après la mise en ligne.
+l'aveugle, puis confrontée ; lot 21 : un vrai tri à deux, par téléphone et sur ordinateur, jusqu'à
+une proposition tranchée), à constater après la mise en ligne.
 
 ## Lot 0 : socle
 
@@ -863,3 +866,40 @@ Fini quand : chacun note de son côté sans voir l'autre, puis la Synthèse dit 
 et où l'on ne l'est pas ; un désaccord devient, d'un clic, un point de la contre-visite ; la liste
 trie par note commune. (Vérifié en tests automatisés, e2e REST et MCP JSON-RPC compris, et sur
 captures Chromium, jeu fictif ; à confirmer par Richard et Chloé après une vraie visite.)
+
+## Lot 21 : suivre ses annonces, étape par étape
+
+Statut : livré (ADR 0031).
+
+- **Pourquoi** : la page Annonces mélangeait tout et Richard s'y perdait ; il veut une vue par
+  étape, un mode pour tout classer, et que l'autre membre valide un changement d'étape.
+- **Étapes** : une barre à la place des onglets d'adéquation et des pastilles de statut (`?etape=`) :
+  À valider (brouillons, « On la garde ? »), À étudier (« Ça vaut une visite ? »), À visiter (sans
+  date d'abord), Visitées (avis manquants, note commune, désaccords), Offres, Archives (Repêcher) ;
+  anciens liens redirigés ; hors critères repliés en bas ; filtres derrière « Filtres » ; Liste,
+  Cartes et Carte dans chaque étape ; le tableau complet reste accessible depuis les filtres.
+- **Ce qui t'attend** : à trier, à confirmer après l'autre, à trancher ensemble, visites à
+  planifier, avis à donner (sans note révélée) ; chaque élément ouvre le bon travail.
+- **Mode tri** (`/annonces/tri`, bureau et téléphone) : une annonce à la fois, À étudier ou À
+  visiter, Écarter (raison en un clic ou texte libre), Passer, raccourcis E, P, A, Annuler, bilan ;
+  position dans l'URL. Le passage du second membre (`?mode=confirmer`) : d'accord, non avec son
+  choix à la place, plus tard. « À trancher ensemble » (`/annonces/a-trancher`) : les deux choix
+  côte à côte, un clic suffit.
+- **Décisions à plusieurs** : garder ou écarter un brouillon, passer À visiter, écarter : une
+  proposition quand l'espace a au moins deux membres actifs et « Décider à plusieurs » activé
+  (réglage d'espace réservé aux propriétaires) ; le reste s'applique tout de suite. Un brouillon
+  gardé devient une annonce à l'accord complet. Caducité, membre retiré, « Décider sans attendre ».
+- **Notifications** : une par session de tri, dans chaque sens ; réglables dans les préférences
+  (`decision_proposed`, `decision_resolved`) ; hors session, aussitôt.
+- **MCP** : pas d'outil nouveau (39) ; `set_listing_status` propose au nom du membre connecté et le
+  dit ; refus quand un autre membre a déjà proposé ; `list_listings` et `get_listing` montrent la
+  proposition en cours.
+- **Export** : `decisions` et `decideTogether` dans le JSON (version 1) ; CSV : « Décision en
+  attente ».
+- **Jeu de démo** : une proposition dans chaque état, chaque étape remplie.
+- Plus tard : un rappel des propositions restées sans réponse, le tri sur mobile hors ligne.
+
+Fini quand : à deux, l'un trie et propose, l'autre confirme ou dit non, et un désaccord se tranche
+d'un clic ; seul, tout s'applique tout de suite ; aucune annonce ne change d'étape à la
+migration. (Vérifié en tests automatisés, e2e REST et MCP JSON-RPC compris, et sur captures
+Chromium, jeu fictif ; à confirmer par Richard et Chloé sur leurs vraies annonces.)

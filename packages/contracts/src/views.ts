@@ -6,6 +6,7 @@ import {
   PriceEventSchema,
   TaskSchema,
 } from './collaboration.js'
+import { DecisionProposalSchema, ListingStageFactsSchema } from './decisions.js'
 import { DuplicateCandidateSchema } from './duplicates.js'
 import { ListingStatusSchema } from './enums.js'
 import { LISTING_PAGE_MAX } from './filters.js'
@@ -104,6 +105,16 @@ export const EvaluatedListingSchema = z.object({
     .default([])
     .describe(
       'Lot 18 : les liens de l’annonce, un par portail où elle est publiée (le principal d’abord, puis du plus ancien au plus récent) : prix affiché, en ligne ou non, origine ; le prix de la fiche est le plus bas des liens en ligne dont le prix est connu'
+    ),
+  decision: DecisionProposalSchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 21 : la proposition en cours sur cette annonce (ouverte ou à trancher), telle que le membre connecté la lit ; le statut ne bouge pas tant que l’accord n’est pas complet ; null sinon'
+    ),
+  stage: ListingStageFactsSchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 21 : ce que les lignes de l’étape affichent (prochaine visite, dernière visite, entrée aux archives)'
     ),
 })
 export type EvaluatedListing = z.infer<typeof EvaluatedListingSchema>

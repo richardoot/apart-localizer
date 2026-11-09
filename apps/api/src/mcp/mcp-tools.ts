@@ -99,6 +99,7 @@ import {
   formatEuros,
   formatPercent,
   keptLabel,
+  mcpDecisionLine,
   mergeAssumptions,
   precisionBadge,
   toleranceSummary,
@@ -125,6 +126,7 @@ import type { VisitsService } from '../visits/visits.service'
 import type { WhatsNewService } from '../whats-new/whats-new.service'
 import type { ExplorationsService } from '../exploration/explorations.service'
 import type { ListingLinksService } from '../listings/listing-links.service'
+import type { DecisionsService } from '../decisions/decisions.service'
 import { describeLinksAndSeller } from './mcp-links'
 import {
   addOpinion,
@@ -162,6 +164,8 @@ export interface McpToolContext {
   agency: AgencyRequestsService
   /** Lot 18 : les liens d'une annonce sur les portails. */
   links: ListingLinksService
+  /** Lot 21 : les décisions à plusieurs. */
+  decisions: DecisionsService
 }
 
 const CHANNEL = 'mcp' as const
@@ -256,6 +260,8 @@ export function describeListing(item: EvaluatedListing): string {
     `location ${RENTAL_VERDICT_LABELS[item.evaluation.rental.verdict]}`,
   ]
   parts.push(`repère : ${precisionBadge(item.listing.location).label}`)
+  // Lot 21 : la proposition en cours.
+  if (item.decision) parts.push(mcpDecisionLine(item.decision))
   // Lot 18 : les portails et le vendeur.
   if (item.links.length > 1) {
     const offline = item.links.filter(l => !l.online).length
@@ -919,6 +925,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         'Lot 14 : chaque annonce porte son adéquation aux critères actifs (`criteriaFit` : meilleur niveau in « dans les critères », to_confirm « à confirmer » (adresse au quartier ou à la commune dont le contour touche le périmètre, ou donnée manquante), margin « à la marge » (dépassement dans la marge de tolérance), out « hors critères » ; raisons chiffrées ; détail par critère ; `kept` quand une annonce hors critères reste dans la liste pour une offre en cours ou une visite prévue). ' +
         'Lot 18 : chaque annonce porte ses liens (`links` : un par portail, prix affiché, en ligne ou non, lien principal d’abord) et son vendeur (`listing.sellerType` agency, mandatary, private, unknown ; `sellerName` agence ou réseau ; `sellerReference`) ; filtres `sellerType` (unknown = à relever), `multiPortal: true` (deux liens ou plus) et `reference` (la référence de l’agence, espaces et tirets ignorés) ; `search` trouve aussi une référence. ' +
         'Sans filtre `fit`, la réponse est l’onglet « Dans les critères » de l’application (in, to_confirm, margin, plus les hors critères gardées) ; `fit: ["out"]` donne l’onglet « Hors critères » (rien n’est perdu), `fit` liste exactement les niveaux voulus. Sans critère actif, tout est « dans les critères ». `fit` de la réponse compte les annonces par niveau. ' +
+        'Lot 21 : chaque annonce porte la proposition en cours (`decision` : auteur, choix, raison, qui on attend, à trancher ou non) ; le statut affiché reste le statut réel tant que l’accord n’est pas complet. ' +
         'Lot 20 : chaque annonce porte les avis visibles par le membre connecté et leur confrontation (`opinionSummary` : note commune, désaccords à partir de 2 points, en attente) ; filtre `opinions` (to_discuss : « À rediscuter », un désaccord ; pending : « Avis en attente », un avis manque ou est masqué) ; tris `commonScore` (note commune) et `disagreement` (plus gros désaccord). À l’aveugle, l’avis d’un autre membre reste masqué tant que le membre connecté n’a pas noté.',
       inputSchema: McpListListingsInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -949,6 +956,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         'Lot 12 : la précision du repère et son placement (`listing.location.placement` : adresse, quartier reconnu dans `district` avec sa zone et son texte, lieu-dit OpenStreetMap, centre de la commune ou point saisi) ; `context.approximation` dit quand les distances partent du centre du quartier ou de la commune (à lire « ≈ »). Dites-le au membre et proposez de préciser l’adresse. ' +
         'Lot 14 : `criteriaFit`, l’adéquation aux critères actifs : meilleur niveau, raisons, « depuis », et pour chaque critère le niveau, les raisons et le détail filtre par filtre (`checks` : valeur de l’annonce, seuil, marge appliquée). Une annonce « à confirmer » à cause de l’adresse (`locationPending`) sera tranchée en précisant l’adresse (update_listing). ' +
         'Lot 18 : « Où la trouver » (`links` : chaque portail avec son prix affiché, l’écart au plus bas, en ligne ou non, l’origine du lien et son identifiant `id` à passer en `linkId` à check_listing et apply_listing_check) et « Qui la vend » (`listing.sellerType`, `sellerName`, `sellerReference` : la référence à chercher sur les autres portails). Le prix de la fiche est le plus bas des liens en ligne. ' +
+        'Lot 21 : `decision`, la proposition en cours sur cette annonce (auteur, choix, raison, `waitingFor`, état `open` ou `to_settle`) ; répondre, trancher ou décider sans attendre se fait dans l’application, jamais par Claude. ' +
         'Lot 20 : « Nos avis », critère par critère : les avis visibles par le membre connecté (`opinions` : note globale, phrase, `scores` par critère de 1 rédhibitoire à 5 excellent avec un mot, `afterVisit`, `seenBefore`, `updatedAt` à repasser en `expectedUpdatedAt` à add_opinion) et leur confrontation (`opinionSummary` : moyenne par personne, écart et accord par critère, désaccords à partir de 2 points, note commune, bilan). À l’aveugle, l’avis d’un autre membre est masqué tant que le membre connecté n’a pas noté : seuls son prénom et son nombre de critères sont donnés ; ne cherchez pas à le deviner. Le verdict ne dépend pas des avis.',
       inputSchema: McpGetListingInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -1162,7 +1170,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       title: 'Changer le statut',
       description:
         'Statuts : to_study, to_visit, visited, offer_made, offer_accepted, offer_refused, discarded (raison obligatoire), sold_or_withdrawn. ' +
-        '`expectedStatus` est le garde-fou optimiste : refus si le statut actuel diffère. Portée listings:write.',
+        '`expectedStatus` est le garde-fou optimiste : refus si le statut actuel diffère. ' +
+        'Lot 21 : dans un espace à plusieurs où « Décider à plusieurs » est activé, passer en to_visit ou discarded ne change pas le statut : l’appel crée une proposition au nom du membre connecté, l’annonce ne bouge pas tant que les autres membres n’ont pas confirmé dans l’application. S’il existe déjà une proposition d’un autre membre, l’appel est refusé : Claude ne confirme jamais à la place d’un autre, ne tranche pas et ne décide pas sans attendre. Les autres statuts (visite faite, offre, vendue, retour à étudier) s’appliquent tout de suite et rendent caduque une proposition ouverte. Portée listings:write.',
       inputSchema: McpSetListingStatusInputSchema,
       annotations: {
         readOnlyHint: false,
@@ -1175,12 +1184,20 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       answer(async () => {
         const denied = writeRefusal(ctx.scopes)
         if (denied) return denied
-        const item = await ctx.listings.setStatus(
-          ctx.member,
-          listingId,
-          { status, reason, ...(expectedStatus ? { expectedStatus } : {}) },
-          CHANNEL
-        )
+        const { item, proposal, outcome, message } =
+          await ctx.decisions.changeStatus(
+            ctx.member,
+            listingId,
+            { status, reason, ...(expectedStatus ? { expectedStatus } : {}) },
+            CHANNEL
+          )
+        // Lot 21 : une décision à deux devient une proposition en son nom.
+        if (outcome === 'proposed') {
+          return dataResult(`${message} — ${describeListing(item)}`, {
+            ...item,
+            proposal,
+          })
+        }
         return dataResult(
           [
             `Statut : ${LISTING_STATUS_LABELS[item.listing.status]}${reason ? ` (${reason})` : ''} — ${describeListing(item)}`,

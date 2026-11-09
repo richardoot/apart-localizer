@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { ref } from 'vue'
-  import { ListingStatusSchema } from '@apart/contracts'
+  import { DISCARD_QUICK_REASONS, ListingStatusSchema } from '@apart/contracts'
   import type { ListingStatus } from '@apart/contracts'
   import { LISTING_STATUS_LABELS } from '@/lib/labels'
 
@@ -15,7 +15,11 @@
   const error = ref<string | null>(null)
 
   function onSelect(event: Event): void {
-    const next = (event.target as HTMLSelectElement).value as ListingStatus
+    const select = event.target as HTMLSelectElement
+    const next = select.value as ListingStatus
+    // Lot 21 : le statut affiché reste le statut réel tant que la décision
+    // n'est pas appliquée (le menu crée peut-être une proposition).
+    select.value = props.status
     if (next === props.status) return
     if (next === 'discarded') {
       pending.value = next
@@ -24,6 +28,7 @@
     emit('change', { status: next, reason: null })
   }
 
+  const quickReason = DISCARD_QUICK_REASONS
   function confirmDiscard(): void {
     if (!reason.value.trim()) {
       error.value = 'Écarter une annonce demande une raison.'
@@ -65,7 +70,11 @@
         v-model="reason"
         class="rounded-lg border border-line bg-bg px-3 py-1.5 text-sm"
         placeholder="Trop cher, DPE G, copro en procédure…"
+        list="discard-reasons-list"
       />
+      <datalist id="discard-reasons-list">
+        <option v-for="r in quickReason" :key="r" :value="r" />
+      </datalist>
       <p v-if="error" class="text-xs text-bad" role="alert">{{ error }}</p>
       <div class="flex gap-2">
         <button

@@ -256,8 +256,8 @@ describe('CSV pour un tableur français', () => {
     expect(cell('Notes par critère')).toBe('')
   })
 
-  it('les colonnes des lots 15, 14, 18 et 20 viennent après « Identifiant » : aucune colonne ne se décale', () => {
-    expect(LISTING_CSV_COLUMNS.slice(-13)).toEqual([
+  it('les colonnes des lots 15, 14, 18, 20 et 21 viennent après « Identifiant » : aucune colonne ne se décale', () => {
+    expect(LISTING_CSV_COLUMNS.slice(-14)).toEqual([
       'Identifiant',
       'Vérifiée le',
       'Vue en ligne le',
@@ -271,6 +271,7 @@ describe('CSV pour un tableur français', () => {
       'Note commune (/5)',
       'Désaccords',
       'Notes par critère',
+      'Décision en attente',
     ])
   })
 })

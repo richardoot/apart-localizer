@@ -14,6 +14,7 @@ import {
   ListingInputSchema,
 } from '@apart/contracts'
 import type {
+  DecisionProposal,
   ListingCriteriaFit,
   ListingDraft,
   ListingDraftAcceptResult,
@@ -22,13 +23,24 @@ import type {
   ListingDraftDecision,
   ListingDraftMerge,
   ListingDraftStatus,
+  ListingEvaluation,
   ListingInput,
   ListingObserved,
+  Point,
 } from '@apart/contracts'
 import { detectLinkPortal, formatEuros, linkKey } from '@apart/domain'
+import type { DecisionJournal } from '@apart/domain'
 import { z } from 'zod'
 import { ActivityService } from '../activity/activity.service'
+import {
+  closeOpenDecisionsAsStale,
+  decisionInclude,
+  decisionViewOf,
+  loadDecisionContext,
+  openDecisionWhere,
+} from '../decisions/decision-context'
 import { CandidateFitService } from '../exploration/candidate-fit.service'
+import { evaluateListing } from '../listings/evaluate'
 import { ListingChecksService } from '../listings/listing-checks.service'
 import { ListingLinksService } from '../listings/listing-links.service'
 import { ListingsService } from '../listings/listings.service'
@@ -58,7 +70,26 @@ const draftInclude = {
     },
   },
   attachedLink: { select: { id: true, portal: true } },
+  // Lot 21 : la proposition en cours (au plus une, contrainte en base).
+  decisionProposals: {
+    where: openDecisionWhere,
+    include: decisionInclude,
+    take: 1,
+  },
 } as const
+
+/** Lot 21 : ce qu'un brouillon en attente montre en plus à la lecture. */
+interface DraftReading {
+  fit: ListingCriteriaFit
+  evaluation: ListingEvaluation
+  located: { point: Point | null }
+  decision: DecisionProposal | null
+}
+
+/** Lot 21 : une écriture née d'une décision à plusieurs. */
+export interface DraftWriteOptions {
+  decision?: DecisionJournal
+}
 
 type DraftRowWithCheck = Prisma.ListingDraftGetPayload<{
   include: typeof draftInclude
@@ -86,7 +117,11 @@ export function toDraftDto(
     listing?: DraftListingRef | null
     attachedLink?: { id: string; portal: ListingPortal } | null
   },
-  fit: ListingCriteriaFit | null = null
+  fit: ListingCriteriaFit | null = null,
+  reading: Pick<
+    DraftReading,
+    'evaluation' | 'located' | 'decision'
+  > | null = null
 ): ListingDraft {
   return ListingDraftSchema.parse({
     id: row.id,
@@ -141,6 +176,9 @@ export function toDraftDto(
           }
         : null,
     detachedAt: row.detachedAt?.toISOString() ?? null,
+    decision: reading?.decision ?? null,
+    evaluation: reading?.evaluation ?? null,
+    located: reading?.located ?? null,
   })
 }
 
@@ -203,23 +241,35 @@ export class DraftsService {
       orderBy: { receivedAt: 'desc' },
       take: 100,
     })
-    const fits =
-      status === 'pending' ? await this.fits(member, rows) : new Map()
-    return rows.map(row => toDraftDto(row, fits.get(row.id) ?? null))
+    const readings =
+      status === 'pending'
+        ? await this.readings(member, rows)
+        : new Map<string, DraftReading>()
+    return rows.map(row => {
+      const reading = readings.get(row.id) ?? null
+      return toDraftDto(row, reading?.fit ?? null, reading)
+    })
   }
 
   async get(member: Member, id: string): Promise<ListingDraft> {
     const row = await this.row(member, id)
-    const fits =
-      row.status === 'pending' ? await this.fits(member, [row]) : new Map()
-    return toDraftDto(row, fits.get(row.id) ?? null)
+    const readings =
+      row.status === 'pending'
+        ? await this.readings(member, [row])
+        : new Map<string, DraftReading>()
+    const reading = readings.get(row.id) ?? null
+    return toDraftDto(row, reading?.fit ?? null, reading)
   }
 
-  /** L'adéquation des brouillons, calculée à la lecture, sans réseau. */
-  private async fits(
+  /**
+   * Ce qu'un brouillon en attente montre à la lecture, sans réseau :
+   * l'adéquation, les chiffres avec les hypothèses de l'espace (lot 21), le
+   * repère pour la carte et la proposition en cours.
+   */
+  private async readings(
     member: Member,
-    rows: readonly DraftRow[]
-  ): Promise<Map<string, ListingCriteriaFit>> {
+    rows: readonly DraftRowWithCheck[]
+  ): Promise<Map<string, DraftReading>> {
     const items = await Promise.all(
       rows.map(async row => {
         const located = await this.fit.offlineLocation(
@@ -229,7 +279,27 @@ export class DraftsService {
         return { key: row.id, listing: located.listing, area: located.area }
       })
     )
-    return this.fit.fits(member.workspaceId, items)
+    const [context, decisions] = await Promise.all([
+      this.fit.context(member.workspaceId),
+      loadDecisionContext(this.prisma, member.workspaceId),
+    ])
+    const fits = await this.fit.fits(member.workspaceId, items, context)
+    const proposals = new Map(
+      rows.map(row => [row.id, row.decisionProposals[0] ?? null])
+    )
+    const readings = new Map<string, DraftReading>()
+    for (const item of items) {
+      const fit = fits.get(item.key)
+      if (!fit) continue
+      const proposal = proposals.get(item.key) ?? null
+      readings.set(item.key, {
+        fit,
+        evaluation: evaluateListing(item.listing, context.base),
+        located: { point: item.listing.location.point ?? null },
+        decision: proposal ? decisionViewOf(proposal, member, decisions) : null,
+      })
+    }
+    return readings
   }
 
   /**
@@ -239,7 +309,8 @@ export class DraftsService {
   async decide(
     member: Member,
     id: string,
-    decision: ListingDraftDecision
+    decision: ListingDraftDecision,
+    options: DraftWriteOptions = {}
   ): Promise<ListingDraft> {
     const row = await this.row(member, id)
     if (decision.status === 'pending') return this.restore(member, row)
@@ -286,10 +357,21 @@ export class DraftsService {
             url: row.url,
             origin: originOf(row),
             ...(reason ? { reason } : {}),
+            ...(options.decision ? { decision: options.decision } : {}),
           },
         },
         tx
       )
+      // Lot 21 : un fait appliqué directement rend caduque la proposition.
+      if (!options.decision) {
+        await closeOpenDecisionsAsStale(tx, this.activity, {
+          workspaceId: member.workspaceId,
+          target: { draftId: id },
+          actorMemberId: member.id,
+          channel: 'web',
+          why: 'le brouillon a été traité',
+        })
+      }
       return tx.listingDraft.findUniqueOrThrow({
         where: { id },
         include: draftInclude,
@@ -340,7 +422,11 @@ export class DraftsService {
    * brouillon est réservé avant la création : deux clics ne créent pas deux
    * annonces.
    */
-  async accept(member: Member, id: string): Promise<ListingDraftAcceptResult> {
+  async accept(
+    member: Member,
+    id: string,
+    options: DraftWriteOptions = {}
+  ): Promise<ListingDraftAcceptResult> {
     const row = await this.row(member, id)
     this.assertPending(row)
     const claimed = await this.prisma.listingDraft.updateMany({
@@ -363,6 +449,7 @@ export class DraftsService {
         channel: 'web',
         provenance: row.extractedBy === 'ai' ? 'ai' : 'listing',
         ignoreDuplicates: duplicates.length > 0,
+        viaDecision: options.decision !== undefined,
       })
     } catch (error) {
       await this.prisma.listingDraft.update({
@@ -385,10 +472,21 @@ export class DraftsService {
             url: row.url,
             origin: originOf(row),
             direct: true,
+            ...(options.decision ? { decision: options.decision } : {}),
           },
         },
         tx
       )
+      // Lot 21 : un fait appliqué directement rend caduque la proposition.
+      if (!options.decision) {
+        await closeOpenDecisionsAsStale(tx, this.activity, {
+          workspaceId: member.workspaceId,
+          target: { draftId: id },
+          actorMemberId: member.id,
+          channel: 'web',
+          why: 'le brouillon a été traité',
+        })
+      }
       return tx.listingDraft.update({
         where: { id },
         data: { listingId },
@@ -427,7 +525,7 @@ export class DraftsService {
         title: result.title,
       })
     }
-    return { accepted, skipped }
+    return { accepted, skipped, proposed: 0 }
   }
 
   /**
@@ -540,6 +638,14 @@ export class DraftsService {
         },
         tx
       )
+      // Lot 21 : « c'est la même » s'applique tout de suite.
+      await closeOpenDecisionsAsStale(tx, this.activity, {
+        workspaceId: member.workspaceId,
+        target: { draftId: id },
+        actorMemberId: member.id,
+        channel: 'web',
+        why: 'le brouillon a été reconnu comme une annonce suivie',
+      })
       return tx.listingDraft.findUniqueOrThrow({
         where: { id },
         include: draftInclude,

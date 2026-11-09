@@ -12,5 +12,6 @@ import { InboundEmailService } from './inbound.service'
   imports: [AiModule, ListingsModule, ExplorationModule],
   controllers: [InboundEmailController, DraftsController],
   providers: [InboundEmailService, DraftsService, InboundSignatureGuard],
+  exports: [DraftsService],
 })
 export class InboundModule {}

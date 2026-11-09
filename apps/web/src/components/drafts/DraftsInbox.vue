@@ -3,7 +3,6 @@
   import { useDrafts } from '@/composables/useDrafts'
   import { draftSourceLabel, draftWhen, pendingDuplicate } from '@/lib/drafts'
   import { formatEuros } from '@/lib/format'
-  import { DRAFTS_TAB_QUERY } from '@/stores/filters'
 
   /**
    * La boîte « À valider » de la Synthèse : combien d'annonces attendent
@@ -33,7 +32,7 @@
         >
       </h2>
       <RouterLink
-        :to="{ name: 'listings', query: { ...DRAFTS_TAB_QUERY } }"
+        :to="{ name: 'listings', query: { etape: 'a-valider' } }"
         class="inline-flex min-h-10 items-center rounded-lg bg-accent px-3 text-sm font-medium text-accent-fg"
         data-testid="drafts-open"
       >

@@ -212,7 +212,8 @@ describe('Historique (lot 19) : une seule chronologie', () => {
     expect(journalKind({ kind: 'link' })).toBe('check')
     expect(journalKind({ kind: 'check' })).toBe('check')
     expect(journalKind({ kind: 'agency' })).toBe('talk')
-    expect(journalKind({ kind: 'status' })).toBe('edit')
+    expect(journalKind({ kind: 'status' })).toBe('decision')
+    expect(journalKind({ kind: 'decision' })).toBe('decision')
     expect(journalKind({ kind: 'visit' })).toBe('edit')
     // Lot 20 : les avis ont leur type et leur filtre.
     expect(journalKind({ kind: 'opinion' })).toBe('opinion')
@@ -222,6 +223,7 @@ describe('Historique (lot 19) : une seule chronologie', () => {
       'Vérifications',
       'Échanges',
       'Avis',
+      'Décisions',
       'Fiche',
     ])
     const entries = listingTimeline({
@@ -245,6 +247,7 @@ describe('Historique (lot 19) : une seule chronologie', () => {
       check: 1,
       talk: 1,
       opinion: 1,
+      decision: 0,
       edit: 0,
     })
     expect(filterTimeline(entries, 'talk')).toHaveLength(1)

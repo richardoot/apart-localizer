@@ -38,6 +38,7 @@ import {
   registerExplorationTools,
 } from './mcp-exploration'
 import { AgencyRequestsService } from '../agency-requests/agency-requests.service'
+import { DecisionsService } from '../decisions/decisions.service'
 import { registerAgencyPrompts, registerAgencyTools } from './mcp-agency'
 import { McpAuthGuard } from './mcp-auth.guard'
 import type { McpAuthenticatedRequest } from './mcp-auth.guard'
@@ -77,7 +78,8 @@ export class McpController {
     private readonly checks: ListingChecksService,
     private readonly agency: AgencyRequestsService,
     private readonly exploration: ExplorationsService,
-    private readonly links: ListingLinksService
+    private readonly links: ListingLinksService,
+    private readonly decisions: DecisionsService
   ) {}
 
   @Post()
@@ -126,6 +128,7 @@ export class McpController {
       exploration: this.exploration,
       agency: this.agency,
       links: this.links,
+      decisions: this.decisions,
     }
     registerTools(server, context)
     // Lot 15 : vérification des annonces sur le portail.

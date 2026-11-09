@@ -236,6 +236,7 @@ export function toWorkspaceDto(
     createdAt: workspace.createdAt.toISOString(),
     members: [...active, ...removed].map(toMemberDto),
     invitations: invitations.map(row => toInvitationDto(row, now, names)),
+    decideTogether: workspace.decideTogether,
   }
 }
 

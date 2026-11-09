@@ -68,6 +68,12 @@ export const WorkspaceSchema = z.object({
   invitations: z
     .array(InvitationSchema)
     .describe('Invitations en attente, expirées ou refusées (lot 8)'),
+  decideTogether: z
+    .boolean()
+    .default(true)
+    .describe(
+      'Lot 21 : « Décider à plusieurs » : un changement d’étape attend l’accord de tous les membres actifs (réservé aux propriétaires, activé par défaut)'
+    ),
 })
 export type Workspace = z.infer<typeof WorkspaceSchema>
 

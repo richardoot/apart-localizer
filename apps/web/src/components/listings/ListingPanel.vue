@@ -3,11 +3,17 @@
   import { useQuery } from '@tanstack/vue-query'
   import { DialogTitle } from 'reka-ui'
   import type {
+    DecisionChoice,
+    DecisionResult,
     ListingStatus,
     OfferInputRaw,
     OfferUpdate,
   } from '@apart/contracts'
-  import { todoPendingCount } from '@apart/domain'
+  import {
+    proposedMessage,
+    todoPendingCount,
+    waitingNames,
+  } from '@apart/domain'
   import SidePanel from '@/components/ui/SidePanel.vue'
   import {
     createListingEditor,
@@ -29,6 +35,8 @@
   import type { OpinionActions } from '@/lib/opinions'
   import { DEFAULT_LISTING_TAB, listingTabQuestion } from '@/lib/listing-tabs'
   import type { ListingTab } from '@/lib/listing-tabs'
+  import DecisionBanner from '@/components/workflow/DecisionBanner.vue'
+  import { useDecisionActions } from '@/composables/useWorkflow'
   import ListingHeader from './ListingHeader.vue'
   import ListingSynthesis from './ListingSynthesis.vue'
   import ListingTabs from './ListingTabs.vue'
@@ -264,15 +272,74 @@
     if (!item.value) return
     failure.value = null
     try {
-      await mutations.setStatus.mutateAsync({
+      const saved = await mutations.setStatus.mutateAsync({
         id: item.value.listing.id,
         change: { ...change, expectedStatus: item.value.listing.status },
       })
       if (change.status === suggestedStatus.value) suggestedStatus.value = null
+      // Lot 21 : une décision à deux devient une proposition.
+      if (saved.decision && saved.listing.status !== change.status) {
+        message.value = proposedMessage(waitingNames(saved.decision))
+      }
     } catch (err) {
       report(err)
     }
   }
+
+  // Lot 21 : répondre, retirer, décider sans attendre depuis la fiche.
+  const decisions = useDecisionActions()
+  async function act(promise: Promise<DecisionResult>): Promise<void> {
+    failure.value = null
+    try {
+      const result = await promise
+      message.value = result.message
+    } catch (err) {
+      report(err)
+    }
+  }
+  function withdrawDecision(): void {
+    if (item.value?.decision) {
+      void act(decisions.withdraw.mutateAsync(item.value.decision.id))
+    }
+  }
+  function decideNow(): void {
+    if (item.value?.decision) {
+      void act(decisions.decideNow.mutateAsync(item.value.decision.id))
+    }
+  }
+  function agreeDecision(): void {
+    if (item.value?.decision) {
+      void act(
+        decisions.respond.mutateAsync({
+          id: item.value.decision.id,
+          input: { agree: true },
+        })
+      )
+    }
+  }
+  function disagreeDecision(
+    choice: DecisionChoice,
+    reason: string | null
+  ): void {
+    if (item.value?.decision) {
+      void act(
+        decisions.respond.mutateAsync({
+          id: item.value.decision.id,
+          input: {
+            agree: false,
+            choice,
+            ...(reason ? { reason } : {}),
+          },
+        })
+      )
+    }
+  }
+  const decisionBusy = computed(
+    () =>
+      decisions.withdraw.isPending.value ||
+      decisions.decideNow.isPending.value ||
+      decisions.respond.isPending.value
+  )
 
   const run = async (
     action: Promise<unknown>,
@@ -455,6 +522,16 @@
       >
         {{ message }}
       </p>
+
+      <DecisionBanner
+        v-if="item.decision"
+        :decision="item.decision"
+        :busy="decisionBusy"
+        @withdraw="withdrawDecision"
+        @decide-now="decideNow"
+        @agree="agreeDecision"
+        @disagree="disagreeDecision"
+      />
 
       <div
         :id="`listing-panel-${tab}`"

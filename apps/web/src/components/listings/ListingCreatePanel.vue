@@ -18,7 +18,7 @@
   import { useListingMutations } from '@/composables/useListings'
   import { useAttachLink } from '@/composables/useListingLinks'
   import { useLivePreview } from '@/composables/useLivePreview'
-  import { useAssumptions } from '@/composables/useWorkspace'
+  import { useAssumptions, useWorkspace } from '@/composables/useWorkspace'
   import { ApiError, api } from '@/lib/api'
   import { useDrafts } from '@/composables/useDrafts'
   import {
@@ -71,6 +71,17 @@
   const draft = ref<ListingDraft | null>(null)
   const notice = ref<string | null>(null)
   const { decide, merge } = useDrafts()
+  /**
+   * Lot 21 : à plusieurs, un brouillon se garde depuis « À valider » : la
+   * fiche pré-remplie se lit, mais l'annonce naît à l'accord complet.
+   */
+  const { data: workspaceData, activeMembers } = useWorkspace()
+  const draftNeedsAgreement = computed(
+    () =>
+      draft.value !== null &&
+      (workspaceData.value?.workspace.decideTogether ?? false) &&
+      activeMembers.value.length >= 2
+  )
 
   const form = ref(emptyForm())
   const errors = ref<Record<string, string>>({})
@@ -259,6 +270,11 @@
   }
 
   async function save(): Promise<void> {
+    if (draftNeedsAgreement.value) {
+      failure.value =
+        'Dans un espace à plusieurs, on garde un brouillon depuis « À valider » : les autres membres confirment, puis l’annonce est créée.'
+      return
+    }
     const { input, errors: issues } = validateForm(form.value)
     errors.value = issues
     if (!input) return
@@ -338,7 +354,7 @@
       >
         {{ notice }}
         <button
-          v-if="draft"
+          v-if="draft && !draftNeedsAgreement"
           type="button"
           class="ml-2 text-xs underline"
           data-testid="dismiss-draft"

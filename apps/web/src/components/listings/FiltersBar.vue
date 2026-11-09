@@ -1,12 +1,10 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import {
-    ACTIVE_LISTING_STATUSES,
     DEFAULT_STALE_DAYS,
     DpeClassSchema,
     LOCATION_PRECISION_LABELS,
     ListingSortSchema,
-    ListingStatusSchema,
     LocationPrecisionFilterSchema,
     OPINIONS_FILTER_LABELS,
     VerdictSchema,
@@ -19,11 +17,7 @@
     SearchCriteriaSummary,
     Verdict,
   } from '@apart/contracts'
-  import {
-    LISTING_STATUS_LABELS,
-    SORT_LABELS,
-    VERDICT_LABELS,
-  } from '@/lib/labels'
+  import { SORT_LABELS, VERDICT_LABELS } from '@/lib/labels'
   import { formatDistance, parseNumberInput } from '@/lib/format'
   import {
     SELLER_FILTER_CHOICES,
@@ -42,24 +36,10 @@
   )
 
   const store = useFiltersStore()
-  const statuses = ListingStatusSchema.options
   const verdicts = VerdictSchema.options
   const dpeClasses = DpeClassSchema.options
   const precisions = LocationPrecisionFilterSchema.options
   const sorts = ListingSortSchema.options
-
-  const selectedStatuses = computed(
-    () => store.filters.status ?? [...ACTIVE_LISTING_STATUSES]
-  )
-  const isActiveDefault = computed(() => store.filters.status === undefined)
-
-  function toggleStatus(status: (typeof statuses)[number]): void {
-    if (isActiveDefault.value) {
-      // Partir de la sélection implicite (actives) plutôt que de rien.
-      store.patch({ status: [...ACTIVE_LISTING_STATUSES] })
-    }
-    store.toggleStatus(status)
-  }
 
   function toggleVerdict(verdict: Verdict): void {
     const current = store.filters.verdict ?? []
@@ -222,28 +202,6 @@
           {{ SORT_LABELS[sort] }}
         </option>
       </select>
-    </div>
-
-    <div class="grid gap-1 sm:col-span-2 lg:col-span-4">
-      <span class="text-xs font-medium text-muted">Statut</span>
-      <div class="flex flex-wrap gap-1.5" role="group" aria-label="Statuts">
-        <button
-          v-for="status in statuses"
-          :key="status"
-          type="button"
-          class="rounded-full border px-2.5 py-0.5 text-xs"
-          :class="
-            selectedStatuses.includes(status)
-              ? 'border-accent bg-accent-soft text-fg'
-              : 'border-line text-muted hover:text-fg'
-          "
-          :aria-pressed="selectedStatuses.includes(status)"
-          :data-status="status"
-          @click="toggleStatus(status)"
-        >
-          {{ LISTING_STATUS_LABELS[status] }}
-        </button>
-      </div>
     </div>
 
     <div class="grid gap-1 sm:col-span-2">

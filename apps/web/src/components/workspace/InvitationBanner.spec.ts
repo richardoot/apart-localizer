@@ -36,6 +36,7 @@ const OWN: WorkspaceMe = {
     createdAt: ME.createdAt,
     members: [ME],
     invitations: [],
+    decideTogether: true,
   },
 }
 const INVITATION: ReceivedInvitation = {

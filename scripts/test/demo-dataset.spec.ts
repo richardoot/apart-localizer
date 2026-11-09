@@ -20,6 +20,7 @@ import {
   notificationsForActivity,
   primaryLink,
   splitOpinionsForViewer,
+  stageOfStatus,
   visibleCriterionKeys,
 } from '@apart/domain'
 import { describe, expect, it } from 'vitest'
@@ -817,5 +818,60 @@ describe('lot 20 : nos avis, critère par critère', () => {
       'custom_cuisine'
     )
     expect(confront('chartrons-t2').disagreementKeys).toEqual(['luminosity'])
+  })
+})
+
+describe('lot 21 : suivre ses annonces, étape par étape', () => {
+  const { decisions } = dataset
+
+  it('une proposition dans chaque état, chaque résolution, des deux côtés', () => {
+    expect(new Set(decisions.map(d => d.state))).toEqual(
+      new Set(['open', 'to_settle', 'applied', 'withdrawn'])
+    )
+    expect(new Set(decisions.map(d => d.resolution))).toEqual(
+      new Set([null, 'agreed', 'without_waiting'])
+    )
+    const open = decisions.filter(d => d.state === 'open')
+    expect(new Set(open.map(d => d.author))).toEqual(new Set(['demo', 'demo2']))
+    expect(open.some(d => d.draftId !== null)).toBe(true)
+    expect(open.some(d => d.listingKey !== null)).toBe(true)
+  })
+
+  it('vise une annonce ou un brouillon, au plus une en cours par cible', () => {
+    for (const d of decisions) {
+      expect((d.listingKey === null) !== (d.draftId === null)).toBe(true)
+    }
+    const running = decisions
+      .filter(d => d.state === 'open' || d.state === 'to_settle')
+      .map(d => d.listingKey ?? d.draftId)
+    expect(new Set(running).size).toBe(running.length)
+  })
+
+  it('un écart a toujours sa raison, un désaccord porte l’autre choix', () => {
+    for (const d of decisions.filter(x => x.choice === 'discard')) {
+      expect(d.reason?.trim()).toBeTruthy()
+    }
+    const clash = decisions.find(d => d.state === 'to_settle')
+    expect(clash?.responses).toEqual([
+      expect.objectContaining({ agrees: false, choice: 'discard' }),
+    ])
+  })
+
+  it('une proposition en cours ne change pas le statut de son annonce', () => {
+    for (const d of decisions) {
+      if (d.state !== 'open' && d.state !== 'to_settle') continue
+      if (d.listingKey === null) continue
+      const row = dataset.listings.find(l => l.key === d.listingKey)
+      expect(row?.input.status).toBe(d.fromStatus)
+    }
+  })
+
+  it('remplit chaque étape à annonces', () => {
+    const stages = new Set(
+      dataset.listings.map(l => stageOfStatus(l.input.status))
+    )
+    expect(stages).toEqual(
+      new Set(['a-etudier', 'a-visiter', 'visitees', 'offres', 'archives'])
+    )
   })
 })

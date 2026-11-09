@@ -13,6 +13,7 @@
     Member,
   } from '@apart/contracts'
   import { useMembers, useWorkspace } from '@/composables/useWorkspace'
+  import { useDecisionSettings } from '@/composables/useWorkflow'
   import { ApiError } from '@/lib/api'
   import { formatDate } from '@/lib/format'
 
@@ -170,6 +171,20 @@
   const canLeave = computed(
     () => me.value?.role !== 'owner' || owners.value > 1
   )
+
+  // Lot 21 : « Décider à plusieurs ».
+  const decisionSettings = useDecisionSettings()
+  async function toggleDecideTogether(value: boolean): Promise<void> {
+    failure.value = null
+    try {
+      await decisionSettings.mutateAsync(value)
+      notice.value = value
+        ? '« Décider à plusieurs » est activé.'
+        : '« Décider à plusieurs » est désactivé.'
+    } catch (error) {
+      report(error, 'Le réglage n’a pas pu être enregistré.')
+    }
+  }
 </script>
 
 <template>
@@ -265,6 +280,42 @@
         class="inline-flex min-h-11 items-center rounded-lg border border-accent px-3 text-sm font-semibold text-accent hover:bg-accent-soft"
         >{{ isOwner ? 'Régler les critères' : 'Voir les critères' }}</RouterLink
       >
+    </section>
+
+    <section
+      v-if="workspace"
+      class="grid gap-2 rounded-xl border border-line bg-surface p-4"
+      aria-labelledby="decide-together-title"
+      data-testid="decide-together"
+    >
+      <h2
+        id="decide-together-title"
+        class="font-display text-base font-semibold"
+      >
+        Réglage de l’espace
+      </h2>
+      <label
+        class="flex min-h-11 items-center gap-2.5 text-sm"
+        :class="isOwner ? 'cursor-pointer' : ''"
+      >
+        <input
+          type="checkbox"
+          class="size-[18px] accent-[var(--accent)]"
+          :checked="workspace.decideTogether"
+          :disabled="!isOwner || decisionSettings.isPending.value"
+          data-testid="decide-together-input"
+          @change="
+            toggleDecideTogether(($event.target as HTMLInputElement).checked)
+          "
+        />
+        Décider à plusieurs : un changement d’étape attend l’accord de tous
+      </label>
+      <p class="text-xs leading-normal text-muted">
+        Sont concernés : garder ou écarter un brouillon, passer en À visiter,
+        écarter une annonce. Une visite faite, une offre acceptée ou refusée,
+        une annonce vendue s’appliquent tout de suite. Seuls les propriétaires
+        changent ce réglage.
+      </p>
     </section>
 
     <section

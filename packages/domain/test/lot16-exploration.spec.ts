@@ -1515,7 +1515,7 @@ describe('journal et notifications', () => {
       { members, listingTitle: null }
     )
     expect(drafts).toHaveLength(2)
-    expect(drafts[0]?.url).toBe('/annonces?vue=a-valider')
+    expect(drafts[0]?.url).toBe('/annonces?etape=a-valider')
   })
 })
 

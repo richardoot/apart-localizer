@@ -151,7 +151,10 @@ hors du dépôt. Un nouveau fichier part du `.env.example` correspondant.
   « Cuisine » ajouté par l'espace ; avis à l'aveugle activé ; deux désaccords sur le T3 de
   Saint-Michel, un sur le T2 des Chartrons, d'accord sur le T2 de Talence Forum et celui du
   Bouscat ; le T2 de la Bastide noté par Sacha seulement, masqué pour Camille tant qu’elle n’a pas
-  noté) ; le journal et les notifications qu'il fait naître. Les
+  noté) ; des décisions à deux (lot 21 : une proposition en attente de Sacha, à confirmer pour
+  Camille, à trancher, appliquée d'un commun accord, décidée sans attendre, retirée, sur des
+  brouillons et des annonces, et de quoi remplir chacune des six étapes) ; le journal et les
+  notifications qu'il fait naître. Les
   liens sont fictifs (`exemple.invalid`, identifiants de portail impossibles « 0000000… »). Les
   dates sont relatives au jour du seed : il y a toujours des « nouvelles », une visite à venir et
   une relance due.
@@ -296,8 +299,8 @@ OAuth vaut lecture et écriture, sans suppression possible ([mcp.md](mcp.md), AD
 critères et leurs liens de recherche ; `triage_candidates` puis `record_exploration` se testent
 avec des annonces fictives (liens `exemple.invalid` ou chemins inventés, `runKey` au choix) :
 aucune page de portail n'est ouverte par l'API, seul Claude (ou vous) ouvre les liens dans le
-navigateur. Les brouillons arrivent dans l'onglet « À valider » de la page Annonces
-(`/annonces?vue=a-valider`), le compte rendu sous la page Critères
+navigateur. Les brouillons arrivent dans l'étape « À valider » de la page Annonces
+(`/annonces?etape=a-valider`), le compte rendu sous la page Critères
 (`/criteres/explorations/<id>`). Le prompt `explore_listings` se lit avec `prompts/get` dans
 l'inspecteur ; sans portail réel, on ne fait que le relire.
 

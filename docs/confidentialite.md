@@ -74,6 +74,12 @@ elles sont protégées.
   membres : son avis porte ensuite « après avoir vu celui de … ». Une notification d'avis ne
   contient jamais de note. Notes et révélations partent avec l'avis, l'annonce ou le membre
   (cascade).
+- **Décisions à plusieurs (lot 21, ADR 0031)** : une proposition garde son auteur, son choix, sa
+  raison (texte libre, 500 caractères au plus) et la réponse de chaque membre ; elle n'est lisible
+  que des membres de l'espace, est dans le journal et l'export JSON, et ne contient aucune note
+  d'avis : « Ce qui t'attend » dit seulement qu'un avis est à donner. Si la ligne d'un membre est
+  effacée en base, ses propositions passées restent sans auteur (à null) et ses réponses partent
+  avec elle.
 - **Retrait d'un membre** : sa ligne reste (nom, adresse, rôle) pour que ses avis, tâches, visites
   et le journal gardent son nom ; son identité est détachée (l'accès est coupé dès la requête
   suivante, MCP compris), ses abonnements push sont supprimés. Un espace quitté pour en rejoindre

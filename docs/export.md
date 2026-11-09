@@ -35,7 +35,8 @@ mensuel (€), Verdict, Location, Prix cible (€), Décote nécessaire (%), Not
 ouvertes, Visites, Dernière offre (€), Ajoutée le, Modifiée le, Identifiant, puis, en fin de ligne
 pour ne décaler aucune colonne existante, Vérifiée le, Vue en ligne le, Dernière vérification
 (lot 15), Adéquation, Raisons de l'adéquation (lot 14), Vendeur, Agence, Référence, Liens
-(lot 18) et Note commune (/5), Désaccords, Notes par critère (lot 20).
+(lot 18), Note commune (/5), Désaccords, Notes par critère (lot 20) et Décision en attente
+(lot 21 : la proposition en cours, « À visiter, proposé par Richard, En attente de Chloé »).
 
 « Vérifiée le » est la dernière vérification sur le portail, quel qu'en soit le résultat ;
 « Dernière vérification » en donne le résultat (« Inchangée », « Mise à jour », « Plus en ligne »,
@@ -127,6 +128,12 @@ de l'écran au membre qui exporte ; l'avis d'un autre membre qu'il ne peut pas e
 pas dans le fichier (ni ses notes, ni sa phrase, ni ses désaccords). C'est le choix le plus
 prudent : un fichier circule plus facilement qu'un écran. Les tâches portent `details` (le
 contexte d'une tâche proposée depuis « Nos avis », `null` par défaut).
+Le lot 21 garde aussi la version 1 (ajouts seulement) : `decideTogether` (le réglage « Décider à
+plusieurs », vrai par défaut) et `decisions` (toutes les propositions de l'espace, de la plus
+récente à la plus ancienne : annonce ou brouillon visé, auteur, choix, raison, état, statut de
+départ, résolution, réponses de chaque membre, dates ; une liste vide dans un export antérieur).
+Une proposition ne porte aucune note d'avis. Le CSV gagne une seule colonne, en fin de ligne,
+« Décision en attente ».
 
 ```text
 {
@@ -157,7 +164,9 @@ contexte d'une tâche proposée depuis « Nos avis », `null` par défaut).
   scenarios: Scenario[],                    // de l'espace et des annonces exportées
   explorations: Exploration[],              // lot 16 : explorations des portails et lignes du compte rendu
   opinionCriteria: OpinionCriterion[],      // lot 20 : critères des avis de l'espace, masqués compris
-  opinionSettings: { blind: boolean }       // lot 20 : avis à l'aveugle
+  opinionSettings: { blind: boolean },      // lot 20 : avis à l'aveugle
+  decideTogether: boolean,                  // lot 21 : réglage « Décider à plusieurs »
+  decisions: ExportDecisionProposal[]       // lot 21 : propositions de l'espace et réponses
 }
 ```
 

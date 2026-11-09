@@ -34,6 +34,7 @@ import {
 import type { MemberRefusal } from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
+import { withdrawDecisionsOf } from '../decisions/decision-context'
 import {
   NotificationDispatcher,
   appLink,
@@ -588,6 +589,13 @@ export class MembersService {
     if (!options.keepDevices) {
       await tx.pushSubscription.deleteMany({ where: { memberId: target.id } })
     }
+    // Lot 21 : on ne l'attend plus ; ses propres propositions sont retirées.
+    await withdrawDecisionsOf(tx, this.activity, {
+      workspaceId: target.workspaceId,
+      memberId: target.id,
+      actorMemberId: byId,
+      channel: CHANNEL,
+    })
     await tx.notification.updateMany({
       where: { recipientId: target.id, pushStatus: 'pending' },
       data: { pushStatus: 'skipped' },

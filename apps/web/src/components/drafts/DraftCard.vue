@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue'
   import type { ListingDraft } from '@apart/contracts'
+  import { decisionDetail, waitingLabel } from '@apart/domain'
   import FitBadge from '@/components/listings/FitBadge.vue'
   import {
     draftFitReason,
@@ -34,8 +35,10 @@
       draft: ListingDraft
       busy?: boolean
       error?: string | null
+      /** Lot 21 : l'espace décide à plusieurs : ajouter et écarter proposent. */
+      agreement?: boolean
     }>(),
-    { busy: false, error: null }
+    { busy: false, error: null, agreement: false }
   )
   const emit = defineEmits<{
     accept: []
@@ -60,7 +63,14 @@
       : `${d.value.listing.rooms} pièce${d.value.listing.rooms > 1 ? 's' : ''}`
   )
 
+  /** Lot 21 : à plusieurs, écarter demande une raison (c'est une proposition). */
+  const reasonRequired = computed(() => props.agreement)
+  const canConfirm = computed(
+    () => !reasonRequired.value || reason.value.trim().length > 0
+  )
+
   function confirmDismiss(): void {
+    if (!canConfirm.value) return
     emit('dismiss', reason.value.trim() || null)
     dismissing.value = false
     reason.value = ''
@@ -181,7 +191,15 @@
     </div>
 
     <div class="grid flex-[1_1_14rem] gap-2" data-testid="draft-actions">
-      <template v-if="d.status === 'pending' && !dismissing">
+      <p
+        v-if="d.decision && d.status === 'pending'"
+        class="rounded-xl bg-surface-2 p-3 text-sm leading-normal"
+        data-testid="draft-decision"
+      >
+        <strong>{{ waitingLabel(d.decision) }}</strong> :
+        {{ decisionDetail(d.decision, null) }}
+      </p>
+      <template v-if="d.status === 'pending' && !dismissing && !d.decision">
         <div class="grid grid-cols-2 gap-2 sm:grid-cols-1">
           <button
             type="button"
@@ -190,7 +208,7 @@
             data-action="accept"
             @click="emit('accept')"
           >
-            Ajouter à la liste
+            {{ agreement ? 'Proposer de la garder' : 'Ajouter à la liste' }}
           </button>
           <button
             type="button"
@@ -199,11 +217,12 @@
             data-action="dismiss"
             @click="dismissing = true"
           >
-            Écarter
+            {{ agreement ? 'Proposer de l’écarter' : 'Écarter' }}
           </button>
         </div>
         <div class="grid grid-cols-2 gap-x-2 sm:grid-cols-1">
           <button
+            v-if="!agreement"
             type="button"
             class="min-h-11 text-sm text-accent underline-offset-2 hover:underline sm:min-h-9"
             data-action="edit"
@@ -225,14 +244,16 @@
         </div>
       </template>
       <form
-        v-else-if="d.status === 'pending'"
+        v-else-if="d.status === 'pending' && !d.decision"
         class="grid gap-2"
         data-testid="dismiss-form"
         @submit.prevent="confirmDismiss"
       >
         <label class="grid gap-1 text-sm">
           Pourquoi l’écarter ?
-          <span class="text-xs text-muted">(facultatif)</span>
+          <span v-if="!reasonRequired" class="text-xs text-muted"
+            >(facultatif)</span
+          >
           <input
             v-model="reason"
             type="text"
@@ -252,10 +273,10 @@
           <button
             type="submit"
             class="min-h-11 rounded-xl bg-fg px-3 text-sm font-semibold text-bg disabled:opacity-60"
-            :disabled="busy"
+            :disabled="busy || !canConfirm"
             data-action="confirm-dismiss"
           >
-            Écarter
+            {{ agreement ? 'Proposer' : 'Écarter' }}
           </button>
         </div>
       </form>

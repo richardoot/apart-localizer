@@ -191,6 +191,18 @@ describe('seed de démonstration (e2e, PostGIS)', () => {
     )
     expect(c.opinion_scores).toBe(report.opinionScores)
     expect(c.opinion_notifications).toBeGreaterThan(0)
+    // Lot 21 : une proposition par état, avec leurs réponses, sans bouger les statuts.
+    const proposals = await db.prisma.decisionProposal.findMany({
+      where: { workspaceId: DEMO_WORKSPACE_ID },
+      include: { responses: true },
+    })
+    expect(proposals).toHaveLength(dataset.decisions.length)
+    expect(new Set(proposals.map(p => p.state))).toEqual(
+      new Set(['open', 'to_settle', 'applied', 'withdrawn'])
+    )
+    expect(proposals.flatMap(p => p.responses)).toHaveLength(
+      dataset.decisions.flatMap(d => d.responses).length
+    )
     const workspace = await db.prisma.workspace.findUniqueOrThrow({
       where: { id: DEMO_WORKSPACE_ID },
       include: { opinionCriteria: { orderBy: { position: 'asc' } } },

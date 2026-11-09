@@ -649,7 +649,7 @@ describe('Lot 20 : nos avis critère par critère (e2e, REST)', () => {
       .split('\r\n')
       .find(line => line.includes('balcon sud'))
     expect(row).toMatch(
-      /;3[,.]2;on s’y voit \(3 points\), calme \(2 points\);Agencement : Richard 4, Chloé 4 \| Calme : Richard 4, Chloé 2 \| On s’y voit : Richard 4, Chloé 1$/
+      /;3[,.]2;on s’y voit \(3 points\), calme \(2 points\);Agencement : Richard 4, Chloé 4 \| Calme : Richard 4, Chloé 2 \| On s’y voit : Richard 4, Chloé 1;$/
     )
   })
 

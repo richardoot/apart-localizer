@@ -86,11 +86,15 @@ export function useCompare(ids: MaybeRef<string[]>) {
 }
 
 /** La liste filtrée ; une page de 200 suffit à deux personnes et quelques dizaines d'annonces. */
-export function useListingList(filters: MaybeRef<ListingFiltersInput>) {
+export function useListingList(
+  filters: MaybeRef<ListingFiltersInput>,
+  enabled: MaybeRef<boolean> = true
+) {
   return useQuery({
     queryKey: computed(() => listingKeys.list(unref(filters))),
     queryFn: () => api.listings.list(unref(filters)),
     placeholderData: previous => previous,
+    enabled: computed(() => unref(enabled)),
   })
 }
 
@@ -113,6 +117,8 @@ export function useListingMutations() {
   function settle(item: EvaluatedListing): void {
     client.setQueryData(listingKeys.detail(item.listing.id), item)
     void client.invalidateQueries({ queryKey: ['listings', 'list'] })
+    // Lot 21 : les compteurs des étapes et « Ce qui t'attend ».
+    void client.invalidateQueries({ queryKey: ['decisions'] })
     // Le prix, le statut et l'historique nourrissent le rang et le brief.
     void client.invalidateQueries({
       queryKey: listingKeys.targetPrice(item.listing.id),

@@ -28,6 +28,8 @@ export function useDrafts() {
     void client.invalidateQueries({ queryKey: draftsKey })
     void client.invalidateQueries({ queryKey: ['listings'] })
     void client.invalidateQueries({ queryKey: ['explorations'] })
+    // Lot 21 : les compteurs des étapes et « Ce qui t'attend ».
+    void client.invalidateQueries({ queryKey: ['decisions'] })
   }
   const decide = useMutation({
     mutationFn: ({

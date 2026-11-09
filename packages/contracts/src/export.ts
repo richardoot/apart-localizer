@@ -7,6 +7,7 @@ import {
   TaskSchema,
 } from './collaboration.js'
 import { ListingSchema } from './listing.js'
+import { ExportDecisionProposalSchema } from './decisions.js'
 import { ListingCheckSchema } from './listing-checks.js'
 import { ListingLinkSchema } from './listing-links.js'
 import { ListingMetricsSchema, TargetPriceSchema } from './metrics.js'
@@ -170,5 +171,15 @@ export const ExportDocumentSchema = z.object({
     .object({ blind: z.boolean() })
     .default({ blind: true })
     .describe('Lot 20 : avis à l’aveugle (vrai par défaut)'),
+  decideTogether: z
+    .boolean()
+    .default(true)
+    .describe('Lot 21 : « Décider à plusieurs » (vrai par défaut)'),
+  decisions: z
+    .array(ExportDecisionProposalSchema)
+    .default([])
+    .describe(
+      'Lot 21 : les propositions de l’espace (ouvertes, à trancher, appliquées, retirées, caduques), de la plus récente à la plus ancienne, avec les réponses par membre (absent dans un export antérieur)'
+    ),
 })
 export type ExportDocument = z.infer<typeof ExportDocumentSchema>

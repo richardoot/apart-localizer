@@ -45,7 +45,6 @@ import {
   ListingListDto,
   ListingListQueryDto,
   ListingPatchDto,
-  ListingStatusChangeDto,
   NegotiationBriefDto,
   PriceEventDto,
   PriceEventInputDto,
@@ -187,20 +186,6 @@ export class ListingsController {
   ): Promise<EvaluatedListingDto> {
     const { update, guards } = splitListingPatch(body)
     return this.listings.update(member, id, update, guards)
-  }
-
-  @Post(':id/status')
-  @HttpCode(200)
-  @ApiOperation({
-    summary: 'Change le statut, avec raison et garde-fou optimiste',
-  })
-  @ZodResponse({ status: 200, type: EvaluatedListingDto })
-  setStatus(
-    @CurrentMember() member: Member,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: ListingStatusChangeDto
-  ): Promise<EvaluatedListingDto> {
-    return this.listings.setStatus(member, id, body)
   }
 
   @Post(':id/seen')

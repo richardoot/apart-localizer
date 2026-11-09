@@ -13,6 +13,7 @@ import {
   fitReasonsText,
   keptLabel,
   precisionBadge,
+  waitingLabel,
 } from '@apart/domain'
 
 /**
@@ -126,6 +127,8 @@ export const LISTING_CSV_COLUMNS = [
   'Note commune (/5)',
   'Désaccords',
   'Notes par critère',
+  // Lot 21, en fin de ligne : la proposition en cours.
+  'Décision en attente',
 ] as const
 
 /** Une ligne par annonce, dans l'ordre de `LISTING_CSV_COLUMNS`. */
@@ -195,7 +198,21 @@ export function listingCsvRow(
     commonScoreCell(item),
     disagreementsCell(item),
     criteriaScoresCell(item),
+    decisionCell(item),
   ]
+}
+
+/** Lot 21 : « À visiter, proposé par Richard, En attente de Chloé », vide sinon. */
+function decisionCell(item: EvaluatedListing): string {
+  const decision = item.decision
+  if (!decision) return ''
+  return [
+    decision.choiceLabel,
+    decision.author ? `proposé par ${decision.author.displayName}` : null,
+    decision.state === 'to_settle' ? 'à trancher' : waitingLabel(decision),
+  ]
+    .filter(Boolean)
+    .join(', ')
 }
 
 /** Lot 20 : la note commune, « en attente » si un avis manque ou est masqué, vide sinon. */

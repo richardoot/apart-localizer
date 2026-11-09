@@ -300,13 +300,16 @@ export class CriteriaMatchService {
     member: Member,
     listingId: string,
     channel: ActivityChannel,
-    trigger: CriteriaFitTrigger = 'updated'
+    trigger: CriteriaFitTrigger = 'updated',
+    options: { quiet?: boolean } = {}
   ): Promise<CriteriaMatchChanges> {
     const result = await this.refresh(member.workspaceId, {
       listingIds: [listingId],
       origin: { cause: 'listing', trigger },
       actorMemberId: member.id,
       channel,
+      // Lot 21 : une décision à plusieurs a sa propre notification.
+      quiet: options.quiet ?? false,
     })
     return (
       result.changes.get(listingId) ?? {
@@ -335,6 +338,8 @@ export class CriteriaMatchService {
       base?: Assumptions
       dryRun?: boolean
       at?: Date
+      /** Lot 21 : pas de notification (une décision à plusieurs a la sienne). */
+      quiet?: boolean
     }
   ): Promise<FitRefreshResult> {
     const now = options.at ?? new Date()
@@ -488,6 +493,7 @@ export class CriteriaMatchService {
               actorMemberId: options.actorMemberId,
               channel: options.channel,
               origin: options.origin,
+              quiet: options.quiet ?? false,
               changes: counted,
               aggregate: { before: aggregateBefore, after: aggregateAfter },
               approximate: new Map(
@@ -589,6 +595,7 @@ export class CriteriaMatchService {
       actorMemberId: string | null
       channel: ActivityChannel
       origin: CriteriaFitOrigin
+      quiet: boolean
       changes: ListingFitPlan['changes']
       aggregate: { before: CriteriaFitLevel | null; after: CriteriaFitLevel }
       approximate: Map<string, boolean>
@@ -619,6 +626,7 @@ export class CriteriaMatchService {
           },
           after: {
             ...originJson(input.origin),
+            ...(input.quiet ? { quiet: true } : {}),
             criteria: list.map(c => ({
               id: c.criteriaId,
               name: c.name,

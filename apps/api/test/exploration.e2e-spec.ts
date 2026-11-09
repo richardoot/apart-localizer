@@ -303,6 +303,8 @@ describe('Exploration par les critères (e2e, lot 16)', () => {
     const workspace = await ctx.prisma.workspace.create({
       data: {
         name: 'Richard et Chloé',
+        // Lot 21 : ces parcours s'appliquent tout de suite.
+        decideTogether: false,
         members: {
           create: [
             {
@@ -670,7 +672,7 @@ describe('Exploration par les critères (e2e, lot 16)', () => {
       )
     ).toMatchObject({
       title: 'Claude a trouvé 4 annonces à valider',
-      url: '/annonces?vue=a-valider',
+      url: '/annonces?etape=a-valider',
     })
     const richardBell = await api()
       .get('/notifications')

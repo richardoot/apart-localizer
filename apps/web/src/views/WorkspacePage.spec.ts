@@ -11,6 +11,7 @@ import { MEMBERS } from '@/test/fixtures'
 
 const apiMock = vi.hoisted(() => ({
   workspace: vi.fn(),
+  decisions: { updateSettings: vi.fn() },
   members: {
     rename: vi.fn(),
     invite: vi.fn(),
@@ -82,6 +83,7 @@ function workspaceFor(
       createdAt: AT,
       members: [RICHARD, CHLOE, FORMER],
       invitations: [PENDING, EXPIRED],
+      decideTogether: true,
       ...over,
     },
   }
@@ -117,6 +119,36 @@ beforeEach(() => {
   vi.clearAllMocks()
   document.body.innerHTML = ''
   apiMock.workspace.mockResolvedValue(workspaceFor(RICHARD))
+})
+
+describe('Décider à plusieurs (lot 21)', () => {
+  it('un propriétaire règle, activé par défaut', async () => {
+    apiMock.decisions.updateSettings.mockResolvedValue(
+      workspaceFor(RICHARD, { decideTogether: false })
+    )
+    const wrapper = await mountPage()
+    const input = wrapper.get('[data-testid="decide-together-input"]')
+    expect((input.element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.get('[data-testid="decide-together"]').text()).toContain(
+      'Seuls les propriétaires changent ce réglage'
+    )
+    await input.setValue(false)
+    await flushPromises()
+    expect(apiMock.decisions.updateSettings).toHaveBeenCalledWith({
+      decideTogether: false,
+    })
+    expect(wrapper.text()).toContain('« Décider à plusieurs » est désactivé.')
+  })
+
+  it('un membre le lit, sans pouvoir le changer', async () => {
+    apiMock.workspace.mockResolvedValue(workspaceFor(CHLOE))
+    const wrapper = await mountPage()
+    expect(
+      wrapper
+        .get('[data-testid="decide-together-input"]')
+        .attributes('disabled')
+    ).toBeDefined()
+  })
 })
 
 describe('WorkspacePage (propriétaire)', () => {

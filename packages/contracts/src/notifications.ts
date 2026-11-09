@@ -19,9 +19,11 @@ export const NotificationTypeSchema = z
     'listing_checked',
     'agency_answer',
     'opinion_added',
+    'decision_proposed',
+    'decision_resolved',
   ])
   .describe(
-    "Type : nouvelle annonce (par l'autre membre ou par le MCP), changement de statut, tâche assignée, annonce entrée dans un critère, réponse à une offre, annonces à valider (reçues par e-mail, ou trouvées par Claude en explorant les portails, lot 16), arrivée d'un membre invité (pour les propriétaires), mise à jour trouvée en vérifiant une annonce sur le portail (prix, charges, plus en ligne, republiée ; lot 15 ; lien d'un autre portail rattaché par Claude ou d'office, lot 18), réponse de l'annonceur enregistrée et champs complétés (lot 17), avis donné ou mis à jour par un autre membre (nombre de désaccords, ou « à toi de noter » sans ses notes ; lot 20)"
+    "Type : nouvelle annonce (par l'autre membre ou par le MCP), changement de statut, tâche assignée, annonce entrée dans un critère, réponse à une offre, annonces à valider (reçues par e-mail, ou trouvées par Claude en explorant les portails, lot 16), arrivée d'un membre invité (pour les propriétaires), mise à jour trouvée en vérifiant une annonce sur le portail (prix, charges, plus en ligne, republiée ; lot 15 ; lien d'un autre portail rattaché par Claude ou d'office, lot 18), réponse de l'annonceur enregistrée et champs complétés (lot 17), avis donné ou mis à jour par un autre membre (nombre de désaccords, ou « à toi de noter » sans ses notes ; lot 20), proposition d'un autre membre à confirmer (une par session de tri ; lot 21), réponse ou décision sur une proposition (confirmée, à trancher, tranchée, décidée sans attendre, retirée ; une par session ; lot 21)"
   )
 export type NotificationType = z.infer<typeof NotificationTypeSchema>
 
@@ -37,6 +39,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
     "Mise à jour d'une annonce (vérification sur le portail, lien ajouté par Claude)",
   agency_answer: "Réponse de l'agence (champs complétés)",
   opinion_added: 'Avis d’un autre membre',
+  decision_proposed: 'Propositions à confirmer (tri d’un autre membre)',
+  decision_resolved: 'Réponses et décisions sur une proposition',
 }
 
 export const NotificationChannelSchema = z
@@ -75,6 +79,8 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: Record<
   listing_checked: { in_app: true, push: true, email: false },
   agency_answer: { in_app: true, push: true, email: false },
   opinion_added: { in_app: true, push: true, email: false },
+  decision_proposed: { in_app: true, push: true, email: false },
+  decision_resolved: { in_app: true, push: true, email: false },
 }
 
 export const NotificationPreferencesSchema = z.object(

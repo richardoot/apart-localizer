@@ -1,4 +1,8 @@
 import {
+  decisionInclude,
+  openDecisionWhere,
+} from '../decisions/decision-context'
+import {
   ListingCheckChangeSchema,
   ListingCheckSchema,
   ListingLinkSchema,
@@ -16,6 +20,7 @@ import {
 import type {
   CheckedLink,
   CriteriaFitEntry,
+  ListingStageFacts,
   CriteriaMatch,
   ListingCriteriaFit,
   FieldProvenanceMap,
@@ -54,6 +59,12 @@ const linkedSelect = { id: true, title: true, status: true } as const
 
 /** Une annonce avec tout ce que l'API renvoie. */
 export const listingInclude = {
+  // Lot 21 : la proposition en cours (au plus une, contrainte en base).
+  decisionProposals: {
+    where: openDecisionWhere,
+    include: decisionInclude,
+    take: 1,
+  },
   renovation: { include: { items: { orderBy: { position: 'asc' } } } },
   rentalPlan: true,
   views: true,
@@ -450,7 +461,9 @@ function stringsOf(value: unknown): string[] {
 }
 
 /** Le détail de l'adéquation par critère actif (lot 14). */
-export function toCriteriaFitEntries(row: ListingRow): CriteriaFitEntry[] {
+export function toCriteriaFitEntries(
+  row: Pick<ListingRow, 'criteriaMatches'>
+): CriteriaFitEntry[] {
   return row.criteriaMatches.map(match => {
     const checks = CriteriaFitCheckSchema.array().safeParse(match.checks)
     return {
@@ -466,7 +479,12 @@ export function toCriteriaFitEntries(row: ListingRow): CriteriaFitEntry[] {
 }
 
 /** L'adéquation enregistrée de l'annonce : meilleur niveau, détail, « depuis », gardée. */
-export function toListingCriteriaFit(row: ListingRow): ListingCriteriaFit {
+export function toListingCriteriaFit(
+  row: Pick<
+    ListingRow,
+    'criteriaMatches' | 'criteriaFitChangedAt' | 'criteriaFitOrigin' | 'status'
+  > & { visits: readonly { status: string }[] }
+): ListingCriteriaFit {
   return listingCriteriaFit({
     entries: toCriteriaFitEntries(row),
     since: row.criteriaFitChangedAt?.toISOString() ?? null,
@@ -474,4 +492,27 @@ export function toListingCriteriaFit(row: ListingRow): ListingCriteriaFit {
     status: row.status,
     plannedVisits: plannedVisitCount(row),
   })
+}
+
+/** Lot 21 : la prochaine visite prévue et la dernière faite (lignes de l'étape). */
+export function toStageFacts(
+  row: Pick<ListingRow, 'visits'>,
+  names: ReadonlyMap<string, string>
+): ListingStageFacts {
+  const planned = row.visits
+    .filter(v => v.status === 'planned')
+    .sort((a, b) => a.visitedAt.getTime() - b.visitedAt.getTime())
+  const done = row.visits
+    .filter(v => v.status === 'done')
+    .sort((a, b) => b.visitedAt.getTime() - a.visitedAt.getTime())
+  const next = planned[0] ?? null
+  return {
+    nextVisitAt: next?.visitedAt.toISOString() ?? null,
+    nextVisitNames: (next?.participantIds ?? [])
+      .map(id => names.get(id))
+      .filter((name): name is string => Boolean(name)),
+    lastVisitAt: done[0]?.visitedAt.toISOString() ?? null,
+    archivedAt: null,
+    archivedBy: null,
+  }
 }

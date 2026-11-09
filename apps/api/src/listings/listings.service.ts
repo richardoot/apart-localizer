@@ -9,6 +9,7 @@ import {
   DEFAULT_TASKS,
   EvaluatedListingSchema,
   HypotheticalListingSchema,
+  LISTING_STATUS_LABELS,
   missingListingFields,
   taskFieldForLabel,
 } from '@apart/contracts'
@@ -28,8 +29,10 @@ import type {
   ListingInput,
   ListingLinkOrigin,
   ListingList,
+  ListingStageFacts,
   ListingLocationInput,
   ListingPlacement,
+  ListingStatus,
   ListingStatusChange,
   LocationPrecision,
   ListingUpdate,
@@ -39,6 +42,7 @@ import type {
   RentalPlanInput,
 } from '@apart/contracts'
 import {
+  archivedByLabel,
   checkReference,
   countFits,
   detectLinkPortal,
@@ -55,7 +59,11 @@ import {
   referenceMatchOf,
   sameUrlMatchOf,
 } from '@apart/domain'
-import type { CriteriaFitTrigger, LinkState } from '@apart/domain'
+import type {
+  CriteriaFitTrigger,
+  DecisionJournal,
+  LinkState,
+} from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { AssumptionsService } from '../assumptions/assumptions.service'
@@ -76,6 +84,10 @@ import {
 import { evaluateListing } from './evaluate'
 import { assertLinkFree, priceEventData, syncPrimaryLink } from './link-writes'
 import {
+  closeOpenDecisionsAsStale,
+  decisionViewOf,
+} from '../decisions/decision-context'
+import {
   linkStateOf,
   listingInclude,
   plannedVisitCount,
@@ -87,6 +99,7 @@ import {
   toPriceEventDto,
   toRepublication,
   toListingLinkDtos,
+  toStageFacts,
   toTaskDto,
 } from './listing.mapper'
 import type { ListingRow } from './listing.mapper'
@@ -116,7 +129,21 @@ export interface CreateOptions extends WriteOptions {
   ignoreDuplicates?: boolean
   /** Lot 18 : l'origine du lien de l'annonce (« original » par défaut). */
   linkOrigin?: ListingLinkOrigin
+  /** Lot 21 : un brouillon gardé à plusieurs : la décision a sa notification. */
+  viaDecision?: boolean
 }
+
+/** Lot 21 : une écriture de statut née d'une décision à plusieurs. */
+export interface StatusWriteOptions {
+  decision?: DecisionJournal
+}
+
+/** Les statuts rangés aux archives (quand, par qui : lignes de l'étape). */
+const ARCHIVE_STATUSES: readonly ListingStatus[] = [
+  'discarded',
+  'offer_refused',
+  'sold_or_withdrawn',
+]
 
 /** Lot 18 : l'origine d'un lien saisi par une écriture d'annonce, selon le canal. */
 function linkOriginOf(channel: ActivityChannel): ListingLinkOrigin {
@@ -324,6 +351,13 @@ export class ListingsService {
       )
     }
     items.sort(comparator(filters))
+    // Lot 21 : quand et par qui une annonce est entrée aux archives.
+    if (
+      filters.status?.length &&
+      filters.status.every(s => ARCHIVE_STATUSES.includes(s))
+    ) {
+      items = await this.withArchiveFacts(member, items, opinions.names)
+    }
     const total = items.length
     const start = (filters.page - 1) * filters.limit
     return {
@@ -339,6 +373,63 @@ export class ListingsService {
         criteriaId: criteriaId ?? null,
       },
     }
+  }
+
+  /** Lot 21 : l'entrée aux archives, lue dans le journal des changements de statut. */
+  private async withArchiveFacts(
+    member: Member,
+    items: EvaluatedListing[],
+    names: ReadonlyMap<string, string>
+  ): Promise<EvaluatedListing[]> {
+    const logs = await this.prisma.activityLog.findMany({
+      where: {
+        workspaceId: member.workspaceId,
+        listingId: { in: items.map(i => i.listing.id) },
+        action: 'listing.status_changed',
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        listingId: true,
+        createdAt: true,
+        channel: true,
+        actorMemberId: true,
+        after: true,
+      },
+    })
+    const latest = new Map<string, (typeof logs)[number]>()
+    for (const log of logs) {
+      if (log.listingId && !latest.has(log.listingId)) {
+        latest.set(log.listingId, log)
+      }
+    }
+    return items.map(item => {
+      const log = latest.get(item.listing.id)
+      const stage: ListingStageFacts = item.stage ?? {
+        nextVisitAt: null,
+        nextVisitNames: [],
+        lastVisitAt: null,
+        archivedAt: null,
+        archivedBy: null,
+      }
+      return {
+        ...item,
+        stage: {
+          ...stage,
+          archivedAt:
+            log?.createdAt.toISOString() ??
+            item.listing.discardedAt ??
+            item.listing.updatedAt,
+          archivedBy: archivedByLabel({
+            status: item.listing.status,
+            channel: log?.channel ?? null,
+            actorName: log?.actorMemberId
+              ? (names.get(log.actorMemberId) ?? null)
+              : null,
+            after: log?.after ?? null,
+          }),
+        },
+      }
+    })
   }
 
   /** Lot 12 : les contours des annonces de l'espace placées au quartier (carte). */
@@ -491,6 +582,7 @@ export class ListingsService {
             duplicates: duplicates.map(d => d.listingId),
             ignoreDuplicates: options.ignoreDuplicates ?? false,
             missingFieldTasks: missingTaskLabels,
+            ...(options.viaDecision ? { viaDecision: true } : {}),
           },
         },
         tx
@@ -535,7 +627,9 @@ export class ListingsService {
     }
     // Données ouvertes (arrêt, plafond, marché, DPE vérifié), puis alertes.
     await this.enrichment.enrich(member, id, { dpe: true, channel })
-    const item = await this.afterWrite(member, id, channel, 'created')
+    const item = await this.afterWrite(member, id, channel, 'created', {
+      quiet: options.viaDecision ?? false,
+    })
     return {
       ...item,
       duplicates,
@@ -557,6 +651,12 @@ export class ListingsService {
     this.checkGuards(before, guards)
     if (Object.keys(patch).length === 0) {
       throw new BadRequestException('Aucun champ à modifier')
+    }
+    // Lot 21 : le statut suit ses règles (décisions à plusieurs).
+    if (patch.status !== undefined && patch.status !== before.status) {
+      throw new BadRequestException(
+        'Le statut ne se change pas ici : utilisez le changement de statut (POST /listings/:id/status, set_listing_status)'
+      )
     }
     let fieldSources = provenanceAfterPatch(
       before.fieldSources,
@@ -768,7 +868,8 @@ export class ListingsService {
     member: Member,
     id: string,
     change: ListingStatusChange,
-    channel: ActivityChannel = 'web'
+    channel: ActivityChannel = 'web',
+    options: StatusWriteOptions = {}
   ): Promise<EvaluatedListing> {
     const current = await this.findRow(member, id)
     if (change.expectedStatus && change.expectedStatus !== current.status) {
@@ -796,12 +897,29 @@ export class ListingsService {
           channel,
           action: 'listing.status_changed',
           before: { status: current.status },
-          after: { status: change.status, reason: change.reason },
+          after: {
+            status: change.status,
+            reason: change.reason,
+            ...(options.decision ? { decision: options.decision } : {}),
+          },
         },
         tx
       )
+      // Lot 21 : un fait appliqué directement rend caduque la proposition
+      // ouverte de l'annonce.
+      if (!options.decision) {
+        await closeOpenDecisionsAsStale(tx, this.activity, {
+          workspaceId: member.workspaceId,
+          target: { listingId: id },
+          actorMemberId: member.id,
+          channel,
+          why: `l’annonce est passée « ${LISTING_STATUS_LABELS[change.status]} »`,
+        })
+      }
     })
-    return this.afterWrite(member, id, channel, 'status')
+    return this.afterWrite(member, id, channel, 'status', {
+      quiet: options.decision !== undefined,
+    })
   }
 
   /**
@@ -998,6 +1116,14 @@ export class ListingsService {
       republication: toRepublication(row),
       criteriaFit: toListingCriteriaFit(row),
       links: toListingLinkDtos(row.links),
+      // Lot 21 : la proposition en cours et les faits des lignes de l'étape.
+      decision: row.decisionProposals[0]
+        ? decisionViewOf(row.decisionProposals[0], member, {
+            active: opinions.members,
+            names: opinions.names,
+          })
+        : null,
+      stage: toStageFacts(row, opinions.names),
     })
   }
 
@@ -1121,13 +1247,15 @@ export class ListingsService {
     member: Member,
     id: string,
     channel: ActivityChannel,
-    trigger: CriteriaFitTrigger = 'updated'
+    trigger: CriteriaFitTrigger = 'updated',
+    options: { quiet?: boolean } = {}
   ): Promise<EvaluatedListing> {
     const criteriaChanges = await this.criteriaMatches.refreshForListing(
       member,
       id,
       channel,
-      trigger
+      trigger,
+      options
     )
     const item = await this.get(member, id)
     return { ...item, criteriaChanges }

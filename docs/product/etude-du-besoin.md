@@ -166,8 +166,8 @@ reste optionnel.
 
 | # | Besoin | Prio |
 | --- | --- | --- |
-| S1 | Statuts : à étudier, à visiter, visité, offre faite, offre acceptée, offre refusée, écarté, vendu ou retiré | M |
-| S2 | Raison d'écartement et date, pour ne pas reproposer | M |
+| S1 | Statuts : à étudier, à visiter, visité, offre faite, offre acceptée, offre refusée, écarté, vendu ou retiré ; lot 21 : la page Annonces les range en six étapes (À valider, À étudier, À visiter, Visitées, Offres, Archives) et passer À visiter ou écarter attend l'accord des membres | M |
+| S2 | Raison d'écartement et date, pour ne pas reproposer ; lot 21 : un clic parmi les raisons courantes, ou texte libre, toujours demandée | M |
 | S3 | « Vu par moi » par membre, remplaçant le drapeau global « vue » | M |
 | S4 | Visites : date, participants, compte rendu, photos | S |
 | S5 | Offres : montant, date, réponse, contre-proposition | S |
@@ -220,6 +220,7 @@ Détail des formules dans [modele-de-calcul.md](modele-de-calcul.md).
 | K4 | Vue « ce qui a changé depuis ma dernière visite » | S |
 | K5 | Invitation d'un nouveau membre par e-mail dans un espace existant (rattachement à sa première connexion Google, expiration, annulation) | L |
 | K6 | Rôles propriétaire et membre ; retrait d'un membre, historique conservé | L |
+| K7 | Décisions à plusieurs (lot 21) : dans un espace d'au moins deux membres actifs où « Décider à plusieurs » est activé (réglage des propriétaires, activé par défaut), garder ou écarter un brouillon, passer une annonce À visiter et l'écarter sont des propositions que tous les membres actifs confirment ; une réponse « non » mène à « À trancher ensemble » ; l'auteur peut retirer ou « Décider sans attendre » ; le reste s'applique tout de suite ; une notification par session de tri | S |
 
 ### 3.7 MCP
 
@@ -257,7 +258,7 @@ Lecture :
 | --- | --- |
 | `create_listing` | Crée une annonce à partir du schéma normalisé, avec le texte source et la provenance par champ en option ; répond avec les doublons probables sans bloquer la création (`ignoreDuplicates` journalisé, ADR 0007) et les tâches posées pour les champs manquants |
 | `update_listing` | Met à jour des champs avec garde-fous sur les valeurs attendues |
-| `set_listing_status` | Change le statut avec raison |
+| `set_listing_status` | Change le statut avec raison ; lot 21 : passer À visiter ou écarter devient une proposition au nom du membre connecté dans un espace à plusieurs (l'annonce ne bouge pas tant que l'autre n'a pas confirmé) |
 | `add_opinion` | Avis du membre connecté : note globale, phrase et, lot 20, notes par critère dictées (fusionnées) ; jamais pour un autre membre |
 | `add_task`, `complete_task` | Tâches |
 | `record_price_change` | Baisse ou hausse constatée sur l'annonce source |
@@ -414,6 +415,12 @@ dans un critère, réponse à une offre, annonces reçues par e-mail), titre, te
 ligne du journal d'origine, lu le, état d'envoi push et e-mail. Les préférences par type et par
 canal sont un JSON sur le membre ; les appareils abonnés au web push sont des lignes
 **PushSubscription**.
+
+**DecisionProposal** (lot 21) : espace, annonce **ou** brouillon, auteur, choix (garder, à
+visiter, écarter), raison, état (ouverte, à trancher, appliquée, retirée, caduque), statut de
+départ, session de tri facultative, résolution ; au plus une en cours par annonce ou brouillon.
+**DecisionResponse** : proposition, membre, d'accord ou non, choix proposé à la place, raison.
+Le réglage « Décider à plusieurs » est sur le **Workspace**.
 
 **ListingDraft** (lot 6) : espace, origine (alerte e-mail), fiche pré-remplie, doublons à la
 réception, lecture par l'IA ou l'analyseur simple, sujet et expéditeur de l'e-mail, décision

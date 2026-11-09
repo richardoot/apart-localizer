@@ -132,6 +132,8 @@ describe('MCP (e2e)', () => {
     await ctx.prisma.workspace.create({
       data: {
         name: 'Richard et Chloé',
+        // Lot 21 : ces parcours s'appliquent tout de suite.
+        decideTogether: false,
         members: {
           create: [
             {

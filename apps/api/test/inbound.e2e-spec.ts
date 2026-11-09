@@ -38,6 +38,8 @@ async function seed(ctx: E2eContext): Promise<string> {
   const workspace = await ctx.prisma.workspace.create({
     data: {
       name: 'Richard et Chloé',
+      // Lot 21 : ces parcours s'appliquent tout de suite.
+      decideTogether: false,
       members: {
         create: [
           {
@@ -154,7 +156,7 @@ describe('Alertes e-mail entrantes (e2e)', () => {
       expect(bell.body.items[0]).toMatchObject({
         type: 'drafts_received',
         title: '2 annonce(s) reçue(s) par e-mail',
-        url: '/annonces?vue=a-valider',
+        url: '/annonces?etape=a-valider',
       })
       // La même alerte reçue deux fois ne double pas les brouillons.
       const again = await post(ctx, workspaceId, ALERT).expect(202)

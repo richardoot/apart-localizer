@@ -35,10 +35,11 @@ export const ActivityKindSchema = z
     'exploration',
     'agency',
     'link',
+    'decision',
     'other',
   ])
   .describe(
-    "Sorte d'événement : annonce, statut, prix, tâche, avis (lot 20 : notes par critère, « Voir quand même », réglage des critères de l'espace), offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon à valider, membres de l'espace (invitations, arrivées, retraits, rôles), vérification sur le portail (lot 15), exploration des portails par Claude (lot 16), échanges avec l'annonceur (contact, demandes, réponses ; lot 17), liens de l'annonce sur les portails (ajout, retrait, détachement ; lot 18), autre"
+    "Sorte d'événement : annonce, statut, prix, tâche, avis (lot 20 : notes par critère, « Voir quand même », réglage des critères de l'espace), offre, visite, critère, IA, hypothèses, étude (scénarios, comparables), brouillon à valider, membres de l'espace (invitations, arrivées, retraits, rôles), vérification sur le portail (lot 15), exploration des portails par Claude (lot 16), échanges avec l'annonceur (contact, demandes, réponses ; lot 17), liens de l'annonce sur les portails (ajout, retrait, détachement ; lot 18), décisions à plusieurs (propositions, réponses, sessions de tri ; lot 21), autre"
   )
 export type ActivityKind = z.infer<typeof ActivityKindSchema>
 
@@ -60,6 +61,7 @@ export const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
   exploration: 'Exploration',
   agency: 'Échanges',
   link: 'Liens des portails',
+  decision: 'Décisions à plusieurs',
   other: 'Autre',
 }
 
@@ -88,6 +90,7 @@ export const ACTIVITY_KIND_RULES: Record<
   exploration: { prefixes: ['exploration'] },
   agency: { prefixes: ['agency_request', 'contact'] },
   link: { prefixes: ['listing_link'] },
+  decision: { prefixes: ['decision'] },
 }
 
 /** La sorte d'une action (`listing.status_changed` → `status`). */

@@ -119,6 +119,7 @@ describe('toWorkspaceDto', () => {
       name: 'Appartement',
       agencySignature: null,
       opinionsBlind: true,
+      decideTogether: true,
       createdAt: NOW,
       updatedAt: NOW,
     }

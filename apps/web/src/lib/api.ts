@@ -1,5 +1,13 @@
 import { listingFiltersToQuery } from '@apart/contracts'
 import type {
+  DecisionCard,
+  DecisionInput,
+  DecisionRespond,
+  DecisionResult,
+  DecisionSessionResult,
+  DecisionSettingsUpdate,
+  DecisionSettle,
+  WorkflowOverview,
   AgencyApplyProposed,
   AgencyApplyResult,
   AgencyRequestDraftInput,
@@ -709,6 +717,50 @@ export const api = {
     distinct: (id: string) =>
       apiFetch<ListingDraft>(`/listing-drafts/${id}/distinct`, {
         method: 'POST',
+      }),
+  },
+
+  /** Lot 21 : les décisions à plusieurs, les compteurs des étapes. */
+  decisions: {
+    overview: () => apiFetch<WorkflowOverview>('/decisions/overview'),
+    cards: (kind: 'confirm' | 'settle') =>
+      apiFetch<DecisionCard[]>(`/decisions/cards?kind=${kind}`),
+    decide: (input: DecisionInput) =>
+      apiFetch<DecisionResult>('/decisions', { method: 'POST', json: input }),
+    respond: (id: string, input: DecisionRespond) =>
+      apiFetch<DecisionResult>(`/decisions/${id}/respond`, {
+        method: 'POST',
+        json: input,
+      }),
+    settle: (id: string, input: DecisionSettle) =>
+      apiFetch<DecisionResult>(`/decisions/${id}/settle`, {
+        method: 'POST',
+        json: input,
+      }),
+    decideNow: (id: string) =>
+      apiFetch<DecisionResult>(`/decisions/${id}/decide-now`, {
+        method: 'POST',
+      }),
+    withdraw: (id: string) =>
+      apiFetch<DecisionResult>(`/decisions/${id}/withdraw`, {
+        method: 'POST',
+      }),
+    undo: (id: string) =>
+      apiFetch<DecisionResult>(`/decisions/${id}/undo`, { method: 'POST' }),
+    finishSession: (sessionId: string) =>
+      apiFetch<DecisionSessionResult>(
+        `/decisions/sessions/${sessionId}/finish`,
+        { method: 'POST' }
+      ),
+    decideSessionNow: (sessionId: string) =>
+      apiFetch<DecisionSessionResult>(
+        `/decisions/sessions/${sessionId}/decide-now`,
+        { method: 'POST' }
+      ),
+    updateSettings: (update: DecisionSettingsUpdate) =>
+      apiFetch<WorkspaceMe>('/workspace/decisions', {
+        method: 'PATCH',
+        json: update,
       }),
   },
 

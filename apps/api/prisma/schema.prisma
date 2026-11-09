@@ -208,6 +208,39 @@ enum NotificationType {
   agency_answer
   /// Lot 20 : avis donné ou mis à jour par un autre membre.
   opinion_added
+  /// Lot 21 : proposition d'un autre membre à confirmer (une par session de tri).
+  decision_proposed
+  /// Lot 21 : réponse ou décision sur une proposition (une par session de tri).
+  decision_resolved
+
+  @@schema("app")
+}
+
+/// Lot 21 : l'état d'une proposition (ADR 0031).
+enum DecisionState {
+  open
+  to_settle
+  applied
+  withdrawn
+  stale
+
+  @@schema("app")
+}
+
+/// Lot 21 : le choix d'une proposition ou d'une réponse.
+enum DecisionChoice {
+  keep
+  to_visit
+  discard
+
+  @@schema("app")
+}
+
+/// Lot 21 : comment une proposition s'est appliquée.
+enum DecisionResolution {
+  agreed
+  settled
+  without_waiting
 
   @@schema("app")
 }
@@ -399,6 +432,11 @@ model Workspace {
   /// Lot 20 : les critères des avis ; aucune ligne = les huit par défaut.
   opinionCriteria OpinionCriterion[]
 
+  /// Lot 21 : « Décider à plusieurs » : un changement d'étape attend l'accord
+  /// de tous les membres actifs ; vrai par défaut, réglé par les propriétaires.
+  decideTogether    Boolean            @default(true) @map("decide_together")
+  decisionProposals DecisionProposal[]
+
   @@map("workspaces")
   @@schema("app")
 }
@@ -475,6 +513,10 @@ model Member {
   updatedContacts        ListingContact[]   @relation("ListingContactEditor")
   // Lot 18 : les liens ajoutés.
   addedLinks             ListingLink[]      @relation("ListingLinkAuthor")
+  // Lot 21 : les décisions à plusieurs.
+  authoredDecisions      DecisionProposal[] @relation("DecisionAuthor")
+  closedDecisions        DecisionProposal[] @relation("DecisionCloser")
+  decisionResponses      DecisionResponse[]
 
   @@unique([workspaceId, handle])
   @@index([workspaceId])
@@ -659,6 +701,8 @@ model Listing {
   agencyRequests   AgencyRequest[]
   // Lot 18 : les liens de l'annonce sur les portails.
   links            ListingLink[]
+  // Lot 21 : les décisions à plusieurs sur cette annonce.
+  decisionProposals DecisionProposal[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, commune])
@@ -1189,10 +1233,83 @@ model ListingDraft {
   exploration  Exploration?           @relation(fields: [explorationId], references: [id], onDelete: SetNull)
   mergedCheck  ListingCheck?          @relation(fields: [mergedCheckId], references: [id], onDelete: SetNull)
   lines        ExplorationCandidate[]
+  /// Lot 21 : les décisions à plusieurs sur ce brouillon.
+  decisionProposals DecisionProposal[]
 
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, url])
   @@map("listing_drafts")
+  @@schema("app")
+}
+
+// ---------------------------------------------------------------------------
+// Décisions à plusieurs (lot 21, ADR 0031)
+// ---------------------------------------------------------------------------
+
+/// Une proposition : garder ou écarter un brouillon, passer une annonce À
+/// visiter, écarter une annonce. Elle vise soit une annonce, soit un brouillon
+/// (contrainte CHECK dans la migration), au plus une ouverte par cible (index
+/// uniques partiels dans la migration, que Prisma ne décrit pas).
+model DecisionProposal {
+  id            String              @id @default(uuid())
+  workspaceId   String              @map("workspace_id")
+  listingId     String?             @map("listing_id")
+  draftId       String?             @map("draft_id")
+  authorId      String?             @map("author_id")
+  choice        DecisionChoice
+  reason        String?
+  state         DecisionState       @default(open)
+  /// Le statut de l'annonce à la proposition : la décision est caduque s'il change.
+  fromStatus    ListingStatus?      @map("from_status")
+  /// La session de tri ; null pour une proposition faite hors session (fiche, MCP).
+  sessionId     String?             @map("session_id")
+  channel       ActivityChannel     @default(web)
+  /// Les autres membres ont été prévenus (session terminée, ou proposition hors session).
+  notifiedAt    DateTime?           @map("notified_at") @db.Timestamptz(6)
+  resolution    DecisionResolution?
+  appliedChoice DecisionChoice?     @map("applied_choice")
+  closedAt      DateTime?           @map("closed_at") @db.Timestamptz(6)
+  closedById    String?             @map("closed_by_id")
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  listing   Listing?           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  draft     ListingDraft?      @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  author    Member?            @relation("DecisionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  closedBy  Member?            @relation("DecisionCloser", fields: [closedById], references: [id], onDelete: SetNull)
+  responses DecisionResponse[]
+
+  @@index([workspaceId, state])
+  @@index([listingId])
+  @@index([draftId])
+  @@index([authorId, sessionId])
+  @@map("decision_proposals")
+  @@schema("app")
+}
+
+/// La réponse d'un membre à une proposition (une au plus par membre).
+model DecisionResponse {
+  id         String          @id @default(uuid())
+  proposalId String          @map("proposal_id")
+  memberId   String          @map("member_id")
+  agrees     Boolean
+  /// Le choix à la place, quand le membre n'est pas d'accord.
+  choice     DecisionChoice?
+  reason     String?
+  /// La session de tri de ce membre ; null hors session (fiche).
+  sessionId  String?         @map("session_id")
+  /// Le retour de cette réponse à l'auteur est parti.
+  notifiedAt DateTime?       @map("notified_at") @db.Timestamptz(6)
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  proposal DecisionProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  member   Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, memberId])
+  @@index([memberId, sessionId])
+  @@map("decision_responses")
   @@schema("app")
 }
 

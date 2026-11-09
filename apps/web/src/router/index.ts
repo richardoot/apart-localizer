@@ -35,6 +35,20 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Synthèse', requiresAuth: true },
   },
   {
+    // Lot 21 : le mode tri, une annonce à la fois.
+    path: '/annonces/tri',
+    name: 'triage',
+    component: () => import('@/views/TriagePage.vue'),
+    meta: { title: 'Trier', requiresAuth: true, bare: true },
+  },
+  {
+    // Lot 21 : « À trancher ensemble ».
+    path: '/annonces/a-trancher',
+    name: 'settle',
+    component: () => import('@/views/SettlePage.vue'),
+    meta: { title: 'À trancher ensemble', requiresAuth: true, bare: true },
+  },
+  {
     path: '/annonces',
     component: () => import('@/views/ListingsPage.vue'),
     meta: { title: 'Annonces', requiresAuth: true },
