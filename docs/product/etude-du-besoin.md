@@ -400,6 +400,18 @@ depuis, origine (lien d'origine, à la main, Claude, exploration, partage, alert
 et référence lues, extrait-preuve court, auteur. Le prix de la fiche est le plus bas des liens en
 ligne ; un prix saisi à la main n'est jamais écrasé (proposé). Le dernier lien ne se retire pas.
 
+**ListingSeller** (lot 27) : annonce, vendeur (agence, mandataire, particulier, à préciser), nom
+de l'agence ou du réseau, référence du bien chez elle et sa clé de comparaison, origine (à la
+main, Claude, lue sur la page d'un lien, reprise d'une fiche fusionnée), auteur. Ce sont les
+**autres** agences qui vendent le même bien (mandat simple) : l'agence principale reste sur
+l'annonce. Huit au plus ; chaque référence sert à reconnaître l'annonce sur les portails.
+
+**ListingMerge** (lot 27) : fiche gardée, fiche absorbée (le doublon), membre et canal, date,
+résumé, ce qui est passé de l'une à l'autre (identifiants, champs complétés, état d'avant) pour
+l'annuler, date de l'annulation. Sur l'annonce absorbée : la fiche qui l'a absorbée. Une fusion
+ne supprime rien : la fiche absorbée est écartée et cachée des listes ; l'annulation rend ce qui
+était venu.
+
 **Offer** : annonce, date, montant, canal (e-mail, téléphone, agence, en personne, courrier), réponse (en attente, acceptée, refusée, contre-proposition), contre-proposition, date de la réponse, auteur, notes. Une offre ne se supprime pas ; sa réponse propose un statut à l'annonce sans le changer d'office (ADR 0009).
 
 **Visit** : annonce, date, état (faite, planifiée), participants (membres), compte rendu, points

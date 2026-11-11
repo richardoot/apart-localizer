@@ -11,6 +11,7 @@
   } from '@apart/contracts'
   import { OFFER_RESPONSE_LABELS } from '@apart/contracts'
   import {
+    mergedBannerText,
     proposedMessage,
     stageOfStatus,
     todoPendingCount,
@@ -18,6 +19,7 @@
   } from '@apart/domain'
   import type { FicheActionKind, NextStepTarget } from '@apart/domain'
   import QueryState from '@/components/ui/QueryState.vue'
+  import UiAlert from '@/components/ui/UiAlert.vue'
   import UiButton from '@/components/ui/UiButton.vue'
   import { useListingCover } from '@/composables/useCovers'
   import { useLeaveGuard } from '@/composables/useLeaveGuard'
@@ -747,6 +749,24 @@
       >
         <template v-if="item">
           <UnsavedChangesBar />
+
+          <!-- Lot 27 : une fiche fusionnée dans une autre le dit d'abord. -->
+          <UiAlert
+            v-if="item.mergedInto"
+            tone="warn"
+            data-testid="merged-banner"
+          >
+            {{ mergedBannerText(item.mergedInto.title) }}
+            <template #actions>
+              <UiButton
+                :to="{ name: 'listing', params: { id: item.mergedInto.id } }"
+                size="sm"
+                variant="primary"
+                data-action="banner-open-kept"
+                >Ouvrir la fiche gardée</UiButton
+              >
+            </template>
+          </UiAlert>
 
           <DecisionBanner
             v-if="item.decision"

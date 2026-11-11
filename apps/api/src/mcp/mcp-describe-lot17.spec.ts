@@ -107,7 +107,7 @@ describe('MCP lot 17 : questions aux agences', () => {
       'record_request_sent',
       'record_agency_answer',
     ])
-    expect(MCP_TOOL_NAMES).toHaveLength(39)
+    expect(MCP_TOOL_NAMES).toHaveLength(42)
     expect(MCP_TOOL_NAMES.some(name => /delete|remove/.test(name))).toBe(false)
     expect(MCP_PROMPT_NAMES).toEqual([
       'analyze_listing',

@@ -138,7 +138,8 @@ export class ExplorationTriageService {
     const { kept, dropped } = dedupeCandidates(candidates)
     const [listings, drafts, members, context] = await Promise.all([
       this.prisma.listing.findMany({
-        where: { workspaceId },
+        // Lot 27 : sans les doublons fusionnés dans une autre fiche.
+        where: { workspaceId, mergedIntoId: null },
         select: {
           ...DUPLICATE_ROW_SELECT,
           discardReason: true,

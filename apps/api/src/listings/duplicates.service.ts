@@ -31,6 +31,15 @@ export const DUPLICATE_ROW_SELECT = {
   sellerReference: true,
   sellerReferenceKey: true,
   links: { select: { normalizedUrl: true } },
+  // Lot 27 : les autres agences qui vendent le même bien.
+  sellers: {
+    select: {
+      sellerType: true,
+      sellerName: true,
+      sellerReference: true,
+      sellerReferenceKey: true,
+    },
+  },
 } as const
 
 /** Une ligne Prisma (`DUPLICATE_ROW_SELECT`) vers la forme comparée par `domain`. */
@@ -49,6 +58,7 @@ export function duplicateRowOf(row: {
   sellerReference: string | null
   sellerReferenceKey: string | null
   links: { normalizedUrl: string }[]
+  sellers?: NonNullable<DuplicateRow['otherSellers']>[number][]
 }): DuplicateRow {
   return {
     id: row.id,
@@ -65,6 +75,7 @@ export function duplicateRowOf(row: {
     sellerName: row.sellerName,
     sellerReference: row.sellerReference,
     sellerReferenceKey: row.sellerReferenceKey,
+    otherSellers: row.sellers ?? [],
   }
 }
 
@@ -91,7 +102,9 @@ export class DuplicatesService {
       ? await this.completeFromListing(member, probe)
       : probe
     const rows = await this.prisma.listing.findMany({
-      where: { workspaceId: member.workspaceId },
+      // Lot 27 : un doublon fusionné ne se propose plus (ses liens et ses
+      // agences sont sur la fiche qui l'a absorbé).
+      where: { workspaceId: member.workspaceId, mergedIntoId: null },
       select: DUPLICATE_ROW_SELECT,
     })
     const distances = new Map<string, number>()

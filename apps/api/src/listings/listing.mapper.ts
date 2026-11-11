@@ -6,6 +6,10 @@ import {
   ListingCheckChangeSchema,
   ListingCheckSchema,
   ListingLinkSchema,
+  ListingMergeCountsSchema,
+  ListingMergeRecordSchema,
+  ListingSellerSchema,
+  EMPTY_MERGE_COUNTS,
   CriteriaFitCheckSchema,
   CriteriaFitOriginSchema,
   ListingOpenDataContextSchema,
@@ -26,6 +30,9 @@ import type {
   FieldProvenanceMap,
   LinkedListing,
   ListingLink as ListingLinkDto,
+  ListingMergeRecord,
+  ListingMergedInto,
+  ListingSeller as ListingSellerDto,
   ListingCheck as ListingCheckDto,
   ListingCheckSummary,
   ListingRepublication,
@@ -41,6 +48,8 @@ import type { LinkState } from '@apart/domain'
 import type {
   ListingCheck,
   ListingLink,
+  ListingMerge,
+  ListingSeller,
   Offer,
   PriceEvent,
   Prisma,
@@ -93,6 +102,25 @@ export const listingInclude = {
   },
   // Lot 18 : les liens de l'annonce sur les portails.
   links: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
+  // Lot 27 : les autres agences qui vendent le même bien ; la fiche qui a
+  // absorbé celle-ci ; les doublons fusionnés dans celle-ci (fusions en
+  // cours, la plus récente d'abord).
+  sellers: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
+  mergedInto: { select: { id: true, title: true } },
+  mergesAsAbsorbed: {
+    where: { undoneAt: null },
+    orderBy: { mergedAt: 'desc' },
+    take: 1,
+    select: { id: true, keptId: true, mergedAt: true },
+  },
+  mergesAsKept: {
+    where: { undoneAt: null },
+    orderBy: { mergedAt: 'desc' },
+    include: {
+      kept: { select: { title: true } },
+      absorbed: { select: { title: true } },
+    },
+  },
 } satisfies Prisma.ListingInclude
 
 export type ListingRow = Prisma.ListingGetPayload<{
@@ -348,6 +376,55 @@ export function toListingLinkDtos(
       state.id === primary?.id
     )
   )
+}
+
+/** Lot 27 : une autre agence qui vend le même bien. */
+export function toListingSellerDto(seller: ListingSeller): ListingSellerDto {
+  return ListingSellerSchema.parse({
+    id: seller.id,
+    listingId: seller.listingId,
+    sellerType: seller.sellerType,
+    sellerName: seller.sellerName,
+    sellerReference: seller.sellerReference,
+    sellerReferenceKey: seller.sellerReferenceKey,
+    origin: seller.origin,
+    addedById: seller.addedById,
+    createdAt: seller.createdAt.toISOString(),
+  })
+}
+
+/** Lot 27 : une fusion enregistrée, avec les titres des deux fiches. */
+export function toMergeRecord(
+  merge: ListingMerge & {
+    kept: { title: string }
+    absorbed: { title: string }
+  }
+): ListingMergeRecord {
+  const counts = ListingMergeCountsSchema.safeParse(merge.counts)
+  return ListingMergeRecordSchema.parse({
+    id: merge.id,
+    keptId: merge.keptId,
+    keptTitle: merge.kept.title,
+    absorbedId: merge.absorbedId,
+    absorbedTitle: merge.absorbed.title,
+    mergedAt: merge.mergedAt.toISOString(),
+    mergedById: merge.mergedById,
+    channel: merge.channel,
+    summary: merge.summary,
+    counts: counts.success ? counts.data : EMPTY_MERGE_COUNTS,
+  })
+}
+
+/** Lot 27 : la fiche qui a absorbé celle-ci ; null pour une fiche ordinaire. */
+export function toMergedInto(row: ListingRow): ListingMergedInto | null {
+  const merge = row.mergesAsAbsorbed[0]
+  if (!row.mergedInto || !merge || !row.mergedAt) return null
+  return {
+    mergeId: merge.id,
+    id: row.mergedInto.id,
+    title: row.mergedInto.title,
+    mergedAt: row.mergedAt.toISOString(),
+  }
 }
 
 /** Un lien vérifié, en quelques champs. */

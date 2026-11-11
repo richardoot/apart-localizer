@@ -137,6 +137,10 @@ export function notificationTypeOf(
       // Lot 18 : un lien ajouté par Claude ou rattaché d'office (exploration,
       // alerte e-mail) ; jamais un lien collé par un membre dans l'application.
       return event.channel === 'web' ? null : 'listing_checked'
+    case 'listing.merged':
+      // Lot 27 : deux fiches n'en font plus qu'une ; les autres membres le
+      // savent, que la fusion vienne de l'application ou de Claude.
+      return 'listing_checked'
     case 'opinion.created':
     case 'opinion.updated':
       // Lot 20 : un avis donné ou mis à jour prévient les autres membres.
@@ -296,6 +300,11 @@ export function notificationsForActivity(
         body = `${str(event.after, 'summary') ?? 'Lien ajouté'} (${field(event.after, 'auto') === true ? 'rattaché d’office' : 'ajouté'} par ${who}).`
         break
       }
+      if (event.action === 'listing.merged') {
+        heading = `Fiches fusionnées : ${title}`
+        body = `${str(event.after, 'summary') ?? 'Un doublon a été fusionné dans cette fiche'} (par ${who}). La fusion s’annule depuis la fiche.`
+        break
+      }
       heading = `Mise à jour : ${title}`
       body = `${str(event.after, 'summary') ?? 'Annonce vérifiée sur le portail'} (vérifiée par ${who}).`
       break
@@ -334,7 +343,8 @@ export function notificationsForActivity(
           ? '/espace'
           : type === 'listing_checked' &&
               url &&
-              event.action !== 'listing_link.added'
+              event.action !== 'listing_link.added' &&
+              event.action !== 'listing.merged'
             ? `${url}?onglet=historique`
             : type === 'agency_answer' && url
               ? `${url}?onglet=a-faire`

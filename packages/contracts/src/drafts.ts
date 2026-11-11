@@ -265,7 +265,7 @@ export const ListingDraftMergeSchema = z.object({
     .string()
     .uuid()
     .describe(
-      'L’annonce suivie qui est la même (parmi les doublons probables)'
+      'L’annonce suivie qui est la même : un des doublons probables, ou (lot 27) une annonce retrouvée par « Déjà vue »'
     ),
   expectedUpdatedAt: z
     .string()

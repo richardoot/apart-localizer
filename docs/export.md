@@ -110,6 +110,11 @@ ou non, principal ou non, origine, agence et référence lues, extrait court mas
 d'abord ; une liste vide dans un export antérieur, où `listing.url` est alors le seul lien),
 `link` de chaque vérification (le lien vérifié, `null` par défaut) et, dans les explorations, le
 compteur `attached` et le résultat « rattachée d'office » des lignes du compte rendu.
+Le lot 27 non plus : `sellers` par annonce (les autres agences qui vendent le même bien : type,
+nom, référence et sa clé, origine, auteur, date ; une liste vide par défaut et dans un export
+antérieur ; l'agence principale reste dans `listing.sellerName` et `listing.sellerReference`). Une
+fiche fusionnée dans une autre (doublon) n'est pas exportée : ses liens, ses agences et son suivi
+sont sur la fiche gardée. Le CSV ne change pas.
 `listing.url`, `source` et `externalId` restent ceux du lien principal.
 Le lot 19 garde aussi la version 1 : une annonce n'a plus d'hypothèses propres ni d'année ou de
 type de location de la phase 2 (ADR 0029) ; `listing.assumptionsOverride`, `rentalPlan.year` et
@@ -158,7 +163,8 @@ Une proposition ne porte aucune note d'avis. Le CSV gagne une seule colonne, en 
     criteriaFit: ListingCriteriaFit,        // lot 14 : adéquation aux critères actifs
     contact: ListingContact | null,         // lot 17 : contact de l'annonceur
     agencyRequests: AgencyRequest[],        // lot 17 : demandes, validation, envoi, réponses
-    links: ListingLink[]                    // lot 18 : un lien par portail, le principal d'abord
+    links: ListingLink[],                   // lot 18 : un lien par portail, le principal d'abord
+    sellers: ListingSeller[]                // lot 27 : les autres agences du même bien, avec leur référence
   }],
   searchCriteria: SearchCriteria[],         // filtres, marge de tolérance, périmètre GeoJSON, portails (lot 16)
   scenarios: Scenario[],                    // de l'espace et des annonces exportées

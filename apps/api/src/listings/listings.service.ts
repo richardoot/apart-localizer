@@ -51,6 +51,7 @@ import {
   linkKey,
   matchesFitFilter,
   mergeAssumptions,
+  mergedListingRefusal,
   normalizeSeller,
   portalOfListingSource,
   priceTrigger,
@@ -99,6 +100,9 @@ import {
   toPriceEventDto,
   toRepublication,
   toListingLinkDtos,
+  toListingSellerDto,
+  toMergeRecord,
+  toMergedInto,
   toStageFacts,
   toTaskDto,
 } from './listing.mapper'
@@ -192,6 +196,9 @@ export class ListingsService {
     const where: Prisma.ListingWhereInput = {
       workspaceId: member.workspaceId,
       status: { in: filters.status ?? [...ACTIVE_LISTING_STATUSES] },
+      // Lot 27 : un doublon fusionné n'est dans aucune liste, archives
+      // comprises ; il se retrouve depuis la fiche qui l'a absorbé.
+      mergedIntoId: null,
     }
     if (filters.commune?.length) {
       where.commune = { in: filters.commune, mode: 'insensitive' }
@@ -647,6 +654,7 @@ export class ListingsService {
     const channel = options.channel ?? 'web'
     const provenance = options.provenance ?? 'user'
     const row = await this.findRow(member, id)
+    this.assertNotMerged(row)
     const before = toListingDto(row)
     this.checkGuards(before, guards)
     if (Object.keys(patch).length === 0) {
@@ -872,6 +880,7 @@ export class ListingsService {
     options: StatusWriteOptions = {}
   ): Promise<EvaluatedListing> {
     const current = await this.findRow(member, id)
+    this.assertNotMerged(current)
     if (change.expectedStatus && change.expectedStatus !== current.status) {
       throw new ConflictException(
         `Le statut attendu était « ${change.expectedStatus} », l'annonce est « ${current.status} »`
@@ -1078,6 +1087,21 @@ export class ListingsService {
     }
   }
 
+  /**
+   * Lot 27 : une fiche fusionnée dans une autre n'est plus suivie ; elle ne
+   * se modifie plus tant que la fusion n'est pas annulée.
+   */
+  assertNotMerged(row: {
+    mergedIntoId: string | null
+    mergedInto?: { title: string } | null
+  }): void {
+    if (row.mergedIntoId) {
+      throw new ConflictException(
+        mergedListingRefusal(row.mergedInto?.title ?? 'une autre fiche')
+      )
+    }
+  }
+
   private async findRow(member: Member, id: string): Promise<ListingRow> {
     const row = await this.prisma.listing.findFirst({
       where: { id, workspaceId: member.workspaceId },
@@ -1116,6 +1140,10 @@ export class ListingsService {
       republication: toRepublication(row),
       criteriaFit: toListingCriteriaFit(row),
       links: toListingLinkDtos(row.links),
+      // Lot 27 : les autres agences, et les fusions des deux côtés.
+      sellers: row.sellers.map(toListingSellerDto),
+      mergedInto: toMergedInto(row),
+      absorbed: row.mergesAsKept.map(toMergeRecord),
       // Lot 21 : la proposition en cours et les faits des lignes de l'étape.
       decision: row.decisionProposals[0]
         ? decisionViewOf(row.decisionProposals[0], member, {

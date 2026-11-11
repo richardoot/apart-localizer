@@ -124,6 +124,12 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     sellerReference: null,
     sellerReferenceKey: null,
     links: [],
+    sellers: [],
+    mergedIntoId: null,
+    mergedAt: null,
+    mergedInto: null,
+    mergesAsAbsorbed: [],
+    mergesAsKept: [],
     ...over,
   }
 }

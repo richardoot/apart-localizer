@@ -29,10 +29,10 @@ import { detectLinkPortal, linkKey } from './listing-urls.js'
 import {
   cleanReference,
   cleanSellerName,
-  sellerObservationDiff,
+  sellerObservationAmong,
   shortDay,
 } from './seller.js'
-import type { SellerFacts } from './seller.js'
+import type { NormalizedSeller, SellerFacts } from './seller.js'
 
 /**
  * Une annonce, plusieurs portails (lot 18, ADR 0028), sans E/S : le lien
@@ -396,6 +396,14 @@ export interface LinkCheckInput {
   /** La provenance du prix de la fiche (`fieldSources.price.source`). */
   priceSource: FieldSource | null
   seller: SellerFacts
+  /** Lot 27 : les autres agences qui vendent le même bien. */
+  otherSellers?: readonly SellerFacts[]
+  /**
+   * Lot 27 : un membre a tranché que c'est le même bien (lien ajouté dans
+   * l'application, « C'est la même ») : une agence ou une référence qui
+   * contredit la principale est enregistrée comme une autre agence.
+   */
+  recordOtherSeller?: boolean
   links: readonly LinkState[]
   /** Le lien vérifié ; null pour une annonce sans lien (règles du lot 15). */
   linkId: string | null
@@ -411,6 +419,8 @@ export interface LinkCheckDiff extends ListingCheckDiff {
   linksAfter: LinkState[]
   fichePrice: FichePriceDecision
   sellerPatch: Partial<SellerFacts>
+  /** Lot 27 : l'autre agence à enregistrer avec sa référence ; null sinon. */
+  newSeller: NormalizedSeller | null
   /** Plus aucun lien en ligne après la vérification (ou, sans lien, page disparue). */
   allOffline: boolean
 }
@@ -535,11 +545,12 @@ export function linkCheckDiff(input: LinkCheckInput): LinkCheckDiff {
     reference,
     ...listingObserved
   } = input.observed
-  const seller = sellerObservationDiff(input.seller, {
-    sellerType: observedSellerType,
-    sellerName,
-    reference,
-  })
+  const seller = sellerObservationAmong(
+    input.seller,
+    input.otherSellers ?? [],
+    { sellerType: observedSellerType, sellerName, reference },
+    { recordOther: input.recordOtherSeller ?? false }
+  )
   const link = input.linkId
     ? (links.find(l => l.id === input.linkId) ?? null)
     : null
@@ -562,6 +573,7 @@ export function linkCheckDiff(input: LinkCheckInput): LinkCheckDiff {
           }
         : { kind: 'none' },
       sellerPatch: seller.patch,
+      newSeller: seller.newSeller,
       allOffline: base.online === false,
     }
   }
@@ -764,6 +776,7 @@ export function linkCheckDiff(input: LinkCheckInput): LinkCheckDiff {
     linksAfter,
     fichePrice,
     sellerPatch: seller.patch,
+    newSeller: seller.newSeller,
     allOffline,
   }
 }

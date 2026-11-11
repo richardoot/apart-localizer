@@ -128,7 +128,11 @@ import type { WhatsNewService } from '../whats-new/whats-new.service'
 import type { ExplorationsService } from '../exploration/explorations.service'
 import type { ListingLinksService } from '../listings/listing-links.service'
 import type { DecisionsService } from '../decisions/decisions.service'
+import type { ListingMergeService } from '../listings/listing-merge.service'
+import type { ListingSellersService } from '../listings/listing-sellers.service'
+import type { SimilarListingsService } from '../listings/similar-listings.service'
 import { describeLinksAndSeller } from './mcp-links'
+import { describeSellersAndMerges } from './mcp-merge'
 import {
   addOpinion,
   describeOpinions,
@@ -167,6 +171,10 @@ export interface McpToolContext {
   links: ListingLinksService
   /** Lot 21 : les décisions à plusieurs. */
   decisions: DecisionsService
+  /** Lot 27 : annonces ressemblantes, autres agences, fusion des doublons. */
+  similar: SimilarListingsService
+  sellers: ListingSellersService
+  merges: ListingMergeService
 }
 
 const CHANNEL = 'mcp' as const
@@ -180,7 +188,8 @@ const CHANNEL = 'mcp' as const
  * (vérification des annonces sur le portail, `mcp-checks.ts`), lot 16
  * (exploration des portails par les critères, `mcp-exploration.ts`), lot 17
  * (questions aux agences, `mcp-agency.ts`), lot 18 (une annonce, plusieurs
- * portails, `mcp-links.ts`).
+ * portails, `mcp-links.ts`), lot 27 (annonces ressemblantes, fusion des
+ * doublons, autres agences, `mcp-merge.ts`).
  */
 export const MCP_TOOL_NAMES = [
   'list_listings',
@@ -222,6 +231,9 @@ export const MCP_TOOL_NAMES = [
   'record_request_sent',
   'record_agency_answer',
   'add_listing_link',
+  'find_similar_listings',
+  'merge_listings',
+  'add_listing_seller',
 ] as const
 
 /**
@@ -970,7 +982,14 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           .map(c => `  - [${c.level}] ${c.message}`)
           .join('\n')
         return dataResult(
-          `${describeListing(item)}\n${describeLinksAndSeller(item)}\n${describeFitDetail(item)}\n${describeOpinions(item)}\n${describePlacement(item)}\nContrôles de louabilité :\n${checks}\n${describeContext(context)}`,
+          `${describeListing(item)}\n${describeLinksAndSeller(item)}\n${[
+            describeSellersAndMerges(item),
+          ]
+            .filter(Boolean)
+            .map(text => `${text}\n`)
+            .join(
+              ''
+            )}${describeFitDetail(item)}\n${describeOpinions(item)}\n${describePlacement(item)}\nContrôles de louabilité :\n${checks}\n${describeContext(context)}`,
           { ...item, context }
         )
       })
@@ -1946,7 +1965,7 @@ export function analyzeListingPrompt(args: {
     '',
     `1. Appelle l'outil extract_listing avec le texte ci-dessous dans \`text\`${args.url ? `, l'URL \`${args.url}\` dans \`url\`` : ''} et, si des captures d'écran sont jointes à la conversation, chacune dans \`images\` (base64, type MIME). N'invente aucune valeur toi-même : c'est le modèle d'extraction côté serveur qui lit.`,
     "2. Présente la fiche rendue au membre en français : prix, surface, pièces, étage, DPE, charges, taxe foncière, adresse et commune, travaux évoqués, vendeur (agence, mandataire ou particulier, jamais deviné), agence ou réseau et référence de l'annonce ; pour chaque valeur, sa confiance et l'extrait justificatif (listing.fieldSources) ; la liste des champs indispensables manquants ou douteux ; les doublons probables avec leur motif.",
-    "3. S'il y a un doublon `certain` (même lien, ou même agence et même référence : la même annonce sur un autre portail), ne crée rien : propose au membre d'ajouter ce lien à la fiche existante avec add_listing_link (prix affiché, vendeur et référence lus). S'il y a un doublon probable, demande au membre s'il s'agit de la même annonce (dans ce cas n'enregistre rien et propose add_listing_link ou update_listing sur l'existante) ou s'il veut créer quand même (ignoreDuplicates: true).",
+    "3. S'il y a un doublon `certain` (même lien, ou même agence et même référence : la même annonce sur un autre portail), ne crée rien : propose au membre d'ajouter ce lien à la fiche existante avec add_listing_link (prix affiché, vendeur et référence lus). S'il y a un doublon probable, demande au membre s'il s'agit de la même annonce (dans ce cas n'enregistre rien et propose add_listing_link ou update_listing sur l'existante ; si c'est le même bien vendu par une autre agence, enregistre d'abord cette agence et sa référence avec add_listing_seller, après son accord, puis ajoute le lien) ou s'il veut créer quand même (ignoreDuplicates: true). Pour retrouver une annonce « déjà vue » sans motif de doublon, find_similar_listings classe les annonces de l'espace par ressemblance.",
     "4. Attends la confirmation explicite du membre avant d'écrire. Applique ses corrections dans la fiche et marque chaque champ corrigé avec la provenance « user » dans fieldSources.",
     "5. Après confirmation seulement, appelle create_listing avec « listing » = la fiche rendue par extract_listing (corrections comprises, fieldSources conservé, sourceText conservé) et « provenance: ai ». Rapporte l'identifiant, les indicateurs (coût tout compris, mensualité, rendement brut, effort, verdict), le verdict de louabilité et les tâches créées pour les champs manquants.",
     '',

@@ -243,6 +243,10 @@ export function fakeEvaluated(
     lastCheck: null,
     republication: { from: null, to: null },
     links: [],
+    // Lot 27 : autres agences et fusions, vides par défaut.
+    sellers: [],
+    mergedInto: null,
+    absorbed: [],
     ...over,
   }
 }

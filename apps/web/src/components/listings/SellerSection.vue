@@ -1,16 +1,35 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue'
-  import { SELLER_TYPE_LABELS, SellerTypeSchema } from '@apart/contracts'
-  import type { EvaluatedListing, SellerType } from '@apart/contracts'
-  import { referenceProvenanceText, sellerNameLabel } from '@apart/domain'
+  import {
+    LISTING_SELLERS_MAX,
+    LISTING_SELLER_ORIGIN_LABELS,
+    ObservedSellerTypeSchema,
+    SELLER_TYPE_LABELS,
+    SellerTypeSchema,
+  } from '@apart/contracts'
+  import type {
+    EvaluatedListing,
+    ObservedSellerType,
+    SellerType,
+  } from '@apart/contracts'
+  import {
+    isEmptySeller,
+    otherSellerText,
+    referenceProvenanceText,
+    sellerNameLabel,
+    sellersCountText,
+  } from '@apart/domain'
   import UiAlert from '@/components/ui/UiAlert.vue'
   import UiButton from '@/components/ui/UiButton.vue'
   import UiCard from '@/components/ui/UiCard.vue'
   import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import UiConfirm from '@/components/ui/UiConfirm.vue'
   import UiField from '@/components/ui/UiField.vue'
   import UiInput from '@/components/ui/UiInput.vue'
   import { useAction } from '@/composables/useAction'
+  import { useListingMerge } from '@/composables/useListingMerge'
   import { useListingMutations } from '@/composables/useListings'
+  import { conflictText } from '@/lib/listing-links'
   import type { ListingTab } from '@/lib/listing-tabs'
 
   /**
@@ -21,6 +40,12 @@
    * « Copier » et d'où elle vient. La référence sert à reconnaître la même
    * annonce sur un autre portail ; un particulier n'en a pas (champs
    * masqués). Enregistré avec le garde-fou `expectedUpdatedAt`.
+   *
+   * Lot 27 (ADR 0037) : un même bien est parfois vendu par plusieurs agences
+   * (mandat simple). Sous l'agence principale, les autres agences, chacune
+   * avec sa référence et d'où elle vient ; « Ajouter une agence » en
+   * enregistre une (elle devient la principale si la fiche n'en avait pas) ;
+   * une agence se retire ici, jamais par Claude.
    */
   const props = defineProps<{ item: EvaluatedListing }>()
   const emit = defineEmits<{ go: [tab: ListingTab] }>()
@@ -100,6 +125,75 @@
     sellerName.value = props.item.listing.sellerName ?? ''
     sellerReference.value = props.item.listing.sellerReference ?? ''
     action.clear()
+  }
+
+  // --- Lot 27 : les autres agences qui vendent le même bien -----------------
+
+  const merges = useListingMerge()
+  const otherTypes = ObservedSellerTypeSchema.options
+  const others = computed(() => props.item.sellers)
+  const countText = computed(() =>
+    sellersCountText(props.item.listing, props.item.sellers)
+  )
+  const canAdd = computed(() => others.value.length < LISTING_SELLERS_MAX)
+  /** Sans vendeur connu, l'agence ajoutée devient celle de la fiche : autant la saisir en haut. */
+  const hasPrincipal = computed(() => !isEmptySeller(props.item.listing))
+  const adding = ref(false)
+  const otherType = ref<ObservedSellerType>('agency')
+  const otherName = ref('')
+  const otherReference = ref('')
+  const otherAction = useAction('L’enregistrement a échoué.')
+  const removing = ref<string | null>(null)
+  const otherIsPro = computed(() => otherType.value !== 'private')
+  const otherError = computed(() =>
+    otherAction.error.value ? conflictText(otherAction.error.value) : null
+  )
+
+  function closeOther(): void {
+    adding.value = false
+    otherType.value = 'agency'
+    otherName.value = ''
+    otherReference.value = ''
+    otherAction.clear()
+  }
+
+  async function addOther(): Promise<void> {
+    const name = otherName.value.trim()
+    const reference = otherReference.value.trim()
+    if (otherIsPro.value && !name && !reference) {
+      otherAction.fail('Donne le nom de l’agence ou sa référence.')
+      document.getElementById('other-seller-name')?.focus()
+      return
+    }
+    const result = await otherAction.run(
+      () =>
+        merges.addSeller.mutateAsync({
+          listingId: props.item.listing.id,
+          input: {
+            sellerType: otherType.value,
+            ...(otherIsPro.value && name ? { sellerName: name } : {}),
+            ...(otherIsPro.value && reference
+              ? { sellerReference: reference }
+              : {}),
+            expectedUpdatedAt: props.item.listing.updatedAt,
+          },
+        }),
+      { success: saved => `${saved.summary}.` }
+    )
+    if (result) closeOther()
+  }
+
+  async function removeOther(sellerId: string): Promise<void> {
+    removing.value = sellerId
+    await otherAction.run(
+      () =>
+        merges.removeSeller.mutateAsync({
+          listingId: props.item.listing.id,
+          sellerId,
+        }),
+      { success: saved => `${saved.summary}.` }
+    )
+    removing.value = null
   }
 
   async function copyReference(): Promise<void> {
@@ -238,5 +332,134 @@
         </UiButton>
       </div>
     </form>
+
+    <!-- Lot 27 : les autres agences qui vendent le même bien. -->
+    <section
+      v-if="hasPrincipal"
+      class="grid gap-2.5 border-t border-line pt-3"
+      aria-labelledby="other-sellers-title"
+      data-testid="other-sellers"
+    >
+      <div class="flex flex-wrap items-baseline justify-between gap-x-2">
+        <h4 id="other-sellers-title" class="text-sm font-semibold">
+          Autres agences pour ce bien
+        </h4>
+        <span
+          v-if="countText"
+          class="text-xs text-muted"
+          data-testid="sellers-count"
+          >{{ countText }}</span
+        >
+      </div>
+      <ul v-if="others.length" class="m-0 grid list-none gap-2 p-0">
+        <li
+          v-for="other in others"
+          :key="other.id"
+          class="grid gap-1 rounded-lg border border-line px-3 py-2 text-sm"
+          :data-other-seller="other.id"
+        >
+          <span class="font-medium">{{ otherSellerText(other) }}</span>
+          <span class="flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs text-muted">{{
+              LISTING_SELLER_ORIGIN_LABELS[other.origin]
+            }}</span>
+            <UiConfirm
+              label="Retirer"
+              question="Retirer cette agence ?"
+              confirm-label="Oui, retirer"
+              cancel-label="Non"
+              :busy="removing === other.id"
+              data-action="remove-other-seller"
+              :confirm-attrs="{ 'data-action': 'confirm-remove-other-seller' }"
+              @confirm="removeOther(other.id)"
+            />
+          </span>
+        </li>
+      </ul>
+      <p v-else-if="!adding" class="text-xs text-muted">
+        Un même bien est parfois confié à plusieurs agences, chacune avec sa
+        référence : note-les ici, l’annonce sera reconnue sur leurs portails.
+      </p>
+
+      <form
+        v-if="adding"
+        class="grid gap-2.5"
+        novalidate
+        data-testid="other-seller-form"
+        @submit.prevent="addOther"
+      >
+        <fieldset class="grid gap-1.5">
+          <legend class="mb-1 text-sm font-medium">Vendeur</legend>
+          <div class="flex flex-wrap gap-1.5">
+            <UiCheckbox
+              v-for="type in otherTypes"
+              :key="type"
+              v-model="otherType"
+              type="radio"
+              name="other-seller-type"
+              :value="type"
+              :label="SELLER_TYPE_LABELS[type]"
+              class="rounded-lg border px-3"
+              :class="
+                otherType === type
+                  ? 'border-accent bg-accent-soft font-medium'
+                  : 'border-line'
+              "
+              :data-other-type="type"
+            />
+          </div>
+        </fieldset>
+        <template v-if="otherIsPro">
+          <UiField
+            id="other-seller-name"
+            v-model="otherName"
+            :label="otherType === 'mandatary' ? 'Réseau' : 'Agence'"
+            quiet
+            maxlength="120"
+            data-testid="other-seller-name"
+          />
+          <UiField
+            id="other-seller-reference"
+            v-model="otherReference"
+            label="Sa référence pour ce bien"
+            quiet
+            maxlength="60"
+            placeholder="EX-2041"
+            data-testid="other-seller-reference"
+          />
+        </template>
+        <p v-else class="text-sm text-muted">
+          Le propriétaire vend aussi en direct (de particulier à particulier).
+        </p>
+        <UiAlert v-if="otherError" data-testid="other-seller-error">
+          {{ otherError }}
+        </UiAlert>
+        <div class="flex flex-wrap justify-end gap-2">
+          <UiButton @click="closeOther">Annuler</UiButton>
+          <UiButton
+            type="submit"
+            variant="primary"
+            :loading="merges.addSeller.isPending.value"
+            loading-label="Enregistrement…"
+            data-action="save-other-seller"
+          >
+            Ajouter l’agence
+          </UiButton>
+        </div>
+      </form>
+      <template v-else>
+        <UiAlert v-if="otherError">{{ otherError }}</UiAlert>
+        <UiButton
+          v-if="canAdd"
+          class="justify-self-start"
+          size="sm"
+          icon="plus"
+          data-action="add-other-seller"
+          @click="adding = true"
+        >
+          Ajouter une agence
+        </UiButton>
+      </template>
+    </section>
   </UiCard>
 </template>

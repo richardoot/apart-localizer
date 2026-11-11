@@ -29,7 +29,12 @@ import type {
   LocationPrecision,
   Point,
 } from '@apart/contracts'
-import { detectLinkPortal, formatEuros, linkKey } from '@apart/domain'
+import {
+  detectLinkPortal,
+  formatEuros,
+  linkKey,
+  mergedListingRefusal,
+} from '@apart/domain'
 import type { DecisionJournal } from '@apart/domain'
 import { z } from 'zod'
 import { ActivityService } from '../activity/activity.service'
@@ -535,7 +540,9 @@ export class DraftsService {
 
   /**
    * « C'est la même : mettre à jour la fiche » : le brouillon est le même
-   * bien qu'une annonce suivie (un de ses doublons probables). Les faits lus
+   * bien qu'une annonce suivie (un de ses doublons probables, ou, lot 27,
+   * une annonce retrouvée par « Déjà vue » ; une autre agence lue sur le
+   * brouillon est alors enregistrée avec sa référence). Les faits lus
    * s'appliquent à cette annonce par une vérification du lot 15 (rien de
    * plus : ni statut, ni lien), le brouillon passe à « merged », lié à
    * l'annonce et à la vérification.
@@ -547,16 +554,14 @@ export class DraftsService {
   ): Promise<ListingDraft> {
     const row = await this.row(member, id)
     this.assertPending(row)
-    const duplicates = z
-      .array(DuplicateCandidateSchema)
-      .catch([])
-      .parse(row.duplicates)
-    if (!duplicates.some(d => d.listingId === request.listingId)) {
-      throw new BadRequestException(
-        'Cette annonce n’est pas un doublon probable du brouillon'
+    // Lot 27 : l'annonce suivie est un doublon probable, ou une annonce que
+    // le membre a retrouvée par « Déjà vue » (toute annonce de l'espace).
+    const item = await this.listings.get(member, request.listingId)
+    if (item.mergedInto) {
+      throw new ConflictException(
+        `${mergedListingRefusal(item.mergedInto.title)} Choisis plutôt « ${item.mergedInto.title} ».`
       )
     }
-    const item = await this.listings.get(member, request.listingId)
     const input = draftInput(row)
     const portal = row.portal ? EXPLORATION_PORTAL_LABELS[row.portal] : null
     const evidence = `Même bien vu ${portal ? `sur ${portal}` : 'dans une alerte'}${input.price > 0 ? ` : Prix : ${formatEuros(input.price)}` : ''}`

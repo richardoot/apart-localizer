@@ -13,6 +13,11 @@ import { LISTING_PAGE_MAX } from './filters.js'
 import { ListingInputSchema, ListingSchema } from './listing.js'
 import { ListingLinkSchema } from './listing-links.js'
 import {
+  ListingMergeRecordSchema,
+  ListingMergedIntoSchema,
+  ListingSellerSchema,
+} from './listing-merge.js'
+import {
   ListingCheckSummarySchema,
   ListingRepublicationSchema,
 } from './listing-checks.js'
@@ -105,6 +110,23 @@ export const EvaluatedListingSchema = z.object({
     .default([])
     .describe(
       'Lot 18 : les liens de l’annonce, un par portail où elle est publiée (le principal d’abord, puis du plus ancien au plus récent) : prix affiché, en ligne ou non, origine ; le prix de la fiche est le plus bas des liens en ligne dont le prix est connu'
+    ),
+  sellers: z
+    .array(ListingSellerSchema)
+    .default([])
+    .describe(
+      'Lot 27 : les autres agences qui vendent le même bien (mandat simple), chacune avec sa référence ; l’agence principale reste dans listing.sellerName et listing.sellerReference'
+    ),
+  mergedInto: ListingMergedIntoSchema.nullable()
+    .default(null)
+    .describe(
+      'Lot 27 : la fiche qui a absorbé celle-ci (doublon fusionné) ; une fiche fusionnée est cachée des listes et ne se modifie plus tant que la fusion n’est pas annulée ; null sinon'
+    ),
+  absorbed: z
+    .array(ListingMergeRecordSchema)
+    .default([])
+    .describe(
+      'Lot 27 : les fiches en double fusionnées dans celle-ci, la plus récente d’abord ; chaque fusion s’annule dans l’application'
     ),
   decision: DecisionProposalSchema.nullable()
     .default(null)

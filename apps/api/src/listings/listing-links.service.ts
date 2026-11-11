@@ -32,7 +32,9 @@ import {
   lowestOnlinePrice,
   priceTrigger,
   sanitizeEvidence,
-  sellerContradiction,
+  mergedListingRefusal,
+  otherSellerText,
+  sellerContradictionAmong,
 } from '@apart/domain'
 import type { LinkState } from '@apart/domain'
 import { ActivityService } from '../activity/activity.service'
@@ -53,6 +55,7 @@ import {
   ListingChecksService,
 } from './listing-checks.service'
 import { toListingCheckDto } from './listing.mapper'
+import { createListingSeller, sellersOf } from './listing-sellers.service'
 import { ListingsService } from './listings.service'
 
 /** Qui écrit : un membre, ou le système (alerte e-mail, `id` null). */
@@ -138,6 +141,12 @@ export class ListingLinksService {
   ): Promise<ListingLinkWriteResult> {
     const member = asMember(actor)
     const item = await this.listings.get(member, listingId)
+    // Lot 27 : un doublon fusionné ne reçoit plus de lien (sa fiche gardée, si).
+    if (item.mergedInto) {
+      throw new ConflictException(
+        `${mergedListingRefusal(item.mergedInto.title)} Ajoute le lien à « ${item.mergedInto.title} » [id ${item.mergedInto.id}].`
+      )
+    }
     if (input.expectedUpdatedAt !== undefined) {
       this.listings.checkGuards(item.listing, {
         expectedUpdatedAt: input.expectedUpdatedAt,
@@ -166,11 +175,13 @@ export class ListingLinksService {
       sellerName: input.sellerName,
       reference: input.reference,
     }
+    // Lot 27 : la page peut montrer une des autres agences de la fiche.
+    const otherSellers = sellersOf(item).others
     if (options.strictSeller) {
-      const problem = sellerContradiction(seller, reading)
+      const problem = sellerContradictionAmong(seller, otherSellers, reading)
       if (problem) {
         throw new ConflictException(
-          `Ce n’est peut-être pas la même annonce : ${problem}. Rien n’est rattaché ; déposez-la dans « À valider » (record_exploration) ou demandez au membre.`
+          `Ce n’est peut-être pas la même annonce : ${problem}. Rien n’est rattaché ; déposez-la dans « À valider » (record_exploration) ou demandez au membre. Si le membre confirme que c’est le même bien vendu par une autre agence, enregistrez d’abord cette agence et sa référence (add_listing_seller), puis ajoutez le lien.`
         )
       }
     }
@@ -212,6 +223,10 @@ export class ListingLinksService {
       stored: item.listing,
       priceSource: item.listing.fieldSources.price?.source ?? null,
       seller,
+      otherSellers,
+      // Un membre a tranché que c'est le même bien : une agence qui
+      // contredit la principale est une autre agence, enregistrée.
+      recordOtherSeller: !options.strictSeller,
       links: linkStatesOf(item),
       link,
       observed,
@@ -256,6 +271,31 @@ export class ListingLinksService {
         alsoTouches: { updatedAt: now },
       })
       await syncPrimaryLink(tx, listingId)
+      if (diff.newSeller) {
+        const added = await createListingSeller(tx, {
+          workspaceId: actor.workspaceId,
+          listingId,
+          seller: diff.newSeller,
+          origin: 'link',
+          addedById: actor.id,
+        })
+        await this.activity.record(
+          {
+            workspaceId: actor.workspaceId,
+            listingId,
+            actorMemberId: actor.id,
+            channel: options.channel,
+            action: 'listing.seller_added',
+            after: {
+              sellerId: added.id,
+              seller: otherSellerText(diff.newSeller),
+              origin: 'link',
+              linkId: id,
+            },
+          },
+          tx
+        )
+      }
       const created = await tx.listingCheck.create({
         data: {
           listingId,

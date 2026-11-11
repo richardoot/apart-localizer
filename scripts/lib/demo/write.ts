@@ -221,6 +221,24 @@ export async function writeDemoDataset(
         ),
       })
 
+      // Lot 27 : les autres agences qui vendent le même bien.
+      await tx.listingSeller.createMany({
+        data: dataset.listings.flatMap(listing =>
+          listing.otherSellers.map(seller => ({
+            id: seller.id,
+            workspaceId,
+            listingId: listing.id,
+            sellerType: seller.sellerType,
+            sellerName: seller.sellerName,
+            sellerReference: seller.sellerReference,
+            sellerReferenceKey: seller.sellerReferenceKey,
+            origin: seller.origin,
+            addedById: idOf(seller.addedBy),
+            createdAt: new Date(seller.createdAt),
+          }))
+        ),
+      })
+
       // Lot 15 : republications et vérifications, une fois toutes les annonces là.
       for (const listing of dataset.listings) {
         if (listing.republishedFromId) {

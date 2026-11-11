@@ -1,6 +1,12 @@
 import { listingFiltersToQuery } from '@apart/contracts'
 import type {
   ClaudeStatus,
+  ListingMergeInput,
+  ListingMergePreview,
+  ListingMergeResult,
+  ListingSellerInputRaw,
+  ListingSellerWriteResult,
+  SimilarListingsResult,
   ListingCovers,
   DecisionCard,
   DecisionInput,
@@ -454,6 +460,52 @@ export const api = {
     remove: (listingId: string, linkId: string) =>
       apiFetch<ListingLinkWriteResult>(
         `/listings/${listingId}/links/${linkId}`,
+        { method: 'DELETE' }
+      ),
+  },
+
+  /**
+   * Lot 27 : retrouver une annonce « déjà vue » par ressemblance, fusionner
+   * deux fiches du même bien (annulable), enregistrer une autre agence.
+   */
+  merges: {
+    /** Les annonces suivies qui ressemblent à une annonce, à un brouillon, ou à un texte cherché. */
+    similar: (query: {
+      listingId?: string | undefined
+      draftId?: string | undefined
+      q?: string | undefined
+      limit?: number | undefined
+    }) => {
+      const params = new URLSearchParams()
+      if (query.listingId) params.set('listingId', query.listingId)
+      if (query.draftId) params.set('draftId', query.draftId)
+      if (query.q) params.set('q', query.q)
+      if (query.limit) params.set('limit', String(query.limit))
+      return apiFetch<SimilarListingsResult>(`/listings/similar?${params}`)
+    },
+    /** Ce que ferait la fusion de `otherId` dans `keepId`, sans rien écrire. */
+    preview: (keepId: string, otherId: string) =>
+      apiFetch<ListingMergePreview>(
+        `/listings/${keepId}/merge-preview?with=${otherId}`
+      ),
+    merge: (keepId: string, input: ListingMergeInput) =>
+      apiFetch<ListingMergeResult>(`/listings/${keepId}/merge`, {
+        method: 'POST',
+        json: input,
+      }),
+    undo: (mergeId: string) =>
+      apiFetch<ListingMergeResult>(`/listing-merges/${mergeId}/undo`, {
+        method: 'POST',
+      }),
+    /** Une autre agence qui vend le même bien, avec sa référence. */
+    addSeller: (listingId: string, input: ListingSellerInputRaw) =>
+      apiFetch<ListingSellerWriteResult>(`/listings/${listingId}/sellers`, {
+        method: 'POST',
+        json: input,
+      }),
+    removeSeller: (listingId: string, sellerId: string) =>
+      apiFetch<ListingSellerWriteResult>(
+        `/listings/${listingId}/sellers/${sellerId}`,
         { method: 'DELETE' }
       ),
   },

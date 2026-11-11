@@ -18,11 +18,21 @@ export interface TriagePick {
   /** Le résultat au bilan (« Passée en À visiter », « À trancher ensemble »). */
   result: string
   action:
-    'keep' | 'to_visit' | 'discard' | 'skip' | 'agree' | 'refuse' | 'later'
+    | 'keep'
+    | 'to_visit'
+    | 'discard'
+    | 'skip'
+    | 'agree'
+    | 'refuse'
+    | 'later'
+    /** Lot 27 : « Déjà vue », rattachée ou fusionnée à une annonce suivie. */
+    | 'seen'
   /** La proposition écrite, à retirer si on annule. */
   proposalId: string | null
-  /** Comment annuler : retirer la proposition, remettre le statut, le brouillon, rien. */
-  undo: 'proposal' | 'listing' | 'draft' | 'skip' | null
+  /** Comment annuler : retirer la proposition, remettre le statut, le brouillon, défaire une fusion (lot 27), rien. */
+  undo: 'proposal' | 'listing' | 'draft' | 'skip' | 'merge' | null
+  /** Lot 27 : la fusion faite par « Déjà vue », à annuler. */
+  mergeId?: string
   /** Le statut à remettre d'une annonce changée tout de suite. */
   statusBefore: ListingStatus | null
   /** Vrai si un brouillon vient de devenir une annonce : Annuler n'est pas offert. */

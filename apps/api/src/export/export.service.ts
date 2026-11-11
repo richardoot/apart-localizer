@@ -264,6 +264,8 @@ export class ExportService {
         agencyRequests: exchanges.requests.get(item.listing.id) ?? [],
         // Lot 18 : les liens des portails, le principal d'abord.
         links: item.links,
+        // Lot 27 : les autres agences qui vendent le même bien.
+        sellers: item.sellers,
       })),
       searchCriteria: criteria.map(toSearchCriteriaDto),
       scenarios: scenarios.map(toScenarioDto),

@@ -53,6 +53,12 @@ const apiMock = vi.hoisted(() => ({
     list: vi.fn(() => Promise.resolve({ covers: [] })),
     choose: vi.fn(),
   },
+  // Lot 27 : « Même bien, autre fiche ? » cherche les fiches très proches.
+  merges: {
+    similar: vi.fn(() =>
+      Promise.resolve({ items: [], compared: 0, summary: '' })
+    ),
+  },
 }))
 
 vi.mock('@/lib/api', async () => {
@@ -427,6 +433,44 @@ describe('ListingPanel (lot 19 : une fiche, sept questions)', () => {
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/annonces')
     expect(apiMock.listings.update).not.toHaveBeenCalled()
+  })
+
+  it('lot 27 : une fiche fusionnée dans une autre le dit d’abord et y mène ; Le bien propose de fusionner', async () => {
+    const merged = {
+      ...item,
+      isNewForMe: false,
+      mergedInto: {
+        mergeId: '33333333-3333-4333-8333-333333333333',
+        id: '22222222-2222-4222-8222-222222222222',
+        title: '[Exemple] Fiche gardée',
+        mergedAt: '2026-11-11T10:00:00.000Z',
+      },
+    }
+    apiMock.listings.get.mockResolvedValue(merged)
+    apiMock.listings.markSeen.mockResolvedValue(merged)
+    mountPanel()
+    await flushPromises()
+    const banner = query('[data-testid="merged-banner"]')
+    expect(banner?.textContent).toContain(
+      'Doublon fusionné dans « [Exemple] Fiche gardée »'
+    )
+    expect(query('[data-action="banner-open-kept"]')).not.toBeNull()
+    // Une fiche fusionnée ne cherche pas de doublon.
+    await openTab('bien')
+    expect(query('[data-testid="merged-into"]')).not.toBeNull()
+    expect(apiMock.merges.similar).not.toHaveBeenCalled()
+  })
+
+  it('lot 27 : une fiche ordinaire n’a pas de bandeau ; Le bien propose « Fusionner avec une autre fiche »', async () => {
+    mountPanel()
+    await flushPromises()
+    expect(query('[data-testid="merged-banner"]')).toBeNull()
+    await openTab('bien')
+    expect(query('[data-testid="merge-section"]')).not.toBeNull()
+    expect(query('[data-action="open-merge"]')).not.toBeNull()
+    expect(apiMock.merges.similar).toHaveBeenCalledWith(
+      expect.objectContaining({ listingId: item.listing.id, limit: 3 })
+    )
   })
 
   it('lot 22 : une fiche illisible dit pourquoi et propose « Réessayer »', async () => {

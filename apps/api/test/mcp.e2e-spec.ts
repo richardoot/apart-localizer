@@ -231,8 +231,9 @@ describe('MCP (e2e)', () => {
       // (vérification des annonces sur le portail), trois au lot 16
       // (exploration des portails par les critères), quatre au lot 17
       // (questions aux agences), un au lot 18 (une annonce, plusieurs
-      // portails).
-      expect(names).toHaveLength(39)
+      // portails), trois au lot 27 (annonces ressemblantes, fusion des
+      // doublons, autres agences).
+      expect(names).toHaveLength(42)
       const extract = list.body.result.tools.find(
         (t: { name: string }) => t.name === 'extract_listing'
       )

@@ -97,9 +97,11 @@ export const ListingCheckFieldSchema = z
     'sellerType',
     'sellerName',
     'sellerReference',
+    // Lot 27 : une autre agence qui vend le même bien.
+    'otherSeller',
   ])
   .describe(
-    'Champ comparé par une vérification (lot 18 : link = un lien ajouté, linkPrice = le prix sur ce portail, priceGap = un écart entre portails, sellerType, sellerName, sellerReference = le vendeur lu)'
+    'Champ comparé par une vérification (lot 18 : link = un lien ajouté, linkPrice = le prix sur ce portail, priceGap = un écart entre portails, sellerType, sellerName, sellerReference = le vendeur lu ; lot 27 : otherSeller = une autre agence qui vend le même bien, enregistrée avec sa référence)'
   )
 export type ListingCheckField = z.infer<typeof ListingCheckFieldSchema>
 

@@ -95,6 +95,7 @@ export const LISTING_CHECK_FIELD_LABELS: Record<ListingCheckField, string> = {
   sellerType: 'Vendeur',
   sellerName: 'Agence ou réseau',
   sellerReference: 'Référence de l’annonce',
+  otherSeller: 'Autre agence',
 }
 
 /** Statuts pour lesquels « plus en ligne » ne propose rien : l'annonce est déjà sortie du suivi. */

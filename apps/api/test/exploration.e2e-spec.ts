@@ -813,11 +813,13 @@ describe('Exploration par les critères (e2e, lot 16)', () => {
       .expect(409)
 
     // « C'est la même » : la fiche suivie est mise à jour, le brouillon reconnu.
+    // Lot 27 : l'annonce suivie n'a plus à être un doublon probable (« Déjà
+    // vue » la retrouve par ressemblance) ; elle reste une annonce de l'espace.
     await api()
       .post(`/listing-drafts/${dup?.id}/merge`)
       .set(ctx.auth(richard))
-      .send({ listingId: suivieId })
-      .expect(400)
+      .send({ listingId: '11111111-1111-4111-8111-111111111111' })
+      .expect(404)
     const merged = await api()
       .post(`/listing-drafts/${dup?.id}/merge`)
       .set(ctx.auth(richard))

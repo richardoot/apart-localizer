@@ -154,7 +154,11 @@ describe('seed de démonstration (e2e, PostGIS)', () => {
     expect(merged.attachedAt).not.toBeNull()
     const chartrons = await db.prisma.listing.findUniqueOrThrow({
       where: { id: demoId('listing:chartrons-t2') },
-      include: { contact: true, links: { orderBy: { createdAt: 'asc' } } },
+      include: {
+        contact: true,
+        links: { orderBy: { createdAt: 'asc' } },
+        sellers: true,
+      },
     })
     expect(chartrons).toMatchObject({
       sellerType: 'agency',
@@ -170,6 +174,11 @@ describe('seed de démonstration (e2e, PostGIS)', () => {
       ['leboncoin', true],
     ])
     expect(chartrons.contact?.agencyName).toBeNull()
+    // Lot 27 : la seconde agence fictive du même bien, avec sa référence.
+    expect(
+      chartrons.sellers.map(s => [s.sellerName, s.sellerReferenceKey, s.origin])
+    ).toEqual([['[Exemple] Agence du Jardin public', 'EX5512', 'manual']])
+    expect(chartrons.sellers[0]?.addedById).not.toBeNull()
     // Lot 17 : trois demandes (réponse reçue, à valider, relance due), trois
     // contacts, les tâches demandées ou répondues rattachées, une
     // notification « réponse de l'agence » pour l'autre membre.

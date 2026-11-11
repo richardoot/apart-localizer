@@ -410,6 +410,182 @@ export function sellerContradiction(
   return problems.length ? problems.join(' ; ') : null
 }
 
+/**
+ * Lot 27 (ADR 0037) : plusieurs agences vendent parfois le même bien (mandat
+ * simple), chacune avec sa référence. L'agence principale reste sur
+ * l'annonce ; les autres sont à côté. Les fonctions qui suivent comparent
+ * une agence, ou ce qu'une page a montré, à toutes celles de la fiche.
+ */
+
+/** Vrai si la fiche ne sait rien de ce vendeur (ni type, ni nom, ni référence). */
+export function isEmptySeller(seller: SellerFacts): boolean {
+  return (
+    seller.sellerType === 'unknown' &&
+    !seller.sellerName &&
+    !seller.sellerReference
+  )
+}
+
+/**
+ * Deux vendeurs sont-ils le même ? Deux particuliers, oui ; un particulier
+ * et une agence, non ; deux agences du même nom (`sameAgency`), oui si leurs
+ * références ne se contredisent pas (la même, ou une seule connue) ; sans
+ * nom d'un côté, la même référence suffit. Une même agence avec deux
+ * références reste deux lignes : chaque référence sert à reconnaître
+ * l'annonce.
+ */
+export function sameSeller(a: SellerFacts, b: SellerFacts): boolean {
+  if (a.sellerType === 'private' || b.sellerType === 'private') {
+    return a.sellerType === 'private' && b.sellerType === 'private'
+  }
+  const keyA = referenceKey(a.sellerReference)
+  const keyB = referenceKey(b.sellerReference)
+  if (a.sellerName && b.sellerName) {
+    if (!sameAgency(a.sellerName, b.sellerName)) return false
+    return keyA === null || keyB === null || keyA === keyB
+  }
+  return keyA !== null && keyA === keyB
+}
+
+/** Les vendeurs connus d'une fiche : le principal (s'il est renseigné), puis les autres. */
+export function knownSellers(
+  principal: SellerFacts,
+  others: readonly SellerFacts[] = []
+): SellerFacts[] {
+  return [...(isEmptySeller(principal) ? [] : [principal]), ...others]
+}
+
+/** Ce qu'une page a montré du vendeur désigne-t-il ce vendeur de la fiche ? */
+export function observationMatchesSeller(
+  seller: SellerFacts,
+  observed: SellerObservation
+): boolean {
+  if (observed.sellerType === 'private') return seller.sellerType === 'private'
+  if (seller.sellerType === 'private') return false
+  const name = cleanSellerName(observed.sellerName)
+  const observedKey = referenceKey(observed.reference)
+  const storedKey = referenceKey(seller.sellerReference)
+  if (name && seller.sellerName) {
+    if (!sameAgency(seller.sellerName, name)) return false
+    return (
+      observedKey === null || storedKey === null || observedKey === storedKey
+    )
+  }
+  return observedKey !== null && observedKey === storedKey
+}
+
+/**
+ * Comme `sellerContradiction`, pour une fiche à plusieurs agences : rien ne
+ * contredit si la page montre l'agence principale, ou une des autres agences
+ * de la fiche (même nom, ou même référence).
+ */
+export function sellerContradictionAmong(
+  principal: SellerFacts,
+  others: readonly SellerFacts[],
+  observed: SellerObservation
+): string | null {
+  const problem = sellerContradiction(principal, observed)
+  if (problem === null) return null
+  if (others.some(other => observationMatchesSeller(other, observed))) {
+    return null
+  }
+  return others.length
+    ? `${problem} (ni une des ${others.length > 1 ? `${others.length} autres agences` : 'autres agences'} de la fiche)`
+    : problem
+}
+
+/** Le vendeur lu sur une page, à enregistrer comme une autre agence ; null s'il n'y a rien à garder. */
+export function sellerFromObservation(
+  observed: SellerObservation
+): NormalizedSeller | null {
+  const seller = normalizeSeller({
+    sellerType: observed.sellerType ?? 'unknown',
+    sellerName: observed.sellerName,
+    sellerReference: observed.reference,
+  })
+  if (seller.sellerType === 'private') return seller
+  return seller.sellerName || seller.sellerReference ? seller : null
+}
+
+/** « « X », réf. EX-2041 », « Particulier », « réf. EX-2041 (agence à préciser) ». */
+export function otherSellerText(seller: SellerFacts): string {
+  if (seller.sellerType === 'private') return 'Particulier (vente directe)'
+  const head = seller.sellerName
+    ? `« ${seller.sellerName} »`
+    : seller.sellerType === 'mandatary'
+      ? 'Mandataire'
+      : 'Agence à préciser'
+  return seller.sellerReference
+    ? `${head}, réf. ${seller.sellerReference}`
+    : head
+}
+
+/**
+ * Le vendeur lu sur une page, comparé à une fiche à plusieurs agences. S'il
+ * désigne une des autres agences de la fiche, rien ne change. Sinon, la
+ * comparaison du lot 18 avec l'agence principale ; et quand un membre a
+ * tranché que c'est le même bien (`recordOther`), une agence ou une référence
+ * qui contredit la principale n'est plus « à vérifier » : elle est
+ * enregistrée comme une autre agence (`newSeller`), sans toucher à la
+ * principale.
+ */
+export function sellerObservationAmong(
+  principal: SellerFacts,
+  others: readonly SellerFacts[],
+  observed: SellerObservation,
+  options: { recordOther?: boolean } = {}
+): {
+  changes: ListingCheckChange[]
+  patch: Partial<SellerFacts>
+  newSeller: NormalizedSeller | null
+} {
+  if (others.some(other => observationMatchesSeller(other, observed))) {
+    return { changes: [], patch: {}, newSeller: null }
+  }
+  const diff = sellerObservationDiff(principal, observed)
+  const contradicts = diff.changes.some(c => c.disposition === 'proposed')
+  if (!options.recordOther || !contradicts) return { ...diff, newSeller: null }
+  const newSeller = sellerFromObservation(observed)
+  // Le même vendeur lu autrement (agence dite « mandataire ») n'est pas une
+  // autre agence : l'écart reste proposé, comme au lot 18.
+  if (
+    !newSeller ||
+    knownSellers(principal, others).some(known => sameSeller(known, newSeller))
+  ) {
+    return { ...diff, newSeller: null }
+  }
+  const text = otherSellerText(newSeller)
+  return {
+    changes: [
+      {
+        field: 'otherSeller',
+        label: 'Autre agence',
+        before: null,
+        after: text,
+        disposition: 'applied',
+        text: `Autre agence enregistrée : ${text} (même bien, autre mandat)`,
+      },
+    ],
+    patch: {},
+    newSeller,
+  }
+}
+
+/** « Vendue par 2 agences », « Vendue par une agence et en direct » : la ligne sous « Qui la vend ». */
+export function sellersCountText(
+  principal: SellerFacts,
+  others: readonly SellerFacts[]
+): string | null {
+  const all = knownSellers(principal, others)
+  if (all.length < 2) return null
+  const direct = all.some(s => s.sellerType === 'private')
+  const pros = all.length - (direct ? 1 : 0)
+  const agencies = `${pros} agence${pros > 1 ? 's' : ''}`
+  return direct
+    ? `Vendue par ${agencies} et en direct`
+    : `Vendue par ${agencies}`
+}
+
 /** « 3 nov. » (fuseau de Paris). */
 export function shortDay(iso: string): string {
   return new Date(iso).toLocaleDateString('fr-FR', {

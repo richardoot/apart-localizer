@@ -360,6 +360,16 @@ enum ListingLinkOrigin {
 
 /// Qui vend (lot 18) : agence, mandataire, particulier, inconnu (par défaut,
 /// jamais deviné).
+/// Lot 27 : d'où vient une autre agence d'une annonce.
+enum ListingSellerOrigin {
+  manual
+  claude
+  link
+  merge
+
+  @@schema("app")
+}
+
 enum SellerType {
   agency
   mandatary
@@ -425,6 +435,9 @@ model Workspace {
   listingContacts ListingContact[]
   /// Lot 18 : les liens des annonces sur les portails.
   listingLinks    ListingLink[]
+  // Lot 27 : autres agences d'une annonce, fusions de fiches.
+  listingSellers  ListingSeller[]
+  listingMerges   ListingMerge[]
 
   /// Lot 20 : avis à l'aveugle (l'avis des autres masqué tant qu'on n'a pas
   /// noté) ; vrai par défaut.
@@ -513,6 +526,10 @@ model Member {
   updatedContacts        ListingContact[]   @relation("ListingContactEditor")
   // Lot 18 : les liens ajoutés.
   addedLinks             ListingLink[]      @relation("ListingLinkAuthor")
+  // Lot 27 : agences ajoutées, fusions faites ou annulées.
+  addedSellers           ListingSeller[]    @relation("ListingSellerAuthor")
+  listingMerges          ListingMerge[]     @relation("ListingMergeAuthor")
+  undoneListingMerges    ListingMerge[]     @relation("ListingMergeUndoer")
   // Lot 21 : les décisions à plusieurs.
   authoredDecisions      DecisionProposal[] @relation("DecisionAuthor")
   closedDecisions        DecisionProposal[] @relation("DecisionCloser")
@@ -674,48 +691,61 @@ model Listing {
   // visite). Jamais une image de portail ; lue par URL signée à durée courte.
   coverPhotoId String? @map("cover_photo_id")
 
+  // Lot 27 (ADR 0037) : la fiche qui a absorbé celle-ci (doublon fusionné).
+  // Une fiche fusionnée est écartée, cachée des listes, jamais supprimée ;
+  // la fusion s'annule (listing_merges). Null = fiche ordinaire.
+  mergedIntoId String?   @map("merged_into_id")
+  mergedAt     DateTime? @map("merged_at") @db.Timestamptz(6)
+
   createdById String?  @map("created_by_id")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  workspace        Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy        Member?                @relation("ListingCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  renovation       Renovation?
-  rentalPlan       RentalPlan?
-  opinions         Opinion[]
+  workspace         Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy         Member?                @relation("ListingCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  renovation        Renovation?
+  rentalPlan        RentalPlan?
+  opinions          Opinion[]
   /// Lot 20 : les « Voir quand même » des membres sur l'annonce.
-  opinionReveals   OpinionReveal[]
-  tasks            Task[]
-  priceEvents      PriceEvent[]
-  offers           Offer[]
-  visits           Visit[]
-  activityLogs     ActivityLog[]
-  views            ListingView[]
-  criteriaMatches  CriteriaMatch[]
-  scenarios        Scenario[]
-  rentComparables  RentComparable[]
-  notifications    Notification[]
-  drafts           ListingDraft[]
-  checks           ListingCheck[]         @relation("ListingChecks")
-  linkedChecks     ListingCheck[]         @relation("ListingCheckLinked")
-  republishedFrom  Listing?               @relation("ListingRepublication", fields: [republishedFromId], references: [id], onDelete: SetNull)
-  republishedAs    Listing?               @relation("ListingRepublication")
-  explorationLines ExplorationCandidate[]
+  opinionReveals    OpinionReveal[]
+  tasks             Task[]
+  priceEvents       PriceEvent[]
+  offers            Offer[]
+  visits            Visit[]
+  activityLogs      ActivityLog[]
+  views             ListingView[]
+  criteriaMatches   CriteriaMatch[]
+  scenarios         Scenario[]
+  rentComparables   RentComparable[]
+  notifications     Notification[]
+  drafts            ListingDraft[]
+  checks            ListingCheck[]         @relation("ListingChecks")
+  linkedChecks      ListingCheck[]         @relation("ListingCheckLinked")
+  republishedFrom   Listing?               @relation("ListingRepublication", fields: [republishedFromId], references: [id], onDelete: SetNull)
+  republishedAs     Listing?               @relation("ListingRepublication")
+  explorationLines  ExplorationCandidate[]
   // Lot 17 : contact de l'annonceur et demandes.
-  contact          ListingContact?
-  agencyRequests   AgencyRequest[]
+  contact           ListingContact?
+  agencyRequests    AgencyRequest[]
   // Lot 18 : les liens de l'annonce sur les portails.
-  links            ListingLink[]
+  links             ListingLink[]
   // Lot 21 : les décisions à plusieurs sur cette annonce.
   decisionProposals DecisionProposal[]
   // Lot 25 : la photo de couverture choisie (photo supprimée : retour à la première).
-  coverPhoto        VisitPhoto?        @relation("ListingCover", fields: [coverPhotoId], references: [id], onDelete: SetNull)
+  coverPhoto        VisitPhoto?            @relation("ListingCover", fields: [coverPhotoId], references: [id], onDelete: SetNull)
+  // Lot 27 : les autres agences qui vendent le même bien, et les fusions.
+  sellers           ListingSeller[]
+  mergedInto        Listing?               @relation("ListingMerged", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedListings    Listing[]              @relation("ListingMerged")
+  mergesAsKept      ListingMerge[]         @relation("ListingMergeKept")
+  mergesAsAbsorbed  ListingMerge[]         @relation("ListingMergeAbsorbed")
 
   @@index([workspaceId, status])
   @@index([workspaceId, commune])
   @@index([workspaceId, url])
   @@index([workspaceId, criteriaFitLevel])
   @@index([workspaceId, sellerReferenceKey])
+  @@index([mergedIntoId])
   @@map("listings")
   @@schema("app")
 }
@@ -1235,13 +1265,13 @@ model ListingDraft {
   attachedAt        DateTime?          @map("attached_at") @db.Timestamptz(6)
   detachedAt        DateTime?          @map("detached_at") @db.Timestamptz(6)
 
-  workspace    Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  decidedBy    Member?                @relation("DraftDecider", fields: [decidedById], references: [id], onDelete: SetNull)
-  attachedLink ListingLink?           @relation(fields: [attachedLinkId], references: [id], onDelete: SetNull)
-  listing      Listing?               @relation(fields: [listingId], references: [id], onDelete: SetNull)
-  exploration  Exploration?           @relation(fields: [explorationId], references: [id], onDelete: SetNull)
-  mergedCheck  ListingCheck?          @relation(fields: [mergedCheckId], references: [id], onDelete: SetNull)
-  lines        ExplorationCandidate[]
+  workspace         Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  decidedBy         Member?                @relation("DraftDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  attachedLink      ListingLink?           @relation(fields: [attachedLinkId], references: [id], onDelete: SetNull)
+  listing           Listing?               @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  exploration       Exploration?           @relation(fields: [explorationId], references: [id], onDelete: SetNull)
+  mergedCheck       ListingCheck?          @relation(fields: [mergedCheckId], references: [id], onDelete: SetNull)
+  lines             ExplorationCandidate[]
   /// Lot 21 : les décisions à plusieurs sur ce brouillon.
   decisionProposals DecisionProposal[]
 
@@ -1844,5 +1874,67 @@ model ListingLink {
   @@unique([workspaceId, normalizedUrl])
   @@index([listingId, createdAt])
   @@map("listing_links")
+  @@schema("app")
+}
+
+// ---------------------------------------------------------------------------
+// Fusion des doublons et agences multiples (lot 27, ADR 0037)
+// ---------------------------------------------------------------------------
+
+/// Une autre agence qui vend le même bien (mandat simple), avec sa propre
+/// référence. L'agence principale reste sur l'annonce (`seller_type`,
+/// `seller_name`, `seller_reference`) ; celles-ci s'y ajoutent. La clé de la
+/// référence sert à reconnaître la même annonce sur un autre portail.
+model ListingSeller {
+  id                 String              @id @default(uuid())
+  workspaceId        String              @map("workspace_id")
+  listingId          String              @map("listing_id")
+  sellerType         SellerType          @default(unknown) @map("seller_type")
+  sellerName         String?             @map("seller_name")
+  sellerReference    String?             @map("seller_reference")
+  sellerReferenceKey String?             @map("seller_reference_key")
+  origin             ListingSellerOrigin
+  addedById          String?             @map("added_by_id")
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  listing   Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  addedBy   Member?   @relation("ListingSellerAuthor", fields: [addedById], references: [id], onDelete: SetNull)
+
+  @@index([listingId, createdAt])
+  @@index([workspaceId, sellerReferenceKey])
+  @@map("listing_sellers")
+  @@schema("app")
+}
+
+/// Une fusion de deux fiches du même bien : la fiche gardée, la fiche
+/// absorbée, qui, par quel canal, et ce qui est passé de l'une à l'autre
+/// (`moved` : identifiants par table, champs complétés, état d'avant), pour
+/// l'annuler. Une fusion annulée garde sa ligne (`undone_at`).
+model ListingMerge {
+  id          String          @id @default(uuid())
+  workspaceId String          @map("workspace_id")
+  keptId      String          @map("kept_id")
+  absorbedId  String          @map("absorbed_id")
+  mergedById  String?         @map("merged_by_id")
+  channel     ActivityChannel
+  mergedAt    DateTime        @default(now()) @map("merged_at") @db.Timestamptz(6)
+  summary     String
+  /// Ce qui a rejoint la fiche gardée, compté (JSON validé par ListingMergeCountsSchema).
+  counts      Json            @default("{}")
+  /// Ce qu'il faut pour annuler : identifiants déplacés, champs complétés, état d'avant.
+  moved       Json            @default("{}")
+  undoneAt    DateTime?       @map("undone_at") @db.Timestamptz(6)
+  undoneById  String?         @map("undone_by_id")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  kept      Listing   @relation("ListingMergeKept", fields: [keptId], references: [id], onDelete: Cascade)
+  absorbed  Listing   @relation("ListingMergeAbsorbed", fields: [absorbedId], references: [id], onDelete: Cascade)
+  mergedBy  Member?   @relation("ListingMergeAuthor", fields: [mergedById], references: [id], onDelete: SetNull)
+  undoneBy  Member?   @relation("ListingMergeUndoer", fields: [undoneById], references: [id], onDelete: SetNull)
+
+  @@index([keptId, mergedAt])
+  @@index([absorbedId])
+  @@map("listing_merges")
   @@schema("app")
 }

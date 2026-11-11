@@ -453,14 +453,22 @@ describe('Lot 18 : une annonce, plusieurs portails au connecteur MCP (e2e)', () 
     expect(n(merged.body.merge.summary)).toContain(
       'Lien Logic-Immo ajouté : 219 000 €'
     )
-    // L'agence lue diffère : elle est proposée, jamais écrasée.
+    // L'agence lue diffère : un membre a tranché que c'est le même bien, elle
+    // est enregistrée comme une autre agence (lot 27), jamais à la place de
+    // l'agence principale.
     expect(n(merged.body.merge.summary)).toContain(
-      'Agence lu « [Exemple] Agence du port », la fiche dit « [Exemple] Immobilier des Chartrons » : à vérifier'
+      'Autre agence enregistrée : « [Exemple] Agence du port », réf. EX 2041 (même bien, autre mandat)'
     )
     const final = (
       await api().get(`/listings/${id}`).set(ctx.auth(richard)).expect(200)
     ).body
     expect(final.listing.sellerName).toBe(AGENCY)
+    expect(final.sellers).toHaveLength(1)
+    expect(final.sellers[0]).toMatchObject({
+      sellerName: '[Exemple] Agence du port',
+      sellerReferenceKey: 'EX2041',
+      origin: 'link',
+    })
     expect(final.links.map((l: { portal: string }) => l.portal)).toEqual([
       'leboncoin',
       'logicimmo',

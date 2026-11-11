@@ -22,6 +22,7 @@ import type {
 import { formatEuros, plural, pluralWord } from './format.js'
 import { describeAgencyActivity } from './agency-activity.js'
 import { describeLinkActivity, portalWhere } from './link-activity.js'
+import { describeMergeActivity } from './merge-activity.js'
 import {
   describeDecisionActivity,
   draftDecisionSummary,
@@ -704,6 +705,11 @@ export function describeActivity(
         activityChanges(b, a, members)
       )
       if (link) return describe(link.summary, link.changes)
+      // Lot 27 : fiches fusionnées, autres agences.
+      const merge = describeMergeActivity(action, before, after, (b, a) =>
+        activityChanges(b, a, members)
+      )
+      if (merge) return describe(merge.summary, merge.changes)
       return describe(action, activityChanges(before, after, members))
     }
   }

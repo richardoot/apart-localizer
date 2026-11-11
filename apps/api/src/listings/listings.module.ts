@@ -11,6 +11,10 @@ import { ListingChecksController } from './listing-checks.controller'
 import { ListingChecksService } from './listing-checks.service'
 import { ListingLinksController } from './listing-links.controller'
 import { ListingLinksService } from './listing-links.service'
+import { ListingMergeController } from './listing-merge.controller'
+import { ListingMergeService } from './listing-merge.service'
+import { ListingSellersService } from './listing-sellers.service'
+import { SimilarListingsService } from './similar-listings.service'
 import { ListingsController } from './listings.controller'
 import { MarketContextController } from './market-context.controller'
 import { ListingsService } from './listings.service'
@@ -19,6 +23,9 @@ import { TargetPriceService } from './target-price.service'
 @Module({
   imports: [AssumptionsModule, AiModule, OpendataModule],
   controllers: [
+    // Lot 27 : avant ListingsController, pour que `/listings/similar` ne
+    // soit pas lu comme `/listings/:id`.
+    ListingMergeController,
     ListingsController,
     MarketContextController,
     ListingChecksController,
@@ -33,6 +40,10 @@ import { TargetPriceService } from './target-price.service'
     ListingEnrichmentService,
     ListingChecksService,
     ListingLinksService,
+    // Lot 27 : annonces ressemblantes, agences multiples, fusion.
+    SimilarListingsService,
+    ListingSellersService,
+    ListingMergeService,
     // Lot 19 : le recalcul du plafond quand l'année ou le type de location
     // de l'espace change (lu par les hypothèses, sans import circulaire).
     {
@@ -48,6 +59,9 @@ import { TargetPriceService } from './target-price.service'
     ListingEnrichmentService,
     ListingChecksService,
     ListingLinksService,
+    SimilarListingsService,
+    ListingSellersService,
+    ListingMergeService,
     OpendataModule,
   ],
 })

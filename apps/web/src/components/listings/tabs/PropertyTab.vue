@@ -3,6 +3,7 @@
   import type { EvaluatedListing } from '@apart/contracts'
   import { useListingEditor } from '@/composables/useListingEditor'
   import type { ListingTab } from '@/lib/listing-tabs'
+  import MergeSection from '@/components/merge/MergeSection.vue'
   import ListingLinksSection from '../ListingLinksSection.vue'
   import SellerSection from '../SellerSection.vue'
   import CoproSection from '../property/CoproSection.vue'
@@ -18,7 +19,8 @@
    * les caractéristiques, l'énergie, la copropriété et les charges, l'annonce
    * et son adresse (dont le prix, que « Corriger » de l'en-tête ouvre) ;
    * chaque section se modifie sur place. À droite : « Où la trouver » et
-   * « Qui la vend » (lot 18).
+   * « Qui la vend » (lot 18), puis « Même bien, autre fiche ? » (lot 27 :
+   * fusionner un doublon, annuler une fusion).
    */
   const props = defineProps<{ item: EvaluatedListing }>()
   const emit = defineEmits<{ go: [tab: ListingTab] }>()
@@ -64,6 +66,7 @@
       >
         <ListingLinksSection :item="item" />
         <SellerSection :item="item" @go="go" />
+        <MergeSection :item="item" />
       </aside>
     </div>
   </div>

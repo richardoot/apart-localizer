@@ -43,6 +43,16 @@ export interface DuplicateRow {
   sellerReference?: string | null
   /** La clé de la référence, si elle est déjà calculée. */
   sellerReferenceKey?: string | null
+  /** Lot 27 : les autres agences qui vendent le même bien, chacune avec sa référence. */
+  otherSellers?: readonly DuplicateRowSeller[]
+}
+
+/** Un vendeur d'une annonce enregistrée, tel que la comparaison le lit. */
+export interface DuplicateRowSeller {
+  sellerType?: SellerType | undefined
+  sellerName?: string | null | undefined
+  sellerReference?: string | null | undefined
+  sellerReferenceKey?: string | null | undefined
 }
 
 const m2 = (value: number | null): string =>
@@ -79,14 +89,32 @@ export function rowLinkKeys(
 /**
  * Le motif « référence » : même référence (clé sans espaces ni tirets) des
  * deux côtés, aucun particulier ; même agence (après normalisation) = la même
- * annonce, sinon probable. Null sans référence commune.
+ * annonce, sinon probable. Null sans référence commune. Lot 27 : la sonde
+ * est comparée à chaque agence de la fiche (la principale et les autres) ;
+ * le motif le plus fort l'emporte.
  */
 export function referenceReason(
   probe: Pick<DuplicateProbe, 'reference' | 'sellerName' | 'sellerType'>,
   row: Pick<
     DuplicateRow,
-    'sellerType' | 'sellerName' | 'sellerReference' | 'sellerReferenceKey'
+    | 'sellerType'
+    | 'sellerName'
+    | 'sellerReference'
+    | 'sellerReferenceKey'
+    | 'otherSellers'
   >
+): DuplicateReason | null {
+  let best: DuplicateReason | null = null
+  for (const seller of [row, ...(row.otherSellers ?? [])]) {
+    const reason = sellerReferenceReason(probe, seller)
+    if (reason && (best === null || reason.score > best.score)) best = reason
+  }
+  return best
+}
+
+function sellerReferenceReason(
+  probe: Pick<DuplicateProbe, 'reference' | 'sellerName' | 'sellerType'>,
+  row: DuplicateRowSeller
 ): DuplicateReason | null {
   if (probe.sellerType === 'private' || row.sellerType === 'private') {
     return null

@@ -31,6 +31,10 @@ import { WhatsNewService } from '../whats-new/whats-new.service'
 import { ListingChecksService } from '../listings/listing-checks.service'
 import { ListingLinksService } from '../listings/listing-links.service'
 import { registerLinkTools } from './mcp-links'
+import { registerMergeTools } from './mcp-merge'
+import { ListingMergeService } from '../listings/listing-merge.service'
+import { ListingSellersService } from '../listings/listing-sellers.service'
+import { SimilarListingsService } from '../listings/similar-listings.service'
 import { ExplorationsService } from '../exploration/explorations.service'
 import { registerCheckPrompts, registerCheckTools } from './mcp-checks'
 import {
@@ -79,7 +83,10 @@ export class McpController {
     private readonly agency: AgencyRequestsService,
     private readonly exploration: ExplorationsService,
     private readonly links: ListingLinksService,
-    private readonly decisions: DecisionsService
+    private readonly decisions: DecisionsService,
+    private readonly similar: SimilarListingsService,
+    private readonly sellers: ListingSellersService,
+    private readonly merges: ListingMergeService
   ) {}
 
   @Post()
@@ -129,6 +136,9 @@ export class McpController {
       agency: this.agency,
       links: this.links,
       decisions: this.decisions,
+      similar: this.similar,
+      sellers: this.sellers,
+      merges: this.merges,
     }
     registerTools(server, context)
     // Lot 15 : vérification des annonces sur le portail.
@@ -139,6 +149,8 @@ export class McpController {
     registerAgencyTools(server, context)
     // Lot 18 : une annonce, plusieurs portails.
     registerLinkTools(server, context)
+    // Lot 27 : annonces ressemblantes, fusion des doublons, autres agences.
+    registerMergeTools(server, context)
     registerPrompts(server)
     registerCheckPrompts(server)
     registerExplorationPrompts(server)

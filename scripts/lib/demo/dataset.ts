@@ -55,6 +55,7 @@ import {
   listingCheckSummary,
   matchDuplicates,
   normalizeSeller,
+  otherSellerText,
   opinionAfterVisit,
   opinionJournalPayload,
   opinionSnapshot,
@@ -265,6 +266,20 @@ export interface DemoListing {
   /** Lot 18 : ses liens, le lien d'origine en tête ; la clé de sa référence. */
   links: DemoLink[]
   sellerReferenceKey: string | null
+  /** Lot 27 : les autres agences (fictives) qui vendent le même bien. */
+  otherSellers: DemoOtherSeller[]
+}
+
+/** Lot 27 : une autre agence d'une annonce de démo, avec sa référence. */
+export interface DemoOtherSeller {
+  id: string
+  sellerType: SellerType
+  sellerName: string | null
+  sellerReference: string | null
+  sellerReferenceKey: string | null
+  origin: 'manual' | 'claude' | 'link' | 'merge'
+  addedBy: DemoHandle
+  createdAt: string
 }
 
 export interface DemoCriteria {
@@ -1936,6 +1951,37 @@ function buildListing(
   // Lots 15 et 18 : liens, vérifications et liens ajoutés (règles de
   // `domain`, données fictives).
   const timeline = buildLinksAndChecks(spec, input, prices, statuses, at, log)
+  // Lot 27 : les autres agences du même bien, chacune avec sa référence.
+  const otherSellers = (OTHER_SELLERS[spec.key] ?? []).map(
+    (other, index): DemoOtherSeller => {
+      const seller = normalizeSeller({
+        sellerType: other.type,
+        sellerName: other.name,
+        sellerReference: other.reference,
+      })
+      const addedAt = at(other.days, 18)
+      const sellerId = demoId(`listing-seller:${spec.key}:${index}`)
+      log({
+        at: addedAt,
+        actor: other.by,
+        channel: 'web',
+        action: 'listing.seller_added',
+        listingKey: spec.key,
+        after: {
+          sellerId,
+          seller: otherSellerText(seller),
+          origin: 'manual',
+        },
+      })
+      return {
+        id: sellerId,
+        ...seller,
+        origin: 'manual',
+        addedBy: other.by,
+        createdAt: addedAt,
+      }
+    }
+  )
   const finalInput = ListingInputSchema.parse({
     ...input,
     ...timeline.seller,
@@ -1975,6 +2021,7 @@ function buildListing(
       : null,
     links: timeline.links,
     sellerReferenceKey: normalizeSeller(timeline.seller).sellerReferenceKey,
+    otherSellers,
   }
 }
 
@@ -2124,6 +2171,32 @@ const SELLERS: Record<
     reference: 'EX-3310',
   },
   'cauderan-t3': { type: 'private' },
+}
+
+/**
+ * Lot 27 : un même bien, plusieurs agences (mandat simple). L'annonce des
+ * Chartrons est aussi confiée à une seconde agence fictive, avec sa propre
+ * référence : `[jours avant le seed, membre, agence]`.
+ */
+const OTHER_SELLERS: Record<
+  string,
+  Array<{
+    days: number
+    by: DemoHandle
+    type: SellerType
+    name: string
+    reference: string
+  }>
+> = {
+  'chartrons-t2': [
+    {
+      days: 3,
+      by: 'demo',
+      type: 'agency',
+      name: '[Exemple] Agence du Jardin public',
+      reference: 'EX-5512',
+    },
+  ],
 }
 
 /**

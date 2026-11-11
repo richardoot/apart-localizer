@@ -132,7 +132,8 @@ export class DecisionsService {
         this.context(member.workspaceId),
         loadOpinionContext(this.prisma, member.workspaceId),
         this.prisma.listing.findMany({
-          where: { workspaceId: member.workspaceId },
+          // Lot 27 : un doublon fusionné ne compte dans aucune étape.
+          where: { workspaceId: member.workspaceId, mergedIntoId: null },
           select: {
             id: true,
             status: true,

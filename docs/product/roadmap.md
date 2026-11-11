@@ -1410,3 +1410,59 @@ moins de quatre clics ; la lecture filtrée est d'une page de 200 annonces (comp
 une annonce en lecture seule par Claude ne se voit pas (rien n'est journalisé) ; les polices
 viennent encore du CDN de Google (l'application installée retombe sur les polices du système hors
 ligne ; pas de lecture hors ligne) ; deux phrases de `rental-checks.ts` toujours au « vous ».
+
+## Lot 27 : fusionner les doublons, plusieurs agences, « déjà vue »
+
+Statut : livré le 11 novembre 2026 (code, tests, documentation ; ADR 0037). Une migration additive
+(`20261113100000_lot27_listing_merge`), aucune variable nouvelle, trois outils MCP (42).
+
+- **Pourquoi** : deux fiches pour le même bien ne pouvaient pas être réunies (on en écartait une,
+  en perdant ses liens, ses visites et ses avis) ; un bien confié à plusieurs agences n'avait
+  qu'un vendeur, la seconde agence était « à vérifier » à chaque lecture et sa référence perdue ;
+  dans le tri, une annonce déjà vue ne se rattachait à sa fiche que si le serveur l'avait proposée
+  comme doublon probable.
+- **Fusionner deux fiches** : l'une est gardée, l'autre absorbée ; liens, agences, visites,
+  offres, avis, tâches et questions rejoignent la fiche gardée ; ses champs vides sont complétés ;
+  rien n'est supprimé, la fiche absorbée est cachée des listes, et la fusion s'annule.
+- **Plusieurs agences** : chaque agence qui vend le bien est enregistrée avec sa référence ;
+  chaque référence reconnaît ensuite l'annonce sur les portails.
+- **« Déjà vue » dans le tri** : une recherche des annonces suivies, écartées comprises, classées
+  par ressemblance avec la carte (commune, quartier, distance, surface, prix, pièces, étage, DPE,
+  agence), avec ce qui concorde et ce qui diffère ; « C'est la même » rattache ou fusionne.
+- MCP : `find_similar_listings`, `merge_listings`, `add_listing_seller`.
+
+Fini quand : deux fiches du même bien n'en font plus qu'une sans rien perdre, et on peut revenir
+en arrière ; la référence de chaque agence est sur la fiche ; dans le tri, retrouver une annonce
+déjà vue prend une touche et un clic.
+
+Livré :
+
+- **Fusion** (`POST /listings/:id/merge`, aperçu `GET /listings/:id/merge-preview?with=`,
+  annulation `POST /listing-merges/:mergeId/undo`) : ce qui passe d'une fiche à l'autre, les champs
+  complétés (jamais un champ déjà rempli), le prix qui suit le plus bas des liens en ligne, la
+  fiche absorbée écartée, liée (`merged_into_id`) et cachée de toutes les listes ; journal des deux
+  côtés, notification des autres membres ; une fiche fusionnée ne s'écrit plus tant que la fusion
+  n'est pas annulée. L'annulation rend ce qui était venu, vide les champs complétés non retouchés
+  et rend son statut à la fiche absorbée.
+- **Autres agences** (`listing_sellers`, `POST` et `DELETE /listings/:id/sellers`) : l'agence
+  principale reste sur l'annonce, les autres à côté (huit au plus), chacune avec sa référence et
+  son origine ; la détection des doublons, le rattachement d'office et `add_listing_link`
+  comparent à toutes les agences de la fiche ; un lien rattaché par un membre, ou « C'est la
+  même », enregistre l'agence lue quand elle diffère (elle n'est plus « à vérifier »).
+- **Annonces ressemblantes** (`GET /listings/similar`) : note de 0 à 1 par caractéristiques
+  pondérées, plancher des motifs de doublon du lot 18, quatre niveaux, texte cherché qui filtre
+  sans changer le classement, distance par PostGIS entre repères plus précis que la commune.
+- **Interface** : dans le tri, « Déjà vue ? La retrouver » (touche D), panneau de recherche,
+  « C'est la même », « Annuler » qui défait la fusion, « déjà vues » au bilan ; dans la fiche,
+  « Même bien, autre fiche ? » (suggestions des fiches très proches, recherche, aperçu, laquelle
+  garder, « Fiches fusionnées ici » et « Annuler la fusion »), bandeau d'une fiche fusionnée,
+  « Autres agences pour ce bien » dans « Qui la vend ».
+- **MCP** : `find_similar_listings` (lecture), `merge_listings` et `add_listing_seller`
+  (écriture, après l'accord du membre : `confirmedInChat`) ; `get_listing` dit les autres agences,
+  les doublons fusionnés et une fiche fusionnée ; ni annulation ni retrait par le connecteur.
+- **Export** : `sellers` par annonce dans le JSON ; CSV inchangé.
+- **Démo** : une seconde agence fictive, avec sa référence, sur l'annonce des Chartrons.
+
+Limites : l'adresse et le repère de la fiche gardée ne changent pas ; pas de choix champ par
+champ ; l'historique des prix de la fiche absorbée reste sur elle ; la ressemblance classe, elle
+ne prouve pas.

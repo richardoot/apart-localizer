@@ -3,7 +3,7 @@
  * décision à deux, `set_listing_status` propose au nom du membre connecté et
  * répond que l'annonce ne bouge pas ; refus quand un autre membre a déjà
  * proposé ; jamais de confirmation pour l'autre ; lectures qui indiquent la
- * proposition ; toujours 39 outils. Données fictives.
+ * proposition ; 42 outils depuis le lot 27. Données fictives.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import request from 'supertest'
@@ -106,10 +106,10 @@ describe('Lot 21 : décisions au connecteur MCP (e2e)', () => {
     await request(ctx.server).get('/workspace').set(ctx.auth(chloe)).expect(200)
   })
 
-  it('reste à 39 outils', async () => {
+  it('reste à 42 outils (lot 27 compris)', async () => {
     const res = await rpc(richard, 'tools/list')
-    expect(res.body.result.tools).toHaveLength(39)
-    expect(MCP_TOOL_NAMES).toHaveLength(39)
+    expect(res.body.result.tools).toHaveLength(42)
+    expect(MCP_TOOL_NAMES).toHaveLength(42)
   })
 
   it('propose en son nom : l’annonce ne bouge pas tant que l’autre n’a pas confirmé', async () => {

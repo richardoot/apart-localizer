@@ -3,7 +3,11 @@ import { ExtractionRequestSchema } from './ai.js'
 import { AssumptionsOverrideSchema } from './assumptions.js'
 import { PriceEventInputSchema } from './collaboration.js'
 import { DuplicateProbeSchema } from './duplicates.js'
-import { OfferChannelSchema, OfferResponseSchema } from './enums.js'
+import {
+  ObservedSellerTypeSchema,
+  OfferChannelSchema,
+  OfferResponseSchema,
+} from './enums.js'
 import { ListingFiltersSchema } from './filters.js'
 import {
   ListingCreateSchema,
@@ -26,6 +30,11 @@ import {
   ListingCheckPreviewRequestSchema,
 } from './listing-checks.js'
 import { WhatsNewQuerySchema } from './whats-new.js'
+import {
+  SIMILAR_LISTINGS_DEFAULT,
+  SIMILAR_LISTINGS_MAX,
+  SimilarProbeFieldsSchema,
+} from './listing-merge.js'
 import {
   ExplorationRecordSchema,
   SearchBriefQuerySchema,
@@ -782,4 +791,139 @@ export const McpAddListingLinkInputSchema = z.object({
 })
 export type McpAddListingLinkInput = z.infer<
   typeof McpAddListingLinkInputSchema
+>
+
+/**
+ * Lot 27 : find_similar_listings. Les annonces suivies qui ressemblent à une
+ * annonce enregistrée, ou à des caractéristiques lues sur une page, classées
+ * par ressemblance (lecture seule).
+ */
+export const McpFindSimilarListingsInputSchema = z
+  .object({
+    listingId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe(
+        'Annonce enregistrée à comparer aux autres (exclue des résultats) ; ses caractéristiques complètent celles données ici'
+      ),
+    ...SimilarProbeFieldsSchema.shape,
+    q: z
+      .string()
+      .trim()
+      .max(120)
+      .optional()
+      .describe(
+        'Texte cherché (titre, commune, quartier, adresse, agence, référence, prix, surface) ; les annonces trouvées restent classées par ressemblance'
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(SIMILAR_LISTINGS_MAX)
+      .default(SIMILAR_LISTINGS_DEFAULT),
+  })
+  .refine(
+    input =>
+      input.listingId !== undefined ||
+      Boolean(input.q) ||
+      input.url !== undefined ||
+      input.address !== undefined ||
+      input.reference !== undefined ||
+      input.commune !== undefined ||
+      input.price !== undefined ||
+      input.surface !== undefined,
+    {
+      message:
+        'Donnez listingId, un texte (q), ou des caractéristiques (url, address, reference, commune, price, surface)',
+    }
+  )
+export type McpFindSimilarListingsInput = z.infer<
+  typeof McpFindSimilarListingsInputSchema
+>
+
+/**
+ * Lot 27 : merge_listings. Deux fiches du même bien n'en font plus qu'une :
+ * `keepId` reste, `mergeId` est absorbée (cachée, jamais supprimée ; la fusion
+ * s'annule dans l'application). Seulement après l'accord du membre.
+ */
+export const McpMergeListingsInputSchema = z.object({
+  keepId: z
+    .string()
+    .uuid()
+    .describe(
+      'La fiche gardée : en général la plus avancée (visites, avis, offres), ou la plus ancienne'
+    ),
+  mergeId: z
+    .string()
+    .uuid()
+    .describe(
+      'La fiche en double : ses liens, ses agences et leurs références, ses visites, offres, avis et tâches rejoignent la fiche gardée'
+    ),
+  confirmedInChat: z
+    .boolean()
+    .describe(
+      'Vrai seulement si le membre vient de confirmer dans la conversation, après avoir vu les deux fiches, que c’est le même bien ; sans cela la fusion est refusée'
+    ),
+  expectedKeepUpdatedAt: z
+    .string()
+    .datetime()
+    .describe('Garde-fou : `updatedAt` de la fiche gardée lu avec get_listing'),
+  expectedMergeUpdatedAt: z
+    .string()
+    .datetime()
+    .describe(
+      'Garde-fou : `updatedAt` de la fiche absorbée lu avec get_listing'
+    ),
+})
+export type McpMergeListingsInput = z.infer<typeof McpMergeListingsInputSchema>
+
+/**
+ * Lot 27 : add_listing_seller. Une autre agence vend le même bien (mandat
+ * simple) : son nom et sa référence s'ajoutent à la fiche, à côté de
+ * l'agence principale.
+ */
+export const McpAddListingSellerInputSchema = z
+  .object({
+    listingId,
+    sellerType: ObservedSellerTypeSchema.default('agency'),
+    sellerName: z
+      .string()
+      .trim()
+      .min(1)
+      .max(120)
+      .optional()
+      .describe(
+        "Agence, ou réseau pour un mandataire, lus sur la page ; jamais le nom d'une personne"
+      ),
+    reference: z
+      .string()
+      .trim()
+      .min(1)
+      .max(60)
+      .optional()
+      .describe(
+        'La référence du bien chez cette agence, lue sur la page (« Réf. EX-2041 »)'
+      ),
+    confirmedInChat: z
+      .boolean()
+      .describe(
+        'Vrai seulement si le membre vient de confirmer dans la conversation que c’est le même bien vendu par cette autre agence ; sans cela l’ajout est refusé'
+      ),
+    expectedUpdatedAt: z
+      .string()
+      .datetime()
+      .describe(
+        "Garde-fou : `updatedAt` lu avec get_listing ; refus si l'annonce a changé depuis"
+      ),
+  })
+  .refine(
+    input =>
+      input.sellerType === 'private' ||
+      Boolean(input.sellerName) ||
+      Boolean(input.reference),
+    { message: 'Donnez le nom de l’agence ou sa référence' }
+  )
+export type McpAddListingSellerInput = z.infer<
+  typeof McpAddListingSellerInputSchema
 >

@@ -33,10 +33,14 @@ export function conflictListingOf(
 
 /** Le message d'un refus, sans identifiant ni noms d'outils du connecteur. */
 export function conflictText(message: string): string {
-  return message
-    .replace(new RegExp(` \\[id ${UUID}\\]`, 'gi'), '')
-    .replace(/ \(add_listing_link[^)]*\)/g, '')
-    .replace(/ \(ignoreDuplicates\)/g, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim()
+  return (
+    message
+      .replace(new RegExp(` \\[id ${UUID}\\]`, 'gi'), '')
+      .replace(/ \(add_listing_link[^)]*\)/g, '')
+      .replace(/ \(ignoreDuplicates\)/g, '')
+      // Lot 27 : « (merge_listings, ou « Fusionner avec une autre fiche ») ».
+      .replace(/merge_listings, ou /g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+  )
 }

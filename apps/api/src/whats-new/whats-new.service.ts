@@ -41,6 +41,8 @@ const WHATS_NEW_ACTIONS = [
   'listing_link.added',
   'listing_link.removed',
   'listing_link.detached',
+  // Lot 27 : un doublon fusionné dans une fiche (ses liens, son prix).
+  'listing.merged',
 ]
 
 function toEvent(row: ActivityLog): WhatsNewEvent {

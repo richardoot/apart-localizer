@@ -214,7 +214,7 @@ describe('MCP lot 16 : exploration par les critères', () => {
       'triage_candidates',
       'record_exploration',
     ])
-    expect(MCP_TOOL_NAMES).toHaveLength(39)
+    expect(MCP_TOOL_NAMES).toHaveLength(42)
     expect(MCP_PROMPT_NAMES).toContain('explore_listings')
   })
 

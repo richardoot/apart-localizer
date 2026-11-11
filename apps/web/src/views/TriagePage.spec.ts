@@ -7,10 +7,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import type { DecisionProposal, ListingDraft } from '@apart/contracts'
+import type {
+  DecisionProposal,
+  ListingDraft,
+  SimilarListing,
+} from '@apart/contracts'
 import { fakeDraft } from '@/test/exploration-fixtures'
+import { fakeEvaluated } from '@/test/fixtures'
 
 const state = vi.hoisted(() => ({
+  listings: [] as unknown[],
+  similar: [] as unknown[],
   drafts: [] as unknown[],
   cards: [] as unknown[],
   overview: null as unknown,
@@ -27,6 +34,14 @@ const actions = vi.hoisted(() => ({
   refreshAll: vi.fn(),
 }))
 
+/** Lot 27 : « Déjà vue » (rattacher un brouillon, fusionner deux fiches). */
+const mergeMock = vi.hoisted(() => ({
+  draftMerge: vi.fn(),
+  merge: vi.fn(),
+  undo: vi.fn(),
+  targets: [] as unknown[],
+}))
+
 const apiMock = vi.hoisted(() => ({
   listings: { setStatus: vi.fn() },
   drafts: { decide: vi.fn() },
@@ -40,15 +55,34 @@ vi.mock('@/composables/useDrafts', () => ({
     error: ref(state.draftsError),
     isFetching: ref(false),
     refetch: state.refetch,
-    merge: { mutateAsync: vi.fn() },
+    merge: { mutateAsync: mergeMock.draftMerge },
   }),
   useDismissedDrafts: () => ({ data: ref([]) }),
 }))
 vi.mock('@/composables/useListings', () => ({
   useListingList: () => ({
-    data: ref({ items: [] }),
+    data: ref({ items: state.listings }),
     isPlaceholderData: ref(false),
+    isPending: ref(false),
+    isError: ref(false),
+    error: ref(null),
   }),
+}))
+vi.mock('@/composables/useListingMerge', () => ({
+  useListingMerge: () => ({
+    merge: { mutateAsync: mergeMock.merge },
+    undo: { mutateAsync: mergeMock.undo },
+  }),
+  useSimilarListings: (target: { value: unknown }) => {
+    mergeMock.targets.push(target.value)
+    return {
+      data: ref({ items: state.similar, compared: 3, summary: 'Trouvées' }),
+      isPending: ref(false),
+      isError: ref(false),
+      error: ref(null),
+      isFetching: ref(false),
+    }
+  },
 }))
 vi.mock('@/composables/useWorkspace', () => ({
   useWorkspace: () => ({
@@ -135,7 +169,18 @@ async function mountPage(query: Record<string, string>) {
   await router.isReady()
   const wrapper = mount(TriagePage, {
     attachTo: document.body,
-    global: { plugins: [router] },
+    global: {
+      plugins: [router],
+      // Lot 27 : le panneau « Déjà vue » rendu sur place (sans portail).
+      stubs: {
+        SidePanel: {
+          props: ['title'],
+          emits: ['close'],
+          template:
+            '<section data-side-panel><h2>{{ title }}</h2><button data-close-panel @click="$emit(\'close\')" /><slot /></section>',
+        },
+      },
+    },
   })
   await flushPromises()
   return { router, wrapper }
@@ -149,6 +194,12 @@ const press = async (key: string, target: EventTarget = window) => {
 describe('le mode tri', () => {
   beforeEach(() => {
     sessionStorage.clear()
+    state.listings = []
+    state.similar = []
+    mergeMock.targets.length = 0
+    for (const fn of [mergeMock.draftMerge, mergeMock.merge, mergeMock.undo]) {
+      fn.mockReset()
+    }
     state.draftsError = null
     state.drafts = [draftAt(1), draftAt(2)]
     state.cards = []
@@ -680,6 +731,185 @@ describe('le passage du second membre', () => {
     expect(wrapper.get('[data-testid="triage-empty"]').text()).toBe(
       'Rien à confirmer.'
     )
+    wrapper.unmount()
+  })
+})
+
+const FOUND_ID = '77777777-7777-4777-8777-777777777777'
+const found = (over: Partial<SimilarListing> = {}): SimilarListing => ({
+  listingId: FOUND_ID,
+  title: '[Exemple] T3 déjà suivie',
+  status: 'discarded',
+  price: 209_000,
+  surface: 68,
+  rooms: 3,
+  commune: 'Bordeaux',
+  district: 'Caudéran',
+  url: null,
+  sellerName: '[Exemple] Cabinet Bastide',
+  sellerReference: 'CB-77',
+  linkCount: 1,
+  updatedAt: '2026-11-10T10:00:00.000Z',
+  score: 0.92,
+  level: 'very_close',
+  matches: [{ kind: 'surface', text: 'Même surface (68 m²)' }],
+  differences: [{ kind: 'floor', text: 'Au 3e étage, pas au 2e étage' }],
+  ...over,
+})
+
+describe('lot 27 : « Déjà vue » dans le tri', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+    state.draftsError = null
+    state.drafts = [draftAt(1), draftAt(2)]
+    state.listings = []
+    state.similar = [found()]
+    state.cards = []
+    state.overview = overview()
+    mergeMock.targets.length = 0
+    for (const fn of Object.values(actions)) fn.mockReset()
+    for (const fn of [mergeMock.draftMerge, mergeMock.merge, mergeMock.undo]) {
+      fn.mockReset()
+    }
+    mergeMock.draftMerge.mockResolvedValue({})
+  })
+
+  it('D ouvre la recherche : les annonces suivies ressemblantes, avec pourquoi', async () => {
+    const { wrapper } = await mountPage({
+      etape: 'a-valider',
+      session: SESSION,
+    })
+    expect(wrapper.find('[data-testid="already-seen-panel"]').exists()).toBe(
+      false
+    )
+    expect(wrapper.get('[data-action="already-seen"]').text()).toContain(
+      'Déjà vue ? La retrouver'
+    )
+    await press('d')
+    const panel = wrapper.get('[data-testid="already-seen-panel"]')
+    expect(panel.text()).toContain('Retrouve « [Exemple] Annonce 1 »')
+    expect(panel.text()).toContain('écartées comprises')
+    // La recherche part du brouillon de la carte.
+    expect(mergeMock.targets.at(-1)).toEqual({ draftId: draftAt(1).id })
+    const row = panel.get(`[data-similar="${FOUND_ID}"]`)
+    expect(row.get('[data-testid="similar-level"]').text()).toBe(
+      'Très proche · 92 %'
+    )
+    expect(row.get('[data-testid="similar-status"]').text()).toBe('Écarté')
+    expect(row.text()).toContain('Même surface (68 m²)')
+    expect(row.get('[data-testid="similar-differences"]').text()).toContain(
+      'Au 3e étage, pas au 2e étage'
+    )
+    expect(row.text()).toContain('[Exemple] Cabinet Bastide · réf. CB-77')
+    // Les raccourcis du tri sont à l'arrêt tant que la recherche est ouverte.
+    await press('a')
+    expect(actions.decide).not.toHaveBeenCalled()
+    await wrapper.get('[data-close-panel]').trigger('click')
+    expect(wrapper.find('[data-testid="already-seen-panel"]').exists()).toBe(
+      false
+    )
+    wrapper.unmount()
+  })
+
+  it('un brouillon est rattaché à l’annonce retrouvée, la carte passe', async () => {
+    const { wrapper } = await mountPage({
+      etape: 'a-valider',
+      session: SESSION,
+    })
+    await wrapper.get('[data-action="already-seen"]').trigger('click')
+    await wrapper.get('[data-action="pick-similar"]').trigger('click')
+    await flushPromises()
+    expect(mergeMock.draftMerge).toHaveBeenCalledWith({
+      id: draftAt(1).id,
+      request: {
+        listingId: FOUND_ID,
+        expectedUpdatedAt: '2026-11-10T10:00:00.000Z',
+      },
+    })
+    expect(mergeMock.merge).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="already-seen-panel"]').exists()).toBe(
+      false
+    )
+    expect(wrapper.get('h1').text()).toBe('[Exemple] Annonce 2')
+    expect(wrapper.get('[data-testid="triage-live"]').text()).toContain(
+      'Déjà vue : « [Exemple] T3 déjà suivie »'
+    )
+    // Un rattachement ne s'annule pas depuis le tri (il se détache sur la fiche).
+    expect(wrapper.find('[data-testid="triage-undo"]').exists()).toBe(false)
+    await press('p')
+    const summary = wrapper.get('[data-testid="triage-summary"]')
+    expect(summary.get('[data-testid="summary-totals"]').text()).toContain(
+      '1 déjà vue'
+    )
+    expect(summary.get('[data-testid="summary-list"]').text()).toContain(
+      'Déjà vue : « [Exemple] T3 déjà suivie »'
+    )
+    wrapper.unmount()
+  })
+
+  it('un refus reste dans le panneau, la carte ne bouge pas', async () => {
+    mergeMock.draftMerge.mockRejectedValue(new Error('réseau coupé'))
+    const { wrapper } = await mountPage({
+      etape: 'a-valider',
+      session: SESSION,
+    })
+    await press('d')
+    await wrapper.get('[data-action="pick-similar"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="already-seen-error"]').text()).toContain(
+      'L’annonce n’a pas pu être rattachée.'
+    )
+    expect(wrapper.get('h1').text()).toBe('[Exemple] Annonce 1')
+    wrapper.unmount()
+  })
+
+  it('une annonce à étudier est fusionnée dans l’annonce retrouvée, et « Annuler » défait la fusion', async () => {
+    const card = fakeEvaluated({
+      id: '33333333-3333-4333-8333-333333333333',
+      title: '[Exemple] Doublon à étudier',
+      status: 'to_study',
+      updatedAt: '2026-11-11T09:00:00.000Z',
+    })
+    state.listings = [card]
+    mergeMock.merge.mockResolvedValue({
+      merge: { id: 'merge-1', keptId: FOUND_ID },
+      listing: card,
+      summary: 'Fusionnée',
+    })
+    mergeMock.undo.mockResolvedValue({ summary: 'Fusion annulée' })
+    const { wrapper } = await mountPage({
+      etape: 'a-etudier',
+      session: SESSION,
+    })
+    expect(wrapper.get('h1').text()).toBe('[Exemple] Doublon à étudier')
+    await press('d')
+    expect(mergeMock.targets.at(-1)).toEqual({ listingId: card.listing.id })
+    const panel = wrapper.get('[data-testid="already-seen-panel"]')
+    expect(panel.text()).toContain('la fusion s’annule')
+    expect(panel.get('[data-action="pick-similar"]').text()).toBe(
+      'C’est la même : fusionner'
+    )
+    await panel.get('[data-action="pick-similar"]').trigger('click')
+    await flushPromises()
+    // L'annonce retrouvée, déjà vue, est celle qu'on garde.
+    expect(mergeMock.merge).toHaveBeenCalledWith({
+      keepId: FOUND_ID,
+      input: {
+        absorbedId: card.listing.id,
+        expectedUpdatedAt: '2026-11-10T10:00:00.000Z',
+        expectedAbsorbedUpdatedAt: '2026-11-11T09:00:00.000Z',
+      },
+    })
+    expect(mergeMock.draftMerge).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="triage-summary"]').exists()).toBe(true)
+    const undo = wrapper.get('[data-testid="triage-undo"]')
+    expect(undo.attributes('aria-label')).toBe(
+      'Annuler : Déjà vue : « [Exemple] T3 déjà suivie »'
+    )
+    await undo.trigger('click')
+    await flushPromises()
+    expect(mergeMock.undo).toHaveBeenCalledWith('merge-1')
+    expect(wrapper.get('h1').text()).toBe('[Exemple] Doublon à étudier')
     wrapper.unmount()
   })
 })

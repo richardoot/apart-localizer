@@ -423,6 +423,12 @@ export class ListingChecksService {
         sellerName: item.listing.sellerName,
         sellerReference: item.listing.sellerReference,
       },
+      // Lot 27 : la page d'un lien peut montrer une autre agence de la fiche.
+      otherSellers: item.sellers.map(other => ({
+        sellerType: other.sellerType,
+        sellerName: other.sellerName,
+        sellerReference: other.sellerReference,
+      })),
       links: linkStatesOf(item),
       linkId: target?.id ?? null,
       observed,

@@ -142,7 +142,7 @@ export class ExplorationsService {
           where: { workspaceId, status: { not: 'discarded' } },
         }),
         this.prisma.listing.count({
-          where: { workspaceId, status: 'discarded' },
+          where: { workspaceId, status: 'discarded', mergedIntoId: null },
         }),
         this.prisma.listingDraft.count({
           where: { workspaceId, status: 'dismissed' },

@@ -483,6 +483,30 @@ describe('jeu de démonstration', () => {
     expect(JSON.stringify(agency)).not.toContain('exemple.invalid')
   })
 
+  it('lot 27 : l’annonce des Chartrons est aussi confiée à une seconde agence fictive, avec sa référence', () => {
+    const chartrons = dataset.listings.find(l => l.key === 'chartrons-t2')
+    expect(chartrons?.otherSellers).toHaveLength(1)
+    expect(chartrons?.otherSellers[0]).toMatchObject({
+      sellerType: 'agency',
+      sellerName: '[Exemple] Agence du Jardin public',
+      sellerReference: 'EX-5512',
+      sellerReferenceKey: 'EX5512',
+      origin: 'manual',
+    })
+    // L'agence principale reste la sienne ; les autres annonces n'en ont qu'une.
+    expect(chartrons?.input.sellerReference).toBe('EX-2041')
+    expect(
+      dataset.listings.filter(l => l.otherSellers.length > 0)
+    ).toHaveLength(1)
+    const logged = dataset.activity.filter(
+      a => a.action === 'listing.seller_added'
+    )
+    expect(logged).toHaveLength(1)
+    expect(logged[0]?.after).toMatchObject({
+      seller: '« [Exemple] Agence du Jardin public », réf. EX-5512',
+    })
+  })
+
   it('lot 18 : une annonce sur trois portails, un particulier sur deux, un mandataire rattaché d’office, des vendeurs inconnus', () => {
     const byKey = new Map(dataset.listings.map(l => [l.key, l]))
     const chartrons = byKey.get('chartrons-t2')

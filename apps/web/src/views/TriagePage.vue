@@ -8,6 +8,7 @@
     EvaluatedListing,
     ListingDraft,
     ListingStatus,
+    SimilarListing,
     WorkflowStage,
   } from '@apart/contracts'
   import {
@@ -20,6 +21,7 @@
     sessionIntro,
   } from '@apart/domain'
   import { useDrafts } from '@/composables/useDrafts'
+  import { useListingMerge } from '@/composables/useListingMerge'
   import { useListingList } from '@/composables/useListings'
   import { useTriageSession } from '@/composables/useTriageSession'
   import type { TriagePick } from '@/composables/useTriageSession'
@@ -31,7 +33,9 @@
   import { useWorkspace } from '@/composables/useWorkspace'
   import { api } from '@/lib/api'
   import { useAction } from '@/composables/useAction'
+  import SimilarListingPicker from '@/components/merge/SimilarListingPicker.vue'
   import QueryState from '@/components/ui/QueryState.vue'
+  import SidePanel from '@/components/ui/SidePanel.vue'
   import UiAlert from '@/components/ui/UiAlert.vue'
   import { errorMessage } from '@/lib/errors'
   import JudgementPills from '@/components/listings/JudgementPills.vue'
@@ -39,6 +43,7 @@
   import UiButton from '@/components/ui/UiButton.vue'
   import UiCard from '@/components/ui/UiCard.vue'
   import { pendingDuplicate, duplicateLead, duplicateWhy } from '@/lib/drafts'
+  import { alreadySeenLabel } from '@/lib/merge'
   import {
     draftTriageCard,
     listingTriageCard,
@@ -61,6 +66,11 @@
    * visiter, Écarter, Passer), ou confirmer les propositions d'un autre
    * membre (`?mode=confirmer`). La session est dans l'URL (`session`, `pos`) :
    * recharger ne perd pas la position. Une seule notification à la fin.
+   *
+   * Lot 27 (ADR 0037) : « Déjà vue » (touche D) ouvre la recherche des
+   * annonces suivies, classées par ressemblance avec la carte ; « C'est la
+   * même » rattache le brouillon à l'annonce retrouvée, ou fusionne les deux
+   * fiches (l'annonce retrouvée est gardée ; la fusion s'annule).
    */
   const route = useRoute()
   const router = useRouter()
@@ -482,6 +492,9 @@
         })
       } else if (pick.undo === 'draft') {
         await api.drafts.decide(pick.id, { status: 'pending' })
+      } else if (pick.undo === 'merge' && pick.mergeId) {
+        // Lot 27 : « Déjà vue » sur une annonce : la fusion est défaite.
+        await merges.undo.mutateAsync(pick.mergeId)
       }
       session.pop()
       announce.value = `Annulé. ${progressLine.value}`
@@ -525,6 +538,15 @@
       label: count('discard') > 1 ? 'écartées' : 'écartée',
     },
     { n: count('skip'), label: count('skip') > 1 ? 'passées' : 'passée' },
+    // Lot 27 : seulement s'il y en a (la grille reste à trois sinon).
+    ...(count('seen') > 0
+      ? [
+          {
+            n: count('seen'),
+            label: count('seen') > 1 ? 'déjà vues' : 'déjà vue',
+          },
+        ]
+      : []),
   ])
   const hasClash = computed(() => picks.value.some(p => p.toSettle))
   const finishedLabel = computed(() => finishLabel(others.value))
@@ -592,6 +614,8 @@
       return
     }
     if (confirmMode.value || !current.value || busy.value) return
+    // Lot 27 : la recherche « Déjà vue » est ouverte, ses touches sont à elle.
+    if (seenOpen.value) return
     const key = event.key.toLowerCase()
     if (asking.value) {
       if (event.key === 'Escape') asking.value = false
@@ -606,6 +630,9 @@
     } else if (key === 'a') {
       event.preventDefault()
       decide(primaryChoice(stage.value))
+    } else if (key === 'd') {
+      event.preventDefault()
+      openSeen()
     }
   }
   onMounted(() => window.addEventListener('keydown', onKey))
@@ -631,7 +658,7 @@
         title: item.card.title,
         label: 'C’est la même',
         result: 'Ajoutée à la fiche suivie',
-        action: 'skip',
+        action: 'seen',
         proposalId: null,
         undo: null,
         statusBefore: null,
@@ -639,6 +666,84 @@
         listingId,
       })
     })
+  }
+
+  // --- Lot 27 : « Déjà vue » ------------------------------------------------
+
+  const merges = useListingMerge()
+  const seenOpen = ref(false)
+  const seenAction = useAction('L’annonce n’a pas pu être rattachée.')
+  /** Ce qu'on compare aux annonces suivies : le brouillon ou l'annonce de la carte. */
+  const seenTarget = computed(() =>
+    current.value?.draft
+      ? { draftId: current.value.draft.id }
+      : current.value?.listing
+        ? { listingId: current.value.listing.listing.id }
+        : {}
+  )
+
+  function openSeen(): void {
+    if (!current.value || confirmMode.value) return
+    asking.value = false
+    seenAction.clear()
+    seenOpen.value = true
+  }
+
+  /**
+   * « C'est la même » sur une annonce retrouvée. Un brouillon y est rattaché
+   * (son lien, ce qu'il a lu, son agence si c'en est une autre) ; une annonce
+   * y est fusionnée : l'annonce retrouvée, déjà vue, est celle qu'on garde.
+   */
+  async function alreadySeen(found: SimilarListing): Promise<void> {
+    const item = current.value
+    if (!item || seenAction.pending.value) return
+    const base = {
+      id: item.id,
+      title: item.card.title,
+      label: alreadySeenLabel(found.title),
+      action: 'seen' as const,
+      proposalId: null,
+      statusBefore: null,
+      createdListing: false,
+      listingId: found.listingId,
+    }
+    const draft = item.draft
+    const listing = item.listing
+    const done = await seenAction.run(async () => {
+      if (draft) {
+        await drafts.merge.mutateAsync({
+          id: draft.id,
+          request: {
+            listingId: found.listingId,
+            expectedUpdatedAt: found.updatedAt,
+          },
+        })
+        return {
+          ...base,
+          result: 'Ajoutée à la fiche suivie',
+          undo: null,
+        } satisfies TriagePick
+      }
+      if (!listing) return null
+      const merged = await merges.merge.mutateAsync({
+        keepId: found.listingId,
+        input: {
+          absorbedId: listing.listing.id,
+          expectedUpdatedAt: found.updatedAt,
+          expectedAbsorbedUpdatedAt: listing.listing.updatedAt,
+        },
+      })
+      return {
+        ...base,
+        result: 'Fusionnée avec la fiche déjà suivie',
+        undo: 'merge',
+        mergeId: merged.merge.id,
+      } satisfies TriagePick
+    })
+    if (!done) return
+    session.push(done)
+    seenOpen.value = false
+    announce.value = `${done.label}. ${progressLine.value}`
   }
 </script>
 
@@ -695,7 +800,7 @@
 
     <main
       id="triage-main"
-      class="mx-auto flex w-full max-w-[1040px] min-w-0 flex-1 flex-col gap-3 px-4 py-3.5 pb-44 sm:px-5 sm:py-4.5 sm:pb-10"
+      class="mx-auto flex w-full max-w-[1040px] min-w-0 flex-1 flex-col gap-3 px-4 py-3.5 pb-56 sm:px-5 sm:py-4.5 sm:pb-10"
     >
       <p class="sr-only" aria-live="polite" data-testid="triage-live">
         {{ announce }}
@@ -999,6 +1104,21 @@
                     >
                   </UiButton>
                 </div>
+                <!-- Lot 27 : on l'a déjà vue ? La retrouver et la rattacher. -->
+                <UiButton
+                  v-if="!asking"
+                  variant="ghost"
+                  icon="search"
+                  class="self-center text-accent"
+                  :disabled="busy"
+                  data-action="already-seen"
+                  @click="openSeen"
+                >
+                  Déjà vue ? La retrouver
+                  <span class="hidden text-xs font-normal text-muted sm:inline"
+                    >touche D</span
+                  >
+                </UiButton>
               </template>
             </div>
           </article>
@@ -1094,5 +1214,35 @@
         </article>
       </QueryState>
     </main>
+
+    <!-- Lot 27 : « Déjà vue » : les annonces suivies, par ressemblance. -->
+    <SidePanel
+      v-if="seenOpen && currentCard"
+      title="Déjà vue ?"
+      @close="seenOpen = false"
+    >
+      <div class="grid gap-3" data-testid="already-seen-panel">
+        <p class="text-sm text-muted">
+          Retrouve « {{ currentCard.title }} » parmi les annonces déjà suivies,
+          écartées comprises.
+          {{
+            current?.draft
+              ? 'Son lien, et son agence si c’en est une autre, rejoindront la fiche choisie.'
+              : 'Les deux fiches n’en feront plus qu’une : celle que tu choisis est gardée, et la fusion s’annule.'
+          }}
+        </p>
+        <UiAlert v-if="seenAction.error.value" data-testid="already-seen-error">
+          {{ seenAction.error.value }}
+        </UiAlert>
+        <SimilarListingPicker
+          :target="seenTarget"
+          :busy="seenAction.pending.value"
+          :action-label="
+            current?.draft ? 'C’est la même' : 'C’est la même : fusionner'
+          "
+          @pick="alreadySeen"
+        />
+      </div>
+    </SidePanel>
   </div>
 </template>

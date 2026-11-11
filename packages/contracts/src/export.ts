@@ -10,6 +10,7 @@ import { ListingSchema } from './listing.js'
 import { ExportDecisionProposalSchema } from './decisions.js'
 import { ListingCheckSchema } from './listing-checks.js'
 import { ListingLinkSchema } from './listing-links.js'
+import { ListingSellerSchema } from './listing-merge.js'
 import { ListingMetricsSchema, TargetPriceSchema } from './metrics.js'
 import { RentalVerdictSchema } from './enums.js'
 import { ListingCriteriaFitSchema } from './criteria-fit.js'
@@ -121,6 +122,12 @@ export const ExportListingSchema = z.object({
     .default([])
     .describe(
       'Lot 18 : les liens de l’annonce, un par portail (prix affiché, en ligne ou non, origine), le principal d’abord (absent dans un export antérieur : `listing.url` est alors le seul lien)'
+    ),
+  sellers: z
+    .array(ListingSellerSchema)
+    .default([])
+    .describe(
+      'Lot 27 : les autres agences qui vendent le même bien, chacune avec sa référence (l’agence principale est dans `listing.sellerName` et `listing.sellerReference`) ; absent dans un export antérieur'
     ),
 })
 export type ExportListing = z.infer<typeof ExportListingSchema>
