@@ -14,6 +14,7 @@ describe('parseCiWorkflow', () => {
     expect(workflow.steps.map(s => s.run)).toEqual([
       'pnpm install --frozen-lockfile',
       'pnpm build:packages',
+      'pnpm --filter @apart/api prisma:generate',
       'pnpm lint',
       'pnpm format:check',
       'pnpm -r type-check',
@@ -38,6 +39,12 @@ describe('parseCiWorkflow', () => {
       stepKind({ name: 'Build shared packages', run: 'pnpm build:packages' })
     ).toBe('check')
     expect(stepKind({ name: 'Lint', run: 'pnpm lint' })).toBe('check')
+    expect(
+      stepKind({
+        name: 'Generate Prisma client',
+        run: 'pnpm --filter @apart/api prisma:generate',
+      })
+    ).toBe('check')
   })
 
   it('lit un run sur plusieurs lignes et saute les étapes sans run', () => {

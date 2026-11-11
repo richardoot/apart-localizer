@@ -60,6 +60,13 @@ jobs:
       - name: Build shared packages
         run: pnpm build:packages
 
+      # The Prisma client is git-ignored (apps/api/src/generated). `scripts`
+      # imports it too, and `pnpm -r type-check` runs both packages in
+      # parallel: without this step, `scripts` is checked before the API has
+      # generated it.
+      - name: Generate Prisma client
+        run: pnpm --filter @apart/api prisma:generate
+
       - name: Lint
         run: pnpm lint
 
