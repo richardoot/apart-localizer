@@ -335,11 +335,17 @@ describe('stack:up', () => {
   })
 
   it('reconstruit les paquets et le client Prisma seulement s’ils datent', async () => {
-    writeFileSync(
-      path.join(root, 'packages/domain/src/index.ts'),
-      'export const x = 1'
-    )
-    writeFileSync(path.join(root, 'apps/api/prisma/schema.prisma'), '// changé')
+    // Une date posée à la main : sur Linux, deux fichiers écrits dans le même
+    // battement d'horloge du noyau portent la même date de modification, et
+    // une source réécrite juste après sa sortie ne paraîtrait pas plus récente.
+    const later = new Date(Date.now() + 60_000)
+    for (const [file, content] of [
+      ['packages/domain/src/index.ts', 'export const x = 1'],
+      ['apps/api/prisma/schema.prisma', '// changé'],
+    ] as const) {
+      writeFileSync(path.join(root, file), content)
+      utimesSync(path.join(root, file), later, later)
+    }
     await makeStack(root, world).stack.up(parseStackArgs(['up']))
     expect(world.commands()).toContain('pnpm build:packages')
     expect(world.commands()).toContain(
