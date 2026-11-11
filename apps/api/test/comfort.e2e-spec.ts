@@ -779,6 +779,42 @@ describe('Lot 6 : confort (e2e)', () => {
   })
 
   describe('MCP', () => {
+    it('lot 26 : GET /activity/claude ne voit Claude qu’à sa première écriture', async () => {
+      const read = async (identity: E2eIdentity) =>
+        (
+          await api()
+            .get('/activity/claude')
+            .set(ctx.auth(identity))
+            .expect(200)
+        ).body as {
+          usage: { state: string; writes: number; text: string }
+          members: { memberId: string; writes: number }[]
+        }
+      expect((await read(richard)).usage.state).toBe('never')
+      // Une lecture par Claude ne laisse pas de trace.
+      await callTool(reader, 'list_visits', { listingId: id })
+      expect((await read(richard)).usage).toMatchObject({
+        state: 'never',
+        writes: 0,
+      })
+      await callTool(richard, 'add_visit', {
+        listingId: id,
+        visitedAt: '2026-11-12T17:30:00.000Z',
+        status: 'planned',
+      })
+      const mine = await read(richard)
+      expect(mine.usage.state).toBe('me')
+      expect(mine.usage.writes).toBeGreaterThanOrEqual(1)
+      expect(mine.members.map(m => m.memberId)).toEqual([richardId])
+      const other = await read(chloe)
+      expect(other.usage.state).toBe('workspace')
+      expect(other.usage.text).toContain('Richard l’utilise')
+      // Un autre espace n'en voit rien.
+      const foreign = await read(stranger)
+      expect(foreign).toMatchObject({ usage: { state: 'never' }, members: [] })
+      await api().get('/activity/claude').expect(401)
+    })
+
     it('add_visit, list_visits et whats_new', async () => {
       const added = await callTool(richard, 'add_visit', {
         listingId: id,

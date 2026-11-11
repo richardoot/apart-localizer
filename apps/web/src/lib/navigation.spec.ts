@@ -26,6 +26,9 @@ describe('les entrées allumées', () => {
     expect(desktopEntryOf('workspace')).toBe('account')
     expect(desktopEntryOf('opinion-criteria')).toBe('account')
     expect(desktopEntryOf('notifications')).toBe('account')
+    // Lot 26 : la page « Claude » est dans le menu du compte (et dans « Plus »).
+    expect(desktopEntryOf('claude')).toBe('account')
+    expect(phoneEntryOf('claude')).toBe('more')
     expect(desktopEntryOf('login')).toBeNull()
     expect(desktopEntryOf(undefined)).toBeNull()
     expect(desktopEntryOf(Symbol('x'))).toBeNull()
@@ -70,6 +73,7 @@ describe('les entrées allumées', () => {
     expect(MORE_LINKS.map(l => l.to)).toEqual([
       '/criteres',
       '/hypotheses',
+      '/claude',
       '/activite',
       '/espace',
       '/espace/criteres-des-avis',

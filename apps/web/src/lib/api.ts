@@ -1,5 +1,6 @@
 import { listingFiltersToQuery } from '@apart/contracts'
 import type {
+  ClaudeStatus,
   ListingCovers,
   DecisionCard,
   DecisionInput,
@@ -657,6 +658,8 @@ export const api = {
       apiFetch<ActivityPage>(
         `/listings/${listingId}/activity${queryString(stringParams(query))}`
       ),
+    /** Lot 26 : ce que le journal sait du connecteur Claude. */
+    claude: () => apiFetch<ClaudeStatus>('/activity/claude'),
   },
 
   /** Lot 6 : « ce qui a changé ». */

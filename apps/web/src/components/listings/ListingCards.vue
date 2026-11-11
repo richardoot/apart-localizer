@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import type { RouteLocationRaw } from 'vue-router'
   import type {
     EvaluatedListing,
     ListingCover as Cover,
@@ -29,12 +30,16 @@
   import JudgementPills from './JudgementPills.vue'
   import ListingCover from './ListingCover.vue'
   import StatusBadge from './StatusBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
 
   /**
    * Les cartes des annonces. Lot 25 (ADR 0035) : la photo de couverture en
    * bandeau quand l'annonce en a une (photo de visite, jamais du portail),
    * les trois jugements étiquetés sous le titre, la raison de l'adéquation
-   * dessous.
+   * dessous. Lot 26 : le titre est un vrai lien (nouvel onglet, clic du
+   * milieu), étiré sur la carte pour que tout clic l'ouvre ; une seule
+   * cible au clavier ; une case pour comparer.
    */
   withDefaults(
     defineProps<{
@@ -43,10 +48,25 @@
       outTab?: boolean
       /** Lot 25 : les couvertures par annonce. */
       covers?: ReadonlyMap<string, Cover> | null
+      /** Lot 26 : le lien de la fiche (le titre est un vrai lien, toute la carte s'ouvre au clic). */
+      linkOf?: ((id: string) => RouteLocationRaw) | null
+      /** Lot 26 : les annonces cochées pour comparer ; null : pas de case. */
+      selected?: readonly string[] | null
+      selectionFull?: boolean
     }>(),
-    { outTab: false, covers: null }
+    {
+      outTab: false,
+      covers: null,
+      linkOf: null,
+      selected: null,
+      selectionFull: false,
+    }
   )
-  const emit = defineEmits<{ open: [id: string]; coverExpired: [] }>()
+  const emit = defineEmits<{
+    open: [id: string]
+    coverExpired: []
+    select: [id: string, checked: boolean]
+  }>()
 
   const openTasks = (item: EvaluatedListing): number =>
     item.tasks.filter(t => !t.done).length
@@ -57,14 +77,11 @@
     <article
       v-for="item in items"
       :key="item.listing.id"
-      class="grid cursor-pointer gap-2 hover:border-accent"
+      class="relative grid gap-2 focus-within:border-accent hover:border-accent"
       :class="
         cardClasses(item.listing.status === 'discarded' ? 'muted' : 'default')
       "
-      tabindex="0"
       :data-id="item.listing.id"
-      @click="emit('open', item.listing.id)"
-      @keydown.enter="emit('open', item.listing.id)"
     >
       <ListingCover
         :cover="covers?.get(item.listing.id) ?? null"
@@ -72,9 +89,27 @@
         @expired="emit('coverExpired')"
       />
       <header class="flex items-start justify-between gap-2">
-        <div class="grid min-w-0 gap-1">
+        <div class="grid min-w-0 flex-1 gap-1">
           <h3 class="flex items-center gap-2 font-medium">
-            {{ item.listing.title }}
+            <!-- Lot 26 : le lien couvre la carte (::after) ; la case et les liens internes passent au-dessus. -->
+            <UiButton
+              v-if="linkOf"
+              :to="linkOf(item.listing.id)"
+              variant="link"
+              size="inline"
+              class="justify-start text-left font-medium text-fg no-underline after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:underline"
+              data-testid="card-title"
+              >{{ item.listing.title }}</UiButton
+            >
+            <UiButton
+              v-else
+              variant="link"
+              size="inline"
+              class="justify-start text-left font-medium text-fg no-underline after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:underline"
+              data-testid="card-title"
+              @click="emit('open', item.listing.id)"
+              >{{ item.listing.title }}</UiButton
+            >
             <NewBadge :is-new="item.isNewForMe" />
           </h3>
           <JudgementPills :judgements="judgementsOfListing(item)" />
@@ -112,6 +147,18 @@
             >
           </div>
         </div>
+        <UiCheckbox
+          v-if="selected !== null"
+          class="relative z-10 -my-2 flex-none"
+          :model-value="selected.includes(item.listing.id)"
+          :disabled="selectionFull && !selected.includes(item.listing.id)"
+          :aria-label="`Comparer « ${item.listing.title} »`"
+          data-testid="card-compare"
+          @update:model-value="
+            (checked: unknown) =>
+              emit('select', item.listing.id, checked === true)
+          "
+        />
       </header>
       <dl class="grid grid-cols-3 gap-2 text-sm">
         <div>

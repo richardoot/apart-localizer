@@ -232,7 +232,11 @@ describe('ListingHeader (lot 19)', () => {
     expect(identity.emitted('back')).toHaveLength(1)
     await identity.get('[data-testid="edit-price"]').trigger('click')
     expect(identity.emitted('editPrice')).toHaveLength(1)
-    expect(identity.find('select').exists()).toBe(false)
+    // Lot 26 : au téléphone, le statut est un menu court sur la ligne du prix.
+    await identity.get('select').setValue('to_visit')
+    expect(identity.emitted('status')).toEqual([
+      [{ status: 'to_visit', reason: null }],
+    ])
     const page = mount(ListingIdentity, {
       props: { item, evaluation: item.evaluation, layout: 'page' },
     })
@@ -259,7 +263,7 @@ describe('ListingHeader (lot 19)', () => {
     expect(facts).toContain('3e étage')
     expect(facts).toContain('Talence · Forum')
     expect(facts).toContain('à 420 m')
-    // Les trois jugements étiquetés, en entier, sous la ligne collée.
+    // Les trois jugements, sur une ligne sous la ligne collée (formes courtes, l'étiquette entière lue).
     expect(wrapper.get('[data-judgement="profitability"]').text()).toContain(
       'Rentabilité'
     )
@@ -273,9 +277,7 @@ describe('ListingHeader (lot 19)', () => {
     )
     expect(wrapper.text()).not.toContain('Ajoutée le')
     expect(wrapper.text()).not.toContain('Modifier la fiche')
-    await wrapper.get('select').setValue('to_visit')
-    expect(wrapper.emitted('status')).toEqual([
-      [{ status: 'to_visit', reason: null }],
-    ])
+    // Lot 26 : plus de menu de statut pleine largeur sous l'en-tête.
+    expect(wrapper.find('select').exists()).toBe(false)
   })
 })

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import {
+  COMPARE_MAX,
   CriteriaFitLevelSchema,
   ListingFiltersSchema,
   ListingListQuerySchema,
@@ -14,10 +15,16 @@ import type {
   SellerType,
   WorkflowStage,
 } from '@apart/contracts'
-import { isWorkflowStage, statusesOfStage } from '@apart/domain'
+import {
+  activeFilterChips,
+  isWorkflowStage,
+  statusesOfStage,
+  withoutChip,
+} from '@apart/domain'
+import type { FilterChip } from '@apart/domain'
 import type { LocationQueryRaw } from 'vue-router'
 
-/** Liste (lignes de l'étape, par défaut), cartes, carte ; le tableau complet garde la comparaison. */
+/** Liste (lignes de l'étape, par défaut), cartes, carte, tableau complet (lot 26 : dans le choix de la vue). */
 export type ListingView = 'list' | 'table' | 'cards' | 'map'
 
 /**
@@ -110,6 +117,22 @@ export function stageFromQuery(query: Query): WorkflowStage | null {
   return isWorkflowStage(stage) ? stage : null
 }
 
+/**
+ * Lot 26 : la sélection à comparer (`?comparer=a,b,c`), dans l'ordre choisi,
+ * sans doublon, `COMPARE_MAX` au plus ; un identifiant illisible est ignoré.
+ */
+export function compareFromQuery(query: Query): string[] {
+  const raw = firstValue(query.comparer) ?? ''
+  return [
+    ...new Set(
+      raw
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => /^[0-9a-f-]{36}$/i.test(s))
+    ),
+  ].slice(0, COMPARE_MAX)
+}
+
 export function viewFromQuery(query: Query): ListingView {
   const view = firstValue(query.view)
   return LISTING_VIEWS.includes(view as ListingView)
@@ -121,11 +144,13 @@ export function viewFromQuery(query: Query): ListingView {
 export function queryFromFilters(
   filters: FilterState,
   view: ListingView,
-  stage: WorkflowStage | null = null
+  stage: WorkflowStage | null = null,
+  compare: readonly string[] = []
 ): LocationQueryRaw {
   const query: LocationQueryRaw = listingFiltersToQuery(filters)
   if (view !== 'list') query.view = view
   if (stage) query.etape = stage
+  if (compare.length) query.comparer = compare.join(',')
   return query
 }
 
@@ -149,29 +174,11 @@ export const useFiltersStore = defineStore('filters', () => {
   const view = ref<ListingView>('list')
   /** Lot 21 : l'étape ouverte ; null tant que l'URL n'en dit rien. */
   const stage = ref<WorkflowStage | null>(null)
+  /** Lot 26 : les annonces cochées pour comparer, dans l'URL (`comparer`). */
+  const compare = ref<string[]>([])
 
-  const activeCount = computed(() => {
-    const f = filters.value
-    let count = 0
-    if (f.status?.length) count += 1
-    if (f.commune?.length) count += 1
-    if (f.dpe?.length) count += 1
-    if (f.verdict?.length) count += 1
-    if (f.precision?.length) count += 1
-    if (f.priceMin !== undefined || f.priceMax !== undefined) count += 1
-    if (f.surfaceMin !== undefined || f.surfaceMax !== undefined) count += 1
-    if (f.roomsMin !== undefined) count += 1
-    if (f.newForMe) count += 1
-    if (f.staleDays !== undefined) count += 1
-    if (f.near) count += 1
-    if (f.criteriaId) count += 1
-    if (f.search) count += 1
-    if (f.sellerType?.length) count += 1
-    if (f.multiPortal) count += 1
-    if (f.reference) count += 1
-    if (f.opinions) count += 1
-    return count
-  })
+  /** Lot 26 : un filtre actif = une puce (`activeFilterChips`, domain) : une seule règle. */
+  const activeCount = computed(() => activeFilterChips(filters.value).length)
 
   /** Les filtres tels que l'API les attend, avec la page demandée. */
   function apiFilters(page = 1, limit = 200): ListingFiltersInput {
@@ -208,24 +215,48 @@ export const useFiltersStore = defineStore('filters', () => {
     patch({ sort, order: order ?? filters.value.order })
   }
 
+  /** Efface les filtres ; le tri reste (il ne cache rien). */
   function reset(): void {
-    filters.value = filtersFromQuery({})
+    const { sort, order } = filters.value
+    filters.value = { ...filtersFromQuery({}), sort, order }
+  }
+
+  /** Lot 26 : retire le filtre d'une puce. */
+  function removeChip(chip: Pick<FilterChip, 'clears'>): void {
+    filters.value = withoutChip(filters.value, chip) as FilterState
+  }
+
+  /** Lot 26 : coche ou décoche une annonce à comparer (`COMPARE_MAX` au plus). */
+  function toggleCompare(id: string, checked?: boolean): void {
+    const has = compare.value.includes(id)
+    const want = checked ?? !has
+    if (want && !has && compare.value.length < COMPARE_MAX) {
+      compare.value = [...compare.value, id]
+    } else if (!want && has) {
+      compare.value = compare.value.filter(c => c !== id)
+    }
+  }
+
+  function clearCompare(): void {
+    compare.value = []
   }
 
   function loadFromQuery(query: Query): void {
     filters.value = filtersFromQuery(query)
     view.value = viewFromQuery(query)
     stage.value = stageFromQuery(query)
+    compare.value = compareFromQuery(query)
   }
 
   const routeQuery = computed(() =>
-    queryFromFilters(filters.value, view.value, stage.value)
+    queryFromFilters(filters.value, view.value, stage.value, compare.value)
   )
 
   return {
     filters,
     view,
     stage,
+    compare,
     activeCount,
     routeQuery,
     apiFilters,
@@ -235,6 +266,9 @@ export const useFiltersStore = defineStore('filters', () => {
     setStage,
     setSort,
     reset,
+    removeChip,
+    toggleCompare,
+    clearCompare,
     loadFromQuery,
   }
 })

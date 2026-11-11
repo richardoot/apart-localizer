@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import type { RouteLocationRaw } from 'vue-router'
   import UiButton from '@/components/ui/UiButton.vue'
   import { computed } from 'vue'
   import { CRITERIA_FIT_LEVEL_LABELS, JUDGEMENT_LABELS } from '@apart/contracts'
@@ -36,8 +37,10 @@
       result: CompareResult
       /** Lot 20 : le membre connecté (« à toi de noter »). */
       meId?: string | null
+      /** Lot 26 : le lien de la fiche (le titre est un vrai lien) ; sans lui, un bouton. */
+      linkOf?: ((id: string) => RouteLocationRaw) | null
     }>(),
-    { meId: null }
+    { meId: null, linkOf: null }
   )
   const emit = defineEmits<{ open: [id: string] }>()
 
@@ -268,9 +271,21 @@
             class="px-3 py-2 font-medium"
           >
             <UiButton
+              v-if="linkOf"
+              :to="linkOf(item.listing.id)"
               variant="link"
               size="sm"
               class="justify-start text-left font-display font-bold text-fg no-underline hover:text-accent"
+              data-testid="compare-title"
+            >
+              {{ item.listing.title }}
+            </UiButton>
+            <UiButton
+              v-else
+              variant="link"
+              size="sm"
+              class="justify-start text-left font-display font-bold text-fg no-underline hover:text-accent"
+              data-testid="compare-title"
               @click="emit('open', item.listing.id)"
             >
               {{ item.listing.title }}

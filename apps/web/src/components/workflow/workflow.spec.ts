@@ -102,7 +102,41 @@ describe('StageBar', () => {
     const wrapper = mount(StageBar, {
       props: { stages: [], current: 'offres' },
     })
-    expect(wrapper.findAll('[data-testid="stage-count"]')[0]?.text()).toBe('0')
+    expect(
+      wrapper
+        .findAll('[data-testid="stage-count"] [aria-hidden="true"]')[0]
+        ?.text()
+    ).toBe('0')
+  })
+
+  it('lot 26 : sous des filtres, « affichées / total », dit en entier au lecteur d’écran', () => {
+    const wrapper = mount(StageBar, {
+      props: {
+        stages: [
+          {
+            stage: 'a-visiter',
+            count: 0,
+            total: 2,
+            filtered: true,
+            outOfCriteria: 0,
+            toSort: 0,
+            sub: '2 sans date',
+          },
+        ],
+        current: 'a-visiter',
+      },
+    })
+    const count = wrapper.get(
+      '[data-stage="a-visiter"] [data-testid="stage-count"]'
+    )
+    expect(count.attributes('data-filtered')).toBe('true')
+    expect(count.get('[aria-hidden="true"]').text()).toBe('0/2')
+    expect(count.get('.sr-only').text()).toBe(
+      '0 sur 2 annonces, avec les filtres'
+    )
+    expect(wrapper.get('[data-stage="a-visiter"]').text()).toContain(
+      'avec les filtres'
+    )
   })
 })
 

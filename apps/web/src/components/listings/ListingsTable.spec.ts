@@ -78,16 +78,41 @@ describe('ListingsTable', () => {
     expect(priceHeader?.attributes('data-sort')).toBe('asc')
   })
 
-  it('ouvre la fiche au clic ou à Entrée, et dit quand rien ne correspond', async () => {
+  it('lot 26 : la ligne s’ouvre au clic (souris) ; au clavier, le lien du titre ; un en-tête triable non trié dit « none »', async () => {
     const wrapper = mount(ListingsTable, { props: { items: [cheap] } })
-    await wrapper.get('tbody tr').trigger('click')
-    await wrapper.get('tbody tr').trigger('keydown.enter')
-    expect(wrapper.emitted('open')).toEqual([
-      [cheap.listing.id],
-      [cheap.listing.id],
-    ])
+    const row = wrapper.get('tbody tr')
+    expect(row.attributes('tabindex')).toBeUndefined()
+    await row.trigger('click')
+    // Une touche (nouvel onglet) laisse faire le navigateur.
+    await row.trigger('click', { metaKey: true })
+    expect(wrapper.emitted('open')).toEqual([[cheap.listing.id]])
+    const price = wrapper
+      .findAll('thead th')
+      .find(th => th.text().startsWith('Prix'))
+    expect(price?.attributes('aria-sort')).toBe('none')
+    expect(
+      wrapper.findAll('thead th')[0]?.attributes('aria-sort')
+    ).toBeUndefined()
     const empty = mount(ListingsTable, { props: { items: [] } })
     expect(empty.text()).toContain('Aucune annonce ne correspond')
+  })
+
+  it('lot 26 : le titre est un vrai lien quand la page le donne', () => {
+    const wrapper = mount(ListingsTable, {
+      props: {
+        items: [cheap],
+        linkOf: (id: string) => `/annonces/${id}?etape=a-etudier`,
+      },
+      global: {
+        stubs: {
+          RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+        },
+      },
+    })
+    const link = wrapper.get('[data-testid="table-title"]')
+    expect(link.attributes('href')).toBe(
+      `/annonces/${cheap.listing.id}?etape=a-etudier`
+    )
   })
 })
 
@@ -110,27 +135,19 @@ describe('ListingsTable : prix cible, décote, classement et comparaison', () =>
     expect(rows[1]?.text()).toContain('2/2')
   })
 
-  it('sélectionne des annonces et demande leur comparaison, sans ouvrir la fiche', async () => {
-    const wrapper = mount(ListingsTable, { props: { items: [cheap, dear] } })
-    expect(wrapper.find('[data-testid="compare-bar"]').exists()).toBe(false)
+  it('lot 26 : coche pour comparer (la sélection est celle de la page), sans ouvrir la fiche', async () => {
+    const wrapper = mount(ListingsTable, {
+      props: { items: [cheap, dear], selected: [dear.listing.id] },
+    })
     const boxes = wrapper.findAll('tbody input[type="checkbox"]')
     expect(boxes).toHaveLength(2)
+    expect((boxes[1]?.element as HTMLInputElement).checked).toBe(true)
     await boxes[0]?.setValue(true)
     expect(wrapper.emitted('open')).toBeUndefined()
-    const bar = wrapper.get('[data-testid="compare-bar"]')
-    expect(bar.text()).toContain('1 annonce sélectionnée')
-    const compareButton = bar
-      .findAll('button')
-      .find(b => b.text().startsWith('Comparer'))
-    expect(compareButton?.attributes('disabled')).toBeDefined()
-    await boxes[1]?.setValue(true)
-    await compareButton?.trigger('click')
-    expect(wrapper.emitted('compare')).toEqual([
-      [[cheap.listing.id, dear.listing.id]],
-    ])
-    await boxes[0]?.setValue(false)
-    expect(wrapper.get('[data-testid="compare-bar"]').text()).toContain(
-      '1 annonce sélectionnée'
-    )
+    expect(wrapper.emitted('select')).toEqual([[cheap.listing.id, true]])
+    // Pleine : les cases non cochées se désactivent.
+    await wrapper.setProps({ selectionFull: true })
+    expect(boxes[0]?.attributes('disabled')).toBeDefined()
+    expect(boxes[1]?.attributes('disabled')).toBeUndefined()
   })
 })

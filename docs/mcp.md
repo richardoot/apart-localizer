@@ -12,6 +12,14 @@ la forme des réponses dans `tool-results.ts`. Les schémas d'entrée viennent d
 `packages/contracts/src/mcp.ts` ; les calculs de `packages/domain` à travers les services ; le
 module n'a aucune logique métier propre.
 
+Lot 26 (ADR 0036) : la page « Claude » de l'application (`/claude`) donne l'adresse du connecteur
+(`VITE_API_URL` + `/mcp`), les étapes pour le brancher dans claude.ai, et une demande courte par
+prompt (`CLAUDE_REQUESTS`, `contracts/src/claude.ts`) avec son titre ; les titres des cinq prompts
+viennent de `MCP_PROMPT_TITLES`, que le serveur utilise en les enregistrant (le test e2e de
+`prompts/list` le vérifie). Elle lit `GET /activity/claude` : l'usage du connecteur n'est connu que
+par ses écritures au journal (canal `mcp`) ; une lecture n'en laisse pas, et aucune API ne liste les
+applications autorisées. Aucun outil n'a changé.
+
 ## Authentification et découverte
 
 | Chemin                                          | Rôle                                                                                                                                                                                |

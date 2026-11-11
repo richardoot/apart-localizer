@@ -3,7 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <!-- Lot 26 : l'icône de l'écran d'accueil de l'iPhone (180 × 180, opaque :
+         iOS arrondit les coins lui-même) ; elle passe avant les icônes du manifeste. -->
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="/icons/apple-touch-icon.png"
+    />
+    <meta name="apple-mobile-web-app-title" content="Apart" />
+    <!-- Barre d'état opaque dans l'application installée : l'en-tête collé
+         (top: 0) ne passe jamais dessous. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta
       name="description"
       content="Suivi d'annonces d'achat d'appartement : comparateur, carte, rentabilité et prix cible."

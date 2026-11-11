@@ -161,6 +161,32 @@ describe('CriteriaEditor', () => {
     wrapper.unmount()
   })
 
+  it('lot 26 : « Effacer » retire la forme tracée ; le périmètre est à reposer', async () => {
+    const wrapper = mountEditor()
+    await flushPromises()
+    await wrapper.get('#c-name').setValue('Talence sud')
+    await wrapper.get('[data-value="polygon"]').trigger('click')
+    mapLibreMock.maps[0]?.emit('load')
+    terraDrawMock.instances[0]?.finish({
+      geometry: SQUARE,
+      properties: { mode: 'polygon' },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="preview"]').text()).toContain(
+      '4 annonces gardées'
+    )
+    await wrapper.get('[data-testid="draw-clear"]').trigger('click')
+    await flushPromises()
+    // Ni l'ancienne forme ni l'aperçu d'avant : « périmètre à poser ».
+    expect(wrapper.get('[data-testid="preview"]').text()).toMatch(
+      /^Sans périmètre/
+    )
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.text()).toContain('Le périmètre n’est pas encore posé')
+    expect(apiMock.searchCriteria.create).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('modifier sans toucher au périmètre : seuls nom et filtres partent, avec le garde-fou', async () => {
     const criteria = fakeCriteria()
     const wrapper = mountEditor(criteria)

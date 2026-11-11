@@ -101,7 +101,8 @@ describe('agendaTarget', () => {
     }
     expect(GETTING_STARTED_TARGETS.assumptions).toEqual({ name: 'assumptions' })
     expect(GETTING_STARTED_TARGETS.listing).toEqual({ name: 'listing-new' })
-    expect(GETTING_STARTED_TARGETS.claude).toBeNull()
-    expect(GETTING_STARTED_ACTIONS.claude).toBe('Copier l’adresse')
+    // Lot 26 : l'étape Claude mène à la page « Claude ».
+    expect(GETTING_STARTED_TARGETS.claude).toEqual({ name: 'claude' })
+    expect(GETTING_STARTED_ACTIONS.claude).toBe('Brancher Claude')
   })
 })

@@ -6,6 +6,7 @@
  * (brief, portails cochés, demande à copier), compte rendu (bilan, filtre
  * dans l'URL), store (onglet dans l'URL). API simulée, données fictives.
  */
+import { CLAUDE_REQUESTS } from '@apart/contracts'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
@@ -638,11 +639,49 @@ describe('CriteriaBriefPage', () => {
     })
     await wrapper.get('[data-action="copy"]').trigger('click')
     await flushPromises()
+    // Lot 26 : la même demande que la page « Claude » (une seule source).
     expect(writeText).toHaveBeenCalledWith(
-      'Explore les nouvelles annonces pour nos critères.'
+      CLAUDE_REQUESTS.find(r => r.prompt === 'explore_listings')?.request
     )
     expect(wrapper.get('[data-action="copy"]').text()).toBe('Copié')
     expect(text).toContain('4 vues · 2 à valider')
+  })
+
+  it('« Copié » redevient « Copier la demande » au bout de deux secondes (lot 26)', async () => {
+    apiMock.explorations.brief.mockResolvedValue(fakeBrief())
+    apiMock.searchCriteria.list.mockResolvedValue([])
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn(() => Promise.resolve()) },
+      configurable: true,
+    })
+    const { wrapper } = await mountWith(
+      CriteriaBriefPage,
+      `/criteres/${CRITERIA_ID}`
+    )
+    vi.useFakeTimers()
+    try {
+      await wrapper.get('[data-action="copy"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[data-action="copy"]').text()).toBe('Copié')
+      vi.advanceTimersByTime(1900)
+      await flushPromises()
+      expect(wrapper.get('[data-action="copy"]').text()).toBe('Copié')
+      vi.advanceTimersByTime(200)
+      await flushPromises()
+      expect(wrapper.get('[data-action="copy"]').text()).toBe(
+        'Copier la demande'
+      )
+      // Un départ de la page pendant « Copié » ne laisse aucun minuteur.
+      const clear = vi.spyOn(globalThis, 'clearTimeout')
+      await wrapper.get('[data-action="copy"]').trigger('click')
+      await flushPromises()
+      const before = clear.mock.calls.length
+      wrapper.unmount()
+      expect(clear.mock.calls.length).toBeGreaterThan(before)
+      clear.mockRestore()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('garde au moins un portail ; une erreur se lit', async () => {
@@ -715,6 +754,16 @@ describe('ExplorationPage', () => {
     expect(wrapper.get('[data-testid="out-digest"]').text()).toContain(
       'prix au-delà de la marge (1)'
     )
+    // Lot 26 : au téléphone, chaque carte d'une annonce suivie ouvre sa fiche, comme le tableau.
+    const tableOpen = wrapper
+      .findAll('[data-testid="lines-table"] a')
+      .filter(a => a.text() === 'Ouvrir la fiche').length
+    const cardOpen = wrapper.findAll(
+      '[data-testid="lines-cards"] [data-testid="line-open"]'
+    )
+    expect(tableOpen).toBeGreaterThan(0)
+    expect(cardOpen).toHaveLength(tableOpen)
+    expect(cardOpen[0]?.text()).toBe('Ouvrir la fiche')
     await wrapper.get('[data-filter="todo"]').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.query).toEqual({ resultat: 'todo' })

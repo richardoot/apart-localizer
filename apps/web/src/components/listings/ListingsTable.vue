@@ -1,5 +1,7 @@
 <script setup lang="ts">
-  import { computed, h, ref } from 'vue'
+  import { computed, h } from 'vue'
+  import { RouterLink } from 'vue-router'
+  import type { RouteLocationRaw } from 'vue-router'
   import {
     FlexRender,
     createColumnHelper,
@@ -24,7 +26,6 @@
     formatEurosPerMonth,
     formatPercent,
     formatSurface,
-    plural,
   } from '@/lib/format'
   import { DISCOUNT_CLASS_LABELS, DISCOUNT_CLASS_TONES } from '@/lib/labels'
   import UiBadge from '@/components/ui/UiBadge.vue'
@@ -59,20 +60,37 @@
       members?: readonly Member[]
       /** Lot 20 : le membre connecté (« à toi de noter »). */
       meId?: string | null
+      /** Lot 26 : les annonces cochées pour comparer (la sélection vit dans l'URL). */
+      selected?: readonly string[]
+      /** Lot 26 : la sélection est pleine (six au plus). */
+      selectionFull?: boolean
+      /** Lot 26 : le lien de la fiche ; le titre est un vrai lien. */
+      linkOf?: ((id: string) => RouteLocationRaw) | null
     }>(),
-    { outTab: false, members: () => [], meId: null }
+    {
+      outTab: false,
+      members: () => [],
+      meId: null,
+      selected: () => [],
+      selectionFull: false,
+      linkOf: null,
+    }
   )
-  const emit = defineEmits<{ open: [id: string]; compare: [ids: string[]] }>()
+  const emit = defineEmits<{
+    open: [id: string]
+    select: [id: string, checked: boolean]
+  }>()
 
-  /** Au plus six annonces côte à côte. */
-  const COMPARE_MAX = 6
-  const selected = ref<string[]>([])
-  function toggle(id: string, checked: boolean): void {
-    selected.value = checked
-      ? selected.value.includes(id)
-        ? selected.value
-        : [...selected.value, id].slice(0, COMPARE_MAX)
-      : selected.value.filter(s => s !== id)
+  /**
+   * Lot 26 : un clic sur la ligne ouvre la fiche (souris), sauf s'il vise un
+   * lien, une case ou un bouton, ou s'il porte une touche (nouvel onglet) :
+   * au clavier, seul le lien du titre ouvre la fiche.
+   */
+  function onRowClick(event: MouseEvent, id: string): void {
+    const target = event.target as Element | null
+    if (target?.closest('a,button,input,label,select,textarea')) return
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    emit('open', id)
   }
 
   /** Rang par décote nécessaire croissante parmi les annonces affichées. */
@@ -192,10 +210,13 @@
           [
             h(UiCheckbox, {
               class: '-my-2.5 sm:-my-1.5',
-              modelValue: selected.value.includes(ctx.row.original.listing.id),
-              'aria-label': `Sélectionner ${ctx.row.original.listing.title} pour comparer`,
+              modelValue: props.selected.includes(ctx.row.original.listing.id),
+              disabled:
+                props.selectionFull &&
+                !props.selected.includes(ctx.row.original.listing.id),
+              'aria-label': `Comparer « ${ctx.row.original.listing.title} »`,
               'onUpdate:modelValue': (checked: unknown) =>
-                toggle(ctx.row.original.listing.id, checked === true),
+                emit('select', ctx.row.original.listing.id, checked === true),
             }),
           ]
         ),
@@ -206,7 +227,23 @@
       cell: ctx =>
         h('div', { class: 'grid gap-0.5' }, [
           h('div', { class: 'flex items-center gap-2' }, [
-            h('span', { class: 'font-medium' }, ctx.row.original.listing.title),
+            // Lot 26 : le titre est un vrai lien (nouvel onglet, clic du milieu).
+            props.linkOf
+              ? h(
+                  RouterLink,
+                  {
+                    to: props.linkOf(ctx.row.original.listing.id),
+                    class:
+                      'font-medium text-fg underline-offset-2 hover:text-accent hover:underline',
+                    'data-testid': 'table-title',
+                  },
+                  () => ctx.row.original.listing.title
+                )
+              : h(
+                  'span',
+                  { class: 'font-medium' },
+                  ctx.row.original.listing.title
+                ),
             h(NewBadge, { isNew: ctx.row.original.isNewForMe }),
           ]),
           h('div', { class: 'flex flex-wrap items-center gap-1.5' }, [
@@ -502,13 +539,15 @@
 
   /** Le sens de tri d'une colonne, pour les lecteurs d'écran (`aria-sort`). */
   function ariaSort(
-    sorted: false | 'asc' | 'desc'
-  ): 'ascending' | 'descending' | undefined {
+    sorted: false | 'asc' | 'desc',
+    sortable = true
+  ): 'ascending' | 'descending' | 'none' | undefined {
+    if (!sortable) return undefined
     return sorted === 'asc'
       ? 'ascending'
       : sorted === 'desc'
         ? 'descending'
-        : undefined
+        : 'none'
   }
 </script>
 
@@ -516,35 +555,6 @@
   <div
     class="relative overflow-x-auto rounded-2xl border border-line bg-surface"
   >
-    <div
-      v-if="selected.length > 0"
-      class="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-accent-soft px-3 py-2 text-sm"
-      data-testid="compare-bar"
-    >
-      <span
-        >{{
-          plural(
-            selected.length,
-            'annonce sélectionnée',
-            'annonces sélectionnées'
-          )
-        }}
-        (6 au plus)</span
-      >
-      <span class="flex gap-2">
-        <UiButton size="sm" @click="selected = []">
-          Tout désélectionner
-        </UiButton>
-        <UiButton
-          variant="primary"
-          size="sm"
-          :disabled="selected.length < 2"
-          @click="emit('compare', selected)"
-        >
-          Comparer ({{ selected.length }})
-        </UiButton>
-      </span>
-    </div>
     <table class="w-full min-w-[1600px] text-sm">
       <thead class="bg-surface-2 text-left text-xs text-muted">
         <tr
@@ -557,7 +567,12 @@
             scope="col"
             class="px-3 py-1 font-medium whitespace-nowrap"
             :class="header.column.getIsSorted() ? 'text-accent' : ''"
-            :aria-sort="ariaSort(header.column.getIsSorted())"
+            :aria-sort="
+              ariaSort(
+                header.column.getIsSorted(),
+                header.column.id !== 'select'
+              )
+            "
           >
             <UiButton
               v-if="header.column.id !== 'select'"
@@ -590,10 +605,8 @@
           :class="
             row.original.listing.status === 'discarded' ? 'bg-surface-2' : ''
           "
-          tabindex="0"
           :data-id="row.original.listing.id"
-          @click="emit('open', row.original.listing.id)"
-          @keydown.enter="emit('open', row.original.listing.id)"
+          @click="onRowClick($event, row.original.listing.id)"
         >
           <td
             v-for="cell in row.getAllCells()"

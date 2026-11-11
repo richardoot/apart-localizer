@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { ServiceUnavailableException } from '@nestjs/common'
 import { z } from 'zod'
 import {
+  MCP_PROMPT_TITLES,
   AssumptionsSchema,
   CRITERIA_FIT_LEVEL_LABELS,
   DISCOUNT_CLASS_LABELS,
@@ -1915,7 +1916,7 @@ export function registerPrompts(server: McpServer): void {
   server.registerPrompt(
     'analyze_listing',
     {
-      title: 'Analyser cette annonce',
+      title: MCP_PROMPT_TITLES.analyze_listing,
       description:
         "À partir du texte d'une page d'annonce (et de captures jointes), extrait la fiche normalisée par l'IA, montre provenance, confiance, champs manquants et doublons, demande confirmation, puis crée l'annonce et l'évalue.",
       argsSchema: McpAnalyzeListingPromptArgsSchema.shape,

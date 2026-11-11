@@ -56,6 +56,8 @@ const ISOCHRONE: Perimeter = {
   params: ISOCHRONE_PARAMS,
 }
 
+const SAVED: Perimeter = { type: 'polygon', polygon: SQUARE }
+
 describe('CriteriaMap (MapLibre et terra-draw mockés)', () => {
   beforeEach(() => {
     mapLibreMock.reset()
@@ -370,5 +372,112 @@ describe('CriteriaMap (MapLibre et terra-draw mockés)', () => {
     expect(mapLibreMock.markers).toHaveLength(2)
     wrapper.unmount()
     expect(mapLibreMock.markers[1]?.removed).toBe(true)
+  })
+
+  it('lot 26 : au toucher, deux doigts hors dessin, tous les gestes en dessin ; la carte vient à l’écran', async () => {
+    const original = window.matchMedia
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })) as unknown as typeof window.matchMedia
+    const scroll = vi.fn()
+    const previous = HTMLElement.prototype.scrollIntoView
+    HTMLElement.prototype.scrollIntoView = scroll
+    const wrapper = mountMap({ perimeter: null, drawMode: null })
+    await nextTick()
+    const map = mapLibreMock.maps[0]
+    expect(map?.options.cooperativeGestures).toBe(true)
+    expect(wrapper.get('[data-testid="draw-hint"]').text()).toContain(
+      'Deux doigts'
+    )
+    map?.emit('load')
+    await wrapper.setProps({ drawMode: 'polygon' })
+    await nextTick()
+    expect(map?.cooperativeGestures.isEnabled()).toBe(false)
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest' })
+    expect(wrapper.get('[data-testid="draw-hint"]').text()).toMatch(
+      /^Touche pour poser les sommets/
+    )
+    await wrapper.setProps({ drawMode: null })
+    expect(map?.cooperativeGestures.isEnabled()).toBe(true)
+    HTMLElement.prototype.scrollIntoView = previous
+    window.matchMedia = original
+    wrapper.unmount()
+  })
+
+  it('lot 26 : à la souris, rien ne bloque les gestes ; « Clique »', async () => {
+    const wrapper = mountMap({ perimeter: null, drawMode: 'circle' })
+    await nextTick()
+    expect(mapLibreMock.maps[0]?.options.cooperativeGestures).toBe(false)
+    expect(wrapper.get('[data-testid="draw-hint"]').text()).toBe(
+      'Clique au centre, puis à la distance voulue.'
+    )
+    // Un cercle n'a pas de point à annuler : seulement « Effacer ».
+    expect(wrapper.find('[data-testid="draw-undo"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="draw-clear"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('lot 26 : « Annuler le dernier point » et « Effacer » pendant un tracé', async () => {
+    const wrapper = mountMap({ perimeter: SAVED, drawMode: 'polygon' })
+    await nextTick()
+    mapLibreMock.maps[0]?.emit('load')
+    const draw = terraDrawMock.instances[0]
+    expect(draw?.options).toMatchObject({
+      undoRedo: { modeLevel: { kind: 'mode-undo-redo' } },
+    })
+    const undo = wrapper.get('[data-testid="draw-undo"]')
+    expect(undo.attributes('disabled')).toBeDefined()
+    draw?.addPoint()
+    draw?.addPoint()
+    await nextTick()
+    expect(undo.attributes('disabled')).toBeUndefined()
+    await undo.trigger('click')
+    expect(draw?.undoCalls).toBe(1)
+    expect(draw?.pendingPoints).toBe(1)
+    await undo.trigger('click')
+    expect(undo.attributes('disabled')).toBeDefined()
+    // Effacer : forme en cours et forme enregistrée retirées, le mode reste.
+    const cleared = draw?.cleared ?? 0
+    await wrapper.get('[data-testid="draw-clear"]').trigger('click')
+    expect(draw?.cleared).toBe(cleared + 1)
+    expect(draw?.features.size).toBe(0)
+    expect(draw?.mode).toBe('polygon')
+    expect(wrapper.emitted('cleared')).toHaveLength(1)
+    // Pas de tracé en cours : pas d'outils.
+    await wrapper.setProps({ drawMode: null })
+    expect(wrapper.find('[data-testid="draw-tools"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('lot 26 : en mode « point », une adresse trouvée se pose par « Placer le point ici »', async () => {
+    apiMock.opendata.geocode.mockResolvedValueOnce({
+      query: '1 place Fictive',
+      status: 'found',
+      result: {
+        point: { type: 'Point', coordinates: [-0.5712345678, 44.84] },
+        label: '1 Place Fictive 33000 Bordeaux',
+        precision: 'exact',
+        commune: 'Bordeaux',
+      },
+    })
+    const wrapper = mountMap({ perimeter: null, drawMode: 'pick' })
+    await nextTick()
+    mapLibreMock.maps[0]?.emit('load')
+    expect(wrapper.find('[data-testid="place-found"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="map-address"]').setValue('1 place Fictive')
+    await wrapper.get('[data-testid="map-address-go"]').trigger('click')
+    await flushPromises()
+    expect(apiMock.opendata.geocode).toHaveBeenCalledWith('1 place Fictive')
+    await wrapper.get('[data-testid="place-found"]').trigger('click')
+    expect(wrapper.emitted('pick')).toEqual([
+      [{ longitude: -0.571235, latitude: 44.84 }],
+    ])
+    // Hors du mode « point », le bouton disparaît.
+    await wrapper.setProps({ drawMode: 'polygon' })
+    expect(wrapper.find('[data-testid="place-found"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 })

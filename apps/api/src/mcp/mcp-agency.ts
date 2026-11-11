@@ -1,5 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
+  MCP_PROMPT_TITLES,
   AGENCY_ANSWER_DISPOSITION_LABELS,
   AGENCY_CHANNEL_LABELS,
   AGENCY_REQUEST_STATUS_LABELS,
@@ -295,7 +296,7 @@ export function registerAgencyPrompts(server: McpServer): void {
   server.registerPrompt(
     'ask_agencies',
     {
-      title: 'Poser les questions ouvertes aux agences',
+      title: MCP_PROMPT_TITLES.ask_agencies,
       description:
         "Liste les questions ouvertes, prépare les messages groupés par annonce, les MONTRE au membre et attend son accord, puis les envoie avec Gmail ou la messagerie du portail dans le navigateur de l'utilisateur et enregistre l'envoi. Jamais d'envoi sans accord, jamais de contournement de captcha ni de connexion à la place de l'utilisateur.",
       argsSchema: McpAskAgenciesPromptArgsSchema.shape,
@@ -316,7 +317,7 @@ export function registerAgencyPrompts(server: McpServer): void {
   server.registerPrompt(
     'check_agency_answers',
     {
-      title: 'Relever les réponses des agences',
+      title: MCP_PROMPT_TITLES.check_agency_answers,
       description:
         'Cherche les réponses dans les fils connus (Gmail, messagerie du portail), les enregistre (valeurs appliquées ou proposées, tâches cochées), puis résume et fait confirmer les valeurs proposées ; signale les relances dues.',
       argsSchema: McpCheckAgencyAnswersPromptArgsSchema.shape,

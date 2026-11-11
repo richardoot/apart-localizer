@@ -257,6 +257,17 @@
                   line.why
                 }}</span>
               </div>
+              <!-- Lot 26 : la même action que le tableau d'ordinateur. -->
+              <UiButton
+                v-if="line.listing"
+                :to="{ name: 'listing', params: { id: line.listing.id } }"
+                variant="outline"
+                size="sm"
+                icon-right="arrow-right"
+                class="w-fit"
+                data-testid="line-open"
+                >Ouvrir la fiche</UiButton
+              >
             </li>
           </ul>
         </div>

@@ -2,6 +2,8 @@
   import { computed, nextTick, ref, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import {
+    COMPARE_MAX,
+    ListingStatusSchema,
     WORKFLOW_STAGE_INTROS,
     WORKFLOW_STAGE_QUESTIONS,
   } from '@apart/contracts'
@@ -12,14 +14,21 @@
     WorkflowStage,
   } from '@apart/contracts'
   import {
+    activeFilterChips,
     decisionRowKind,
     defaultStage,
+    hiddenByFiltersText,
     isFoldedOut,
+    stageCountText,
+    stageCountsUnderFilters,
     stageOfDecision,
     stageOfStatus,
   } from '@apart/domain'
+  import type { RouteLocationRaw } from 'vue-router'
   import { criteriaChangesMessage } from '@/lib/criteria'
+  import CompareBar from '@/components/listings/CompareBar.vue'
   import CostBasisBadge from '@/components/listings/CostBasisBadge.vue'
+  import FilterChips from '@/components/listings/FilterChips.vue'
   import DraftsTab from '@/components/drafts/DraftsTab.vue'
   import FiltersBar from '@/components/listings/FiltersBar.vue'
   import ListingCards from '@/components/listings/ListingCards.vue'
@@ -66,7 +75,6 @@
   import UiBadge from '@/components/ui/UiBadge.vue'
   import UiButton from '@/components/ui/UiButton.vue'
   import UiCard from '@/components/ui/UiCard.vue'
-  import UiField from '@/components/ui/UiField.vue'
   import { useFeedbackStore } from '@/stores/feedback'
   import {
     confirmLabel,
@@ -136,9 +144,16 @@
     return rest
   }
   store.loadFromQuery(pageQuery(route.query))
+  /** Lot 26 : la page ne réécrit l'URL que sur ses propres routes (pas en partant vers Comparer). */
+  const ownRoute = (): boolean =>
+    route.name === 'listings' ||
+    route.name === 'listing' ||
+    route.name === 'listing-new' ||
+    route.name === undefined
   watch(
     () => route.query,
     query => {
+      if (!ownRoute()) return
       const filters = pageQuery(query)
       if (JSON.stringify(filters) !== JSON.stringify(store.routeQuery)) {
         store.loadFromQuery(filters)
@@ -148,6 +163,7 @@
   watch(
     () => store.routeQuery,
     query => {
+      if (!ownRoute()) return
       if (JSON.stringify(query) !== JSON.stringify(pageQuery(route.query))) {
         void router.replace({
           name: route.name ?? 'listings',
@@ -176,14 +192,26 @@
   const agreement = computed(() => overview.value?.agreementRequired ?? false)
 
   const draftsStage = computed(() => stage.value === 'a-valider')
-  const listFilters = computed(() => ({
-    ...store.apiFilters(),
-    ...stageApiFilters(stage.value),
-  }))
-  /** À valider : pas d'appel de liste ; sinon, l'étape est connue. */
+  /**
+   * Lot 26 (ADR 0036) : sous des filtres, une seule lecture pour toutes les
+   * étapes (tous les statuts) : elle donne la liste de l'étape et les
+   * compteurs qui suivent les filtres ; changer d'étape ne relit rien.
+   * Sans filtre, la lecture de l'étape seule, comme avant.
+   */
+  const filtersActive = computed(() => store.activeCount > 0)
+  const listFilters = computed(() =>
+    filtersActive.value
+      ? {
+          ...store.apiFilters(),
+          ...stageApiFilters(stage.value),
+          status: [...ListingStatusSchema.options],
+        }
+      : { ...store.apiFilters(), ...stageApiFilters(stage.value) }
+  )
+  /** À valider sans filtre : pas d'appel de liste ; sinon, l'étape est connue. */
   const listEnabled = computed(
     () =>
-      !draftsStage.value &&
+      (!draftsStage.value || filtersActive.value) &&
       (store.stage !== null || overviewReady.value || overviewFailed.value)
   )
   const listQuery = useListingList(listFilters, listEnabled)
@@ -222,14 +250,15 @@
   // Un brouillon écarté n'a jamais été une annonce suivie : les archives le
   // montrent à côté des annonces écartées, et « Repêcher » le remet À valider.
   const { data: dismissedData } = useDismissedDrafts(
-    computed(() => stage.value === 'archives')
+    computed(() => stage.value === 'archives' || filtersActive.value)
+  )
+  const dismissedMatching = computed(() =>
+    (dismissedData.value ?? []).filter(d =>
+      draftMatchesFilters(d, store.filters)
+    )
   )
   const dismissedDrafts = computed(() =>
-    stage.value === 'archives'
-      ? (dismissedData.value ?? []).filter(d =>
-          draftMatchesFilters(d, store.filters)
-        )
-      : []
+    stage.value === 'archives' ? dismissedMatching.value : []
   )
 
   const communes = computed(() => {
@@ -245,6 +274,60 @@
   })
   const colorBy = ref<'verdict' | 'status'>('verdict')
   const filtersOpen = ref(false)
+
+  /** Lot 26 : une puce par filtre actif, nommée par `domain`. */
+  const chips = computed(() =>
+    activeFilterChips(store.filters, {
+      criteriaName: id => criteria.value.find(c => c.id === id)?.name ?? null,
+    })
+  )
+  /** Lot 26 : les compteurs de la barre suivent les filtres (« 1/4 »). */
+  const stageCounts = computed(() =>
+    stageCountsUnderFilters({
+      stages: stages.value,
+      filtered: filtersActive.value,
+      listings:
+        data.value && !(isPlaceholderData?.value ?? false)
+          ? data.value.items.map(item => ({
+              status: item.listing.status,
+              fit: item.criteriaFit,
+              decision: item.decision,
+            }))
+          : null,
+      drafts: draftsData.value
+        ? filteredDrafts.value.map(d => ({ fit: d.fit, decision: d.decision }))
+        : null,
+      dismissedDrafts: dismissedData.value
+        ? dismissedMatching.value.length
+        : null,
+    })
+  )
+  const currentCount = computed(
+    () => stageCounts.value.find(c => c.stage === stage.value) ?? null
+  )
+  const chipsSummary = computed(() =>
+    currentCount.value?.filtered
+      ? stageCountText(currentCount.value).spoken
+      : null
+  )
+  /** Lot 26 : pourquoi l'étape paraît vide : les filtres qui cachent ses annonces. */
+  const hiddenText = computed(() =>
+    currentCount.value
+      ? hiddenByFiltersText(currentCount.value, chips.value)
+      : null
+  )
+
+  /** Lot 26 : le lien d'une fiche, qui garde l'étape, la vue, les filtres et la sélection. */
+  function listingLink(id: string): RouteLocationRaw {
+    return {
+      name: 'listing',
+      params: { id },
+      query: { ...withoutListingTab(route.query) },
+    }
+  }
+  const rowLink = (row: StageRowView): RouteLocationRaw | null =>
+    row.kind === 'listing' ? listingLink(row.id) : null
+  const selectionFull = computed(() => store.compare.length >= COMPARE_MAX)
 
   const context = computed(() => ({
     members: activeMembers.value,
@@ -402,8 +485,16 @@
   function onNear(near: PointRadius | undefined): void {
     store.setNear(near)
   }
-  function compare(ids: string[]): void {
-    void router.push({ name: 'compare', query: { ids: ids.join(',') } })
+  /**
+   * Lot 26 : la comparaison emporte la requête de la page (étape, vue,
+   * filtres) pour y revenir, la sélection comprise.
+   */
+  function compare(): void {
+    const { comparer: _comparer, ...rest } = withoutListingTab(route.query)
+    void router.push({
+      name: 'compare',
+      query: { ...rest, ids: store.compare.join(',') },
+    })
   }
 
   /** Lot 21 : changer d'étape referme les hors critères et les filtres ouverts restent. */
@@ -568,10 +659,6 @@
   )
   /** Lot 22 : les filtres actifs sont nommés quand l'étape paraît vide. */
   const filtered = computed(() => store.activeCount > 0)
-  const COLOR_OPTIONS = [
-    { value: 'verdict', label: 'par verdict' },
-    { value: 'status', label: 'par statut' },
-  ]
 </script>
 
 <template>
@@ -611,7 +698,7 @@
         @stage="selectStageFromAgenda"
       />
 
-      <StageBar :stages="stages" :current="stage" @select="selectStage" />
+      <StageBar :stages="stageCounts" :current="stage" @select="selectStage" />
       <UiAlert
         v-if="overviewFailed"
         tone="warn"
@@ -656,16 +743,11 @@
               ({{ store.activeCount }})</template
             >
           </UiButton>
-          <!-- Lot 23 : au téléphone, le choix de la vue est rangé dans « Filtres ». -->
-          <ViewSwitch v-model="store.view" class="hidden! sm:inline-flex!" />
-          <UiField
-            v-if="store.view === 'map'"
-            id="map-color-by"
-            v-model="colorBy"
-            as="select"
-            label="Couleur des repères"
-            sr-label
-            :options="COLOR_OPTIONS"
+          <!-- Lot 23 : au téléphone, le choix de la vue est rangé dans « Filtres ». Lot 26 : le tableau y entre (ordinateur). -->
+          <ViewSwitch
+            v-model="store.view"
+            :with-table="!draftsStage"
+            class="hidden! sm:inline-flex!"
           />
           <UiButton
             v-if="toConfirm > 0"
@@ -689,7 +771,11 @@
 
       <div v-if="filtersOpen" class="grid gap-2" data-testid="filters-panel">
         <div class="flex flex-wrap items-center gap-2 sm:hidden">
-          <ViewSwitch v-model="store.view" data-testid="view-switch-phone" />
+          <ViewSwitch
+            v-model="store.view"
+            :with-table="false"
+            data-testid="view-switch-phone"
+          />
           <ExportMenu
             :filters="draftsStage ? store.apiFilters() : listFilters"
           />
@@ -720,20 +806,15 @@
             ></template
           >
         </p>
-        <UiButton
-          v-if="!draftsStage"
-          variant="link"
-          class="w-fit"
-          data-testid="full-table"
-          @click="store.view = store.view === 'table' ? 'list' : 'table'"
-        >
-          {{
-            store.view === 'table'
-              ? 'Revenir à la liste'
-              : 'Voir le tableau complet (toutes les colonnes, comparer)'
-          }}
-        </UiButton>
       </div>
+
+      <!-- Lot 26 : les filtres actifs se voient, une puce chacun, au-dessus de la liste. -->
+      <FilterChips
+        :chips="chips"
+        :summary="chipsSummary"
+        @remove="chip => store.removeChip(chip)"
+        @clear="store.reset()"
+      />
 
       <template v-if="draftsStage && store.view !== 'map'">
         <DraftsTab
@@ -757,9 +838,9 @@
         <ListingsMap
           v-if="!pageFiche"
           v-model:toggles="toggles"
+          v-model:color-by="colorBy"
           :items="mapItems"
           :near="store.filters.near"
-          :color-by="colorBy"
           :layers="mapLayers"
           :areas="null"
           @open="
@@ -788,9 +869,12 @@
         >
           <p class="text-muted">{{ STAGE_EMPTY_TEXT[stage] }}</p>
           <template v-if="filtered">
-            <p class="text-muted" data-testid="stage-empty-filters">
-              Des filtres sont actifs ({{ store.activeCount }}) : ils cachent
-              peut-être des annonces de cette étape.
+            <!-- Lot 26 : l'étape vide nomme les filtres et dit combien d'annonces ils cachent. -->
+            <p class="text-fg" data-testid="stage-empty-filters">
+              {{
+                hiddenText ??
+                `Des filtres sont actifs (${store.activeCount}) : ${chips.map(c => c.label).join(', ')}.`
+              }}
             </p>
             <UiButton
               size="sm"
@@ -809,8 +893,12 @@
           :rows="visibleRows"
           :covers="covers.byId.value"
           :expanded="expandedDismissedIds"
+          :link-of="rowLink"
+          :selected="store.compare"
+          :selection-full="selectionFull"
           @open="openRow"
           @action="onRowAction"
+          @select="(id, checked) => store.toggleCompare(id, checked)"
         >
           <template #expanded="{ row }">
             <div class="flex flex-col gap-2.5">
@@ -839,23 +927,30 @@
           :items="items"
           :members="activeMembers"
           :me-id="me?.id ?? null"
+          :selected="store.compare"
+          :selection-full="selectionFull"
+          :link-of="listingLink"
           @open="open"
-          @compare="compare"
+          @select="(id, checked) => store.toggleCompare(id, checked)"
         />
         <ListingCards
           v-else-if="store.view === 'cards'"
           :items="mainItems"
           :covers="covers.byId.value"
+          :link-of="listingLink"
+          :selected="store.compare"
+          :selection-full="selectionFull"
           @open="open"
+          @select="(id, checked) => store.toggleCompare(id, checked)"
           @cover-expired="covers.refresh"
         />
         <template v-else>
           <ListingsMap
             v-if="!pageFiche"
             v-model:toggles="toggles"
+            v-model:color-by="colorBy"
             :items="mapItems"
             :near="store.filters.near"
-            :color-by="colorBy"
             :layers="mapLayers"
             :areas="listingAreas.data.value ?? null"
             @open="open"
@@ -909,6 +1004,14 @@
           @open="open"
         />
       </QueryState>
+
+      <!-- Lot 26 : « Comparer (n) » reste à portée, au-dessus de la barre du bas au téléphone. -->
+      <CompareBar
+        v-if="!draftsStage"
+        :count="store.compare.length"
+        @compare="compare"
+        @clear="store.clearCompare()"
+      />
 
       <p
         v-if="store.view === 'table' && !draftsStage"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+  import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
   import '@/lib/maplibre-worker'
   import * as maplibregl from 'maplibre-gl'
   import type { Map as MapLibreMap, Marker } from 'maplibre-gl'
@@ -7,6 +7,7 @@
   import {
     TerraDraw,
     TerraDrawCircleMode,
+    TerraDrawModeUndoRedo,
     TerraDrawPolygonMode,
   } from 'terra-draw'
   import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter'
@@ -34,6 +35,13 @@
   } from '@/lib/perimeter'
   import BaseMapSwitcher from '@/components/map/BaseMapSwitcher.vue'
   import MapAddressSearch from '@/components/map/MapAddressSearch.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import { useMediaQuery } from '@/composables/useMediaQuery'
+  import {
+    COARSE_POINTER_QUERY,
+    criteriaDrawHint,
+    roundCoordinate,
+  } from '@/lib/map-draw'
 
   /**
    * La carte du critère : affiche le périmètre courant, dessine un polygone
@@ -47,6 +55,15 @@
    * recadre sur le périmètre ou sur le centre de Bordeaux ; une adresse
    * cherchée recentre la carte ; le fond (plan OSM, plan IGN, photo) se
    * change sans perdre le dessin en cours (lib/base-maps.ts).
+   *
+   * Lot 26 (ADR 0036) : sur iPhone, pas de piège au défilement : hors dessin,
+   * un doigt fait défiler le panneau et deux doigts déplacent la carte
+   * (`cooperativeGestures`) ; en dessin, la carte prend tous les gestes et
+   * vient à l'écran. Les aides disent « Touche » au doigt, « Clique » à la
+   * souris. Pendant un tracé : « Annuler le dernier point » (annulation de
+   * terra-draw) et « Effacer » (forme en cours et forme tracée, `cleared`).
+   * Un point (rayon, départ d'isochrone) se pose aussi depuis une adresse
+   * cherchée (« Placer le point ici »), par `GET /opendata/geocode`.
    */
   const props = defineProps<{
     perimeter: Perimeter | null
@@ -55,9 +72,16 @@
   const emit = defineEmits<{
     drawn: [perimeter: PerimeterInput]
     pick: [point: { longitude: number; latitude: number }]
+    /** « Effacer » : plus de forme tracée, le périmètre est à reposer. */
+    cleared: []
   }>()
 
+  const coarse = useMediaQuery(COARSE_POINTER_QUERY)
   const container = ref<HTMLDivElement | null>(null)
+  /** Un point de tracé peut être annulé (polygone en cours). */
+  const canUndo = ref(false)
+  /** La dernière adresse trouvée, pour « Placer le point ici ». */
+  const found = ref<NonNullable<GeocodeLookup['result']> | null>(null)
   let map: MapLibreMap | null = null
   let draw: TerraDraw | null = null
   let addressMarker: Marker | null = null
@@ -106,7 +130,41 @@
     ])
   }
 
-  function applyMode(): void {
+  function refreshUndo(): void {
+    canUndo.value = draw?.canUndo() ?? false
+  }
+
+  /** « Annuler le dernier point » : le sommet posé en dernier s'en va. */
+  function undoPoint(): void {
+    draw?.undo()
+    refreshUndo()
+  }
+
+  /** « Effacer » : la forme en cours et la forme tracée, le mode reste. */
+  function clearDrawing(): void {
+    applyMode(false)
+    emit('cleared')
+  }
+
+  /** Au toucher, hors dessin, deux doigts pour la carte ; en dessin, tous les gestes. */
+  function applyGestures(): void {
+    const handler = map?.cooperativeGestures
+    if (!handler) return
+    if (coarse.value && !props.drawMode) handler.enable()
+    else handler.disable()
+  }
+
+  function placeFound(): void {
+    const result = found.value
+    if (!result) return
+    const [lng, lat] = result.point.coordinates
+    emit('pick', {
+      longitude: roundCoordinate(lng),
+      latitude: roundCoordinate(lat),
+    })
+  }
+
+  function applyMode(loadSaved = true): void {
     if (!draw) return
     draw.clear()
     draw.setMode(
@@ -114,7 +172,8 @@
         ? props.drawMode
         : 'static'
     )
-    loadEditablePolygon()
+    if (loadSaved) loadEditablePolygon()
+    refreshUndo()
   }
 
   /** Cadre la carte sur un périmètre ; faux s'il n'y en a pas. */
@@ -138,6 +197,7 @@
   }
 
   function goTo(result: NonNullable<GeocodeLookup['result']>): void {
+    found.value = result
     if (!map) return
     const center = result.point.coordinates
     map.flyTo({
@@ -174,6 +234,8 @@
       ...initialView(),
       fitBoundsOptions: { padding: FIT_PADDING, maxZoom: FIT_MAX_ZOOM },
       attributionControl: { compact: true },
+      // Lot 26 : au toucher, hors dessin, un doigt fait défiler le panneau.
+      cooperativeGestures: coarse.value && !props.drawMode,
     })
     map = created
     created.addControl(new maplibregl.NavigationControl(), 'top-right')
@@ -190,8 +252,12 @@
           new TerraDrawPolygonMode({ editable: true }),
           new TerraDrawCircleMode(),
         ],
+        // Lot 26 : « Annuler le dernier point » pendant un tracé.
+        undoRedo: { modeLevel: new TerraDrawModeUndoRedo() },
       })
       draw.start()
+      draw.on('change', refreshUndo)
+      draw.on('history', refreshUndo)
       // Fin d'un tracé ou d'une retouche : la forme part vers l'éditeur, et
       // remplace la précédente (une seule forme à la fois).
       draw.on('finish', id => {
@@ -203,6 +269,7 @@
           .filter((other): other is string | number => other !== undefined)
           .filter(other => other !== id)
         if (others.length) draw?.removeFeatures(others)
+        refreshUndo()
       })
       applyMode()
     })
@@ -210,8 +277,8 @@
       const e = event as { lngLat: { lng: number; lat: number } }
       if (props.drawMode !== 'pick') return
       emit('pick', {
-        longitude: Math.round(e.lngLat.lng * 1e6) / 1e6,
-        latitude: Math.round(e.lngLat.lat * 1e6) / 1e6,
+        longitude: roundCoordinate(e.lngLat.lng),
+        latitude: roundCoordinate(e.lngLat.lat),
       })
     })
   })
@@ -242,33 +309,65 @@
   )
   watch(
     () => props.drawMode,
-    () => {
+    mode => {
       applyMode()
       frameForDrawing()
+      applyGestures()
+      // Au téléphone, entrer en dessin amène la carte à l'écran.
+      if (mode && coarse.value) {
+        void nextTick(() =>
+          container.value?.scrollIntoView?.({ block: 'nearest' })
+        )
+      }
     }
   )
+  watch(coarse, applyGestures)
 </script>
 
 <template>
   <div class="grid gap-1">
     <MapAddressSearch @found="goTo" />
+    <UiButton
+      v-if="drawMode === 'pick' && found"
+      variant="outline"
+      icon="map-pin"
+      class="w-fit"
+      data-testid="place-found"
+      @click="placeFound"
+    >
+      Placer le point ici
+    </UiButton>
     <p class="text-sm text-muted" data-testid="draw-hint">
-      <template v-if="drawMode === 'polygon'">
-        Clique pour poser les sommets, puis sur le premier ou le dernier pour
-        fermer le polygone ; fais glisser un sommet pour le modifier.
-      </template>
-      <template v-else-if="drawMode === 'circle'">
-        Clique au centre, puis à la distance voulue.
-      </template>
-      <template v-else-if="drawMode === 'pick'">
-        Clique sur la carte pour placer le point.
-      </template>
-      <template v-else>Le périmètre du critère.</template>
+      {{ criteriaDrawHint(drawMode, coarse) }}
     </p>
+    <div
+      v-if="drawMode === 'polygon' || drawMode === 'circle'"
+      class="flex flex-wrap gap-2"
+      data-testid="draw-tools"
+    >
+      <UiButton
+        v-if="drawMode === 'polygon'"
+        size="sm"
+        icon="undo"
+        :disabled="!canUndo"
+        data-testid="draw-undo"
+        @click="undoPoint"
+      >
+        Annuler le dernier point
+      </UiButton>
+      <UiButton
+        size="sm"
+        icon="trash"
+        data-testid="draw-clear"
+        @click="clearDrawing"
+      >
+        Effacer
+      </UiButton>
+    </div>
     <div class="relative">
       <div
         ref="container"
-        class="h-[45vh] min-h-[280px] w-full overflow-hidden rounded-xl border border-line"
+        class="h-[50vh] max-h-[420px] min-h-[280px] w-full overflow-hidden rounded-xl border border-line sm:h-[45vh] sm:max-h-none"
         role="region"
         aria-label="Carte du périmètre"
       />

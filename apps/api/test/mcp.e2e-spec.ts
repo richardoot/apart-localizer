@@ -5,7 +5,12 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import request from 'supertest'
-import { DEFAULT_TASKS } from '@apart/contracts'
+import {
+  CLAUDE_REQUESTS,
+  DEFAULT_TASKS,
+  MCP_PROMPT_TITLES,
+  McpPromptNameSchema,
+} from '@apart/contracts'
 import { createE2eApp, e2eIdentity } from './e2e-app'
 import type { E2eContext, E2eIdentity } from './e2e-app'
 import {
@@ -245,6 +250,15 @@ describe('MCP (e2e)', () => {
         (p: { name: string }) => p.name
       )
       expect(names).toEqual([...MCP_PROMPT_NAMES])
+      // Lot 26 : la page « Claude » affiche ces noms et titres ; une seule source.
+      expect([...names].sort()).toEqual([...McpPromptNameSchema.options].sort())
+      for (const p of list.body.result.prompts as {
+        name: keyof typeof MCP_PROMPT_TITLES
+        title: string
+      }[]) {
+        expect(p.title).toBe(MCP_PROMPT_TITLES[p.name])
+      }
+      for (const r of CLAUDE_REQUESTS) expect(names).toContain(r.prompt)
       const prompt = list.body.result.prompts[0]
       expect(
         prompt.arguments.map((a: { name: string }) => a.name).sort()

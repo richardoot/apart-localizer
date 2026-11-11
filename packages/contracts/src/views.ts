@@ -295,12 +295,19 @@ export const TargetPriceReportSchema = z.object({
 })
 export type TargetPriceReport = z.infer<typeof TargetPriceReportSchema>
 
+/**
+ * Lot 26 : six annonces au plus côte à côte, partout (la page Comparer, sa
+ * sélection dans l'URL, le MCP) : au-delà, la table ne se lit plus sur un
+ * écran de 1440 px, et le classement par ligne perd son sens.
+ */
+export const COMPARE_MAX = 6
+
 /** Comparaison côte à côte de 2 à 6 annonces de l'espace. */
 export const CompareRequestSchema = z.object({
   listingIds: z
     .array(z.string().uuid())
     .min(2)
-    .max(6)
+    .max(COMPARE_MAX)
     .describe('Identifiants des annonces à comparer (2 à 6)'),
 })
 export type CompareRequest = z.infer<typeof CompareRequestSchema>

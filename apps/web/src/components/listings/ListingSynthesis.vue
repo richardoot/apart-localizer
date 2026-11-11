@@ -196,11 +196,9 @@
       nearMisses: evaluation.metrics.nearMisses,
       fit: props.item.criteriaFit,
       targetPrice: props.targetPrice,
+      dpeClass: listing.value.dpeClass,
     })
   })
-  const answerRest = computed(() =>
-    answer.value ? answer.value.sentence.slice(answer.value.lead.length) : ''
-  )
   const ANSWER_LOOK: Record<AnswerTone, { icon: IconName; ink: string }> = {
     go: { icon: 'check', ink: 'text-good' },
     maybe: { icon: 'alert', ink: 'text-warn' },
@@ -236,9 +234,10 @@
       :data-tone="answer?.tone ?? 'unknown'"
     >
       <h2 id="answer-title" class="sr-only">La réponse</h2>
-      <p
+      <!-- Lot 26 : une réponse courte, puis trois raisons courtes au plus (domain). -->
+      <div
         v-if="answer"
-        class="flex items-start gap-2 text-base leading-snug sm:text-lg"
+        class="flex items-start gap-2"
         data-testid="answer-sentence"
       >
         <UiIcon
@@ -246,11 +245,19 @@
           class="mt-1 size-5 flex-none"
           :class="ANSWER_LOOK[answer.tone].ink"
         />
-        <span
-          ><strong class="font-display font-bold">{{ answer.lead }}</strong
-          >{{ answerRest }}</span
-        >
-      </p>
+        <div class="grid gap-1">
+          <p class="font-display text-lg leading-snug font-bold sm:text-xl">
+            {{ answer.lead }}<span class="sr-only">.</span>
+          </p>
+          <ul
+            v-if="answer.reasons.length"
+            class="m-0 grid list-none gap-0.5 p-0 text-sm leading-snug sm:text-base"
+            data-testid="answer-reasons"
+          >
+            <li v-for="r in answer.reasons" :key="r">{{ r }}</li>
+          </ul>
+        </div>
+      </div>
       <p v-else class="text-sm text-muted" data-testid="answer-sentence">
         Pas encore de réponse : saisis un prix et un loyer visé pour que
         l’application la calcule.

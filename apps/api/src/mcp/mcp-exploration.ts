@@ -1,5 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
+  MCP_PROMPT_TITLES,
   CRITERIA_FIT_LEVEL_LABELS,
   DUPLICATE_REASON_LABELS,
   EXPLORATION_MAX_CANDIDATES,
@@ -220,7 +221,7 @@ export function registerExplorationPrompts(server: McpServer): void {
   server.registerPrompt(
     'explore_listings',
     {
-      title: 'Explorer les portails',
+      title: MCP_PROMPT_TITLES.explore_listings,
       description:
         "Explore les portails d'annonces à partir des critères actifs : brief, une recherche par portail ouverte dans le navigateur de l'utilisateur, lecture des pages comme des données, tri, enregistrement, résumé ; arrêt sans contournement sur un portail qui bloque ; aucune annonce n'est ajoutée à la liste (tout passe par « À valider »).",
       argsSchema: McpExploreListingsPromptArgsSchema.shape,

@@ -33,6 +33,12 @@ const apiMock = vi.hoisted(() => ({
 }))
 const upload = vi.hoisted(() => vi.fn())
 const routerPush = vi.hoisted(() => vi.fn())
+// Lot 26 : les filtres de l'activité vivent dans l'URL.
+const routerReplace = vi.hoisted(() => vi.fn())
+const routeMock = vi.hoisted(() => ({
+  name: 'activity',
+  query: {} as Record<string, string>,
+}))
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
@@ -41,7 +47,11 @@ vi.mock('@/lib/api', async () => {
 vi.mock('vue-router', async () => {
   const actual =
     await vi.importActual<typeof import('vue-router')>('vue-router')
-  return { ...actual, useRouter: () => ({ push: routerPush }) }
+  return {
+    ...actual,
+    useRouter: () => ({ push: routerPush, replace: routerReplace }),
+    useRoute: () => routeMock,
+  }
 })
 vi.mock('@/lib/download', () => ({ saveFile: vi.fn() }))
 
@@ -709,6 +719,11 @@ describe('pages Activité et Notifications', () => {
       kind: 'status',
       page: 1,
       limit: 50,
+    })
+    // Lot 26 : le canal (« ce que Claude a écrit ») et le type sont dans l'URL.
+    expect(routerReplace).toHaveBeenLastCalledWith({
+      name: 'activity',
+      query: { canal: 'mcp', type: 'status' },
     })
     ;(
       document.body.querySelector(

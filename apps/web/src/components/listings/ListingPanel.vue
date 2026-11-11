@@ -711,9 +711,6 @@
             :evaluation="shownEvaluation"
             :layout="layout"
             :cover="cover"
-            :busy="busy"
-            :status-error="statusError"
-            @status="change => changeStatus(change, 'header')"
             @cover-expired="refreshCover"
           />
         </template>

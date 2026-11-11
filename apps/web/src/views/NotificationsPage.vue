@@ -25,6 +25,8 @@
   import UiButton from '@/components/ui/UiButton.vue'
   import UiCard from '@/components/ui/UiCard.vue'
   import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import InstallHelp from '@/components/nav/InstallHelp.vue'
+  import { installState, readInstallEnv } from '@/lib/install'
 
   const router = useRouter()
   const notifications = useNotifications(false, 50)
@@ -33,6 +35,8 @@
   const settings = useNotificationSettings()
   const { data: workspace } = useWorkspace()
   const types = NotificationTypeSchema.options
+  /** Lot 26 : Safari sur iPhone, application pas installée (l'aide le dit). */
+  const iosBrowser = installState(readInstallEnv()) === 'ios-browser'
   const channels = NotificationChannelSchema.options
 
   const apiUrl = (
@@ -188,9 +192,10 @@
                     'appareils abonnés'
                   )
                 }}
-                pour toi. Sur iPhone, installe d'abord l'application sur l'écran
-                d'accueil (Partager, puis « Sur l’écran d’accueil »).
+                pour toi.
               </p>
+              <!-- Lot 26 : dans Safari sur iPhone, le push attend l'application installée. -->
+              <InstallHelp context="notifications" />
               <div class="flex flex-wrap gap-2">
                 <UiButton
                   variant="primary"
@@ -209,7 +214,7 @@
                 </UiButton>
               </div>
               <p
-                v-if="settings.support === 'unsupported'"
+                v-if="settings.support === 'unsupported' && !iosBrowser"
                 class="text-sm text-muted"
               >
                 Ce navigateur ne reçoit pas les notifications push ici.

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { fakeEvaluated } from '@/test/fixtures'
@@ -44,7 +44,7 @@ describe('ListingsMap (MapLibre mocké)', () => {
     expect(map?.removed).toBe(true)
   })
 
-  it('un clic sur la carte pose le point avec le rayon courant ; le curseur change le rayon', async () => {
+  it('lot 26 : un clic ordinaire ne pose rien ; « Filtrer autour d’un point » puis un clic pose le point', async () => {
     const wrapper = mount(ListingsMap, {
       props: { items: [placed], near: undefined, colorBy: 'verdict' },
       attachTo: document.body,
@@ -52,9 +52,24 @@ describe('ListingsMap (MapLibre mocké)', () => {
     await nextTick()
     const map = mapLibreMock.maps[0]
     map?.emit('click', { lngLat: { lng: -0.5955123456, lat: 44.8077 } })
+    expect(wrapper.emitted('update:near')).toBeUndefined()
+    await wrapper.get('[data-testid="near-start"]').trigger('click')
+    expect(wrapper.get('[data-testid="placing-hint"]').text()).toBe(
+      'Clique la carte à l’endroit voulu.'
+    )
+    // « Annuler » referme le placement sans rien poser.
+    await wrapper.get('[data-testid="placing-cancel"]').trigger('click')
+    map?.emit('click', { lngLat: { lng: -0.5955123456, lat: 44.8077 } })
+    expect(wrapper.emitted('update:near')).toBeUndefined()
+    await wrapper.get('[data-testid="near-start"]').trigger('click')
+    map?.emit('click', { lngLat: { lng: -0.5955123456, lat: 44.8077 } })
     expect(wrapper.emitted('update:near')?.[0]).toEqual([
       { longitude: -0.595512, latitude: 44.8077, radiusMeters: 800 },
     ])
+    // Le placement se referme : le clic suivant ne déplace plus le point.
+    await nextTick()
+    map?.emit('click', { lngLat: { lng: -0.5, lat: 44.8 } })
+    expect(wrapper.emitted('update:near')).toHaveLength(1)
     await wrapper.setProps({
       near: { longitude: -0.595512, latitude: 44.8077, radiusMeters: 800 },
     })
@@ -64,8 +79,61 @@ describe('ListingsMap (MapLibre mocké)', () => {
     expect(wrapper.emitted('update:near')?.at(-1)).toEqual([
       { longitude: -0.595512, latitude: 44.8077, radiusMeters: 300 },
     ])
-    await wrapper.get('button').trigger('click')
+    // « Déplacer le point » rouvre le placement.
+    await wrapper.get('[data-testid="near-move"]').trigger('click')
+    map?.emit('click', { lngLat: { lng: -0.6, lat: 44.81 } })
+    expect(wrapper.emitted('update:near')?.at(-1)).toEqual([
+      { longitude: -0.6, latitude: 44.81, radiusMeters: 300 },
+    ])
+    await nextTick()
+    await wrapper.get('[data-testid="near-clear"]').trigger('click')
     expect(wrapper.emitted('update:near')?.at(-1)).toEqual([undefined])
+    wrapper.unmount()
+  })
+
+  it('lot 26 : couches, légendes, couleur et fond repliés dans un panneau ; toucher', async () => {
+    const original = window.matchMedia
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })) as unknown as typeof window.matchMedia
+    const wrapper = mount(ListingsMap, {
+      props: { items: [placed], near: undefined, colorBy: 'verdict' },
+      attachTo: document.body,
+    })
+    await nextTick()
+    expect(mapLibreMock.maps[0]?.options.cooperativeGestures).toBe(true)
+    const toggle = wrapper.get('[data-testid="layers-toggle"]')
+    // Une couche allumée par défaut (périmètres des critères).
+    expect(toggle.text()).toBe('Couches et légende (1)')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    const panel = wrapper.get('[data-testid="layers-panel"]')
+    expect(toggle.attributes('aria-controls')).toBe(panel.attributes('id'))
+    expect(panel.isVisible()).toBe(false)
+    await toggle.trigger('click')
+    expect(panel.isVisible()).toBe(true)
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(panel.find('[data-testid="base-map-switcher"]').exists()).toBe(true)
+    expect(panel.find('[data-testid="precision-legend"]').exists()).toBe(true)
+    await panel.get('[data-value="status"]').trigger('click')
+    expect(wrapper.emitted('update:colorBy')).toEqual([['status']])
+    await wrapper.setProps({ colorBy: 'status' })
+    expect(mapLibreMock.markers.at(-1)?.options.element.style.background).toBe(
+      'var(--muted)'
+    )
+    // Toucher : « Touche la carte… ».
+    await wrapper.get('[data-testid="near-start"]').trigger('click')
+    expect(wrapper.get('[data-testid="placing-hint"]').text()).toBe(
+      'Touche la carte à l’endroit voulu.'
+    )
+    await panel.trigger('keydown', { key: 'Escape' })
+    expect(panel.isVisible()).toBe(false)
+    await toggle.trigger('click')
+    await wrapper.get('[data-testid="layers-close"]').trigger('click')
+    expect(panel.isVisible()).toBe(false)
+    window.matchMedia = original
     wrapper.unmount()
   })
 
@@ -225,9 +293,10 @@ describe('ListingsMap (MapLibre mocké)', () => {
     const popup = mapLibreMock.popups.at(-1)
     expect(popup?.html).toContain('Vente DVF du 12 juin 2024')
     expect(popup?.html).toContain('3 rue Fictive')
+    // Lot 26 : un clic à vide ne pose plus le point du filtre.
     if (map) map.rendered = []
     map?.emit('click', { lngLat: { lng: -0.58, lat: 44.84 }, point: [1, 1] })
-    expect(wrapper.emitted('update:near')).toHaveLength(1)
+    expect(wrapper.emitted('update:near')).toBeUndefined()
     wrapper.unmount()
   })
 
@@ -454,7 +523,7 @@ describe('ListingsMap (MapLibre mocké)', () => {
     map?.emit('click', { lngLat: { lng: -0.58, lat: 44.84 }, point: [1, 1] })
     expect(wrapper.emitted('update:near')).toBeUndefined()
     expect(mapLibreMock.popups.at(-1)?.html).toContain('Drive à vérifier')
-    // Un clic sur un quartier : son nom, et le point du filtre comme avant.
+    // Un clic sur un quartier : son nom ; le point du filtre ne bouge pas (lot 26).
     if (map) {
       map.rendered = [
         {
@@ -467,7 +536,7 @@ describe('ListingsMap (MapLibre mocké)', () => {
     expect(mapLibreMock.popups.at(-1)?.html).toContain(
       'Quartier Quartier parent fictif'
     )
-    expect(wrapper.emitted('update:near')).toHaveLength(1)
+    expect(wrapper.emitted('update:near')).toBeUndefined()
 
     // Survol : le nom près du pointeur ; couche éteinte, plus rien.
     map?.emit('mousemove:neighbourhoods-fill', {

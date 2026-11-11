@@ -126,6 +126,13 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Hypothèses', requiresAuth: true },
   },
   {
+    // Lot 26 : brancher Claude, lui demander, ce qu'il a fait.
+    path: '/claude',
+    name: 'claude',
+    component: () => import('@/views/ClaudePage.vue'),
+    meta: { title: 'Claude', requiresAuth: true },
+  },
+  {
     path: '/activite',
     name: 'activity',
     component: () => import('@/views/ActivityPage.vue'),

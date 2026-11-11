@@ -20,10 +20,10 @@
    * défilement : retour, titre, prix (« Corriger » ouvre le prix dans Le
    * bien, même section, même garde, même journal), les trois jugements
    * étiquetés, le statut. Sur ordinateur, une ligne de page ; au téléphone,
-   * compacte : retour, titre (deux lignes au plus) et prix ; les jugements et
-   * le statut passent juste dessous, dans l'en-tête qui défile, pour que les
-   * trois étiquettes tiennent en entier sur 390 px. Dans le panneau, le titre
-   * est celui du dialogue.
+   * compacte : retour, titre (deux lignes au plus), prix et statut (lot 26 :
+   * un menu court sur la ligne du prix) ; les jugements passent juste
+   * dessous, sur une ligne, dans l'en-tête qui défile. Dans le panneau, le
+   * titre est celui du dialogue.
    */
   const props = defineProps<{
     item: EvaluatedListing
@@ -80,7 +80,10 @@
       @expired="emit('coverExpired')"
     />
     <div class="grid min-w-0 flex-1 gap-1">
-      <div class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+      <div
+        class="flex min-w-0 gap-x-3 gap-y-0.5"
+        :class="page ? 'flex-wrap items-baseline' : 'flex-col'"
+      >
         <FicheTitle
           :page="page"
           class="min-w-0 font-display leading-tight font-bold break-words"
@@ -93,25 +96,37 @@
         >
           {{ listing.title }}
         </FicheTitle>
-        <span class="inline-flex items-center gap-1">
-          <strong
-            class="text-base text-fg tabular-nums sm:text-lg"
-            data-testid="header-price"
-            >{{ price }}</strong
-          >
-          <UiButton
-            variant="ghost"
-            size="icon"
-            class="-my-2 text-muted"
-            :aria-label="`Corriger le prix (${price})`"
-            data-testid="edit-price"
-            @click="emit('editPrice')"
-          >
-            <UiIcon name="edit" class="size-4" />
-          </UiButton>
-        </span>
+        <!-- Lot 26 : au téléphone, le statut se règle sur la ligne du prix (plus de menu pleine largeur sous l'en-tête). -->
+        <div class="flex min-w-0 items-center gap-x-2 gap-y-1">
+          <span class="inline-flex items-center gap-1">
+            <strong
+              class="text-base text-fg tabular-nums sm:text-lg"
+              data-testid="header-price"
+              >{{ price }}</strong
+            >
+            <UiButton
+              variant="ghost"
+              size="icon"
+              class="-my-2 text-muted"
+              :aria-label="`Corriger le prix (${price})`"
+              data-testid="edit-price"
+              @click="emit('editPrice')"
+            >
+              <UiIcon name="edit" class="size-4" />
+            </UiButton>
+          </span>
+          <StatusChanger
+            v-if="!page"
+            class="ml-auto"
+            compact
+            :status="listing.status"
+            :busy="busy"
+            :error="statusError ?? null"
+            @change="change => emit('status', change)"
+          />
+        </div>
       </div>
-      <!-- Au téléphone, les jugements passent sous la ligne collée (en-tête), en entier. -->
+      <!-- Au téléphone, les jugements passent sous la ligne collée (en-tête), sur une ligne. -->
       <JudgementPills v-if="page" :judgements="judgements" />
     </div>
     <div v-if="page" class="flex-none">

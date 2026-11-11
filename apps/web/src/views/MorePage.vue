@@ -12,6 +12,7 @@
   import { useThemeStore } from '@/stores/theme'
   import type { ThemeMode } from '@/stores/theme'
   import UiAlert from '@/components/ui/UiAlert.vue'
+  import InstallHelp from '@/components/nav/InstallHelp.vue'
 
   /**
    * Lot 23 (ADR 0033) : « Plus », la cinquième entrée de la barre du bas au
@@ -95,6 +96,9 @@
         data-testid="more-theme"
       />
     </UiCard>
+
+    <!-- Lot 26 : sur iPhone, ajouter l'application à l'écran d'accueil (notifications comprises). -->
+    <InstallHelp context="more" />
 
     <div class="grid gap-2">
       <UiButton

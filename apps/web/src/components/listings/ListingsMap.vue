@@ -1,7 +1,16 @@
 <script setup lang="ts">
   import UiButton from '@/components/ui/UiButton.vue'
   import UiCheckbox from '@/components/ui/UiCheckbox.vue'
-  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+  import UiSegmented from '@/components/ui/UiSegmented.vue'
+  import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    useId,
+    watch,
+  } from 'vue'
   import '@/lib/maplibre-worker'
   import * as maplibregl from 'maplibre-gl'
   import type { Map as MapLibreMap, Marker } from 'maplibre-gl'
@@ -67,6 +76,24 @@
   } from '@/lib/map-style'
   import BaseMapSwitcher from '@/components/map/BaseMapSwitcher.vue'
   import SurroundingsLegend from '@/components/map/SurroundingsLegend.vue'
+  import { useMediaQuery } from '@/composables/useMediaQuery'
+  import {
+    COARSE_POINTER_QUERY,
+    activeLayerCount,
+    layersButtonLabel,
+    placingHint,
+    roundCoordinate,
+  } from '@/lib/map-draw'
+
+  /**
+   * La carte des annonces. Lot 26 (ADR 0036) : peu de chrome au-dessus de la
+   * carte. Une ligne d'outils : « Filtrer autour d'un point » (le clic
+   * suivant pose le point, et seulement lui : un clic ordinaire ne filtre
+   * plus rien), le rayon quand un point est posé, « Couches et légende ».
+   * Couches, légendes, couleur des repères et fond de carte sont repliés dans
+   * un panneau posé sur la carte. Au toucher, un doigt fait défiler la page,
+   * deux doigts déplacent la carte (`cooperativeGestures`).
+   */
 
   const props = withDefaults(
     defineProps<{
@@ -88,8 +115,30 @@
     open: [id: string]
     'update:near': [near: PointRadius | undefined]
     'update:toggles': [toggles: MapLayerToggles]
+    'update:colorBy': [colorBy: 'verdict' | 'status']
     bounds: [bbox: [number, number, number, number]]
   }>()
+
+  const coarse = useMediaQuery(COARSE_POINTER_QUERY)
+  /** Le placement du point est ouvert : le prochain clic sur la carte le pose. */
+  const placing = ref(false)
+  const layersOpen = ref(false)
+  const panelId = useId()
+  const layersButton = ref<{ $el?: HTMLElement } | null>(null)
+  const layerCount = computed(() => activeLayerCount(props.toggles))
+  const COLOR_OPTIONS: { value: 'verdict' | 'status'; label: string }[] = [
+    { value: 'verdict', label: 'par rentabilité' },
+    { value: 'status', label: 'par statut' },
+  ]
+  const colorModel = computed({
+    get: () => props.colorBy,
+    set: value => emit('update:colorBy', value),
+  })
+
+  function closeLayers(): void {
+    layersOpen.value = false
+    void nextTick(() => layersButton.value?.$el?.focus?.())
+  }
 
   const LAYER_LABELS: { key: keyof MapLayerToggles; label: string }[] = [
     { key: 'criteria', label: 'Périmètres des critères' },
@@ -396,8 +445,8 @@
 
   function setCenter(lng: number, lat: number): void {
     emit('update:near', {
-      longitude: Math.round(lng * 1e6) / 1e6,
-      latitude: Math.round(lat * 1e6) / 1e6,
+      longitude: roundCoordinate(lng),
+      latitude: roundCoordinate(lat),
       radiusMeters: radius.value,
     })
   }
@@ -421,6 +470,8 @@
         : DEFAULT_MAP_CENTER,
       zoom: props.near ? 13 : DEFAULT_MAP_ZOOM,
       attributionControl: { compact: true },
+      // Lot 26 : au toucher, un doigt fait défiler la page, deux déplacent la carte.
+      cooperativeGestures: coarse.value,
     })
     map = created
     created.addControl(new maplibregl.NavigationControl(), 'top-right')
@@ -442,7 +493,13 @@
       },
     })
     created.on('click', event => {
-      // Un arrêt ou une vente sous le clic : sa fiche, sans déplacer le point.
+      // Lot 26 : le point du filtre ne se pose que si on l'a demandé.
+      if (placing.value) {
+        placing.value = false
+        setCenter(event.lngLat.lng, event.lngLat.lat)
+        return
+      }
+      // Un arrêt ou une vente sous le clic : sa fiche.
       const hit = ready.value
         ? created.queryRenderedFeatures(event.point, {
             layers: [...POPUP_LAYER_IDS],
@@ -455,8 +512,7 @@
           .addTo(created)
         return
       }
-      // Le quartier sous le clic (utile sans survol, sur un téléphone) ; le
-      // clic place aussi le point du filtre, comme sans la couche.
+      // Le quartier sous le clic (utile sans survol, sur un téléphone).
       const area =
         ready.value && props.toggles.neighbourhoods
           ? created.queryRenderedFeatures(event.point, {
@@ -469,7 +525,6 @@
           .setHTML(neighbourhoodPopupHtml(area.properties))
           .addTo(created)
       }
-      setCenter(event.lngLat.lng, event.lngLat.lat)
     })
     renderMarkers()
   })
@@ -499,40 +554,76 @@
 
 <template>
   <div class="grid gap-2">
+    <!-- Lot 26 : une seule ligne d'outils au-dessus de la carte. -->
     <div
-      class="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface px-3 py-2 text-sm"
+      class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm"
+      data-testid="map-toolbar"
     >
-      <span class="text-muted">
-        {{
-          near
-            ? 'Touche la carte pour déplacer le point.'
-            : 'Touche la carte pour filtrer autour d’un point.'
-        }}
-      </span>
-      <label class="flex items-center gap-2">
-        <span class="text-sm text-muted">Rayon</span>
-        <!-- Lot 22 : contrôle de carte (curseur du rayon), sans équivalent partagé. -->
-        <input
-          type="range"
-          class="accent-accent"
-          min="0"
-          :max="RADIUS_STEPS.length - 1"
-          step="1"
-          :value="radiusIndex"
-          aria-label="Rayon du filtre"
-          @input="onRadiusInput"
-        />
-        <span class="font-mono text-sm" data-testid="radius-label">{{
-          formatDistance(radius)
-        }}</span>
-      </label>
+      <template v-if="placing">
+        <span
+          class="font-medium text-fg"
+          role="status"
+          data-testid="placing-hint"
+        >
+          {{ placingHint(coarse) }}
+        </span>
+        <UiButton
+          size="sm"
+          data-testid="placing-cancel"
+          @click="placing = false"
+        >
+          Annuler
+        </UiButton>
+      </template>
       <UiButton
-        v-if="near"
+        v-else-if="!near"
         size="sm"
-        icon="close"
-        @click="emit('update:near', undefined)"
+        icon="map-pin"
+        data-testid="near-start"
+        @click="placing = true"
       >
-        Retirer le point
+        Filtrer autour d’un point
+      </UiButton>
+      <template v-else>
+        <label class="flex items-center gap-2">
+          <span class="text-sm text-muted">Rayon</span>
+          <!-- Lot 22 : contrôle de carte (curseur du rayon), sans équivalent partagé. -->
+          <input
+            type="range"
+            class="accent-accent"
+            min="0"
+            :max="RADIUS_STEPS.length - 1"
+            step="1"
+            :value="radiusIndex"
+            aria-label="Rayon du filtre"
+            @input="onRadiusInput"
+          />
+          <span class="font-mono text-sm" data-testid="radius-label">{{
+            formatDistance(radius)
+          }}</span>
+        </label>
+        <UiButton size="sm" data-testid="near-move" @click="placing = true">
+          Déplacer le point
+        </UiButton>
+        <UiButton
+          size="sm"
+          icon="close"
+          data-testid="near-clear"
+          @click="emit('update:near', undefined)"
+        >
+          Retirer le point
+        </UiButton>
+      </template>
+      <UiButton
+        ref="layersButton"
+        size="sm"
+        icon="sliders"
+        :aria-expanded="layersOpen"
+        :aria-controls="panelId"
+        data-testid="layers-toggle"
+        @click="layersOpen = !layersOpen"
+      >
+        {{ layersButtonLabel(layerCount) }}
       </UiButton>
       <span class="ml-auto text-sm text-muted">
         {{
@@ -544,78 +635,109 @@
         }}
       </span>
     </div>
-    <div
-      class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted"
-      data-testid="precision-legend"
-    >
-      <span>Repères :</span>
-      <span class="flex items-center gap-1">
-        <span
-          class="inline-block h-3 w-3 rounded-full border-2 border-white bg-muted shadow"
-          aria-hidden="true"
-        />
-        à l’adresse ({{ precisionCounts.address }})
-      </span>
-      <span class="flex items-center gap-1">
-        <span
-          class="inline-block h-3.5 w-3.5 rounded-full border-[3px] border-muted"
-          aria-hidden="true"
-        />
-        au quartier ({{ precisionCounts.district }}, contour au survol)
-      </span>
-      <span class="flex items-center gap-1">
-        <span
-          class="inline-block h-3.5 w-3.5 rounded-full border-2 border-dashed border-muted"
-          aria-hidden="true"
-        />
-        commune seulement ({{ precisionCounts.commune }})
-      </span>
-    </div>
-    <div
-      class="flex flex-wrap items-center gap-x-4 gap-y-0 text-sm"
-      role="group"
-      aria-label="Couches de la carte"
-    >
-      <span class="text-muted">Couches :</span>
-      <UiCheckbox
-        v-for="layer in LAYER_LABELS"
-        :key="layer.key"
-        :label="layer.label"
-        :model-value="toggles[layer.key]"
-        :data-layer="layer.key"
-        @change="toggle(layer.key, $event)"
-      />
-      <SurroundingsLegend :toggles="toggles" />
-      <span
-        v-if="toggles.rentZones"
-        class="flex items-center gap-2 text-muted"
-        data-testid="rent-zone-legend"
-      >
-        Zones :
-        <span
-          v-for="(color, zone) in RENT_ZONE_COLORS"
-          :key="zone"
-          class="flex items-center gap-1"
-        >
-          <span
-            class="inline-block h-2.5 w-2.5 rounded-sm"
-            :style="{ background: color }"
-          />{{ zone }}
-        </span>
-      </span>
-    </div>
     <div class="relative">
       <div
         ref="container"
-        class="h-[60vh] min-h-[360px] w-full overflow-hidden rounded-2xl border border-line"
+        class="h-[calc(100dvh-var(--bottom-nav,0px)-16rem)] min-h-[360px] w-full overflow-hidden rounded-2xl border border-line sm:h-[60vh]"
+        :class="placing ? 'ring-2 ring-accent' : ''"
         role="region"
         aria-label="Carte des annonces"
       />
-      <BaseMapSwitcher
-        class="absolute top-2 left-2 z-10"
-        :model-value="baseMap"
-        @update:model-value="setBaseMap"
-      />
+      <!-- Lot 26 : couches, légendes, couleur et fond repliés, posés sur la carte. -->
+      <div
+        v-show="layersOpen"
+        :id="panelId"
+        role="group"
+        aria-label="Couches et légende"
+        class="absolute top-2 left-2 z-10 grid max-h-[calc(100%-1rem)] w-[min(22rem,calc(100%-4.5rem))] gap-3 overflow-y-auto rounded-xl border border-line bg-surface p-3 text-sm text-fg shadow-lg"
+        data-testid="layers-panel"
+        @keydown.esc.stop="closeLayers"
+      >
+        <div class="flex items-center justify-between gap-2">
+          <strong class="font-semibold">Couches et légende</strong>
+          <UiButton
+            variant="ghost"
+            size="icon"
+            icon="close"
+            aria-label="Fermer les couches"
+            data-testid="layers-close"
+            @click="closeLayers"
+          />
+        </div>
+        <div class="grid gap-1">
+          <span class="text-xs text-muted">Fond de carte</span>
+          <BaseMapSwitcher
+            class="w-fit"
+            :model-value="baseMap"
+            @update:model-value="setBaseMap"
+          />
+        </div>
+        <div class="grid gap-1">
+          <span class="text-xs text-muted">Couleur des repères</span>
+          <UiSegmented
+            v-model="colorModel"
+            :options="COLOR_OPTIONS"
+            label="Couleur des repères"
+            data-testid="color-by"
+          />
+        </div>
+        <div class="grid gap-0" role="group" aria-label="Couches de la carte">
+          <span class="text-xs text-muted">Couches</span>
+          <UiCheckbox
+            v-for="layer in LAYER_LABELS"
+            :key="layer.key"
+            :label="layer.label"
+            :model-value="toggles[layer.key]"
+            :data-layer="layer.key"
+            @change="toggle(layer.key, $event)"
+          />
+        </div>
+        <div
+          class="grid gap-1 text-xs text-muted"
+          data-testid="precision-legend"
+        >
+          <span>Repères :</span>
+          <span class="flex items-center gap-1">
+            <span
+              class="inline-block h-3 w-3 rounded-full border-2 border-white bg-muted shadow"
+              aria-hidden="true"
+            />
+            à l’adresse ({{ precisionCounts.address }})
+          </span>
+          <span class="flex items-center gap-1">
+            <span
+              class="inline-block h-3.5 w-3.5 rounded-full border-[3px] border-muted"
+              aria-hidden="true"
+            />
+            au quartier ({{ precisionCounts.district }}, contour au survol)
+          </span>
+          <span class="flex items-center gap-1">
+            <span
+              class="inline-block h-3.5 w-3.5 rounded-full border-2 border-dashed border-muted"
+              aria-hidden="true"
+            />
+            commune seulement ({{ precisionCounts.commune }})
+          </span>
+        </div>
+        <SurroundingsLegend :toggles="toggles" class="text-xs" />
+        <span
+          v-if="toggles.rentZones"
+          class="flex flex-wrap items-center gap-2 text-xs text-muted"
+          data-testid="rent-zone-legend"
+        >
+          Zones :
+          <span
+            v-for="(color, zone) in RENT_ZONE_COLORS"
+            :key="zone"
+            class="flex items-center gap-1"
+          >
+            <span
+              class="inline-block h-2.5 w-2.5 rounded-sm"
+              :style="{ background: color }"
+            />{{ zone }}
+          </span>
+        </span>
+      </div>
       <div
         v-if="hoverLabel && hoverPoint"
         class="pointer-events-none absolute z-10 rounded-md bg-surface px-2 py-1 text-xs font-medium text-fg shadow"

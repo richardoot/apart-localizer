@@ -164,8 +164,14 @@ describe('Lot 25 : la Synthèse répond d’abord', () => {
       .text()
       .replace(/[\u202f\u00a0]/g, ' ')
     // L'annonce fictive est hors cible ; la décote est hors de portée.
-    expect(sentence).toMatch(/^Plutôt non : hors de la cible de rentabilité/)
-    expect(sentence).toContain('dans tes critères de recherche')
+    // Lot 26 : une réponse courte, puis trois raisons courtes au plus.
+    expect(sentence).toMatch(/^Plutôt non\.?\s*Hors de la cible de rentabilité/)
+    const reasons = answer.findAll('[data-testid="answer-reasons"] li')
+    expect(reasons.length).toBeGreaterThan(0)
+    expect(reasons.length).toBeLessThanOrEqual(3)
+    expect(reasons.map(r => r.text())).toContain(
+      'Dans tes critères de recherche.'
+    )
     expect(answer.attributes('data-tone')).toBe('no')
     const action = answer.get('[data-testid="answer-action"]')
     expect(action.text()).toBe('Trier cette annonce')

@@ -189,6 +189,33 @@ export function judgementsOfDraft(draft: JudgedDraft): Judgement[] {
   })
 }
 
+/**
+ * Lot 26 : ce qu'une ligne de liste montre des jugements. Un jugement « à
+ * confirmer » n'est pas un jugement : la ligne l'omet (un brouillon sans
+ * loyer visé ne montre plus trois pastilles de bruit) et la fiche le dit en
+ * entier. L'ordre des autres ne change pas.
+ */
+export function rowJudgements(judgements: readonly Judgement[]): Judgement[] {
+  return judgements.filter(j => j.sense !== 'unknown')
+}
+
+/**
+ * Lot 26 : ce que la ligne a omis, pour le lecteur d'écran et l'infobulle :
+ * « Rentabilité et recherche à confirmer » ; null si rien n'est omis.
+ */
+export function pendingJudgementsText(
+  judgements: readonly Judgement[]
+): string | null {
+  const pending = judgements.filter(j => j.sense === 'unknown')
+  if (pending.length === 0) return null
+  const names = pending.map((j, i) => (i ? j.label.toLowerCase() : j.label))
+  const joined =
+    names.length > 1
+      ? `${names.slice(0, -1).join(', ')} et ${names.at(-1)}`
+      : names[0]
+  return `${joined} à confirmer`
+}
+
 // ---------------------------------------------------------------------------
 // « Faut-il y aller ? » en une phrase
 // ---------------------------------------------------------------------------
@@ -203,6 +230,8 @@ export interface ListingAnswerInput {
   verdict: Verdict
   failures: readonly VerdictFailure[]
   nearMisses: readonly VerdictNearMiss[]
+  /** Lot 26 : la classe DPE lue, pour nommer un DPE qui échoue (« DPE F »). */
+  dpeClass?: string | null
   fit: {
     level: CriteriaFitLevel
     activeCriteria: number
@@ -219,16 +248,24 @@ export interface ListingAnswer {
   tone: AnswerTone
   /** « Oui », « Peut-être », « Pas à ce prix », « Plutôt non », « Pas encore de réponse ». */
   lead: string
-  /** La phrase entière, la réponse en tête. */
+  /**
+   * Lot 26 : trois raisons courtes au plus, une phrase chacune, la décisive
+   * d'abord (rentabilité, prix cible, recherche ; la recherche en tête quand
+   * c'est elle qui dit non).
+   */
+  reasons: string[]
+  /** La réponse et ses raisons, en texte suivi (« Plutôt non. Hors de… »). */
   sentence: string
   /** Ce qui manque pour répondre (« le loyer visé », « le prix »). */
   missing: string[]
 }
 
-const FAILURE_WORDS: Record<VerdictFailure, string> = {
+/** Lot 26 : au plus trois raisons sous la réponse. */
+export const ANSWER_REASONS_MAX = 3
+
+const FAILURE_WORDS: Record<Exclude<VerdictFailure, 'dpe'>, string> = {
   gross_yield: 'rendement brut trop faible',
   effort: 'effort mensuel trop lourd',
-  dpe: 'DPE E, F ou G',
 }
 const NEAR_MISS_WORDS: Record<VerdictNearMiss, string> = {
   gross_yield: 'rendement brut',
@@ -248,93 +285,110 @@ const LEADS: Record<AnswerTone | 'not_at_price', string> = {
 const lowerFirst = (text: string): string =>
   /^\p{Lu}{2}/u.test(text) ? text : text.charAt(0).toLowerCase() + text.slice(1)
 
-const withReasons = (text: string, reasons: readonly string[]): string =>
-  reasons.length ? `${text} (${lowerFirst(fitReasonsText(reasons))})` : text
+const upperFirst = (text: string): string =>
+  text.charAt(0).toUpperCase() + text.slice(1)
+
+/** « Tête : détail. », ou « Tête. » sans détail ; jamais de parenthèses imbriquées. */
+const reason = (head: string, detail: readonly string[] = []): string =>
+  detail.length ? `${head} : ${detail.join(', ')}.` : `${head}.`
 
 /** « −9 % ». */
 function discountText(discount: number): string {
   return `−${Math.round(discount * 100)} %`
 }
 
-function profitabilityPart(input: ListingAnswerInput): string {
+/** Le DPE qui fait échouer la rentabilité, nommé quand la classe est lue. */
+function dpeWord(dpeClass: string | null | undefined): string {
+  return dpeClass ? `DPE ${dpeClass}` : 'DPE classé E à G'
+}
+
+function profitabilityReason(input: ListingAnswerInput): string {
   switch (input.verdict) {
     case 'target':
-      return 'dans la cible de rentabilité au prix affiché'
+      return 'Dans la cible de rentabilité au prix affiché.'
     case 'to_dig':
-      return `la cible de rentabilité manquée de peu${
-        input.nearMisses.length
-          ? ` (${input.nearMisses.map(n => NEAR_MISS_WORDS[n]).join(', ')})`
-          : ''
-      }`
-    default:
-      return `hors de la cible de rentabilité${
-        input.failures.length
-          ? ` (${input.failures.map(f => FAILURE_WORDS[f]).join(', ')})`
-          : ''
-      }`
-  }
-}
-
-function searchPart(fit: ListingAnswerInput['fit']): string | null {
-  if (!fit || fit.activeCriteria === 0) return null
-  switch (fit.level) {
-    case 'in':
-      return 'dans tes critères de recherche'
-    case 'margin':
-      return withReasons('à la marge de tes critères de recherche', fit.reasons)
-    case 'to_confirm':
-      return withReasons(
-        'à confirmer face à tes critères de recherche',
-        fit.reasons
+      return reason(
+        'Cible de rentabilité manquée de peu',
+        input.nearMisses.map(n => NEAR_MISS_WORDS[n])
       )
     default:
-      return withReasons('hors de tes critères de recherche', fit.reasons)
+      return reason(
+        'Hors de la cible de rentabilité',
+        input.failures.map(f =>
+          f === 'dpe' ? dpeWord(input.dpeClass) : FAILURE_WORDS[f]
+        )
+      )
   }
 }
 
-function targetPricePart(input: ListingAnswerInput): string | null {
+function searchReason(fit: ListingAnswerInput['fit']): string | null {
+  if (!fit || fit.activeCriteria === 0) return null
+  const detail = fit.reasons.length
+    ? [lowerFirst(fitReasonsText(fit.reasons))]
+    : []
+  switch (fit.level) {
+    case 'in':
+      return 'Dans tes critères de recherche.'
+    case 'margin':
+      return detail.length
+        ? reason('À la marge de tes critères', detail)
+        : 'À la marge de tes critères de recherche.'
+    case 'to_confirm':
+      return detail.length
+        ? reason('À confirmer face à tes critères', detail)
+        : 'À confirmer face à tes critères de recherche.'
+    default:
+      return detail.length
+        ? reason('Hors de tes critères', detail)
+        : 'Hors de tes critères de recherche.'
+  }
+}
+
+function targetPriceReason(input: ListingAnswerInput): string | null {
   const target = input.targetPrice
   if (!target) return null
-  if (target.targetPrice === null) return 'pas de prix cible calculable'
+  if (target.targetPrice === null) return 'Pas de prix cible calculable.'
+  const price = formatEuros(target.targetPrice)
   if (target.discount === null || target.discount <= 0) {
     return input.verdict === 'target'
       ? null
-      : `prix cible ${formatEuros(target.targetPrice)}, déjà atteint`
+      : `Prix cible ${price}, déjà atteint.`
+  }
+  if (input.failures.includes('dpe')) {
+    return `Baisser le prix ne suffit pas : le DPE la laisse hors cible, même à ${price}.`
   }
   const reach =
     target.discountClass && target.discountClass !== 'in_target'
-      ? `, ${lowerFirst(DISCOUNT_CLASS_LABELS[target.discountClass])}`
+      ? ` : ${lowerFirst(DISCOUNT_CLASS_LABELS[target.discountClass])}`
       : ''
-  if (input.failures.includes('dpe')) {
-    return `le DPE la laisse hors cible quel que soit le prix (prix cible ${formatEuros(target.targetPrice)})`
-  }
-  return `il faudrait l’obtenir à ${formatEuros(target.targetPrice)} (${discountText(target.discount)}${reach})`
+  return `Il faudrait l’obtenir à ${price}, soit ${discountText(target.discount)}${reach}.`
 }
 
+const sentenceOf = (lead: string, reasons: readonly string[]): string =>
+  [`${lead}.`, ...reasons].join(' ')
+
 /**
- * La réponse à « Faut-il y aller ? » : d'abord le mot qui répond, puis la
- * rentabilité, la recherche et le prix cible tels que l'application les a
- * calculés. Rien d'inventé : sans loyer visé ou sans prix, elle le dit et ne
- * juge pas la rentabilité.
+ * La réponse à « Faut-il y aller ? » : d'abord le mot qui répond, puis trois
+ * raisons courtes au plus (lot 26), tirées de la rentabilité, du prix cible
+ * et de la recherche tels que l'application les a calculés. Rien d'inventé :
+ * sans loyer visé ou sans prix, elle le dit et ne juge pas la rentabilité.
  */
 export function listingAnswer(input: ListingAnswerInput): ListingAnswer {
   const missing = [
     ...(input.price > 0 ? [] : ['le prix']),
     ...(input.hasRent ? [] : ['le loyer visé']),
   ]
-  const search = searchPart(input.fit)
+  const search = searchReason(input.fit)
   if (missing.length) {
-    const parts = [
-      'sans le prix et le loyer visé, la rentabilité et le prix cible ne se calculent pas',
+    const reasons = [
+      `Sans ${missing.join(' et ')}, la rentabilité et le prix cible ne se calculent pas.`,
       ...(search ? [search] : []),
     ]
-    if (missing.length === 1) {
-      parts[0] = `sans ${missing[0]}, la rentabilité et le prix cible ne se calculent pas`
-    }
     return {
       tone: 'unknown',
       lead: LEADS.unknown,
-      sentence: `${LEADS.unknown} : ${parts.join(' ; ')}. Il manque ${missing.join(' et ')}.`,
+      reasons,
+      sentence: sentenceOf(LEADS.unknown, reasons),
       missing,
     }
   }
@@ -356,16 +410,20 @@ export function listingAnswer(input: ListingAnswerInput): ListingAnswer {
     lead = 'maybe'
   } else lead = 'go'
 
-  const parts = [
-    profitabilityPart(input),
-    targetPricePart(input),
-    search,
-  ].filter((part): part is string => Boolean(part))
+  const ordered =
+    fitLevel === 'out'
+      ? [search, profitabilityReason(input), targetPriceReason(input)]
+      : [profitabilityReason(input), targetPriceReason(input), search]
+  const reasons = ordered
+    .filter((part): part is string => Boolean(part))
+    .map(upperFirst)
+    .slice(0, ANSWER_REASONS_MAX)
   const tone: AnswerTone = lead === 'not_at_price' ? 'maybe' : lead
   return {
     tone,
     lead: LEADS[lead],
-    sentence: `${LEADS[lead]} : ${parts.join(' ; ')}.`,
+    reasons,
+    sentence: sentenceOf(LEADS[lead], reasons),
     missing: [],
   }
 }
@@ -446,7 +504,7 @@ export function ficheNextAction(input: FicheActionInput): FicheAction {
       return action(
         'settle',
         'Trancher ensemble',
-        'Vos réponses ne vont pas dans le même sens'
+        'Les réponses ne vont pas dans le même sens'
       )
     case 'no_date':
       return action(
@@ -466,7 +524,7 @@ export function ficheNextAction(input: FicheActionInput): FicheAction {
         'Tu ne l’as pas encore notée'
       )
     case 'to_discuss':
-      return action('opinions', 'Voir nos désaccords', 'Vos notes s’écartent')
+      return action('opinions', 'Voir nos désaccords', 'Nos notes s’écartent')
     case 'opinions_waiting':
       return action('opinions', 'Voir nos avis', 'Un avis est encore attendu')
     case 'opinions_complete':

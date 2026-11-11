@@ -114,4 +114,37 @@ describe('store des filtres', () => {
       view: 'cards',
     })
   })
+
+  it('lot 26 : la sélection à comparer vit dans l’URL, six au plus', () => {
+    const store = useFiltersStore()
+    const id = (n: number) =>
+      `${String(n).repeat(8)}-1111-4111-8111-111111111111`
+    store.loadFromQuery({ comparer: `${id(1)},${id(2)},${id(1)},pas-un-id` })
+    expect(store.compare).toEqual([id(1), id(2)])
+    expect(store.routeQuery).toEqual({ comparer: `${id(1)},${id(2)}` })
+    store.toggleCompare(id(1))
+    expect(store.compare).toEqual([id(2)])
+    for (let n = 3; n <= 9; n++) store.toggleCompare(id(n), true)
+    expect(store.compare).toHaveLength(6)
+    store.toggleCompare(id(2), true)
+    expect(store.compare).toHaveLength(6)
+    store.clearCompare()
+    expect(store.routeQuery).toEqual({})
+  })
+
+  it('lot 26 : une puce retire son filtre ; effacer garde le tri', () => {
+    const store = useFiltersStore()
+    store.loadFromQuery({
+      commune: 'Bègles',
+      priceMax: '200000',
+      sort: 'price',
+    })
+    expect(store.activeCount).toBe(2)
+    store.removeChip({ clears: ['priceMin', 'priceMax'] })
+    expect(store.filters.priceMax).toBeUndefined()
+    expect(store.filters.commune).toEqual(['Bègles'])
+    store.reset()
+    expect(store.activeCount).toBe(0)
+    expect(store.filters.sort).toBe('price')
+  })
 })

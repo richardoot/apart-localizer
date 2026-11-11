@@ -31,3 +31,12 @@ export function useListingActivity(
     placeholderData: previous => previous,
   })
 }
+
+/** Lot 26 : l'usage du connecteur Claude, lu dans le journal (page « Claude »). */
+export function useClaudeStatus() {
+  return useQuery({
+    queryKey: ['activity', 'claude'] as const,
+    queryFn: () => api.activity.claude(),
+    staleTime: 60_000,
+  })
+}

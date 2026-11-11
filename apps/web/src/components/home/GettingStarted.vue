@@ -1,42 +1,26 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
+  import { computed } from 'vue'
   import type { GettingStarted } from '@apart/contracts'
   import UiBadge from '@/components/ui/UiBadge.vue'
   import UiButton from '@/components/ui/UiButton.vue'
   import UiCard from '@/components/ui/UiCard.vue'
   import UiIcon from '@/components/ui/UiIcon.vue'
-  import { useFeedbackStore } from '@/stores/feedback'
-  import { MCP_URL } from '@/lib/api'
   import { GETTING_STARTED_ACTIONS, GETTING_STARTED_TARGETS } from '@/lib/home'
 
   /**
    * Lot 23 (ADR 0033) : la mise en route. Pour un espace vide, la suite
    * ordonnée remplace les chiffres de l'accueil (`full`) ; ensuite, tant
    * qu'il reste une étape, seulement ce qui reste, en bas (`compact`).
-   * Ce qui est fait se décide dans `domain` (`gettingStarted`). Claude : en
-   * attendant la page du lot 26, l'adresse du connecteur et où la coller ;
-   * l'étape se coche à sa première écriture dans l'espace, pas avant.
+   * Ce qui est fait se décide dans `domain` (`gettingStarted`). Claude
+   * (lot 26) : l'étape mène à la page « Claude » (adresse, étapes, demandes) ;
+   * elle se coche à sa première écriture dans l'espace, pas avant.
    */
   const props = defineProps<{ data: GettingStarted }>()
-  const feedback = useFeedbackStore()
 
   const full = computed(() => props.data.mode === 'full')
   const steps = computed(() =>
     full.value ? props.data.steps : props.data.steps.filter(s => !s.done)
   )
-  const showClaude = ref(false)
-  async function copyAddress(): Promise<void> {
-    showClaude.value = true
-    try {
-      await navigator.clipboard.writeText(MCP_URL)
-      feedback.success('Adresse du connecteur copiée.')
-    } catch {
-      // Presse-papiers refusé : l'adresse reste affichée, à copier à la main.
-      feedback.notify('Copie impossible : sélectionne l’adresse affichée.', {
-        tone: 'info',
-      })
-    }
-  }
 </script>
 
 <template>
@@ -96,28 +80,6 @@
               :data-testid="`getting-started-${step.key}`"
               >{{ GETTING_STARTED_ACTIONS[step.key] }}</UiButton
             >
-            <template v-else>
-              <UiButton
-                size="sm"
-                icon="copy"
-                class="w-fit"
-                data-testid="getting-started-claude"
-                @click="copyAddress"
-                >{{ GETTING_STARTED_ACTIONS[step.key] }}</UiButton
-              >
-              <div v-if="showClaude" class="grid gap-1 text-sm">
-                <code
-                  class="rounded-lg bg-surface-2 px-2 py-1 break-all select-all"
-                  data-testid="getting-started-mcp-url"
-                  >{{ MCP_URL }}</code
-                >
-                <p class="text-muted">
-                  Dans claude.ai : Paramètres, Connecteurs, « Ajouter un
-                  connecteur personnalisé », colle cette adresse, puis
-                  connecte-toi avec ton compte de l’espace.
-                </p>
-              </div>
-            </template>
           </template>
         </div>
       </li>

@@ -11,6 +11,7 @@ import type {
   OpinionSummary,
 } from '@apart/contracts'
 import {
+  ANSWER_REASONS_MAX,
   JUDGEMENT_SYMBOLS,
   describeActivity,
   coverPhotoOf,
@@ -21,6 +22,8 @@ import {
   listingChangesLine,
   listingJudgements,
   nextStepTarget,
+  pendingJudgementsText,
+  rowJudgements,
 } from '../src/index.js'
 import type {
   FicheActionInput,
@@ -95,7 +98,12 @@ describe('Lot 25 : trois jugements étiquetés', () => {
 /** Les montants s'écrivent avec une espace fine insécable : les tests l'écrivent normale. */
 function listingAnswer(input: ListingAnswerInput): ListingAnswer {
   const answer = rawAnswer(input)
-  return { ...answer, sentence: answer.sentence.replace(/\u202f/g, ' ') }
+  const plain = (text: string) => text.replace(/\u202f/g, ' ')
+  return {
+    ...answer,
+    reasons: answer.reasons.map(plain),
+    sentence: plain(answer.sentence),
+  }
 }
 
 describe('Lot 25 : les jugements d’une annonce et d’un brouillon', () => {
@@ -166,14 +174,18 @@ const answerInput = (
   ...over,
 })
 
-describe('Lot 25 : « Faut-il y aller ? » en une phrase', () => {
+describe('Lot 25, lot 26 : « Faut-il y aller ? », une réponse et trois raisons courtes', () => {
   it('oui : dans la cible et dans les critères', () => {
     const answer = listingAnswer(answerInput())
     expect(answer).toEqual({
       tone: 'go',
       lead: 'Oui',
+      reasons: [
+        'Dans la cible de rentabilité au prix affiché.',
+        'Dans tes critères de recherche.',
+      ],
       sentence:
-        'Oui : dans la cible de rentabilité au prix affiché ; dans tes critères de recherche.',
+        'Oui. Dans la cible de rentabilité au prix affiché. Dans tes critères de recherche.',
       missing: [],
     })
   })
@@ -191,9 +203,12 @@ describe('Lot 25 : « Faut-il y aller ? » en une phrase', () => {
       })
     )
     expect(answer.tone).toBe('maybe')
-    expect(answer.sentence).toBe(
-      'Pas à ce prix : hors de la cible de rentabilité (rendement brut trop faible) ; il faudrait l’obtenir à 182 000 € (−9 %, négociable) ; dans tes critères de recherche.'
-    )
+    expect(answer.lead).toBe('Pas à ce prix')
+    expect(answer.reasons).toEqual([
+      'Hors de la cible de rentabilité : rendement brut trop faible.',
+      'Il faudrait l’obtenir à 182 000 €, soit −9 % : négociable.',
+      'Dans tes critères de recherche.',
+    ])
   })
 
   it('plutôt non : décote hors de portée, ou DPE qui la laisse hors cible', () => {
@@ -209,39 +224,46 @@ describe('Lot 25 : « Faut-il y aller ? » en une phrase', () => {
       })
     )
     expect(far.tone).toBe('no')
-    expect(far.sentence).toContain('(−40 %, hors de portée)')
+    expect(far.reasons[1]).toBe(
+      'Il faudrait l’obtenir à 120 000 €, soit −40 % : hors de portée.'
+    )
+    // Le cas relevé par l'audit : trois échecs, le DPE, la marge des critères.
     const dpe = listingAnswer(
       answerInput({
         verdict: 'off_target',
-        failures: ['dpe'],
+        failures: ['gross_yield', 'effort', 'dpe'],
+        dpeClass: 'E',
+        fit: {
+          level: 'margin',
+          activeCriteria: 1,
+          reasons: ['DPE E (maximum D, marge une classe)'],
+        },
         targetPrice: {
-          targetPrice: 190_000,
-          discount: 0.05,
-          discountClass: 'negotiable',
+          targetPrice: 159_070,
+          discount: 0.26,
+          discountClass: 'out_of_reach',
         },
       })
     )
     expect(dpe.lead).toBe('Plutôt non')
-    expect(dpe.sentence).toContain(
-      'le DPE la laisse hors cible quel que soit le prix (prix cible 190 000 €)'
-    )
-  })
-
-  it('un sigle en tête de raison garde ses majuscules', () => {
+    expect(dpe.reasons).toEqual([
+      'Hors de la cible de rentabilité : rendement brut trop faible, effort mensuel trop lourd, DPE E.',
+      'Baisser le prix ne suffit pas : le DPE la laisse hors cible, même à 159 070 €.',
+      'À la marge de tes critères : DPE E (maximum D, marge une classe).',
+    ])
+    // Plus de parenthèses imbriquées ni de « quel que soit le prix ».
+    for (const r of dpe.reasons) {
+      expect(r).not.toMatch(/\([^)]*\(/)
+      expect(r).not.toContain('quel que soit')
+    }
+    // Sans la classe lue, le DPE qui échoue reste nommé sans liste « E, F ou G ».
     expect(
-      listingAnswer(
-        answerInput({
-          fit: {
-            level: 'margin',
-            activeCriteria: 1,
-            reasons: ['DPE E (maximum D, marge une classe)'],
-          },
-        })
-      ).sentence
-    ).toContain('(DPE E (maximum D, marge une classe))')
+      listingAnswer(answerInput({ verdict: 'off_target', failures: ['dpe'] }))
+        .reasons[0]
+    ).toBe('Hors de la cible de rentabilité : DPE classé E à G.')
   })
 
-  it('plutôt non : hors des critères, avec la raison', () => {
+  it('plutôt non : hors des critères, la raison en tête', () => {
     const answer = listingAnswer(
       answerInput({
         fit: {
@@ -252,9 +274,12 @@ describe('Lot 25 : « Faut-il y aller ? » en une phrase', () => {
       })
     )
     expect(answer.tone).toBe('no')
-    expect(answer.sentence).toContain(
-      'hors de tes critères de recherche (hors du périmètre)'
-    )
+    expect(answer.reasons[0]).toBe('Hors de tes critères : hors du périmètre.')
+    expect(
+      listingAnswer(
+        answerInput({ fit: { level: 'out', activeCriteria: 1, reasons: [] } })
+      ).reasons[0]
+    ).toBe('Hors de tes critères de recherche.')
   })
 
   it('peut-être : de peu, à la marge ou à confirmer', () => {
@@ -264,13 +289,11 @@ describe('Lot 25 : « Faut-il y aller ? » en une phrase', () => {
           verdict: 'to_dig',
           nearMisses: ['effort', 'dpe_unknown'],
         })
-      ).sentence
-    ).toContain(
-      'la cible de rentabilité manquée de peu (effort mensuel, DPE inconnu)'
+      ).reasons[0]
+    ).toBe('Cible de rentabilité manquée de peu : effort mensuel, DPE inconnu.')
+    expect(listingAnswer(answerInput({ verdict: 'to_dig' })).reasons[0]).toBe(
+      'Cible de rentabilité manquée de peu.'
     )
-    expect(
-      listingAnswer(answerInput({ verdict: 'to_dig' })).sentence
-    ).toContain('manquée de peu ;')
     expect(
       listingAnswer(
         answerInput({
@@ -279,17 +302,35 @@ describe('Lot 25 : « Faut-il y aller ? » en une phrase', () => {
       )
     ).toMatchObject({
       tone: 'maybe',
-      sentence: expect.stringContaining(
-        'à la marge de tes critères de recherche (prix +3,6 %)'
-      ),
+      reasons: expect.arrayContaining([
+        'À la marge de tes critères : prix +3,6 %.',
+      ]),
     })
+    expect(
+      listingAnswer(
+        answerInput({
+          fit: { level: 'margin', activeCriteria: 1, reasons: [] },
+        })
+      ).reasons
+    ).toContain('À la marge de tes critères de recherche.')
     expect(
       listingAnswer(
         answerInput({
           fit: { level: 'to_confirm', activeCriteria: 1, reasons: [] },
         })
-      ).sentence
-    ).toContain('à confirmer face à tes critères de recherche.')
+      ).reasons
+    ).toContain('À confirmer face à tes critères de recherche.')
+    expect(
+      listingAnswer(
+        answerInput({
+          fit: {
+            level: 'to_confirm',
+            activeCriteria: 1,
+            reasons: ['surface inconnue'],
+          },
+        })
+      ).reasons
+    ).toContain('À confirmer face à tes critères : surface inconnue.')
   })
 
   it('hors cible sans détail, prix cible déjà atteint ou incalculable', () => {
@@ -305,7 +346,7 @@ describe('Lot 25 : « Faut-il y aller ? » en une phrase', () => {
         })
       ).sentence
     ).toBe(
-      'Plutôt non : hors de la cible de rentabilité ; prix cible 230 000 €, déjà atteint ; dans tes critères de recherche.'
+      'Plutôt non. Hors de la cible de rentabilité. Prix cible 230 000 €, déjà atteint. Dans tes critères de recherche.'
     )
     expect(
       listingAnswer(
@@ -320,11 +361,11 @@ describe('Lot 25 : « Faut-il y aller ? » en une phrase', () => {
         })
       ).sentence
     ).toBe(
-      'Peut-être : la cible de rentabilité manquée de peu ; pas de prix cible calculable.'
+      'Peut-être. Cible de rentabilité manquée de peu. Pas de prix cible calculable.'
     )
     expect(
       listingAnswer(answerInput({ targetPrice: null, fit: null })).sentence
-    ).toBe('Oui : dans la cible de rentabilité au prix affiché.')
+    ).toBe('Oui. Dans la cible de rentabilité au prix affiché.')
     // Un prix cible plus bas que le prix (critère du prix cible plus strict que le verdict).
     expect(
       listingAnswer(
@@ -335,8 +376,25 @@ describe('Lot 25 : « Faut-il y aller ? » en une phrase', () => {
             discountClass: null,
           },
         })
-      ).sentence
-    ).toContain('il faudrait l’obtenir à 190 000 € (−5 %)')
+      ).reasons
+    ).toContain('Il faudrait l’obtenir à 190 000 €, soit −5 %.')
+  })
+
+  it('jamais plus de trois raisons', () => {
+    expect(ANSWER_REASONS_MAX).toBe(3)
+    const answer = listingAnswer(
+      answerInput({
+        verdict: 'to_dig',
+        nearMisses: ['effort'],
+        fit: { level: 'margin', activeCriteria: 2, reasons: ['prix +2 %'] },
+        targetPrice: {
+          targetPrice: 190_000,
+          discount: 0.05,
+          discountClass: 'negotiable',
+        },
+      })
+    )
+    expect(answer.reasons).toHaveLength(3)
   })
 
   it('pas encore de réponse : dit ce qui manque, sans juger la rentabilité', () => {
@@ -346,16 +404,57 @@ describe('Lot 25 : « Faut-il y aller ? » en une phrase', () => {
     expect(noRent).toEqual({
       tone: 'unknown',
       lead: 'Pas encore de réponse',
+      reasons: [
+        'Sans le loyer visé, la rentabilité et le prix cible ne se calculent pas.',
+        'Dans tes critères de recherche.',
+      ],
       sentence:
-        'Pas encore de réponse : sans le loyer visé, la rentabilité et le prix cible ne se calculent pas ; dans tes critères de recherche. Il manque le loyer visé.',
+        'Pas encore de réponse. Sans le loyer visé, la rentabilité et le prix cible ne se calculent pas. Dans tes critères de recherche.',
       missing: ['le loyer visé'],
     })
     const nothing = listingAnswer(
       answerInput({ hasRent: false, price: 0, fit: null })
     )
     expect(nothing.sentence).toBe(
-      'Pas encore de réponse : sans le prix et le loyer visé, la rentabilité et le prix cible ne se calculent pas. Il manque le prix et le loyer visé.'
+      'Pas encore de réponse. Sans le prix et le loyer visé, la rentabilité et le prix cible ne se calculent pas.'
     )
+  })
+})
+
+describe('Lot 26 : ce qu’une ligne montre des jugements', () => {
+  const judgements = listingJudgements({
+    verdict: null,
+    fit: { level: 'to_confirm', activeCriteria: 1 },
+    rental: 'conditional',
+  })
+  it('les jugements à confirmer sont omis, l’ordre gardé', () => {
+    expect(rowJudgements(judgements).map(j => j.key)).toEqual(['rental'])
+    expect(pendingJudgementsText(judgements)).toBe(
+      'Rentabilité et recherche à confirmer'
+    )
+  })
+  it('un seul, ou aucun à confirmer', () => {
+    const one = listingJudgements({ verdict: null, fit: null, rental: null })
+    expect(rowJudgements(one)).toEqual([])
+    expect(pendingJudgementsText(one)).toBe('Rentabilité à confirmer')
+    const known = listingJudgements({
+      verdict: 'target',
+      fit: { level: 'in', activeCriteria: 1 },
+      rental: null,
+    })
+    expect(rowJudgements(known)).toHaveLength(2)
+    expect(pendingJudgementsText(known)).toBeNull()
+    const three = listingJudgements({
+      verdict: null,
+      fit: { level: 'to_confirm', activeCriteria: 1 },
+      rental: null,
+    })
+    expect(
+      pendingJudgementsText([
+        ...three,
+        { ...three[0]!, key: 'rental', label: 'Location' },
+      ])
+    ).toBe('Rentabilité, recherche et location à confirmer')
   })
 })
 

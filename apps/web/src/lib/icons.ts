@@ -21,6 +21,8 @@ export const ICONS = {
     'M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
   ],
   plus: ['M12 5v14', 'M5 12h14'],
+  // Lot 26 : Claude (la page du connecteur).
+  spark: ['M12 4l1.8 6.2L20 12l-6.2 1.8L12 20l-1.8-6.2L4 12l6.2-1.8z'],
   // Lot 24 : l'appareil photo et la photothèque du mode visite, le presse-papiers.
   camera: [
     'M4 8a1 1 0 0 1 1-1h3l1.5-2h5L16 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8z',

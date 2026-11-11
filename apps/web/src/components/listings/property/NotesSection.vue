@@ -41,7 +41,7 @@
       {{ listing.notes }}
     </p>
     <p v-else class="text-sm text-muted">
-      Aucune note pour l’instant : ce que vous avez vu, ce qu’il faut demander.
+      Aucune note pour l’instant : ce qu’on a vu, ce qu’il faut demander.
     </p>
     <details class="rounded-xl bg-bg px-3" data-testid="notes-description-fold">
       <summary

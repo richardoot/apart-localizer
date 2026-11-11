@@ -60,6 +60,7 @@ describe('MorePage (lot 23)', () => {
     ).toEqual([
       '/criteres',
       '/hypotheses',
+      '/claude',
       '/activite',
       '/espace',
       '/espace/criteres-des-avis',

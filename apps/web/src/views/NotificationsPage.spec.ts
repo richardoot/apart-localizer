@@ -75,3 +75,52 @@ describe('NotificationsPage (lot 22 : états de lecture)', () => {
     wrapper.unmount()
   })
 })
+
+describe('NotificationsPage (lot 26 : le push sur iPhone)', () => {
+  const settings = {
+    preferences: {},
+    push: { enabled: true, publicKey: 'BAAA', subscriptions: 0 },
+    email: { enabled: false, address: null },
+    inbound: { enabled: false, path: '/inbound/x' },
+  }
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+    apiMock.workspace.mockReturnValue(new Promise(() => undefined))
+    apiMock.notifications.list.mockResolvedValue({
+      items: [],
+      total: 0,
+      unreadCount: 0,
+      page: 1,
+      limit: 50,
+      pageCount: 0,
+    })
+    apiMock.notifications.settings.mockResolvedValue(settings)
+  })
+
+  it('dans Safari sur iPhone : dit d’ajouter l’application à l’écran d’accueil', async () => {
+    const ua = vi
+      .spyOn(window.navigator, 'userAgent', 'get')
+      .mockReturnValue(
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1'
+      )
+    const wrapper = mountPage()
+    await flushPromises()
+    const push = wrapper.get('[data-testid="push"]')
+    expect(push.get('[data-testid="install-help"]').text()).toContain(
+      'ne marchent que dans l’application ouverte depuis l’écran d’accueil'
+    )
+    expect(push.text()).not.toContain('Ce navigateur ne reçoit pas')
+    ua.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('sur un ordinateur : pas d’aide d’installation', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="push"]').text()).not.toContain(
+      'écran d’accueil'
+    )
+    wrapper.unmount()
+  })
+})

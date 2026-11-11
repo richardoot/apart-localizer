@@ -1,5 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
+  MCP_PROMPT_TITLES,
   DEFAULT_STALE_DAYS,
   LISTING_CHECK_DISPOSITION_LABELS,
   LISTING_CHECK_OUTCOME_LABELS,
@@ -164,7 +165,7 @@ export function registerCheckPrompts(server: McpServer): void {
   server.registerPrompt(
     'review_listings',
     {
-      title: 'Tournée de mise à jour des annonces',
+      title: MCP_PROMPT_TITLES.review_listings,
       description:
         "Revérifie une à une les annonces actives à revérifier : ouvrir chaque lien dans le navigateur de l'utilisateur, lire la page (prix, vendeur, référence), check_listing puis apply_listing_check ; chercher la référence sur les autres portails et rattacher un lien (add_listing_link) seulement si l'agence et la référence sont les mêmes, sinon le proposer dans « À valider » ; s'arrêter et le dire si un portail bloque (jamais de contournement de captcha) ; résumé final avec les statuts proposés à faire confirmer.",
       argsSchema: McpReviewListingsPromptArgsSchema.shape,

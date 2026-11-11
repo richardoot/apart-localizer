@@ -11,9 +11,9 @@
 
   /**
    * Lot 23 (ADR 0033) : le menu du compte de l'en-tête d'ordinateur. Le
-   * bouton dit qui est connecté ; le menu porte l'espace (membres,
-   * critères des avis), les notifications et leurs réglages, le thème et la
-   * déconnexion. Il s'allume sur ces pages-là.
+   * bouton dit qui est connecté ; le menu porte Claude (lot 26), l'espace
+   * (membres, critères des avis), les notifications et leurs réglages, le
+   * thème et la déconnexion. Il s'allume sur ces pages-là.
    */
   const route = useRoute()
   const router = useRouter()
@@ -39,7 +39,7 @@
     icon="user"
     width="w-72"
     :class="active ? 'bg-accent-soft text-fg' : 'text-muted'"
-    :aria-label="`Compte de ${name} : espace, notifications, thème, déconnexion`"
+    :aria-label="`Compte de ${name} : Claude, espace, notifications, thème, déconnexion`"
     data-testid="account-menu"
   >
     <div class="grid gap-0.5 px-2.5 pt-1 pb-2" data-testid="account-who">
@@ -51,6 +51,10 @@
         >Espace « {{ workspace.workspace.name }} »</span
       >
     </div>
+    <UiMenuItem data-testid="account-claude" @select="go('/claude')">
+      <UiIcon name="spark" class="size-4 text-muted" /> Claude : brancher,
+      demander, suivre
+    </UiMenuItem>
     <UiMenuItem data-testid="account-workspace" @select="go('/espace')">
       <UiIcon name="users" class="size-4 text-muted" /> Espace et membres
     </UiMenuItem>

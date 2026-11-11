@@ -4,7 +4,6 @@
     EvaluatedListing,
     ListingCover as Cover,
     ListingEvaluation,
-    ListingStatus,
   } from '@apart/contracts'
   import { judgementsOfListing, locationApproximation } from '@apart/domain'
   import { formatDistance, formatEurosPerM2, formatSurface } from '@/lib/format'
@@ -14,15 +13,17 @@
   import ListingCover from './ListingCover.vue'
   import NewBadge from './NewBadge.vue'
   import PortalChips from './PortalChips.vue'
-  import StatusChanger from './StatusChanger.vue'
 
   /**
    * Lot 19 (ADR 0029), lot 25 (ADR 0035) : ce qui suit la ligne d'identité
    * collée de la fiche (retour, titre, prix, jugements, statut :
    * `ListingIdentity`) et défile : prix au m², surface, pièces, étage, lieu ;
    * pastilles « nouvelle », DPE, portails, fraîcheur de la vérification ; au
-   * téléphone, les trois jugements étiquetés, la photo de couverture (photo de visite, jamais du portail ;
-   * sur ordinateur, elle est dans la ligne collée) et le statut. La barre d'onglets suit et reste collée.
+   * téléphone, les trois jugements étiquetés et la photo de couverture (photo
+   * de visite, jamais du portail ; sur ordinateur, elle est dans la ligne
+   * collée). Lot 26 : au téléphone, une ligne de jugements (formes courtes)
+   * et une ligne de faits qui défile ; le statut est sur la ligne du prix
+   * (`ListingIdentity`). La barre d'onglets suit et reste collée.
    */
   const props = defineProps<{
     item: EvaluatedListing
@@ -30,12 +31,8 @@
     evaluation: ListingEvaluation | null
     layout: 'page' | 'panel'
     cover?: Cover | null
-    busy?: boolean
-    /** Lot 22 : le refus du dernier changement de statut. */
-    statusError?: string | null
   }>()
   const emit = defineEmits<{
-    status: [change: { status: ListingStatus; reason: string | null }]
     coverExpired: []
   }>()
 
@@ -69,7 +66,8 @@
 
 <template>
   <header
-    class="flex gap-3 bg-surface px-4 pt-1 pb-2 sm:px-5"
+    class="flex gap-3 bg-surface px-4 sm:px-5"
+    :class="layout === 'panel' ? 'pt-0.5 pb-2' : 'pt-1 pb-2'"
     data-testid="listing-header"
   >
     <ListingCover
@@ -79,41 +77,63 @@
       @expired="emit('coverExpired')"
     />
     <div class="grid min-w-0 flex-1 gap-1.5">
-      <JudgementPills v-if="layout === 'panel'" :judgements="judgements" />
-      <p
-        class="flex flex-wrap items-baseline gap-x-3.5 gap-y-0.5 text-sm text-muted tabular-nums"
-        data-testid="listing-facts"
-      >
-        <span v-if="pricePerM2">{{ pricePerM2 }}</span>
-        <span v-if="listing.surface">{{ formatSurface(listing.surface) }}</span>
-        <span v-if="listing.rooms !== null"
-          >{{ listing.rooms }} pièce{{ listing.rooms > 1 ? 's' : '' }}</span
-        >
-        <span v-if="floor">{{ floor }}</span>
-        <span v-if="place">{{ place }}</span>
-        <span v-if="item.distanceMeters !== null"
-          >à {{ approximate ? '≈ ' : ''
-          }}{{ formatDistance(item.distanceMeters) }}</span
-        >
-      </p>
+      <!-- Lot 26 : au téléphone, les jugements en formes courtes sur une ligne (l'étiquette entière pour le lecteur d'écran). -->
+      <JudgementPills
+        v-if="layout === 'panel'"
+        :judgements="judgements"
+        compact
+        nowrap
+        class="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0"
+      />
+      <!-- Lot 26 : au téléphone, les faits et les pastilles sur une seule ligne qui défile ; rien n'est retiré. -->
       <div
-        class="flex flex-wrap items-center gap-1.5"
-        data-testid="listing-pills"
+        class="flex gap-x-3.5 gap-y-1"
+        :class="
+          layout === 'panel'
+            ? '-mx-4 flex-nowrap items-center overflow-x-auto px-4 whitespace-nowrap [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0 sm:whitespace-normal'
+            : 'flex-col'
+        "
+        data-testid="listing-facts-line"
       >
-        <NewBadge :is-new="item.isNewForMe" />
-        <DpeBadge :dpe="listing.dpeClass" />
-        <template v-if="item.links.length">
-          <span
-            aria-hidden="true"
-            class="mx-0.5 hidden h-4 w-px bg-line sm:inline-block"
+        <p
+          class="flex items-baseline gap-x-3.5 gap-y-0.5 text-sm text-muted tabular-nums"
+          :class="layout === 'panel' ? 'flex-none sm:flex-wrap' : 'flex-wrap'"
+          data-testid="listing-facts"
+        >
+          <span v-if="pricePerM2">{{ pricePerM2 }}</span>
+          <span v-if="listing.surface">{{
+            formatSurface(listing.surface)
+          }}</span>
+          <span v-if="listing.rooms !== null"
+            >{{ listing.rooms }} pièce{{ listing.rooms > 1 ? 's' : '' }}</span
+          >
+          <span v-if="floor">{{ floor }}</span>
+          <span v-if="place">{{ place }}</span>
+          <span v-if="item.distanceMeters !== null"
+            >à {{ approximate ? '≈ ' : ''
+            }}{{ formatDistance(item.distanceMeters) }}</span
+          >
+        </p>
+        <div
+          class="flex items-center gap-1.5"
+          :class="layout === 'panel' ? 'flex-none' : 'flex-wrap'"
+          data-testid="listing-pills"
+        >
+          <NewBadge :is-new="item.isNewForMe" />
+          <DpeBadge :dpe="listing.dpeClass" />
+          <template v-if="item.links.length">
+            <span
+              aria-hidden="true"
+              class="mx-0.5 hidden h-4 w-px bg-line sm:inline-block"
+            />
+            <PortalChips :links="item.links" short linked />
+          </template>
+          <CheckFreshnessBadge
+            v-if="listing.lastCheckedAt"
+            :listing="listing"
+            :last-outcome="item.lastCheck?.outcome ?? null"
           />
-          <PortalChips :links="item.links" short linked />
-        </template>
-        <CheckFreshnessBadge
-          v-if="listing.lastCheckedAt"
-          :listing="listing"
-          :last-outcome="item.lastCheck?.outcome ?? null"
-        />
+        </div>
       </div>
       <p
         v-if="listing.status === 'discarded' && listing.discardReason"
@@ -122,13 +142,6 @@
       >
         Écartée : {{ listing.discardReason }}
       </p>
-      <StatusChanger
-        v-if="layout === 'panel'"
-        :status="listing.status"
-        :busy="busy"
-        :error="statusError ?? null"
-        @change="change => emit('status', change)"
-      />
     </div>
   </header>
 </template>

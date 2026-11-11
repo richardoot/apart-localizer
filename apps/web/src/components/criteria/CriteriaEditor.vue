@@ -284,6 +284,8 @@
   const shownPerimeter = computed<Perimeter | null>(() => {
     if (!touched.value) return c?.perimeter ?? null
     if (kind.value === 'none') return null
+    // Lot 26 : périmètre effacé ou pas encore posé, rien à montrer (pas l'aperçu d'avant).
+    if (!perimeterInput.value) return null
     return preview.data.value?.perimeter ?? null
   })
 
@@ -297,6 +299,16 @@
     touched.value = true
     perimeterInput.value = perimeter
     if (perimeter.type === 'point_radius') radius.value = perimeter.radiusMeters
+  }
+
+  /**
+   * Lot 26 : « Effacer » sur la carte : plus de forme, le périmètre est à
+   * reposer (comme un changement de type) ; le critère enregistré ne change
+   * qu'à « Enregistrer ».
+   */
+  function onCleared(): void {
+    touched.value = true
+    perimeterInput.value = null
   }
 
   function onPick(point: { longitude: number; latitude: number }): void {
@@ -324,7 +336,8 @@
     touched.value = true
     const address = isoAddress.value.trim()
     if (!isoOrigin.value && address.length < 3) {
-      failure.value = 'Donne une adresse de départ ou clique sur la carte.'
+      failure.value =
+        'Donne une adresse de départ ou pose le point sur la carte.'
       return
     }
     failure.value = null
@@ -388,7 +401,7 @@
     }
     if (touched.value && kind.value !== 'none' && !perimeterInput.value) {
       failure.value =
-        'Le périmètre n’est pas encore posé : dessine-le, clique sur la carte, ou calcule l’isochrone.'
+        'Le périmètre n’est pas encore posé : dessine-le, pose le point sur la carte, ou calcule l’isochrone.'
       return
     }
     try {
@@ -775,7 +788,7 @@
         <UiField
           id="c-iso-address"
           v-model="isoAddress"
-          label="Adresse de départ (ou clic sur la carte)"
+          label="Adresse de départ (ou point sur la carte)"
           quiet
           data-testid="iso-address"
           :placeholder="
@@ -828,6 +841,7 @@
         :draw-mode="drawMode"
         @drawn="onDrawn"
         @pick="onPick"
+        @cleared="onCleared"
       />
       <p class="text-sm" aria-live="polite" data-testid="preview">
         {{ describePerimeter(shownPerimeter) }} ·

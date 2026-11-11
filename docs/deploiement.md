@@ -414,6 +414,10 @@ carte s'affichent (la carte charge les tuiles OpenFreeMap sans clé), puis les f
    (`extract_listing`, confirmation, `create_listing`). L'annonce doit apparaître « nouvelle »
    dans le web pour l'autre membre, avec ses pastilles de provenance.
 
+La page « Claude » de l'application (lot 26, `/claude`) montre la même adresse (`VITE_API_URL` +
+`/mcp`) et ces étapes pour chaque membre, puis ce que Claude a écrit ; elle ne voit Claude qu'à sa
+première écriture.
+
 Les outils, paramètres et garde-fous sont décrits dans [mcp.md](mcp.md).
 
 ## 6. Sentry (facultatif)
@@ -513,6 +517,42 @@ sinon la saisie manuelle reprend le lien). Le manifeste déclare `share_target` 
 `/partager`. Sur iPhone, Safari ne propose pas les applications web installées dans la feuille de
 partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « Coller une annonce ».
 
+### L'application installée sur l'iPhone (lot 26)
+
+iOS ne propose jamais l'installation : le membre ouvre le web dans Safari, touche Partager
+(dans le menu « ••• » sur iOS 26), puis « Sur l'écran d'accueil » (« Ajouter à l'écran
+d'accueil » selon la version), laisse « Ouvrir en tant qu'app web » activé s'il apparaît, et
+ouvre ensuite l'application depuis son icône. Les notifications push n'y marchent que depuis
+cette application (WebKit, « Web Push for Web Apps on iOS and iPadOS », iOS 16.4, février 2023 ;
+depuis iOS 26, tout site ajouté à l'écran d'accueil s'ouvre en application web par défaut :
+WebKit, « News from WWDC25 », juin 2025). « Plus » et la page des notifications le disent dans
+Safari sur iPhone ou iPad (`lib/install.ts`, `components/nav/InstallHelp.vue`), et se taisent
+ailleurs.
+
+Fichiers servis par le web (`apps/web/public/icons`, mis en cache par le service worker avec le
+reste de l'application, sans cache des appels) :
+
+- `apple-touch-icon.png` (180 × 180, opaque : iOS arrondit lui-même les coins), déclaré dans
+  `index.html` ; il passe avant les icônes du manifeste sur iOS ;
+- `icon-192.png` et `icon-512.png` (`purpose: any`, opaques, pleine surface) ;
+- `icon-maskable-512.png` (`purpose: maskable`) : la maison réduite à 75 % et centrée sur le
+  fond `#0e6b63`, dans la zone sûre centrale (Android la découpe en cercle ou en carré arrondi).
+
+Les deux nouvelles icônes sont tirées de `icon-512.png` avec `sips` (macOS) :
+`sips -z 180 180 icon-512.png --out apple-touch-icon.png` ; `sips -z 384 384 icon-512.png`, puis
+`sips --padToHeightWidth 512 512 --padColor 0E6B63`. Le manifeste porte `id` et `scope` (`/`),
+`start_url`, `display: standalone`, `lang: fr`, sans orientation imposée (l'ordinateur s'en sert
+aussi) ; `index.html` porte `apple-mobile-web-app-title` (« Apart »), une barre d'état opaque
+(`apple-mobile-web-app-status-bar-style: default` : l'en-tête collé ne passe jamais dessous),
+`theme-color` clair et sombre et `viewport-fit=cover` (les marges de l'encoche sont gardées par
+`env(safe-area-inset-*)`). Les polices viennent toujours du CDN de Google : sans réseau,
+l'application installée s'affiche avec les polices de repli.
+
+À vérifier sur l'iPhone après le déploiement : l'icône et le nom sous l'icône, l'ouverture sans
+barre de Safari, la barre d'état lisible en thème clair et sombre, la barre du bas au-dessus de la
+barre d'accueil, l'aide qui disparaît une fois l'application ouverte depuis son icône, puis
+« Activer sur cet appareil » et une notification reçue.
+
 ## 11. Liste de contrôle
 
 - [ ] Projet Supabase créé, PostGIS actif, Google configuré, URL de redirection du web ajoutées.
@@ -534,6 +574,8 @@ partage (à vérifier à chaque version d'iOS) : copier le lien et utiliser « C
       une photo testées depuis le web, l'URL publique de l'objet refusée.
 - [ ] Clés VAPID générées et posées (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`) ;
       PWA installée sur les deux téléphones, push activé, notification reçue.
+- [ ] iPhone : application ajoutée à l'écran d'accueil depuis Safari, icône et nom vérifiés,
+      aide d'installation absente dans l'application ouverte depuis son icône (lot 26).
 - [ ] Partage depuis l'application Leboncoin ou SeLoger sur Android : « Nouvelle annonce »
       pré-remplie.
 - [ ] Si souhaité : `INBOUND_EMAIL_SECRET` posé, service d'e-mails entrants branché et une alerte

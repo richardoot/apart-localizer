@@ -33,9 +33,25 @@ Richard et Chloé sur ordinateur et sur téléphone ; lot 20 : une vraie visite 
 l'aveugle, puis confrontée ; lot 21 : un vrai tri à deux, par téléphone et sur ordinateur, jusqu'à
 une proposition tranchée), à constater après la mise en ligne.
 
-Audit d'interface du 10 novembre 2026 : les lots 22 à 26, en fin de document, sont **validés par
-Richard, à faire dans l'ordre** ; le téléphone visé est un iPhone. Le lot 22 (socle d'interface)
-est livré, sans migration ; les lots 23 à 26 restent à faire.
+Audit d'interface du 10 novembre 2026 : **les lots 22 à 26 sont livrés** côté code, tests et
+documentation (ADR 0032 à 0036 ; le tableau avant/après est au lot 26) ; le téléphone visé est un
+iPhone. Ils attendent leur déploiement : **une seule migration**, additive, celle du lot 25
+(`20261112100000_lot25_listing_cover` : `listings.cover_photo_id`), sans variable ni outil MCP
+nouveau ; les nouvelles icônes de l'application installée partent avec le web. Ce que seul un vrai
+iPhone peut confirmer, rassemblé des cinq lots : le zoom évité par les champs à 16 px ; les marges
+de l'encoche et de la barre d'accueil dans Safari et dans l'application installée ; le glissé
+arrière dans l'application installée ; la barre du bas qui se retire au clavier, la barre
+d'enregistrement d'une section et la barre « Comparer » au-dessus du clavier (`visualViewport`) ; le
+défilement des barres de pastilles, des cadres de tableaux et de la ligne de faits de la fiche ;
+pendant une vraie visite, l'appareil photo et le format rendu, le presse-papiers (« Coller »),
+IndexedDB avec des photos dans l'application installée, et le temps d'une capture avec l'IA ;
+l'image de couverture dans l'application installée ; les gestes coopératifs dans le panneau d'un
+critère et le glissé des sommets d'un polygone ; la hauteur de la carte sous les barres de Safari ;
+l'icône et le nom « Apart » sur l'écran d'accueil, l'ouverture sans la barre de Safari (« Ouvrir en
+tant qu'app web », iOS 26), la barre d'état en thème clair et sombre, les libellés français de la
+feuille de partage, l'aide d'installation qui disparaît une fois l'application ouverte depuis son
+icône, puis « Activer sur cet appareil » et une notification reçue ; enfin une relecture au lecteur
+d'écran (VoiceOver).
 
 ## Lot 0 : socle
 
@@ -910,7 +926,8 @@ Chromium, jeu fictif ; à confirmer par Richard et Chloé sur leurs vraies annon
 
 ## Audit d'interface du 10 novembre 2026 : lots 22 à 26
 
-Statut : validés par Richard le 10 novembre 2026 ; à faire dans l'ordre, un lot à la fois.
+Statut : validés par Richard le 10 novembre 2026 ; les cinq lots sont livrés (22 à 26, ADR 0032 à
+0036) ; le tableau de clôture est au lot 26.
 
 - **Méthode** : parcours de l'application sur le jeu fictif (ordinateur 1440 px, téléphone 390 px,
   thème sombre, Chromium) et relecture du code de `apps/web`. Rien n'a été vérifié sur un vrai
@@ -1278,7 +1295,9 @@ disent toujours « verdict » (aucun outil changé).
 
 ## Lot 26 : trouver, comparer, Claude
 
-Statut : validé, à faire.
+Statut : livré le 11 novembre 2026 (code, tests, documentation ; ADR 0036), sans migration ni
+variable nouvelle ni outil MCP nouveau ou changé ; une route de lecture (`GET /activity/claude`) ;
+à relire sur un vrai iPhone.
 
 - **Pourquoi** : les filtres actifs restent cachés derrière « Filtres », suivent d'une étape à
   l'autre, et les compteurs des étapes les ignorent ; un clic sur la carte pose un filtre de rayon.
@@ -1300,3 +1319,94 @@ Statut : validé, à faire.
 
 Fini quand : on sait d'un coup d'œil pourquoi une étape paraît vide ; comparer trois annonces prend
 trois clics ; un membre qui n'a jamais branché Claude y arrive depuis l'application.
+
+Livré :
+
+- **D'abord, les deux reculs du lot 25 au téléphone.** En-tête de la fiche : la ligne collée porte
+  retour, titre, prix et le statut en menu court sur la ligne du prix ; dessous, une ligne de
+  jugements en formes courtes et une ligne de faits et de pastilles qui défile ; rien de retiré. La
+  barre d'onglets commence à 142–162 px (environ 290 au lot 25, 370 avec le statut). Lignes de liste :
+  un jugement « à confirmer » n'est plus montré dans une ligne (`rowJudgements`, domain ; dit au
+  lecteur d'écran) ; au téléphone, symbole et forme courte (« ✓ Renta. »), la valeur dans
+  l'infobulle et pour le lecteur d'écran ; trois lignes entières de nouveau visibles à l'étape À
+  valider, boutons compris. La Synthèse répond par un mot puis trois raisons courtes au plus, sans
+  parenthèses imbriquées (`listingAnswer` : « Plutôt non » ; « Hors de la cible de rentabilité :
+  rendement brut trop faible, effort mensuel trop lourd, DPE E. » ; « Baisser le prix ne suffit pas :
+  le DPE la laisse hors cible, même à 159 070 €. » ; « À la marge de tes critères : DPE E (maximum D,
+  marge une classe). »).
+- **Filtres visibles** : une puce par filtre actif au-dessus de la liste, retirable, « Tout
+  effacer » (le tri reste) ; **les compteurs des étapes suivent les filtres** (« 0/2 », « avec les
+  filtres », une seule lecture de tous les statuts sous des filtres) ; une étape vide dit quels
+  filtres cachent combien d'annonces (« Les filtres cachent les 2 annonces de l'étape À étudier :
+  DPE D. »). Puces, compteurs et phrase viennent de `domain` (`activeFilterChips`,
+  `stageCountsUnderFilters`, `hiddenByFiltersText`) ; filtres et sélection restent dans l'URL.
+- **Comparer** : une case sur les lignes, les cartes et le tableau ; la sélection dans l'URL
+  (`?comparer=`) ; la barre « Comparer (n) » collée en bas de la liste, au-dessus de la barre du bas
+  au téléphone ; **six au plus** (la limite de l'API et du MCP, et ce qu'une table côte à côte garde
+  de lisible ; les cases se désactivent au-delà) ; « Retour aux annonces » ramène à l'étape, la vue
+  et les filtres d'origine, sélection cochée ; un titre de la comparaison ouvre la fiche, que la
+  fermeture rend à la comparaison. Le tableau entre dans le choix de la vue (« Tableau », ordinateur).
+- **Vrais liens** : le titre est un lien dans les lignes, les cartes, le tableau et la comparaison
+  (clic du milieu, nouvel onglet ; l'URL garde l'étape, la vue, les filtres) ; une seule cible au
+  clavier ; la carte entière s'ouvre au clic (lien étiré) ; la ligne du tableau au clic de souris,
+  sans `tabindex` ; `aria-sort` sur chaque en-tête triable ; le retour arrière après la fermeture
+  d'une fiche ne la rouvre pas.
+- **Page « Claude »** (`/claude`, menu du compte sur ordinateur, « Plus » au téléphone, et l'étape
+  « Connecter Claude » de la mise en route) : l'adresse du connecteur à copier (une adresse locale
+  est signalée), les quatre étapes dans claude.ai, ce que le journal sait (`GET /activity/claude` :
+  « jamais vu », « écrit pour un autre membre », « branché pour toi », dernière écriture ; une lecture
+  ne laisse pas de trace, aucune application autorisée n'est listable), les cinq demandes à copier
+  avec le titre de l'invite MCP (`CLAUDE_REQUESTS`, `MCP_PROMPT_TITLES` dans `contracts`, que le
+  serveur utilise pour enregistrer ses prompts ; testé de bout en bout), les messages à valider, les
+  explorations et leurs comptes rendus, ce que Claude a écrit (« Tout voir » : l'activité filtrée
+  `?canal=mcp`, filtres de l'activité dans l'URL). Le brief d'un critère y renvoie.
+- **Cartes** : la carte des annonces ne pose plus de filtre au clic ; « Filtrer autour d'un point »
+  puis un toucher ; couches, légendes, fond et couleur des repères derrière « Couches et légende » ;
+  une seule ligne de contrôles au-dessus de la carte. Carte d'un critère au téléphone : gestes
+  coopératifs hors dessin, consignes « Touche », « Annuler le dernier point », « Effacer », « Placer
+  le point ici » après une adresse trouvée (`GET /opendata/geocode`).
+- **L'application installée sur l'iPhone** : icône d'écran d'accueil de 180 px, icône masquable à
+  part, `id`, `scope`, titre « Apart », barre d'état ; une aide « Ajouter à l'écran d'accueil » dans
+  « Plus » et dans les préférences de notification (seulement sur iPhone ou iPad, hors application
+  installée), qui dit que les notifications sur iPhone en ont besoin (WebKit, « Web Push for Web
+  Apps on iOS and iPadOS », iOS 16.4 ; « News from WWDC25 », iOS 26 : rien de changé pour le push).
+- **Retouches** : « Ouvrir la fiche » sur les cartes de téléphone du compte rendu d'exploration ;
+  « Copié » redevient « Copier » après deux secondes ; « Nos notes s'écartent » au lieu de « Vos ».
+
+Mesuré à la livraison, clôture de l'audit (Chromium, jeu fictif, Camille ; Sacha donne les mêmes
+longueurs d'accueil) :
+
+| Mesure                                                               | Audit (10 nov.)                     | Après le lot 26                      |
+| -------------------------------------------------------------------- | ----------------------------------- | ------------------------------------ |
+| En-tête de l'application au téléphone                                | 130 px                              | 56 px                                |
+| Accueil, en écrans (téléphone / ordinateur)                          | 5,9 / 2,4                           | 4,2 / 2,8                            |
+| Annonces visibles sans défiler au téléphone (À valider)              | 1                                   | 3, boutons compris                   |
+| Début des onglets de la fiche au téléphone                           | —                                   | 142–162 px (≈ 290 au lot 25)         |
+| Fiche à 1440 × 900 : Synthèse, Le bien, Budget, Négocier, Quartier, À faire, Historique | 1192, 1647, 1697, 3178, 1172, 1694, 2789 | 1495, 1770, 1685, 2032, 1243, 1706, 2811 |
+| Fiche à 390 × 844, mêmes onglets                                     | 3059, 2975, 3105, 4270, 1453, 3830, 4193 | 2410, 3170, 3064, 3045, 1472, 3966, 4128 |
+| `<button>` / `<input>` / `<select>` / `<textarea>` écrits à la main hors `components/ui` | 282 / 172 / 46 / 11 | 10 / 7 / 0 / 0 (exceptions commentées) |
+| « Chargement… » visibles                                             | 23                                  | 0 (une annonce pour lecteur d'écran) |
+| Pluriels paresseux « (s) » dans les textes                           | 69                                  | 0                                    |
+| Fichiers qui disent « vous » au membre                               | 52                                  | 1 (`rental-checks.ts`, figé)         |
+| Contrôles au-dessus de la carte des annonces (ordinateur)            | ≈ 460 px                            | une ligne (76 px sous la question)   |
+
+Sur ordinateur, la Synthèse s'allonge de la réponse et de l'action (lot 25) et l'accueil de « Ce qui
+t'attend » (lot 23) ; Négocier perd 36 %. Au téléphone, chaque onglet gagne environ 120 px sur le
+lot 25 (en-tête resserré). « Fini quand », mesuré : **pourquoi une étape paraît vide** se lit d'un
+coup d'œil (puces, « 0/2 » sur l'étape, phrase qui nomme le filtre) ; **comparer trois annonces prend
+quatre clics** depuis la liste (trois cases et « Comparer (3) », sans passer par « Filtres » ; six
+avant) : trois clics demanderaient une comparaison sans choix, écartée ; **un membre qui n'a jamais
+branché Claude y arrive depuis l'application** (mise en route ou « Plus », puis l'adresse, les
+étapes et les demandes ; vu avec un espace vide). Parcours à la main, ordinateur et téléphone :
+filtre DPE D à À étudier (« 0/2 », phrase), puis Offres (« 2/3 », puce gardée), « Tout effacer » ;
+trois annonces cochées à Offres, comparées, une fiche ouverte depuis la comparaison puis fermée
+(retour à la comparaison), « Retour aux annonces » (Offres, trois cases cochées) ; le titre porte
+son lien ; une fiche fermée ne se rouvre pas au retour arrière ; un clic sur la carte ne filtre pas,
+le bouton puis un toucher, oui ; page « Claude » pour un membre qui l'utilise et pour un espace vide,
+thème sombre compris.
+
+Reste : une vérification sur un vrai iPhone (liste consolidée dans l'état, en tête) ; comparer en
+moins de quatre clics ; la lecture filtrée est d'une page de 200 annonces (compteurs bas au-delà) ;
+une annonce en lecture seule par Claude ne se voit pas (rien n'est journalisé) ; les polices
+viennent encore du CDN de Google (l'application installée retombe sur les polices du système hors
+ligne ; pas de lecture hors ligne) ; deux phrases de `rental-checks.ts` toujours au « vous ».

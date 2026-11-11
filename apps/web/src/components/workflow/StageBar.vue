@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import { WORKFLOW_STAGES, WORKFLOW_STAGE_LABELS } from '@apart/contracts'
   import type { WorkflowStage, WorkflowStageCount } from '@apart/contracts'
+  import { stageCountText } from '@apart/domain'
+  import type { StageCountView } from '@apart/domain'
   import { computed, nextTick, onMounted, ref, watch } from 'vue'
   import UiIcon from '@/components/ui/UiIcon.vue'
 
@@ -12,7 +14,8 @@
    * quand elle change d'ailleurs : « Ce qui t'attend », un lien).
    */
   const props = defineProps<{
-    stages: readonly WorkflowStageCount[]
+    /** Lot 26 : sous des filtres, chaque compteur dit « affichées / total » (`stageCountsUnderFilters`). */
+    stages: readonly (WorkflowStageCount | StageCountView)[]
     current: WorkflowStage
   }>()
   const emit = defineEmits<{ select: [stage: WorkflowStage] }>()
@@ -20,11 +23,23 @@
   const items = computed(() =>
     WORKFLOW_STAGES.map(stage => {
       const found = props.stages.find(s => s.stage === stage)
+      const view: StageCountView = {
+        stage,
+        count: found?.count ?? 0,
+        outOfCriteria: found?.outOfCriteria ?? 0,
+        toSort: found?.toSort ?? 0,
+        sub: found?.sub ?? '',
+        total: found && 'total' in found ? found.total : (found?.count ?? 0),
+        filtered: found && 'filtered' in found ? found.filtered : false,
+      }
+      const text = stageCountText(view)
       return {
         stage,
         label: WORKFLOW_STAGE_LABELS[stage],
-        count: found?.count ?? 0,
-        sub: found?.sub ?? '',
+        count: text.short,
+        spoken: text.spoken,
+        filtered: view.filtered,
+        sub: view.filtered ? 'avec les filtres' : view.sub,
       }
     })
   )
@@ -68,7 +83,7 @@
         <!-- Lot 22 : contrôle spécialisé (étape d'un parcours, `aria-current="step"`), sa recette n'est pas celle d'un bouton. -->
         <button
           type="button"
-          class="flex min-h-11 flex-auto cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-left sm:min-h-[76px] sm:flex-col sm:items-stretch sm:justify-center sm:gap-0.5 sm:rounded-xl sm:px-3.5 sm:py-2"
+          class="relative flex min-h-11 flex-auto cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-left sm:min-h-[76px] sm:flex-col sm:items-stretch sm:justify-center sm:gap-0.5 sm:rounded-xl sm:px-3.5 sm:py-2"
           :class="
             current === item.stage
               ? 'border-accent bg-accent text-accent-fg'
@@ -84,8 +99,10 @@
             <span class="whitespace-nowrap">{{ item.label }}</span>
             <span
               class="font-display tabular-nums sm:text-2xl sm:font-bold"
+              :data-filtered="item.filtered ? 'true' : undefined"
               data-testid="stage-count"
-              >{{ item.count }}</span
+              ><span aria-hidden="true">{{ item.count }}</span
+              ><span class="sr-only">{{ item.spoken }}</span></span
             >
           </span>
           <span

@@ -13,6 +13,8 @@
     busy?: boolean
     /** Lot 22 : le refus du dernier changement, dit sous le menu. */
     error?: string | null
+    /** Lot 26 : sur la ligne du prix au téléphone, sans étiquette visible. */
+    compact?: boolean
   }>()
   const emit = defineEmits<{
     change: [change: { status: ListingStatus; reason: string | null }]
@@ -54,9 +56,14 @@
 <template>
   <div class="grid gap-2">
     <label class="flex items-center gap-2 text-sm">
-      <span class="text-sm font-medium text-muted">Statut</span>
+      <span
+        class="text-sm font-medium text-muted"
+        :class="compact ? 'sr-only' : ''"
+        >Statut</span
+      >
       <UiSelect
         class="w-auto"
+        :class="compact ? 'max-w-[11rem]' : ''"
         :model-value="status"
         :disabled="busy"
         aria-label="Changer le statut"

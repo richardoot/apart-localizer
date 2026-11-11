@@ -1,13 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
-import { ACTIVITY_KIND_RULES } from '@apart/contracts'
+import { ACTIVITY_KIND_RULES, ClaudeStatusSchema } from '@apart/contracts'
 import type {
   ActivityActor,
+  ClaudeStatus,
   ActivityKind,
   ActivityPage,
   ActivityQuery,
 } from '@apart/contracts'
 import { PrismaService } from '../prisma/prisma.service'
 import type { Member, Prisma } from '../generated/prisma'
+import { claudeUsage } from '@apart/domain'
 import { toActivityEntry } from './activity.mapper'
 import { redactOpinionRows } from '../opinions/opinion-context'
 
@@ -49,6 +51,50 @@ export function kindWhere(kind: ActivityKind): Prisma.ActivityLogWhereInput {
 @Injectable()
 export class ActivityQueryService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Lot 26 (ADR 0036) : ce que le journal dit du connecteur, pour la page
+   * « Claude » : par membre actif, ses écritures par Claude (canal `mcp`) et
+   * la dernière ; la phrase vient de `domain` (`claudeUsage`). Une lecture
+   * par Claude ne laisse aucune trace : rien de plus n'est détectable.
+   */
+  async claude(member: Member, now = new Date()): Promise<ClaudeStatus> {
+    const [groups, members] = await Promise.all([
+      this.prisma.activityLog.groupBy({
+        by: ['actorMemberId'],
+        where: { workspaceId: member.workspaceId, channel: 'mcp' },
+        _count: { _all: true },
+        _max: { createdAt: true },
+      }),
+      this.prisma.member.findMany({
+        where: { workspaceId: member.workspaceId, status: 'active' },
+        select: { id: true, displayName: true },
+      }),
+    ])
+    const names = new Map(members.map(m => [m.id, m.displayName]))
+    const usage = groups
+      .flatMap(group => {
+        const name = group.actorMemberId
+          ? names.get(group.actorMemberId)
+          : undefined
+        const last = group._max.createdAt
+        return group.actorMemberId && name !== undefined && last
+          ? [
+              {
+                memberId: group.actorMemberId,
+                displayName: name,
+                writes: group._count._all,
+                lastWriteAt: last.toISOString(),
+              },
+            ]
+          : []
+      })
+      .sort((a, b) => Date.parse(b.lastWriteAt) - Date.parse(a.lastWriteAt))
+    return ClaudeStatusSchema.parse({
+      usage: claudeUsage({ viewerId: member.id, members: usage }, now),
+      members: usage,
+    })
+  }
 
   async list(
     member: Member,

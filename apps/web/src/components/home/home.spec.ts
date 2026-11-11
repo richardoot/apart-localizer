@@ -1,12 +1,11 @@
 /**
- * Lot 23 : la mise en route (l'adresse du connecteur se copie, l'étape reste
- * à faire tant que Claude n'a rien écrit) et « Ce qui t'attend ».
+ * Lot 23 : la mise en route (l'étape Claude reste à faire tant que Claude
+ * n'a rien écrit ; lot 26 : elle mène à la page « Claude ») et « Ce qui
+ * t'attend ».
  */
-import { describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { describe, expect, it } from 'vitest'
+import { mount, RouterLinkStub } from '@vue/test-utils'
 import type { GettingStarted as GettingStartedData } from '@apart/contracts'
-import { MCP_URL } from '@/lib/api'
-import { useFeedbackStore } from '@/stores/feedback'
 import GettingStarted from './GettingStarted.vue'
 import HomeAgenda from './HomeAgenda.vue'
 
@@ -42,33 +41,21 @@ const data: GettingStartedData = {
 }
 
 describe('GettingStarted', () => {
-  it('en bref : ce qui reste ; Claude : l’adresse du connecteur se copie', async () => {
-    const writeText = vi.fn(() => Promise.resolve())
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText },
-      configurable: true,
+  it('en bref : ce qui reste ; Claude : l’étape mène à la page « Claude » (lot 26)', () => {
+    const wrapper = mount(GettingStarted, {
+      props: { data },
+      global: { stubs: { RouterLink: RouterLinkStub } },
     })
-    const wrapper = mount(GettingStarted, { props: { data } })
     expect(wrapper.text()).toContain('3 sur 4 faites')
     expect(
       wrapper.findAll('[data-step]').map(s => s.attributes('data-step'))
     ).toEqual(['claude'])
-    await wrapper.get('[data-testid="getting-started-claude"]').trigger('click')
-    await flushPromises()
-    expect(writeText).toHaveBeenCalledWith(MCP_URL)
-    expect(wrapper.get('[data-testid="getting-started-mcp-url"]').text()).toBe(
-      MCP_URL
-    )
-    expect(useFeedbackStore().messages.at(-1)?.text).toBe(
-      'Adresse du connecteur copiée.'
-    )
+    const link = wrapper.getComponent(RouterLinkStub)
+    expect(link.props('to')).toEqual({ name: 'claude' })
+    expect(link.text()).toBe('Brancher Claude')
   })
 
-  it('presse-papiers refusé : l’adresse reste affichée', async () => {
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText: () => Promise.reject(new Error('refus')) },
-      configurable: true,
-    })
+  it('espace vide : les quatre étapes, chacune avec son lien', () => {
     const wrapper = mount(GettingStarted, {
       props: {
         data: {
@@ -78,15 +65,11 @@ describe('GettingStarted', () => {
           steps: data.steps.map(s => ({ ...s, done: false })),
         },
       },
+      global: { stubs: { RouterLink: RouterLinkStub } },
     })
     expect(wrapper.text()).toContain('Par où commencer')
     expect(wrapper.findAll('[data-step]')).toHaveLength(4)
-    await wrapper.get('[data-testid="getting-started-claude"]').trigger('click')
-    await flushPromises()
-    expect(
-      wrapper.find('[data-testid="getting-started-mcp-url"]').exists()
-    ).toBe(true)
-    expect(useFeedbackStore().messages.at(-1)?.tone).toBe('info')
+    expect(wrapper.findAllComponents(RouterLinkStub)).toHaveLength(4)
   })
 })
 

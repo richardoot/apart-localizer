@@ -94,8 +94,8 @@ export const GETTING_STARTED_TARGETS: Record<
   assumptions: { name: 'assumptions' },
   criteria: { name: 'criteria' },
   listing: { name: 'listing-new' },
-  // Lot 26 ajoutera une page « Claude » ; d'ici là, l'adresse du connecteur se copie sur place.
-  claude: null,
+  // Lot 26 : la page « Claude » (adresse, étapes, demandes, ce qu'il a fait).
+  claude: { name: 'claude' },
 }
 
 /** Le bouton d'une étape de la mise en route. */
@@ -103,5 +103,5 @@ export const GETTING_STARTED_ACTIONS: Record<GettingStartedStepKey, string> = {
   assumptions: 'Ouvrir les hypothèses',
   criteria: 'Dessiner un critère',
   listing: 'Ajouter une annonce',
-  claude: 'Copier l’adresse',
+  claude: 'Brancher Claude',
 }

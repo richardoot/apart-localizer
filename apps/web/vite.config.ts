@@ -28,6 +28,10 @@ export default defineConfig({
         description:
           "Suivi d'annonces d'achat d'appartement : comparateur, carte, rentabilité",
         lang: 'fr',
+        dir: 'ltr',
+        // Lot 26: a stable identity for the installed app, the whole site in scope.
+        id: '/',
+        scope: '/',
         start_url: '/',
         display: 'standalone',
         background_color: '#f3f6f6',
@@ -39,11 +43,25 @@ export default defineConfig({
           method: 'GET',
           params: { title: 'title', text: 'text', url: 'url' },
         },
+        // Lot 26: opaque full-bleed icons for `any`; a dedicated maskable icon
+        // whose drawing stays inside the central safe zone (Android crops it
+        // to a circle or a squircle). iOS takes the `apple-touch-icon` of
+        // index.html first (180 × 180, opaque).
         icons: [
-          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          {
+            src: '/icons/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
           {
             src: '/icons/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/icons/icon-maskable-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',

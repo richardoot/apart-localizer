@@ -66,6 +66,13 @@ export const MORE_LINKS: readonly (NavLink<string> & { hint: string })[] = [
     hint: 'Apport, prêt, loyer visé : la base des calculs',
   },
   {
+    entry: 'claude',
+    to: '/claude',
+    label: 'Claude',
+    icon: 'spark',
+    hint: 'Le brancher, lui demander, ce qu’il a fait',
+  },
+  {
     entry: 'activity',
     to: '/activite',
     label: 'Activité',
@@ -106,6 +113,7 @@ const DESKTOP_OF: Record<string, DesktopEntry> = {
   workspace: 'account',
   'opinion-criteria': 'account',
   notifications: 'account',
+  claude: 'account',
   more: 'account',
 }
 
@@ -128,6 +136,7 @@ const PHONE_OF: Record<string, PhoneEntry> = {
   activity: 'more',
   workspace: 'more',
   'opinion-criteria': 'more',
+  claude: 'more',
 }
 
 const nameOf = (name: unknown): string => (typeof name === 'string' ? name : '')

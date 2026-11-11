@@ -90,8 +90,26 @@ export class MockMap {
   camera: Array<{ kind: 'fitBounds' | 'easeTo' | 'flyTo'; args: unknown[] }> =
     []
   zoom: number
+  /** Lot 26 : les gestes coopératifs (deux doigts pour la carte), comme `map.cooperativeGestures`. */
+  cooperativeGestures: {
+    enabled: boolean
+    enable: () => void
+    disable: () => void
+    isEnabled: () => boolean
+  }
   constructor(public readonly options: Record<string, unknown>) {
     mapLibreMock.maps.push(this)
+    const gestures = {
+      enabled: options.cooperativeGestures === true,
+      enable: () => {
+        gestures.enabled = true
+      },
+      disable: () => {
+        gestures.enabled = false
+      },
+      isEnabled: () => gestures.enabled,
+    }
+    this.cooperativeGestures = gestures
     if (Array.isArray(options.center))
       this.center = options.center as [number, number]
     this.zoom =
@@ -330,6 +348,7 @@ export class MockTerraDraw {
   clear(): void {
     this.cleared++
     this.features.clear()
+    this.pendingPoints = 0
   }
   on(event: string, listener: (...args: unknown[]) => void): void {
     const list = this.listeners.get(event) ?? []
@@ -357,9 +376,34 @@ export class MockTerraDraw {
   removeFeatures(ids: string[]): void {
     for (const id of ids) this.features.delete(id)
   }
+  /** Lot 26 : les points posés du tracé en cours, que `undo` retire un à un. */
+  pendingPoints = 0
+  undoCalls = 0
+  canUndo(): boolean {
+    return this.pendingPoints > 0
+  }
+  undo(): boolean {
+    this.undoCalls++
+    if (this.pendingPoints === 0) return false
+    this.pendingPoints--
+    this.emit('history')
+    return true
+  }
+  redo(): boolean {
+    return false
+  }
+  /** Simule un sommet posé pendant un tracé (événement `change`). */
+  addPoint(): void {
+    this.pendingPoints++
+    this.emit('change', [], 'create')
+  }
+  emit(event: string, ...args: unknown[]): void {
+    for (const listener of this.listeners.get(event) ?? []) listener(...args)
+  }
   /** Simule la fin d'un tracé (ou d'une retouche, `action: 'edit'`). */
   finish(feature: unknown, id = 'drawn-1', action = 'draw'): void {
     this.features.set(id, feature)
+    this.pendingPoints = 0
     for (const listener of this.listeners.get('finish') ?? [])
       listener(id, { mode: this.mode, action })
   }
@@ -373,6 +417,9 @@ vi.mock('terra-draw', () => ({
   },
   TerraDrawCircleMode: class {
     mode = 'circle'
+  },
+  TerraDrawModeUndoRedo: class {
+    kind = 'mode-undo-redo'
   },
 }))
 

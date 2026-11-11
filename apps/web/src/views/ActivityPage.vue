@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue'
-  import { useRouter } from 'vue-router'
+  import { useRoute, useRouter } from 'vue-router'
   import {
     ACTIVITY_CHANNEL_LABELS,
     ACTIVITY_KIND_LABELS,
@@ -16,12 +16,43 @@
   import UiField from '@/components/ui/UiField.vue'
   import { plural } from '@/lib/format'
 
+  const route = useRoute()
   const router = useRouter()
   const { members } = useWorkspace()
-  const memberId = ref('')
-  const channel = ref<ActivityChannel | ''>('')
-  const kind = ref<ActivityKind | ''>('')
+  const channels = ActivityChannelSchema.options
+  const kinds = ActivityKindSchema.options
+  /** Lot 26 : les filtres vivent dans l'URL (`?canal=mcp` : ce que Claude a écrit). */
+  const one = (value: unknown): string =>
+    typeof value === 'string' ? value : ''
+  const fromQuery = <T extends string>(
+    value: unknown,
+    allowed: readonly T[]
+  ): T | '' =>
+    (allowed as readonly string[]).includes(one(value)) ? (one(value) as T) : ''
+  const memberId = ref(one(route.query.membre))
+  const channel = ref<ActivityChannel | ''>(
+    fromQuery(route.query.canal, channels)
+  )
+  const kind = ref<ActivityKind | ''>(fromQuery(route.query.type, kinds))
   const page = ref(1)
+  watch([memberId, channel, kind], ([m, c, k]) => {
+    const query = {
+      ...(m ? { membre: m } : {}),
+      ...(c ? { canal: c } : {}),
+      ...(k ? { type: k } : {}),
+    }
+    if (JSON.stringify(query) !== JSON.stringify(route.query)) {
+      void router.replace({ name: route.name ?? 'activity', query })
+    }
+  })
+  watch(
+    () => route.query,
+    query => {
+      memberId.value = one(query.membre)
+      channel.value = fromQuery(query.canal, channels)
+      kind.value = fromQuery(query.type, kinds)
+    }
+  )
   const filters = computed(() => ({
     ...(memberId.value ? { memberId: memberId.value } : {}),
     ...(channel.value ? { channel: channel.value } : {}),
@@ -34,8 +65,6 @@
   })
   const activity = useActivity(filters)
   const { data, isPending, isFetching } = activity
-  const channels = ActivityChannelSchema.options
-  const kinds = ActivityKindSchema.options
   const filtered = computed(
     () => !!memberId.value || !!channel.value || !!kind.value
   )

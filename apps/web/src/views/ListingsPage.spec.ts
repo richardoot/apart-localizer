@@ -5,7 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
@@ -148,6 +148,8 @@ async function mountAt(path: string, attach = false) {
     global: {
       plugins: [router],
       stubs: {
+        // Lot 26 : les titres des lignes sont de vrais liens ; leur texte se lit.
+        RouterLink: RouterLinkStub,
         ListingPanel: PanelStub,
         ListingsTable: Empty,
         ListingCards: Empty,
@@ -365,11 +367,12 @@ describe('ListingsPage : onglet de la fiche dans l’URL', () => {
     )
   })
 
-  it('lot 21 : ouvrir le tableau complet depuis les filtres', async () => {
-    const { router, wrapper } = await mountAt('/annonces?etape=a-etudier')
+  it('lot 26 : le tableau est une vue comme les autres (plus de lien caché dans les filtres)', async () => {
+    const { router, wrapper } = await mountAt(
+      '/annonces?etape=a-etudier&view=table'
+    )
     await wrapper.get('[data-testid="filters-toggle"]').trigger('click')
-    await wrapper.get('[data-testid="full-table"]').trigger('click')
-    await flushPromises()
+    expect(wrapper.find('[data-testid="full-table"]').exists()).toBe(false)
     expect(router.currentRoute.value.query.view).toBe('table')
   })
 
@@ -560,5 +563,104 @@ describe('ListingsPage : onglet de la fiche dans l’URL', () => {
       expect.objectContaining({ name: 'listings' })
     )
     window.history.replaceState(state, '')
+  })
+})
+
+describe('ListingsPage : lot 26, filtres visibles, comparer, vrais liens', () => {
+  const VISIT = '22222222-2222-4222-8222-222222222222'
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    listState.fit = null
+    listState.drafts = []
+    listState.dismissed = []
+    listState.listCalls = []
+    listState.listError = null
+    listState.overviewError = null
+    listState.overview = overviewOf([
+      { stage: 'a-etudier', count: 1, sub: '', toSort: 1 },
+      { stage: 'a-visiter', count: 2, sub: '2 sans date', toSort: 0 },
+    ])
+    listState.items = [
+      fakeEvaluated({
+        id: ID,
+        title: '[Exemple] À Talence',
+        status: 'to_study',
+      }),
+    ]
+  })
+
+  it('une puce par filtre, des compteurs qui suivent, une étape vide expliquée', async () => {
+    const { router, wrapper } = await mountAt(
+      '/annonces?etape=a-visiter&commune=Talence'
+    )
+    // Sous des filtres, une lecture de tous les statuts pour toutes les étapes.
+    const call = listState.listCalls.at(-1) as {
+      value: { status: string[] }
+    }
+    expect(call.value.status).toContain('to_study')
+    expect(call.value.status).toContain('discarded')
+    const chips = wrapper.get('[data-testid="filter-chips"]')
+    expect(chips.text()).toContain('Commune : Talence')
+    expect(
+      wrapper
+        .get(
+          '[data-stage="a-visiter"] [data-testid="stage-count"] [aria-hidden="true"]'
+        )
+        .text()
+    ).toBe('0/2')
+    expect(
+      wrapper
+        .get(
+          '[data-stage="a-etudier"] [data-testid="stage-count"] [aria-hidden="true"]'
+        )
+        .text()
+    ).toBe('1/1')
+    expect(wrapper.get('[data-testid="stage-empty-filters"]').text()).toBe(
+      'Les filtres cachent les 2 annonces de l’étape À visiter : Commune : Talence.'
+    )
+    // Retirer la puce retire le filtre, dans l'URL.
+    await chips.get('[data-chip="commune"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.commune).toBeUndefined()
+    expect(wrapper.find('[data-testid="filter-chips"]').exists()).toBe(false)
+  })
+
+  it('cocher depuis la liste : « Comparer (n) » emporte l’étape et revient', async () => {
+    listState.items = [
+      fakeEvaluated({ id: ID, title: '[Exemple] Un', status: 'to_visit' }),
+      fakeEvaluated({ id: VISIT, title: '[Exemple] Deux', status: 'to_visit' }),
+    ]
+    const { router, wrapper } = await mountAt('/annonces?etape=a-visiter')
+    expect(wrapper.find('[data-testid="compare-bar"]').exists()).toBe(false)
+    const boxes = wrapper.findAll('[data-testid="row-compare"]')
+    expect(boxes).toHaveLength(2)
+    await boxes[0]!.setValue(true)
+    await flushPromises()
+    expect(router.currentRoute.value.query.comparer).toBe(ID)
+    const bar = wrapper.get('[data-testid="compare-bar"]')
+    expect(
+      bar.get('[data-testid="compare-go"]').attributes('disabled')
+    ).toBeDefined()
+    await wrapper.findAll('[data-testid="row-compare"]')[1]!.setValue(true)
+    await flushPromises()
+    await wrapper.get('[data-testid="compare-go"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('compare')
+    expect(router.currentRoute.value.query).toMatchObject({
+      ids: `${ID},${VISIT}`,
+      etape: 'a-visiter',
+    })
+  })
+
+  it('le titre d’une ligne est un vrai lien qui garde l’étape et les filtres', async () => {
+    const { wrapper } = await mountAt('/annonces?etape=a-etudier&dpe=D')
+    const link = wrapper
+      .findAllComponents(RouterLinkStub)
+      .find(l => l.attributes('data-testid') === 'row-title')!
+    expect(link.props('to')).toMatchObject({
+      name: 'listing',
+      params: { id: ID },
+      query: { etape: 'a-etudier', dpe: 'D' },
+    })
   })
 })

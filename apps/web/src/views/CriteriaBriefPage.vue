@@ -1,5 +1,6 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
+  import { CLAUDE_REQUESTS, MCP_PROMPT_TITLES } from '@apart/contracts'
+  import { computed, onBeforeUnmount, ref } from 'vue'
   import { useRoute } from 'vue-router'
   import type { SearchPortal } from '@apart/contracts'
   import {
@@ -52,8 +53,24 @@
   const portalsAction = useAction()
   const copyFailure = ref<string | null>(null)
   const copied = ref(false)
+  /** Lot 26 : « Copié » redevient « Copier la demande » au bout de deux secondes. */
+  const COPIED_MS = 2000
+  let copiedTimer: ReturnType<typeof setTimeout> | null = null
+  function showCopied(): void {
+    copied.value = true
+    if (copiedTimer) clearTimeout(copiedTimer)
+    copiedTimer = setTimeout(() => {
+      copied.value = false
+      copiedTimer = null
+    }, COPIED_MS)
+  }
+  onBeforeUnmount(() => {
+    if (copiedTimer) clearTimeout(copiedTimer)
+  })
 
-  const GENERAL_REQUEST = 'Explore les nouvelles annonces pour nos critères.'
+  /** Lot 26 : la demande de la page « Claude », une seule source (`CLAUDE_REQUESTS`). */
+  const GENERAL_REQUEST =
+    CLAUDE_REQUESTS.find(r => r.prompt === 'explore_listings')?.request ?? ''
 
   async function toggle(portal: SearchPortal, on: boolean): Promise<void> {
     portalsAction.clear()
@@ -78,7 +95,7 @@
     copyFailure.value = null
     try {
       await navigator.clipboard.writeText(GENERAL_REQUEST)
-      copied.value = true
+      showCopied()
     } catch {
       copyFailure.value = 'Copie impossible : sélectionne le texte à la main.'
     }
@@ -245,10 +262,15 @@
                 Lancer une exploration
               </h2>
               <p class="text-sm leading-normal text-muted">
-                Dans claude.ai, connecteur apart-localizer actif, choisis la
-                demande
-                <strong class="text-fg">« Explorer les portails »</strong>, ou
-                écris simplement :
+                Claude branché (<RouterLink
+                  :to="{ name: 'claude' }"
+                  class="text-accent underline"
+                  data-testid="brief-claude-link"
+                  >comment le brancher</RouterLink
+                >), choisis l’invite
+                <strong class="text-fg"
+                  >« {{ MCP_PROMPT_TITLES.explore_listings }} »</strong
+                >, ou écris simplement :
               </p>
               <p
                 class="rounded-lg bg-surface-2 px-3 py-2 font-mono text-sm"
