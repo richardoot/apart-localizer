@@ -33,10 +33,19 @@ export const ListingLocationInputSchema = z.object({
     300,
     "Adresse telle qu'elle apparaît dans l'annonce ou saisie"
   ),
-  addressNormalized: nullableText(300, 'Adresse normalisée par le géocodeur'),
-  banId: nullableText(64, 'Identifiant Base Adresse Nationale'),
+  addressNormalized: nullableText(
+    300,
+    'Adresse normalisée par le géocodeur ; ignorée quand le connecteur MCP l’envoie'
+  ),
+  banId: nullableText(
+    64,
+    'Identifiant Base Adresse Nationale, rendu par le géocodeur ; ignoré quand le connecteur MCP l’envoie'
+  ),
   commune: nullableText(120, 'Commune'),
-  inseeCode: nullableText(5, 'Code INSEE de la commune'),
+  inseeCode: nullableText(
+    5,
+    'Code INSEE de la commune, rendu par le géocodeur ; ignoré quand le connecteur MCP l’envoie'
+  ),
   district: nullableText(
     200,
     'Quartier ou secteur cité par l’annonce, du plus large au plus fin (« Bordeaux Sud, Victoire ») ; sans adresse au numéro, il place le repère au centre du quartier reconnu. Arrêt de tram ou résidence en complément seulement'

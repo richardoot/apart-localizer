@@ -208,6 +208,10 @@ Règles :
 - Hypothèses : `create_listing` et `update_listing` ignorent `assumptionsOverride`,
   `rentalPlan.year` et `rentalPlan.leaseType` ; `set_assumptions` règle `rentalYear` et `leaseType`
   pour toutes les annonces.
+- Champs du serveur (ADR 0040) : `create_listing` et `update_listing` ignorent
+  `rentalPlan.referenceRentPerM2` (arrêté), `rentalPlan.marketRent` (retenu dans l'application) et
+  les sorties du géocodeur (`addressNormalized`, `banId`, `inseeCode`) : `connector-fields.ts` dans
+  `domain`, option `connector` de `ListingsService` ; le REST les accepte.
 - `list_listings` rend par défaut l'onglet « Dans les critères » (`fit[]`).
 - Jamais de couverture ni d'URL signée dans les réponses ; le loyer observé est dit comme un
   indicateur, jamais comme un plafond ; la tendance des prix comme un constat daté, jamais comme une
@@ -368,6 +372,7 @@ MCP et consentement OAuth : 0017.
 - Lot 27, fusion des doublons, agences multiples : 0037
 - Lot 28, loyers observés : 0038
 - Lot 29, tendance des prix de vente, ventes DVF depuis 2014 : 0039
+- Champs que le connecteur n'écrit pas (plafond, loyer de marché, géocodeur) : 0040
 
 Identifiants de code en anglais ; textes d'interface, messages d'erreur métier et descriptions
 Zod en français.

@@ -448,6 +448,12 @@ Lot 19 : une annonce n'a plus d'hypothèses propres ni d'année ou de type de lo
 `assumptionsOverride`, `rentalPlan.year` et `rentalPlan.leaseType` envoyés sont acceptés et ignorés
 (ils se règlent pour l'espace par `set_assumptions`).
 
+ADR 0040 : le plafond d'encadrement (`rentalPlan.referenceRentPerM2`) est posé d'après l'arrêté, le
+loyer de marché (`rentalPlan.marketRent`) se retient dans l'application à partir des loyers
+comparables (`add_rent_comparable`), l'adresse normalisée, l'identifiant BAN et le code INSEE
+viennent du géocodeur : envoyés, ils sont ignorés (vides à la création ; une fiche rendue par
+`extract_listing` garde ce que le géocodeur du serveur a rendu).
+
 #### `update_listing`
 
 Entrée : `listingId`, `patch` (`ListingUpdate` partiel), `expectedUpdatedAt`, `expectedPrice`,
@@ -468,6 +474,10 @@ que `user` devient aussi le prix affiché du lien principal.
 
 Lot 19 : `assumptionsOverride`, `rentalPlan.year` et `rentalPlan.leaseType` sont ignorés (réglages
 de l'espace).
+
+ADR 0040 : le plafond d'encadrement, le loyer de marché, l'adresse normalisée, l'identifiant BAN et
+le code INSEE ne s'écrivent pas ici : la fiche garde les siens, avec leur provenance, même quand
+`rentalPlan` ou `location` est remplacé.
 
 #### `set_listing_status`
 

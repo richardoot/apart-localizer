@@ -44,6 +44,8 @@ import type {
 import {
   archivedByLabel,
   checkReference,
+  connectorListingCreate,
+  connectorListingUpdate,
   countFits,
   detectLinkPortal,
   fitForCriteria,
@@ -58,6 +60,7 @@ import {
   primaryLink,
   referenceKey,
   referenceMatchOf,
+  restoreKeptProvenance,
   sameUrlMatchOf,
 } from '@apart/domain'
 import type {
@@ -126,6 +129,12 @@ export interface WriteOptions {
   channel?: ActivityChannel
   /** Provenance attribuée aux champs écrits (web : `user`, MCP : `ai` ou `user`). */
   provenance?: FieldSource
+  /**
+   * L'écriture vient du connecteur (MCP) : plafond, loyer de marché et
+   * sorties du géocodeur ne sont pas pris de l'entrée (ADR 0040,
+   * `connectorListingCreate`, `connectorListingUpdate`).
+   */
+  connector?: boolean
 }
 
 export interface CreateOptions extends WriteOptions {
@@ -465,9 +474,12 @@ export class ListingsService {
    */
   async create(
     member: Member,
-    input: ListingInput,
+    received: ListingInput,
     options: CreateOptions = {}
   ): Promise<ListingCreateResult> {
+    const input = options.connector
+      ? connectorListingCreate(received)
+      : received
     const channel = options.channel ?? 'web'
     const provenance = options.provenance ?? 'user'
     let fieldSources = withProvenance(
@@ -647,7 +659,7 @@ export class ListingsService {
   async update(
     member: Member,
     id: string,
-    patch: ListingUpdate,
+    received: ListingUpdate,
     guards: ListingUpdateGuards = {},
     options: WriteOptions = {}
   ): Promise<EvaluatedListing> {
@@ -657,6 +669,11 @@ export class ListingsService {
     this.assertNotMerged(row)
     const before = toListingDto(row)
     this.checkGuards(before, guards)
+    // ADR 0040 : le connecteur n'écrit ni le plafond, ni le loyer de marché,
+    // ni les sorties du géocodeur ; la fiche garde les siens.
+    const { patch, keptKeys } = options.connector
+      ? connectorListingUpdate(received, before)
+      : { patch: received, keptKeys: [] }
     if (Object.keys(patch).length === 0) {
       throw new BadRequestException('Aucun champ à modifier')
     }
@@ -693,6 +710,11 @@ export class ListingsService {
         }
       }
     }
+    fieldSources = restoreKeptProvenance(
+      fieldSources,
+      before.fieldSources,
+      keptKeys
+    )
     let location = patch.location
     const locationChanged =
       location !== undefined &&

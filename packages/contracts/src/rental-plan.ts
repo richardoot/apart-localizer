@@ -24,7 +24,7 @@ export const RentalPlanInputSchema = z.object({
     .nullable()
     .default(null)
     .describe(
-      'Loyer de référence majoré en euros par m² et par mois (encadrement) ; plafond = ce loyer × surface'
+      'Loyer de référence majoré en euros par m² et par mois (encadrement) ; plafond = ce loyer × surface ; posé d’office d’après l’arrêté, ignoré quand le connecteur MCP l’envoie'
     ),
   targetRent: z
     .number()
@@ -38,7 +38,7 @@ export const RentalPlanInputSchema = z.object({
     .nullable()
     .default(null)
     .describe(
-      'Loyer de marché constaté hors charges en euros par mois (médiane des comparables)'
+      'Loyer de marché retenu hors charges en euros par mois (médiane des loyers comparables, retenue par un membre dans l’application) ; ignoré quand le connecteur MCP l’envoie'
     ),
   demand: RentalDemandSchema.nullable().default(null),
   coOwnershipAllowsRental: TriStateSchema.default('unknown').describe(
