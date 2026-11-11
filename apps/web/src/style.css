@@ -9,6 +9,8 @@
  *   --fg, --muted                        : texte
  *   --accent (sarcelle)                  : action et sélection
  *   --good / --warn / --bad              : verdicts et contrôles
+ *   --good-fg / --warn-fg / --bad-fg     : encre sur un fond plein good, warn ou bad
+ *                                          (lot 22 : blanc en clair, sombre en thème sombre)
  *   --info / --ai (lot 19)               : pastilles « Visite » et « IA »
  *   --opinion (lot 20)                   : pastille « Avis » de l'Historique
  *   --dpe-A … --dpe-G                    : échelle DPE
@@ -29,6 +31,9 @@
   --warn-soft: #fbecd2;
   --bad: #b4342c;
   --bad-soft: #f8e0de;
+  --good-fg: #ffffff;
+  --warn-fg: #ffffff;
+  --bad-fg: #ffffff;
   --info: #1d4466;
   --info-soft: #e6eef5;
   --ai: #3f2a72;
@@ -70,6 +75,9 @@
     --warn-soft: #3a2b10;
     --bad: #f2847b;
     --bad-soft: #3d1a17;
+    --good-fg: #06210f;
+    --warn-fg: #241600;
+    --bad-fg: #2a0b08;
     --info: #9cc3ea;
     --info-soft: #16283a;
     --ai: #c9b8f2;
@@ -97,6 +105,9 @@
   --warn-soft: #3a2b10;
   --bad: #f2847b;
   --bad-soft: #3d1a17;
+  --good-fg: #06210f;
+  --warn-fg: #241600;
+  --bad-fg: #2a0b08;
   --info: #9cc3ea;
   --info-soft: #16283a;
   --ai: #c9b8f2;
@@ -124,6 +135,9 @@
   --color-warn-soft: var(--warn-soft);
   --color-bad: var(--bad);
   --color-bad-soft: var(--bad-soft);
+  --color-good-fg: var(--good-fg);
+  --color-warn-fg: var(--warn-fg);
+  --color-bad-fg: var(--bad-fg);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
   --color-ai: var(--ai);
@@ -166,4 +180,24 @@ body {
   font-family: var(--f-body);
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/*
+ * Lot 22 : un focus visible partout, au clavier. `:where` garde la
+ * spécificité nulle, dans la couche `base` : un composant qui dessine son propre focus
+ * (`focus-visible:outline-*`, `outline-none` d'un champ dans sa case) l'emporte.
+ */
+@layer base {
+  :where(
+    a,
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    [tabindex]
+  ):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 }

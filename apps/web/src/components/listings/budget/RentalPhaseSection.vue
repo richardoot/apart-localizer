@@ -10,7 +10,10 @@
   import { rentGauge } from '@apart/domain'
   import CompliancePanel from '@/components/study/CompliancePanel.vue'
   import RentMarketPanel from '@/components/study/RentMarketPanel.vue'
-  import FormField from '@/components/ui/FormField.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import type { Tone } from '@/lib/ui'
   import { useListingContext } from '@/composables/useListingContext'
   import { useListingEditor } from '@/composables/useListingEditor'
   import { useRentComparables } from '@/composables/useStudy'
@@ -19,6 +22,7 @@
     formatCssPercent,
     formatEuros,
     formatEurosPerMonth,
+    plural,
   } from '@/lib/format'
   import {
     CHECK_LEVEL_CLASSES,
@@ -109,11 +113,11 @@
   )
 
   const rentControl = computed(() => context.value?.rentControl ?? null)
-  const STATUS_CLASSES: Record<OpenDataStatus, string> = {
-    ok: 'bg-good-soft text-good',
-    to_verify: 'bg-warn-soft text-warn',
-    not_applicable: 'bg-surface-2 text-muted',
-    unavailable: 'bg-surface-2 text-muted',
+  const STATUS_TONES: Record<OpenDataStatus, Tone> = {
+    ok: 'good',
+    to_verify: 'warn',
+    not_applicable: 'neutral',
+    unavailable: 'neutral',
   }
 
   const DEMAND_LABELS = {
@@ -139,8 +143,27 @@
     editor.errors.value[`rentalPlan.${path}`] ??
     (path === 'furnitureValue' ? editor.errors.value.furnitureValue : undefined)
 
-  const inputClass =
-    'min-h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm text-fg sm:min-h-10'
+  const YES_NO_UNKNOWN = [
+    { value: 'unknown', label: 'À vérifier' },
+    { value: 'yes', label: 'Oui' },
+    { value: 'no', label: 'Non' },
+  ]
+  const RENT_CONTROL_OPTIONS = [
+    { value: 'auto', label: 'Automatique (commune)' },
+    { value: 'yes', label: 'Oui, loyer plafonné' },
+    { value: 'no', label: 'Non' },
+  ]
+  const DEMAND_OPTIONS = [
+    { value: '', label: 'À évaluer' },
+    { value: 'strong', label: 'Forte (tram, campus, CHU, emplois)' },
+    { value: 'medium', label: 'Moyenne' },
+    { value: 'weak', label: 'Faible' },
+  ]
+  const PERMIT_OPTIONS = [
+    { value: 'unknown', label: 'À vérifier' },
+    { value: 'no', label: 'Non' },
+    { value: 'yes', label: 'Oui (demande à faire)' },
+  ]
 </script>
 
 <template>
@@ -275,11 +298,9 @@
         class="flex min-h-11 cursor-pointer flex-wrap items-center gap-2 font-medium"
       >
         Encadrement des loyers
-        <span
-          :class="STATUS_CLASSES[rentControl.status]"
-          class="rounded-full px-2 text-xs"
-          >{{ OPEN_DATA_STATUS_LABELS[rentControl.status] }}</span
-        >
+        <UiBadge :tone="STATUS_TONES[rentControl.status]">{{
+          OPEN_DATA_STATUS_LABELS[rentControl.status]
+        }}</UiBadge>
       </summary>
       <div class="grid gap-1 pb-3">
         <p v-if="rentControl.referenceRentPerM2 !== null">
@@ -299,7 +320,7 @@
             {{
               rentControl.rooms === 4
                 ? '4 pièces et plus'
-                : `${rentControl.rooms} pièce(s)`
+                : plural(rentControl.rooms ?? 0, 'pièce')
             }},
             {{
               rentControl.epoch
@@ -348,160 +369,101 @@
     </details>
 
     <template #edit="{ draft }">
-      <p class="text-xs text-muted">
+      <p class="text-sm text-muted">
         L’année et le type de location se règlent pour tout l’espace, dans la
         page
-        <RouterLink
-          :to="{ name: 'assumptions' }"
-          class="text-accent underline-offset-2 hover:underline"
-          >Hypothèses</RouterLink
+        <UiButton :to="{ name: 'assumptions' }" variant="link" size="inline"
+          >Hypothèses</UiButton
         >.
       </p>
       <div class="grid gap-3 @xl:grid-cols-2">
-        <FormField
-          label="Loyer visé HC (€/mois)"
-          for-id="f-rent"
+        <UiField
+          id="f-rent"
+          v-model="draft.rentalPlan.targetRent"
+          label="Loyer visé HC"
           v-bind="meta('targetRent')"
           :error="error('targetRent')"
-        >
-          <input
-            id="f-rent"
-            v-model="draft.rentalPlan.targetRent"
-            :class="inputClass"
-            inputmode="numeric"
-          />
-        </FormField>
-        <FormField
+          unit="€/mois"
+          inputmode="numeric"
+        />
+        <UiField
+          id="f-p2-control"
+          v-model="draft.rentalPlan.rentControl"
+          as="select"
           label="Encadrement des loyers"
-          for-id="f-p2-control"
           v-bind="meta('rentControl')"
-        >
-          <select
-            id="f-p2-control"
-            v-model="draft.rentalPlan.rentControl"
-            :class="inputClass"
-          >
-            <option value="auto">Automatique (commune)</option>
-            <option value="yes">Oui, loyer plafonné</option>
-            <option value="no">Non</option>
-          </select>
-        </FormField>
-        <FormField
-          label="Loyer de référence majoré (€/m²)"
-          for-id="f-p2-ref"
+          :options="RENT_CONTROL_OPTIONS"
+        />
+        <UiField
+          id="f-p2-ref"
+          v-model="draft.rentalPlan.referenceRentPerM2"
+          label="Loyer de référence majoré"
           v-bind="meta('referenceRentPerM2')"
           :error="error('referenceRentPerM2')"
           hint="Simulateur Bordeaux Métropole ; vide = posé d’office s’il est connu"
-        >
-          <input
-            id="f-p2-ref"
-            v-model="draft.rentalPlan.referenceRentPerM2"
-            :class="inputClass"
-            inputmode="decimal"
-          />
-        </FormField>
-        <FormField
-          label="Loyer de marché constaté (€/mois HC)"
-          for-id="f-p2-market"
+          unit="€/m²"
+          inputmode="decimal"
+        />
+        <UiField
+          id="f-p2-market"
+          v-model="draft.rentalPlan.marketRent"
+          label="Loyer de marché constaté"
           v-bind="meta('marketRent')"
           :error="error('marketRent')"
           hint="Médiane de 5 à 10 annonces"
-        >
-          <input
-            id="f-p2-market"
-            v-model="draft.rentalPlan.marketRent"
-            :class="inputClass"
-            inputmode="numeric"
-          />
-        </FormField>
-        <FormField
+          unit="€/mois HC"
+          inputmode="numeric"
+        />
+        <UiField
+          id="f-p2-demand"
+          v-model="draft.rentalPlan.demand"
+          as="select"
           label="Demande locative"
-          for-id="f-p2-demand"
           v-bind="meta('demand')"
-        >
-          <select
-            id="f-p2-demand"
-            v-model="draft.rentalPlan.demand"
-            :class="inputClass"
-          >
-            <option value="">À évaluer</option>
-            <option value="strong">Forte (tram, campus, CHU, emplois)</option>
-            <option value="medium">Moyenne</option>
-            <option value="weak">Faible</option>
-          </select>
-        </FormField>
-        <FormField
+          :options="DEMAND_OPTIONS"
+        />
+        <UiField
+          id="f-p2-coown"
+          v-model="draft.rentalPlan.coOwnershipAllowsRental"
+          as="select"
           label="Le règlement de copropriété autorise la location"
-          for-id="f-p2-coown"
           v-bind="meta('coOwnershipAllowsRental')"
-        >
-          <select
-            id="f-p2-coown"
-            v-model="draft.rentalPlan.coOwnershipAllowsRental"
-            :class="inputClass"
-          >
-            <option value="unknown">À vérifier</option>
-            <option value="yes">Oui</option>
-            <option value="no">Non</option>
-          </select>
-        </FormField>
-        <FormField
+          :options="YES_NO_UNKNOWN"
+        />
+        <UiField
+          id="f-p2-decency"
+          v-model="draft.rentalPlan.decencyCompliant"
+          as="select"
           label="Critères de décence respectés"
-          for-id="f-p2-decency"
           v-bind="meta('decencyCompliant')"
-        >
-          <select
-            id="f-p2-decency"
-            v-model="draft.rentalPlan.decencyCompliant"
-            :class="inputClass"
-          >
-            <option value="unknown">À vérifier</option>
-            <option value="yes">Oui</option>
-            <option value="no">Non</option>
-          </select>
-        </FormField>
-        <FormField
+          :options="YES_NO_UNKNOWN"
+        />
+        <UiField
+          id="f-p2-permit"
+          v-model="draft.rentalPlan.rentalPermitRequired"
+          as="select"
           label="Permis de louer exigé dans le secteur"
-          for-id="f-p2-permit"
           v-bind="meta('rentalPermitRequired')"
-        >
-          <select
-            id="f-p2-permit"
-            v-model="draft.rentalPlan.rentalPermitRequired"
-            :class="inputClass"
-          >
-            <option value="unknown">À vérifier</option>
-            <option value="no">Non</option>
-            <option value="yes">Oui (demande à faire)</option>
-          </select>
-        </FormField>
-        <FormField
-          label="Mobilier pour louer meublé (€)"
-          for-id="f-furniture"
+          :options="PERMIT_OPTIONS"
+        />
+        <UiField
+          id="f-furniture"
+          v-model="draft.furnitureValue"
+          label="Mobilier pour louer meublé"
           v-bind="meta('furnitureValue')"
           :error="error('furnitureValue')"
           hint="Compté dans le coût tout compris"
-        >
-          <input
-            id="f-furniture"
-            v-model="draft.furnitureValue"
-            :class="inputClass"
-            inputmode="numeric"
-          />
-        </FormField>
-        <FormField
+          unit="€"
+          inputmode="numeric"
+        />
+        <UiField
+          id="f-p2-notes"
+          v-model="draft.rentalPlan.notes"
           label="Notes location"
-          for-id="f-p2-notes"
           v-bind="meta('notes')"
           full
-        >
-          <input
-            id="f-p2-notes"
-            v-model="draft.rentalPlan.notes"
-            :class="inputClass"
-            placeholder="Profil de locataire visé, atouts, points faibles…"
-          />
-        </FormField>
+          placeholder="Profil de locataire visé, atouts, points faibles…"
+        />
       </div>
     </template>
   </EditableSection>

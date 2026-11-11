@@ -12,7 +12,9 @@
     formatEurosPerMonth,
     formatPercent,
     formatSurface,
+    plural,
   } from '@/lib/format'
+  import { cardClasses } from '@/lib/ui'
   import CostBasisBadge from './CostBasisBadge.vue'
   import DpeBadge from './DpeBadge.vue'
   import FitSummary from './FitSummary.vue'
@@ -43,8 +45,10 @@
     <article
       v-for="item in items"
       :key="item.listing.id"
-      class="grid cursor-pointer gap-2 rounded-xl border border-line bg-surface p-3 hover:border-accent"
-      :class="item.listing.status === 'discarded' ? 'opacity-60' : ''"
+      class="grid cursor-pointer gap-2 hover:border-accent"
+      :class="
+        cardClasses(item.listing.status === 'discarded' ? 'muted' : 'default')
+      "
       tabindex="0"
       :data-id="item.listing.id"
       @click="emit('open', item.listing.id)"
@@ -95,56 +99,56 @@
       <dl class="grid grid-cols-3 gap-2 text-sm">
         <div>
           <dt
-            class="inline-flex items-center gap-1 text-[11px] text-muted uppercase"
+            class="inline-flex items-center gap-1 text-xs text-muted uppercase"
           >
             Prix <CostBasisBadge basis="price" compact />
           </dt>
-          <dd class="font-mono text-xs">
+          <dd class="font-mono text-sm">
             {{ formatEuros(item.listing.price) }}
           </dd>
           <dd
             v-if="priceRangeText(item.links)"
-            class="text-[11px] text-warn"
+            class="text-xs text-warn"
             data-testid="card-price-range"
           >
             {{ priceRangeText(item.links) }}
           </dd>
         </div>
         <div>
-          <dt class="text-[11px] text-muted uppercase">€/m²</dt>
-          <dd class="font-mono text-xs">
+          <dt class="text-xs text-muted uppercase">€/m²</dt>
+          <dd class="font-mono text-sm">
             {{ formatEurosPerM2(item.evaluation.metrics.pricePerM2) }}
           </dd>
         </div>
         <div>
-          <dt class="text-[11px] text-muted uppercase">Surface</dt>
-          <dd class="font-mono text-xs">
+          <dt class="text-xs text-muted uppercase">Surface</dt>
+          <dd class="font-mono text-sm">
             {{ formatSurface(item.listing.surface) }}
           </dd>
         </div>
         <div>
-          <dt class="text-[11px] text-muted uppercase">Loyer HC</dt>
-          <dd class="font-mono text-xs">
+          <dt class="text-xs text-muted uppercase">Loyer HC</dt>
+          <dd class="font-mono text-sm">
             {{ formatEurosPerMonth(item.evaluation.metrics.rent) }}
           </dd>
         </div>
         <div>
           <dt
-            class="inline-flex items-center gap-1 text-[11px] text-muted uppercase"
+            class="inline-flex items-center gap-1 text-xs text-muted uppercase"
           >
             Brut <CostBasisBadge basis="all_in" compact />
           </dt>
-          <dd class="font-mono text-xs">
+          <dd class="font-mono text-sm">
             {{ formatPercent(item.evaluation.metrics.grossYield) }}
           </dd>
         </div>
         <div>
           <dt
-            class="inline-flex items-center gap-1 text-[11px] text-muted uppercase"
+            class="inline-flex items-center gap-1 text-xs text-muted uppercase"
           >
             Effort <CostBasisBadge basis="all_in" compact />
           </dt>
-          <dd class="font-mono text-xs">
+          <dd class="font-mono text-sm">
             {{ formatEurosPerMonth(item.evaluation.metrics.effort) }}
           </dd>
         </div>
@@ -154,16 +158,16 @@
         <DpeBadge :dpe="item.listing.dpeClass" />
         <RentalPill :verdict="item.evaluation.rental.verdict" />
         <span v-if="openTasks(item) > 0"
-          >{{ openTasks(item) }} tâche(s) à faire</span
+          >{{ plural(openTasks(item), 'tâche') }} à faire</span
         >
       </footer>
     </article>
     <p
       v-if="items.length === 0"
-      class="col-span-full rounded-xl border border-line bg-surface px-4 py-8 text-center text-sm text-muted"
+      class="col-span-full rounded-2xl border border-line bg-surface px-4 py-8 text-center text-sm text-muted"
     >
-      Aucune annonce ne correspond : élargissez les filtres de statut ou de
-      commune.
+      Aucune annonce dans cette étape avec ces filtres : change d’étape ou
+      élargis les filtres.
     </p>
   </div>
 </template>

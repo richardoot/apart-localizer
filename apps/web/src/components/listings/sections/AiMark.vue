@@ -27,7 +27,7 @@
 <template>
   <span
     v-if="provenance?.source === 'ai'"
-    class="ml-1 inline-block rounded-md bg-ai-soft px-1.5 align-[1px] text-[11px] leading-[18px] font-semibold text-ai"
+    class="ml-1 inline-block rounded-md bg-ai-soft px-1.5 align-[1px] text-xs leading-[18px] font-semibold text-ai"
     :title="title"
     data-testid="ai-mark"
     ><span aria-hidden="true">IA</span

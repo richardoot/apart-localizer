@@ -18,6 +18,8 @@
     VERDICT_CLASSES,
     VERDICT_SYMBOLS,
   } from '@/lib/labels'
+  import UiSelect from '@/components/ui/UiSelect.vue'
+  import { cardClasses } from '@/lib/ui'
   import CostBasisBadge from './CostBasisBadge.vue'
 
   /**
@@ -119,15 +121,12 @@
     if (!row || !col || !cell) return ''
     return `${SENSITIVITY_AXIS_LABELS[grid.rowAxis]} ${stepLabel(grid.rowAxis, row)}, ${SENSITIVITY_AXIS_LABELS[grid.colAxis].toLowerCase()} ${stepLabel(grid.colAxis, col)} : rendement brut ${formatRate(cell.grossYield)}, effort ${formatSignedEurosPerMonth(cell.effort)}, ${VERDICT_LABELS[cell.verdict].toLowerCase()}`
   }
-
-  const selectClass =
-    'rounded-lg border border-line bg-bg px-2 py-1.5 text-xs text-fg'
 </script>
 
 <template>
   <section
     class="grid gap-3 text-sm"
-    :class="bare ? '' : 'rounded-2xl border border-line bg-surface p-4 sm:p-5'"
+    :class="bare ? '' : cardClasses()"
     aria-labelledby="sensitivity-title"
   >
     <header class="flex flex-wrap items-start justify-between gap-3">
@@ -150,32 +149,32 @@
           <strong class="text-fg">coût tout compris</strong>.
         </p>
       </div>
-      <div class="flex flex-wrap items-center gap-2 text-xs text-muted">
+      <div class="flex flex-wrap items-center gap-2 text-sm text-muted">
         <label class="flex items-center gap-1">
           Lignes
-          <select
-            :class="selectClass"
-            :value="rowAxis"
+          <UiSelect
+            class="w-auto"
+            :model-value="rowAxis"
             aria-label="Axe des lignes"
             @change="pickRow"
           >
             <option v-for="axis in axes" :key="axis" :value="axis">
               {{ SENSITIVITY_AXIS_LABELS[axis] }}
             </option>
-          </select>
+          </UiSelect>
         </label>
         <label class="flex items-center gap-1">
           Colonnes
-          <select
-            :class="selectClass"
-            :value="colAxis"
+          <UiSelect
+            class="w-auto"
+            :model-value="colAxis"
             aria-label="Axe des colonnes"
             @change="pickCol"
           >
             <option v-for="axis in axes" :key="axis" :value="axis">
               {{ SENSITIVITY_AXIS_LABELS[axis] }}
             </option>
-          </select>
+          </UiSelect>
         </label>
         <span v-if="loading" aria-live="polite">calcul…</span>
       </div>
@@ -223,12 +222,12 @@
                 <span class="block">{{ stepLabel(grid.colAxis, col) }}</span>
                 <span
                   v-if="stepTag(grid.colAxis, col)"
-                  class="block text-[11px] font-semibold"
+                  class="block text-xs font-semibold"
                   >{{ stepTag(grid.colAxis, col) }}</span
                 >
                 <span
                   v-if="col.totalCost !== null"
-                  class="block text-[11px] font-normal text-muted"
+                  class="block text-xs font-normal text-muted"
                   >→ {{ formatEuros(col.totalCost) }} tout compris</span
                 >
               </th>
@@ -249,19 +248,21 @@
                   >{{ stepLabel(grid.rowAxis, row) }}
                   <span
                     v-if="stepTag(grid.rowAxis, row)"
-                    class="text-[11px] text-accent"
+                    class="text-xs text-accent"
                     data-testid="row-tag"
                     >· {{ stepTag(grid.rowAxis, row) }}</span
                   ></span
                 >
                 <span
                   v-if="row.totalCost !== null"
-                  class="block text-[11px] font-normal text-muted"
+                  class="block text-xs font-normal text-muted"
                   data-testid="row-cost"
                   >→ {{ formatEuros(row.totalCost) }} tout compris</span
                 >
               </th>
               <td v-for="(cell, j) in grid.cells[i] ?? []" :key="j" class="p-0">
+                <!-- Lot 22 : une cellule du tableau qu'on sélectionne (grille
+                     de chiffres), pas un bouton d'action. -->
                 <button
                   type="button"
                   class="grid w-full justify-items-end gap-px rounded-lg px-2.5 py-1.5 text-right focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
@@ -382,7 +383,7 @@
             « Prix cible » : le prix affiché le plus haut qui satisfait les
             critères retenus.</template
           >
-          Choisissez une case pour son détail.</span
+          Choisis une case pour son détail.</span
         >
       </div>
     </template>

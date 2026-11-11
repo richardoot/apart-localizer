@@ -500,13 +500,13 @@ export class ListingsService {
     const sameUrl = sameUrlMatchOf(duplicates)
     if (sameUrl) {
       throw new ConflictException(
-        `Ce lien est déjà celui de l’annonce « ${sameUrl.title} » [id ${sameUrl.listingId}] : une même URL ne peut pas être sur deux fiches. Ouvrez cette annonce plutôt que d’en créer une autre.`
+        `Ce lien est déjà celui de l’annonce « ${sameUrl.title} » [id ${sameUrl.listingId}] : une même URL ne peut pas être sur deux fiches. Ouvre cette annonce plutôt que d’en créer une autre.`
       )
     }
     const sameReference = referenceMatchOf(duplicates)
     if (sameReference && !options.ignoreDuplicates) {
       throw new ConflictException(
-        `Même agence et même référence que « ${sameReference.title} » [id ${sameReference.listingId}] : c’est la même annonce, publiée sur un autre portail. Ajoutez ce lien à sa fiche (add_listing_link, ou « C’est la même : ajouter ce lien à la fiche »), ou confirmez qu’il s’agit d’une autre annonce (ignoreDuplicates).`
+        `Même agence et même référence que « ${sameReference.title} » [id ${sameReference.listingId}] : c’est la même annonce, publiée sur un autre portail. Ajoute ce lien à sa fiche (add_listing_link, ou « C’est la même : ajouter ce lien à la fiche »), ou confirmez qu’il s’agit d’une autre annonce (ignoreDuplicates).`
       )
     }
     const seller = normalizeSeller(input)
@@ -758,7 +758,7 @@ export class ListingsService {
     const primary = primaryLink(links)
     if (patch.url === null && links.length > 0) {
       throw new BadRequestException(
-        'Le lien principal ne s’efface pas : retirez un lien dans « Où la trouver » (le dernier lien d’une annonce reste)'
+        'Le lien principal ne s’efface pas : retire un lien dans « Où la trouver » (le dernier lien d’une annonce reste)'
       )
     }
     await this.prisma.$transaction(async tx => {
@@ -1065,7 +1065,7 @@ export class ListingsService {
       Date.parse(guards.expectedUpdatedAt) !== Date.parse(before.updatedAt)
     ) {
       throw new ConflictException(
-        `L'annonce a changé depuis votre lecture (modifiée le ${before.updatedAt}) : relisez-la avant de la modifier`
+        `L'annonce a changé depuis ta lecture (modifiée le ${before.updatedAt}) : relis-la avant de la modifier`
       )
     }
     if (

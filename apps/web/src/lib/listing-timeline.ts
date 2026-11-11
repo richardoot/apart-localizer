@@ -12,6 +12,7 @@ import type {
 import { LISTING_PORTAL_LABELS } from '@apart/contracts'
 import { activityActorName, orderLinks } from '@apart/domain'
 import { formatDate, formatEuros } from './format'
+import type { Tone } from './ui'
 
 /**
  * Lot 19 (ADR 0029) : l'onglet « Historique » de la fiche, une seule
@@ -54,14 +55,14 @@ export const TIMELINE_FILTERS: ReadonlyArray<{
   { id: 'edit', label: 'Fiche' },
 ]
 
-/** Pastilles des types, en jetons du thème (clair et sombre). */
-export const TIMELINE_KIND_CLASSES: Record<TimelineKind, string> = {
-  price: 'bg-warn-soft text-warn',
-  check: 'bg-info-soft text-info',
-  talk: 'bg-ai-soft text-ai',
-  opinion: 'bg-opinion-soft text-opinion',
-  decision: 'bg-accent-soft text-accent',
-  edit: 'bg-surface-2 text-fg',
+/** Le ton de la pastille de chaque type (`UiBadge`, jetons du thème). */
+export const TIMELINE_KIND_TONES: Record<TimelineKind, Tone> = {
+  price: 'warn',
+  check: 'info',
+  talk: 'ai',
+  opinion: 'opinion',
+  decision: 'accent',
+  edit: 'neutral',
 }
 
 interface EntryBase {

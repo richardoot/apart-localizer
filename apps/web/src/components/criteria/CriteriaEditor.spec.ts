@@ -85,7 +85,7 @@ describe('CriteriaEditor', () => {
     expect(apiMock.searchCriteria.preview).toHaveBeenCalled()
     await wrapper.get('#c-name').setValue('Talence sud')
     await wrapper.get('[data-testid="c-price-max"]').setValue('210000')
-    await wrapper.get('[data-kind="polygon"]').trigger('click')
+    await wrapper.get('[data-value="polygon"]').trigger('click')
     mapLibreMock.maps[0]?.emit('load')
     terraDrawMock.instances[0]?.finish({
       geometry: SQUARE,
@@ -93,7 +93,7 @@ describe('CriteriaEditor', () => {
     })
     await flushPromises()
     expect(wrapper.get('[data-testid="preview"]').text()).toContain(
-      '4 annonce(s)'
+      '4 annonces gardées'
     )
     expect(wrapper.get('[data-testid="preview"]').text()).toContain(
       '1 à confirmer faute d’adresse'
@@ -116,9 +116,9 @@ describe('CriteriaEditor', () => {
     const wrapper = mountEditor()
     await flushPromises()
     await wrapper.get('#c-name').setValue('À pied')
-    await wrapper.get('[data-kind="isochrone"]').trigger('click')
+    await wrapper.get('[data-value="isochrone"]').trigger('click')
     await wrapper.get('[data-testid="iso-compute"]').trigger('click')
-    expect(wrapper.text()).toContain('Donnez une adresse de départ')
+    expect(wrapper.text()).toContain('Donne une adresse de départ')
     await wrapper
       .get('[data-testid="iso-address"]')
       .setValue('1 place Fictive, Bordeaux')
@@ -141,7 +141,7 @@ describe('CriteriaEditor', () => {
     const wrapper = mountEditor()
     await flushPromises()
     await wrapper.get('#c-name').setValue('Autour d’un point')
-    await wrapper.get('[data-kind="point_radius"]').trigger('click')
+    await wrapper.get('[data-value="point_radius"]').trigger('click')
     await wrapper.get('form').trigger('submit')
     expect(wrapper.text()).toContain('Le périmètre n’est pas encore posé')
     mapLibreMock.maps[0]?.emit('click', { lngLat: { lng: -0.58, lat: 44.84 } })
@@ -252,6 +252,68 @@ describe('CriteriaEditor', () => {
     expect(apiMock.searchCriteria.update.mock.calls[0]?.[1]).toMatchObject({
       tolerance: DEFAULT_CRITERIA_TOLERANCE,
     })
+    wrapper.unmount()
+  })
+
+  it('lot 22 : « 250k » est refusé au champ, jamais « pas de filtre » ; une marge hors bornes est dite, pas ramenée', async () => {
+    const wrapper = mountEditor()
+    await flushPromises()
+    await wrapper.get('#c-name').setValue('Budget')
+    await wrapper.get('[data-testid="c-price-max"]').setValue('250k')
+    await wrapper.get('[data-testid="tol-perimeter"]').setValue('5000')
+    const calls = apiMock.searchCriteria.preview.mock.calls.length
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(apiMock.searchCriteria.create).not.toHaveBeenCalled()
+    // Une saisie refusée ne part même pas en aperçu.
+    expect(apiMock.searchCriteria.preview.mock.calls.length).toBe(calls)
+    const price = wrapper.get('[data-testid="c-price-max"]')
+    expect(price.attributes('aria-invalid')).toBe('true')
+    expect(wrapper.text()).toContain('« 250k » n’est pas un nombre')
+    expect(wrapper.text()).toMatch(/Entre 0 et 2\s000 m\./)
+    expect(document.activeElement).toBe(price.element)
+    await price.setValue('250000')
+    await wrapper.get('[data-testid="tol-perimeter"]').setValue('300')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(apiMock.searchCriteria.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ priceMax: 250000 }),
+        tolerance: { ...DEFAULT_CRITERIA_TOLERANCE, perimeterMeters: 300 },
+      })
+    )
+    wrapper.unmount()
+  })
+
+  it('lot 22 : isDirty suit la saisie et le périmètre (garde du panneau)', async () => {
+    const wrapper = mountEditor()
+    await flushPromises()
+    const editor = wrapper.vm as unknown as { isDirty: () => boolean }
+    expect(editor.isDirty()).toBe(false)
+    await wrapper.get('#c-name').setValue('Nouveau')
+    expect(editor.isDirty()).toBe(true)
+    await wrapper.get('#c-name').setValue('')
+    expect(editor.isDirty()).toBe(false)
+    await wrapper.get('[data-value="polygon"]').trigger('click')
+    expect(editor.isDirty()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('lot 22 : le rayon saisi part en nombre', async () => {
+    const wrapper = mountEditor()
+    await flushPromises()
+    await wrapper.get('#c-name').setValue('Rayon')
+    await wrapper.get('[data-value="point_radius"]').trigger('click')
+    await wrapper.get('#c-radius').setValue('1200')
+    mapLibreMock.maps[0]?.emit('click', { lngLat: { lng: -0.58, lat: 44.84 } })
+    await flushPromises()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(apiMock.searchCriteria.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        perimeter: expect.objectContaining({ radiusMeters: 1200 }),
+      })
+    )
     wrapper.unmount()
   })
 })

@@ -210,7 +210,7 @@ export async function assertLinkFree(
     return { id: existing.id }
   }
   throw new ConflictException(
-    `Ce lien est déjà celui de l’annonce « ${existing.listing.title} » [id ${existing.listingId}] : une même URL ne peut pas être sur deux fiches. Ouvrez cette annonce, ou ajoutez-y ce lien si c'est la même.`
+    `Ce lien est déjà celui de l’annonce « ${existing.listing.title} » [id ${existing.listingId}] : une même URL ne peut pas être sur deux fiches. Ouvre cette annonce, ou ajoutes-y ce lien si c'est la même.`
   )
 }
 

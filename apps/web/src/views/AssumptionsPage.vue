@@ -5,7 +5,10 @@
   import AssumptionsForm from '@/components/assumptions/AssumptionsForm.vue'
   import AssumptionsHistory from '@/components/assumptions/AssumptionsHistory.vue'
   import { useAssumptions } from '@/composables/useWorkspace'
-  import { ApiError, api } from '@/lib/api'
+  import { api } from '@/lib/api'
+  import { errorMessage } from '@/lib/errors'
+  import QueryState from '@/components/ui/QueryState.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
   import { savedMessage } from '@/lib/assumptions-summary'
   import { formatDate } from '@/lib/format'
 
@@ -15,7 +18,7 @@
    * versions. Chaque enregistrement crée une version datée, avec le
    * garde-fou de la version lue à l'écran.
    */
-  const { data, isPending, error, update } = useAssumptions()
+  const { data, isPending, error, update, refetch } = useAssumptions()
   const history = useQuery({
     queryKey: ['assumptions', 'history'],
     queryFn: api.assumptions.history,
@@ -41,8 +44,7 @@
       await history.refetch()
       message.value = savedMessage(result.impact)
     } catch (err) {
-      failure.value =
-        err instanceof ApiError ? err.message : "L'enregistrement a échoué."
+      failure.value = errorMessage(err, "L'enregistrement a échoué.")
     }
   }
 
@@ -54,10 +56,7 @@
     try {
       impact.value = await api.assumptions.preview(values)
     } catch (err) {
-      failure.value =
-        err instanceof ApiError
-          ? err.message
-          : "Le calcul de l'impact a échoué."
+      failure.value = errorMessage(err, "Le calcul de l'impact a échoué.")
     } finally {
       previewing.value = false
     }
@@ -87,8 +86,7 @@
           Hypothèses
         </h1>
         <p class="hidden text-sm text-muted sm:block">
-          Vos réglages communs à toutes les annonces. Une fiche peut en
-          surcharger certains.
+          Les réglages communs à toutes les annonces de l’espace.
         </p>
       </div>
       <p
@@ -97,9 +95,8 @@
         data-testid="current-version"
       >
         <span class="sm:hidden">Communes à toutes les annonces.</span>
-        <span
-          class="rounded-full bg-accent-soft px-2.5 py-1 font-semibold text-fg"
-          >Version en vigueur : {{ data.label ?? 'sans libellé' }}</span
+        <UiBadge tone="accent" class="px-2.5 py-1 text-sm text-fg"
+          >Version en vigueur : {{ data.label ?? 'sans libellé' }}</UiBadge
         >
         <span
           >depuis le {{ formatDate(data.effectiveFrom) }} ·
@@ -112,23 +109,18 @@
         >
       </p>
     </header>
-    <p
-      v-if="isPending"
-      class="mx-auto w-full max-w-6xl px-4 text-sm text-muted"
-    >
-      Chargement…
-    </p>
-    <p
-      v-else-if="error"
-      role="alert"
-      class="mx-auto w-full max-w-6xl px-4 text-sm text-bad"
-    >
-      <span class="block rounded-lg bg-bad-soft px-3 py-2">{{
-        error.message
-      }}</span>
-    </p>
+    <QueryState
+      v-if="!data"
+      class="mx-auto w-full max-w-6xl px-4"
+      :pending="isPending"
+      :error="error"
+      skeleton="cards"
+      :skeleton-count="2"
+      loading-label="des hypothèses"
+      @retry="refetch()"
+    />
     <AssumptionsForm
-      v-else-if="data"
+      v-else
       :values="data.values"
       :saving="update.isPending.value"
       :impact="impact"

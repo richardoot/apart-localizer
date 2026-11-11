@@ -4,7 +4,8 @@ import type {
   AgencyAnswerValueKey,
   ListingContactInputRaw,
 } from '@apart/contracts'
-import { ApiError } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
+import { useFeedbackStore } from '@/stores/feedback'
 import { useAgencySettings, useListingExchanges } from './useAgencyRequests'
 
 /**
@@ -12,16 +13,17 @@ import { useAgencySettings, useListingExchanges } from './useAgencyRequests'
  * l'ancien onglet « Échanges » pour servir l'onglet « À faire » : préparer
  * un message ou une relance, valider (seul ou par lot), corriger le texte,
  * annuler, noter un envoi fait à la main, « pas de réponse », appliquer une
- * valeur proposée, contact et signature. Chaque action rend un message
- * (`notice`) ou l'erreur de l'API (`failure`). L'application n'envoie rien :
+ * valeur proposée, contact et signature. Lot 22 : une réussite part dans la
+ * zone de messages commune ; l'erreur de l'API reste dans `failure`, que le
+ * bloc où l'on a cliqué affiche. L'application n'envoie rien :
  * Claude envoie ce qu'un membre a validé, avec les outils de l'utilisateur.
  */
 export function useExchangeActions(listingId: MaybeRef<string>) {
   const exchanges = useListingExchanges(computed(() => unref(listingId)))
   const settings = useAgencySettings()
   const view = computed(() => exchanges.data.value ?? null)
+  const feedback = useFeedbackStore()
   const failure = ref<string | null>(null)
-  const notice = ref<string | null>(null)
 
   const busy = computed(
     () =>
@@ -37,12 +39,6 @@ export function useExchangeActions(listingId: MaybeRef<string>) {
       settings.save.isPending.value
   )
 
-  function errorText(error: unknown): string {
-    return error instanceof ApiError
-      ? error.message
-      : "L'enregistrement a échoué."
-  }
-
   /** Lance une écriture : le message en cas de succès, l'erreur sinon. */
   async function run(
     action: () => Promise<unknown>,
@@ -51,11 +47,10 @@ export function useExchangeActions(listingId: MaybeRef<string>) {
     failure.value = null
     try {
       await action()
-      notice.value = done
+      feedback.success(done)
       return true
     } catch (error) {
-      notice.value = null
-      failure.value = errorText(error)
+      failure.value = errorMessage(error, 'L’enregistrement a échoué.')
       return false
     }
   }
@@ -63,19 +58,19 @@ export function useExchangeActions(listingId: MaybeRef<string>) {
   const prepare = () =>
     run(
       () => exchanges.draft.mutateAsync({}),
-      'Message préparé : relisez-le, puis validez-le.'
+      'Message préparé : relis-le, puis valide-le.'
     )
   const followUp = (requestId: string) =>
     run(
       () => exchanges.draft.mutateAsync({ followUpOf: requestId }),
-      'Relance préparée : relisez-la, puis validez-la.'
+      'Relance préparée : relis-la, puis valide-la.'
     )
   const approve = (ids: string[]) =>
     run(
       () => exchanges.approve.mutateAsync(ids),
       ids.length > 1
-        ? `${ids.length} messages validés : demandez à Claude de les envoyer (prompt « Questions aux agences »).`
-        : 'Message validé : demandez à Claude de l’envoyer (prompt « Questions aux agences »).'
+        ? `${ids.length} messages validés : demande à Claude de les envoyer (prompt « Questions aux agences »).`
+        : 'Message validé : demande à Claude de l’envoyer (prompt « Questions aux agences »).'
     )
   const cancel = (requestId: string) =>
     run(() => exchanges.cancel.mutateAsync(requestId), 'Message annulé.')
@@ -113,7 +108,7 @@ export function useExchangeActions(listingId: MaybeRef<string>) {
   ): Promise<unknown | null> {
     try {
       await exchanges.putContact.mutateAsync(input)
-      notice.value = 'Contact enregistré.'
+      feedback.success('Contact enregistré.')
       failure.value = null
       return null
     } catch (error) {
@@ -134,7 +129,6 @@ export function useExchangeActions(listingId: MaybeRef<string>) {
     settings,
     view,
     failure,
-    notice,
     busy,
     prepare,
     followUp,

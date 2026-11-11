@@ -13,6 +13,7 @@ import {
   studyInputFromListing,
 } from '@apart/domain'
 import { fakeEvaluated } from '@/test/fixtures'
+import { useFeedbackStore } from '@/stores/feedback'
 
 const apiMock = vi.hoisted(() => ({
   study: {
@@ -207,7 +208,10 @@ describe('panneaux de l’étude (lot 5, onglet Budget au lot 19)', () => {
       listingId: item.listing.id,
       overrides: { price: 150_000 },
     })
-    expect(wrapper.text()).toContain('Scénario « Prix négocié » enregistré.')
+    // Lot 22 : la réussite va à la zone de messages commune.
+    expect(useFeedbackStore().messages.map(m => m.text)).toContain(
+      'Scénario « Prix négocié » enregistré.'
+    )
     const applyButton = wrapper
       .findAll('button')
       .find(b => b.text() === 'Appliquer')
@@ -218,14 +222,21 @@ describe('panneaux de l’étude (lot 5, onglet Budget au lot 19)', () => {
     expect((wrapper.get('#sc-price').element as HTMLInputElement).value).toBe(
       ''
     )
-    await wrapper
-      .findAll('button')
-      .find(b => b.text() === 'Supprimer')
-      ?.trigger('click')
+    // Lot 22 : supprimer se confirme sur place.
+    const removeButton = () =>
+      wrapper.findAll('button').find(b => b.text() === 'Supprimer')
+    await removeButton()?.trigger('click')
+    expect(apiMock.scenarios.remove).not.toHaveBeenCalled()
+    await removeButton()?.trigger('click')
     await flushPromises()
     expect(apiMock.scenarios.remove).toHaveBeenCalledWith(saved.id)
+    // Un nombre illisible est refusé à son champ, rien n'est enregistré.
+    apiMock.scenarios.create.mockClear()
     await wrapper.get('#sc-price').setValue('abc')
-    expect(wrapper.find('[role="alert"]').text()).toMatch(/price/)
+    expect(wrapper.get('#sc-price').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.text()).toContain('« abc » n’est pas un nombre')
+    await wrapper.get('[data-action="save-scenario"]').trigger('click')
+    expect(apiMock.scenarios.create).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -234,7 +245,7 @@ describe('panneaux de l’étude (lot 5, onglet Budget au lot 19)', () => {
     await flushPromises()
     await wrapper.get('#sc-rent').setValue('800')
     await wrapper.get('[data-action="save-scenario"]').trigger('click')
-    expect(wrapper.text()).toContain('Donnez un nom')
+    expect(wrapper.text()).toContain('Donne un nom')
     const { ApiError } = await import('@/lib/api')
     apiMock.scenarios.create.mockRejectedValueOnce(
       new ApiError(404, 'Annonce introuvable')
@@ -300,6 +311,10 @@ describe('panneaux de l’étude (lot 5, onglet Budget au lot 19)', () => {
     await wrapper
       .get('[aria-label="Supprimer le comparable à 600 €"]')
       .trigger('click')
+    await wrapper
+      .findAll('button')
+      .find(b => b.text() === 'Supprimer')
+      ?.trigger('click')
     await flushPromises()
     expect(apiMock.study.removeComparable).toHaveBeenCalledWith(
       item.listing.id,
@@ -309,7 +324,14 @@ describe('panneaux de l’étude (lot 5, onglet Budget au lot 19)', () => {
     expect(wrapper.emitted('retain')?.[0]).toEqual([765])
     await wrapper.get('#rc-rent').setValue('')
     await wrapper.get('form').trigger('submit')
-    expect(wrapper.text()).toContain('Loyer et surface sont nécessaires.')
+    expect(wrapper.text()).toContain('Le loyer est nécessaire.')
+    // Lot 22 : « 42 m² » n'est pas lu comme vide, il est refusé au champ.
+    apiMock.study.addComparable.mockClear()
+    await wrapper.get('#rc-rent').setValue('700')
+    await wrapper.get('#rc-surface').setValue('42 m²')
+    await wrapper.get('form').trigger('submit')
+    expect(apiMock.study.addComparable).not.toHaveBeenCalled()
+    expect(wrapper.get('#rc-surface').attributes('aria-invalid')).toBe('true')
     wrapper.unmount()
   })
 

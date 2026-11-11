@@ -29,7 +29,13 @@
     useWorkflowOverview,
   } from '@/composables/useWorkflow'
   import { useWorkspace } from '@/composables/useWorkspace'
-  import { ApiError, api } from '@/lib/api'
+  import { api } from '@/lib/api'
+  import { useAction } from '@/composables/useAction'
+  import QueryState from '@/components/ui/QueryState.vue'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCard from '@/components/ui/UiCard.vue'
   import { pendingDuplicate, duplicateLead, duplicateWhy } from '@/lib/drafts'
   import {
     draftTriageCard,
@@ -168,6 +174,14 @@
     )
   })
 
+  /**
+   * Lot 22 : la lecture qui nourrit ce tri. Un échec (réseau coupé) se dit,
+   * avec « Réessayer » ; jamais un « Chargement… » sans fin.
+   */
+  const activeQuery = computed(() =>
+    confirmMode.value ? cards : stage.value === 'a-valider' ? drafts : listings
+  )
+
   const session = useTriageSession({
     sessionId,
     queue,
@@ -189,25 +203,16 @@
     { immediate: true }
   )
 
-  const failure = ref<string | null>(null)
   const announce = ref('')
-  const busy = ref(false)
+  const action = useAction('L’action a échoué.')
+  const busy = action.pending
   const asking = ref(false)
   /** Le volet « Les données du bien » reste ouvert d'une annonce à l'autre. */
   const factsOpen = ref(false)
 
-  async function run(action: () => Promise<void>): Promise<void> {
+  async function run(task: () => Promise<void>): Promise<void> {
     if (busy.value) return
-    busy.value = true
-    failure.value = null
-    try {
-      await action()
-    } catch (err) {
-      failure.value =
-        err instanceof ApiError ? err.message : 'L’action a échoué.'
-    } finally {
-      busy.value = false
-    }
+    await action.run(task)
   }
 
   const stageWord = computed(() => primaryLabel(stage.value))
@@ -584,22 +589,23 @@
         class="mx-auto flex w-full max-w-[1040px] flex-col gap-1.5 px-4 pt-2 pb-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2 sm:px-5 sm:py-2.5"
       >
         <div class="flex items-center justify-between gap-2 sm:contents">
-          <button
-            type="button"
-            class="inline-flex min-h-11 items-center bg-transparent text-accent"
+          <UiButton
+            variant="ghost"
+            icon="arrow-left"
+            class="-ml-2 text-accent"
             data-testid="triage-quit"
             :disabled="busy"
             @click="quit"
           >
             {{ confirmMode ? 'Quitter' : 'Quitter le tri' }}
-          </button>
+          </UiButton>
           <strong class="sm:hidden" data-testid="progress-mobile">
             {{ Math.min(position + 1, total) }} sur {{ total }}
           </strong>
-          <button
+          <UiButton
             v-if="canUndo"
-            type="button"
-            class="min-h-11 rounded-[10px] border border-line bg-surface px-3 text-[13px] sm:order-last disabled:opacity-60"
+            icon="undo"
+            class="sm:order-last"
             :aria-label="undoText"
             :disabled="busy"
             data-testid="triage-undo"
@@ -607,7 +613,7 @@
           >
             <span class="sm:hidden">Annuler</span>
             <span class="hidden sm:inline">{{ undoText }}</span>
-          </button>
+          </UiButton>
         </div>
         <div class="flex min-w-0 flex-col gap-1.5 sm:flex-[1_1_280px]">
           <strong class="hidden sm:block" data-testid="progress">{{
@@ -634,16 +640,9 @@
       <p class="sr-only" aria-live="polite" data-testid="triage-live">
         {{ announce }}
       </p>
-      <p
-        v-if="failure"
-        role="alert"
-        class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-      >
-        {{ failure }}
-      </p>
-      <p
+      <UiAlert
         v-if="undoBlocked && !finished"
-        class="rounded-lg bg-surface-2 px-3 py-2 text-sm"
+        tone="neutral"
         data-testid="undo-blocked"
       >
         {{ CREATED_LISTING_NO_UNDO }}
@@ -653,388 +652,393 @@
           class="ml-1 text-accent underline underline-offset-2"
           >Ouvrir la fiche</RouterLink
         >
-      </p>
+      </UiAlert>
 
-      <p v-if="!loaded" class="text-sm text-muted">Chargement…</p>
-      <p
-        v-else-if="total === 0"
-        class="rounded-[14px] border border-line bg-surface p-5"
-        data-testid="triage-empty"
+      <QueryState
+        :query="activeQuery"
+        :pending="!loaded"
+        :empty="loaded && total === 0"
+        skeleton="cards"
+        :skeleton-count="1"
+        loading-label="ce qu’il y a à trier"
+        error-fallback="Impossible de lire ce qu’il y a à trier."
+        data-testid="triage-state"
       >
-        {{ confirmMode ? 'Rien à confirmer.' : 'Rien à trier ici.' }}
-      </p>
-
-      <template v-else-if="!finished && currentCard">
-        <p
-          v-if="!confirmMode && agreement"
-          class="text-[13px] text-muted"
-          data-testid="triage-intro"
-        >
-          {{ sessionIntro(others) }}
-        </p>
-
-        <article
-          class="flex flex-col gap-3 sm:gap-4 sm:rounded-2xl sm:border sm:border-line sm:bg-surface sm:px-5.5 sm:py-5"
-          :data-card="currentCard.id"
-          data-testid="triage-card"
-        >
-          <div
-            v-if="current?.proposal"
-            class="flex flex-col gap-0.5 rounded-xl px-3.5 py-3"
-            :class="
-              current.proposal.choice === 'discard'
-                ? 'bg-bad-soft text-bad'
-                : 'bg-accent-soft text-accent'
-            "
-            data-testid="confirm-banner"
+        <template #empty>
+          <UiCard>
+            <p class="font-semibold" data-testid="triage-empty">
+              {{ confirmMode ? 'Rien à confirmer.' : 'Rien à trier ici.' }}
+            </p>
+            <p class="mt-1 text-sm text-muted">
+              {{
+                confirmMode
+                  ? 'Les propositions des autres membres arriveront ici.'
+                  : 'Les nouvelles annonces de cette étape arriveront ici.'
+              }}
+            </p>
+            <UiButton class="mt-3" data-action="empty-back" @click="quit"
+              >Retour aux annonces</UiButton
+            >
+          </UiCard>
+        </template>
+        <template v-if="!finished && currentCard">
+          <p
+            v-if="!confirmMode && agreement"
+            class="text-sm text-muted"
+            data-testid="triage-intro"
           >
-            <strong class="text-base">{{
-              current.proposal.choice === 'discard'
-                ? `${current.proposal.author?.displayName ?? 'Un membre'} propose de l’écarter`
-                : `${current.proposal.author?.displayName ?? 'Un membre'} propose : ${current.proposal.choiceLabel}`
-            }}</strong>
-            <span>{{
-              current.proposal.reason
-                ? current.proposal.choice === 'discard'
-                  ? `Raison : ${current.proposal.reason}.`
-                  : `« ${current.proposal.reason} »`
-                : 'Aucune raison donnée.'
-            }}</span>
-          </div>
+            {{ sessionIntro(others) }}
+          </p>
 
-          <div class="flex flex-col gap-1.5">
-            <div class="flex flex-wrap items-start justify-between gap-2">
-              <h1
-                class="min-w-0 flex-[1_1_320px] font-display text-[23px] leading-tight font-bold sm:text-[26px]"
-              >
-                {{ currentCard.title }}
-              </h1>
-              <a
-                v-if="currentCard.url"
-                :href="currentCard.url"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border-[1.5px] border-accent bg-accent-soft px-3.5 text-sm font-semibold whitespace-nowrap text-accent"
-                data-testid="triage-link"
-                >Voir l’annonce en ligne
-                <span aria-hidden="true">↗</span>
-                <span class="sr-only">(nouvel onglet)</span></a
-              >
-            </div>
-            <div class="flex flex-wrap gap-x-3.5 gap-y-1 text-sm text-muted">
-              <span>{{ currentCard.where }}</span>
-              <span>{{ currentCard.size }}</span>
-              <span>{{ currentCard.rooms }}</span>
-              <span v-if="!confirmMode">{{ currentCard.source }}</span>
-              <RouterLink
-                v-if="current?.listing"
-                :to="{
-                  name: 'listing',
-                  params: { id: current.listing.listing.id },
-                }"
-                class="text-accent underline-offset-2 hover:underline"
-                >Ouvrir la fiche</RouterLink
-              >
-            </div>
-            <div class="flex flex-wrap items-center gap-1.5">
-              <span
-                v-if="currentCard.verdict"
-                class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                :class="currentCard.verdictClass"
-                >{{ currentCard.verdict }}</span
-              >
-              <span
-                v-if="currentCard.fit"
-                class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                :class="currentCard.fitClass"
-                >{{ currentCard.fit }}</span
-              >
-              <span
-                class="rounded-md bg-surface-2 px-2 py-0.5 text-xs font-semibold"
-                >{{ currentCard.dpe }}</span
-              >
-            </div>
-          </div>
-
-          <div
-            class="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] sm:gap-2.5"
-            data-testid="triage-figures"
+          <article
+            class="flex flex-col gap-3 sm:gap-4 sm:rounded-2xl sm:border sm:border-line sm:bg-surface sm:px-5.5 sm:py-5"
+            :data-card="currentCard.id"
+            data-testid="triage-card"
           >
             <div
-              v-for="figure in currentCard.figures"
-              :key="figure.label"
-              class="flex flex-col gap-px rounded-xl border border-line bg-surface px-3 py-2.5 sm:border-0 sm:bg-bg sm:px-3.5"
+              v-if="current?.proposal"
+              class="flex flex-col gap-0.5 rounded-xl px-3.5 py-3"
+              :class="
+                current.proposal.choice === 'discard'
+                  ? 'bg-bad-soft text-bad'
+                  : 'bg-accent-soft text-accent'
+              "
+              data-testid="confirm-banner"
             >
-              <span class="text-xs text-muted">{{ figure.label }}</span>
-              <strong class="font-display text-[19px] sm:text-[21px]">{{
-                figure.value
+              <strong class="text-base">{{
+                current.proposal.choice === 'discard'
+                  ? `${current.proposal.author?.displayName ?? 'Un membre'} propose de l’écarter`
+                  : `${current.proposal.author?.displayName ?? 'Un membre'} propose : ${current.proposal.choiceLabel}`
               }}</strong>
-              <span
-                v-if="figure.note"
-                class="hidden text-xs text-muted sm:block"
-                >{{ figure.note }}</span
-              >
+              <span>{{
+                current.proposal.reason
+                  ? current.proposal.choice === 'discard'
+                    ? `Raison : ${current.proposal.reason}.`
+                    : `« ${current.proposal.reason} »`
+                  : 'Aucune raison donnée.'
+              }}</span>
             </div>
-          </div>
 
+            <div class="flex flex-col gap-1.5">
+              <div class="flex flex-wrap items-start justify-between gap-2">
+                <h1
+                  class="min-w-0 flex-[1_1_320px] font-display text-2xl leading-tight font-bold sm:text-3xl"
+                >
+                  {{ currentCard.title }}
+                </h1>
+                <UiButton
+                  v-if="currentCard.url"
+                  :href="currentCard.url"
+                  variant="outline"
+                  icon-right="external"
+                  class="whitespace-nowrap"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="triage-link"
+                  >Voir l’annonce en ligne
+                  <span class="sr-only">(nouvel onglet)</span></UiButton
+                >
+              </div>
+              <div class="flex flex-wrap gap-x-3.5 gap-y-1 text-sm text-muted">
+                <span>{{ currentCard.where }}</span>
+                <span>{{ currentCard.size }}</span>
+                <span>{{ currentCard.rooms }}</span>
+                <span v-if="!confirmMode">{{ currentCard.source }}</span>
+                <RouterLink
+                  v-if="current?.listing"
+                  :to="{
+                    name: 'listing',
+                    params: { id: current.listing.listing.id },
+                  }"
+                  class="text-accent underline-offset-2 hover:underline"
+                  >Ouvrir la fiche</RouterLink
+                >
+              </div>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <UiBadge
+                  v-if="currentCard.verdict"
+                  :tone="currentCard.verdictTone"
+                  >{{ currentCard.verdict }}</UiBadge
+                >
+                <UiBadge v-if="currentCard.fit" :tone="currentCard.fitTone">{{
+                  currentCard.fit
+                }}</UiBadge>
+                <UiBadge>{{ currentCard.dpe }}</UiBadge>
+              </div>
+            </div>
+
+            <div
+              class="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] sm:gap-2.5"
+              data-testid="triage-figures"
+            >
+              <div
+                v-for="figure in currentCard.figures"
+                :key="figure.label"
+                class="flex flex-col gap-px rounded-xl border border-line bg-surface px-3 py-2.5 sm:border-0 sm:bg-bg sm:px-3.5"
+              >
+                <span class="text-xs text-muted">{{ figure.label }}</span>
+                <strong class="font-display text-xl">{{ figure.value }}</strong>
+                <span
+                  v-if="figure.note"
+                  class="hidden text-xs text-muted sm:block"
+                  >{{ figure.note }}</span
+                >
+              </div>
+            </div>
+
+            <div
+              v-if="!confirmMode"
+              class="flex flex-col gap-3.5 sm:flex-row sm:flex-wrap sm:gap-x-7"
+            >
+              <section
+                v-if="currentCard.why.length"
+                class="flex flex-col gap-1 rounded-xl border border-line bg-surface px-3.5 py-3 sm:flex-[1_1_320px] sm:gap-1.5 sm:border-0 sm:bg-transparent sm:p-0"
+                data-testid="triage-why"
+              >
+                <h2 class="text-base font-semibold">
+                  {{ currentCard.whyTitle }}
+                </h2>
+                <ul class="ml-4.5 list-disc leading-normal">
+                  <li v-for="why in currentCard.why" :key="why">{{ why }}</li>
+                </ul>
+              </section>
+              <section
+                v-if="currentCard.missing.length"
+                class="hidden flex-col gap-1.5 sm:flex sm:flex-[1_1_320px]"
+                data-testid="triage-missing"
+              >
+                <h2 class="text-base font-semibold">Ce qui manque</h2>
+                <ul class="ml-4.5 list-disc leading-normal">
+                  <li v-for="missing in currentCard.missing" :key="missing">
+                    {{ missing }}
+                  </li>
+                </ul>
+              </section>
+            </div>
+
+            <PropertyFacts
+              v-model:open="factsOpen"
+              :facts="currentCard.facts"
+              :description="currentCard.description"
+            />
+
+            <div
+              v-if="duplicate && !confirmMode"
+              class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-warn-soft px-3 py-2.5 text-sm text-warn"
+              data-testid="triage-duplicate"
+            >
+              <span class="min-w-0 flex-[1_1_20rem]"
+                >{{ duplicateLead(duplicate) }} « {{ duplicate.title }} », déjà
+                suivie : {{ duplicateWhy(duplicate) }}</span
+              >
+              <UiButton
+                class="border-warn! font-semibold"
+                :disabled="busy"
+                data-action="same"
+                @click="same(duplicate.listingId)"
+              >
+                C’est la même
+              </UiButton>
+            </div>
+
+            <div
+              class="fixed inset-x-0 bottom-0 z-10 flex flex-col gap-2 border-t border-line bg-surface px-4 pt-2.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:static sm:px-0 sm:pt-3.5 sm:pb-0"
+            >
+              <!-- Lot 22 : l'échec d'un choix se dit au-dessus des boutons. -->
+              <UiAlert v-if="action.error.value" data-testid="triage-failure">
+                {{ action.error.value }}
+              </UiAlert>
+              <template v-if="confirmMode && current?.proposal">
+                <DiscardReasons
+                  v-if="refuseAsking"
+                  :busy="busy"
+                  @pick="reason => sendRefuse('discard', reason)"
+                  @cancel="refuseAsking = false"
+                />
+                <div
+                  v-else
+                  class="grid grid-cols-[1fr_0.8fr_1.2fr] gap-2 sm:grid-cols-[repeat(auto-fit,minmax(200px,1fr))] sm:gap-2.5"
+                >
+                  <UiButton
+                    class="min-h-15! rounded-[14px]! font-semibold sm:min-h-14! sm:rounded-xl! sm:text-base border-[1.5px] border-ai! text-ai"
+                    :disabled="busy"
+                    data-action="refuse"
+                    @click="refuse"
+                  >
+                    {{ refuseLabel(current.proposal.choice) }}
+                  </UiButton>
+                  <UiButton
+                    class="min-h-15! rounded-[14px]! font-semibold sm:min-h-14! sm:rounded-xl! sm:text-base border-[1.5px]"
+                    :disabled="busy"
+                    data-action="later"
+                    @click="later"
+                  >
+                    Plus tard
+                  </UiButton>
+                  <UiButton
+                    variant="primary"
+                    class="min-h-15! rounded-[14px]! font-semibold sm:min-h-14! sm:rounded-xl! sm:text-base"
+                    :disabled="busy"
+                    data-action="agree"
+                    @click="agree"
+                  >
+                    {{
+                      agreeLabel(
+                        current.proposal.target,
+                        current.proposal.choice
+                      )
+                    }}
+                  </UiButton>
+                </div>
+                <p
+                  v-if="!refuseAsking"
+                  class="hidden text-xs text-muted sm:block"
+                >
+                  D’accord : l’annonce change d’étape tout de suite. Sinon, elle
+                  part dans « À trancher ensemble ».
+                </p>
+              </template>
+              <template v-else>
+                <DiscardReasons
+                  v-if="asking"
+                  :busy="busy"
+                  @pick="reason => decide('discard', reason)"
+                  @cancel="asking = false"
+                />
+                <div
+                  v-else
+                  class="grid grid-cols-[1fr_0.8fr_1.2fr] gap-2 sm:grid-cols-[repeat(auto-fit,minmax(200px,1fr))] sm:gap-2.5"
+                >
+                  <UiButton
+                    variant="danger-soft"
+                    class="min-h-15! rounded-[14px]! font-semibold sm:min-h-14! sm:rounded-xl! sm:text-base border-[1.5px] border-bad!"
+                    :disabled="busy"
+                    data-action="discard"
+                    @click="asking = true"
+                  >
+                    Écarter
+                    <span class="hidden text-xs font-normal sm:inline"
+                      >touche E</span
+                    >
+                  </UiButton>
+                  <UiButton
+                    class="min-h-15! rounded-[14px]! font-semibold sm:min-h-14! sm:rounded-xl! sm:text-base border-[1.5px]"
+                    :disabled="busy"
+                    data-action="skip"
+                    @click="skip"
+                  >
+                    Passer
+                    <span class="hidden text-xs font-normal sm:inline"
+                      >touche P</span
+                    >
+                  </UiButton>
+                  <UiButton
+                    variant="primary"
+                    class="min-h-15! rounded-[14px]! font-semibold sm:min-h-14! sm:rounded-xl! sm:text-base"
+                    :disabled="busy"
+                    data-action="keep"
+                    @click="decide(primaryChoice(stage))"
+                  >
+                    {{ primaryLabel(stage) }}
+                    <span class="hidden text-xs font-normal sm:inline"
+                      >touche A</span
+                    >
+                  </UiButton>
+                </div>
+              </template>
+            </div>
+          </article>
+        </template>
+
+        <article
+          v-else-if="finished"
+          class="flex flex-col gap-3.5 rounded-2xl border border-line bg-surface p-4 sm:gap-4 sm:p-6"
+          data-testid="triage-summary"
+        >
+          <h1 class="font-display text-2xl font-bold sm:text-3xl">
+            {{ confirmMode ? 'C’est fait' : 'Ton tri est fini' }}
+          </h1>
           <div
             v-if="!confirmMode"
-            class="flex flex-col gap-3.5 sm:flex-row sm:flex-wrap sm:gap-x-7"
+            class="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2.5"
+            data-testid="summary-totals"
           >
-            <section
-              v-if="currentCard.why.length"
-              class="flex flex-col gap-1 rounded-xl border border-line bg-surface px-3.5 py-3 sm:flex-[1_1_320px] sm:gap-1.5 sm:border-0 sm:bg-transparent sm:p-0"
-              data-testid="triage-why"
+            <div
+              v-for="line in totals"
+              :key="line.label"
+              class="rounded-xl bg-bg px-3.5 py-3"
             >
-              <h2 class="text-[15px] font-semibold">
-                {{ currentCard.whyTitle }}
-              </h2>
-              <ul class="ml-4.5 list-disc leading-normal">
-                <li v-for="why in currentCard.why" :key="why">{{ why }}</li>
-              </ul>
-            </section>
-            <section
-              v-if="currentCard.missing.length"
-              class="hidden flex-col gap-1.5 sm:flex sm:flex-[1_1_320px]"
-              data-testid="triage-missing"
-            >
-              <h2 class="text-[15px] font-semibold">Ce qui manque</h2>
-              <ul class="ml-4.5 list-disc leading-normal">
-                <li v-for="missing in currentCard.missing" :key="missing">
-                  {{ missing }}
-                </li>
-              </ul>
-            </section>
+              <strong class="font-display text-3xl">{{ line.n }}</strong>
+              {{ line.label }}
+            </div>
           </div>
-
-          <PropertyFacts
-            v-model:open="factsOpen"
-            :facts="currentCard.facts"
-            :description="currentCard.description"
-          />
+          <ul class="m-0 list-none p-0" data-testid="summary-list">
+            <li
+              v-for="pick in picks"
+              :key="pick.id"
+              class="flex flex-wrap justify-between gap-x-4 gap-y-1 border-t border-line py-2.5"
+            >
+              <span class="font-medium">{{ pick.title }}</span>
+              <span class="text-muted">{{
+                confirmMode ? pick.result : pick.label
+              }}</span>
+            </li>
+          </ul>
 
           <div
-            v-if="duplicate && !confirmMode"
-            class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-warn-soft px-3 py-2.5 text-sm text-warn"
-            data-testid="triage-duplicate"
+            v-if="!confirmMode && hasProposals && !outcome"
+            class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
           >
-            <span class="min-w-0 flex-[1_1_20rem]"
-              >{{ duplicateLead(duplicate) }} « {{ duplicate.title }} », déjà
-              suivie : {{ duplicateWhy(duplicate) }}</span
+            <UiButton
+              variant="primary"
+              class="min-h-12!"
+              :loading="busy"
+              data-action="finish"
+              @click="finishAndNotify"
             >
-            <button
-              type="button"
-              class="min-h-11 rounded-lg border border-warn bg-surface px-3 font-semibold disabled:opacity-60"
+              {{ finishedLabel }}
+            </UiButton>
+            <UiButton
+              class="min-h-12!"
               :disabled="busy"
-              data-action="same"
-              @click="same(duplicate.listingId)"
+              data-action="decide-now"
+              @click="decideNow"
             >
-              C’est la même
-            </button>
+              Décider sans attendre
+            </UiButton>
+            <span class="text-sm text-muted">
+              « Décider sans attendre » applique tes choix tout de suite et
+              l’inscrit au journal.
+            </span>
           </div>
-
           <div
-            class="fixed inset-x-0 bottom-0 z-10 flex flex-col gap-2 border-t border-line bg-surface px-4 pt-2.5 pb-3.5 sm:static sm:px-0 sm:pt-3.5 sm:pb-0"
+            v-if="outcome"
+            class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 rounded-xl bg-accent-soft px-3.5 py-3 text-accent"
+            data-testid="triage-outcome"
           >
-            <template v-if="confirmMode && current?.proposal">
-              <DiscardReasons
-                v-if="refuseAsking"
-                :busy="busy"
-                @pick="reason => sendRefuse('discard', reason)"
-                @cancel="refuseAsking = false"
-              />
-              <div
-                v-else
-                class="grid grid-cols-[1fr_0.8fr_1.2fr] gap-2 sm:grid-cols-[repeat(auto-fit,minmax(200px,1fr))] sm:gap-2.5"
-              >
-                <button
-                  type="button"
-                  class="min-h-[60px] rounded-[14px] border-[1.5px] border-ai bg-surface font-semibold text-ai disabled:opacity-60 sm:min-h-14 sm:rounded-xl sm:text-base"
-                  :disabled="busy"
-                  data-action="refuse"
-                  @click="refuse"
-                >
-                  {{ refuseLabel(current.proposal.choice) }}
-                </button>
-                <button
-                  type="button"
-                  class="min-h-[60px] rounded-[14px] border-[1.5px] border-line bg-surface font-semibold disabled:opacity-60 sm:min-h-14 sm:rounded-xl sm:text-base"
-                  :disabled="busy"
-                  data-action="later"
-                  @click="later"
-                >
-                  Plus tard
-                </button>
-                <button
-                  type="button"
-                  class="min-h-[60px] rounded-[14px] bg-accent font-semibold text-accent-fg disabled:opacity-60 sm:min-h-14 sm:rounded-xl sm:text-base"
-                  :disabled="busy"
-                  data-action="agree"
-                  @click="agree"
-                >
-                  {{
-                    agreeLabel(current.proposal.target, current.proposal.choice)
-                  }}
-                </button>
-              </div>
-              <p
-                v-if="!refuseAsking"
-                class="hidden text-xs text-muted sm:block"
-              >
-                D’accord : l’annonce change d’étape tout de suite. Sinon, elle
-                part dans « À trancher ensemble ».
-              </p>
-            </template>
-            <template v-else>
-              <DiscardReasons
-                v-if="asking"
-                :busy="busy"
-                @pick="reason => decide('discard', reason)"
-                @cancel="asking = false"
-              />
-              <div
-                v-else
-                class="grid grid-cols-[1fr_0.8fr_1.2fr] gap-2 sm:grid-cols-[repeat(auto-fit,minmax(200px,1fr))] sm:gap-2.5"
-              >
-                <button
-                  type="button"
-                  class="min-h-[60px] rounded-[14px] border-[1.5px] border-bad bg-surface font-semibold text-bad disabled:opacity-60 sm:min-h-14 sm:rounded-xl sm:text-base"
-                  :disabled="busy"
-                  data-action="discard"
-                  @click="asking = true"
-                >
-                  Écarter
-                  <span class="hidden text-xs font-normal sm:inline"
-                    >touche E</span
-                  >
-                </button>
-                <button
-                  type="button"
-                  class="min-h-[60px] rounded-[14px] border-[1.5px] border-line bg-surface font-semibold disabled:opacity-60 sm:min-h-14 sm:rounded-xl sm:text-base"
-                  :disabled="busy"
-                  data-action="skip"
-                  @click="skip"
-                >
-                  Passer
-                  <span class="hidden text-xs font-normal sm:inline"
-                    >touche P</span
-                  >
-                </button>
-                <button
-                  type="button"
-                  class="min-h-[60px] rounded-[14px] bg-accent font-semibold text-accent-fg disabled:opacity-60 sm:min-h-14 sm:rounded-xl sm:text-base"
-                  :disabled="busy"
-                  data-action="keep"
-                  @click="decide(primaryChoice(stage))"
-                >
-                  {{ primaryLabel(stage) }}
-                  <span class="hidden text-xs font-normal sm:inline"
-                    >touche A</span
-                  >
-                </button>
-              </div>
-            </template>
+            <span>{{ outcomeText }}</span>
+            <UiButton variant="link" class="font-semibold" @click="quit">
+              Retour aux annonces
+            </UiButton>
           </div>
+          <div
+            v-else-if="confirmMode || !hasProposals"
+            class="flex flex-wrap gap-2"
+          >
+            <UiButton
+              v-if="hasClash"
+              :to="{ name: 'settle' }"
+              variant="primary"
+              data-action="go-settle"
+              >Voir ce qui reste à trancher</UiButton
+            >
+            <UiButton data-action="back" @click="quit">
+              Retour aux annonces
+            </UiButton>
+          </div>
+          <UiAlert v-if="action.error.value">{{ action.error.value }}</UiAlert>
         </article>
-      </template>
-
-      <article
-        v-else-if="finished"
-        class="flex flex-col gap-3.5 rounded-2xl border border-line bg-surface p-4 sm:gap-4 sm:p-6"
-        data-testid="triage-summary"
-      >
-        <h1 class="font-display text-[25px] font-bold sm:text-[26px]">
-          {{ confirmMode ? 'C’est fait' : 'Ton tri est fini' }}
-        </h1>
-        <div
-          v-if="!confirmMode"
-          class="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2.5"
-          data-testid="summary-totals"
-        >
-          <div
-            v-for="line in totals"
-            :key="line.label"
-            class="rounded-xl bg-bg px-3.5 py-3"
-          >
-            <strong class="font-display text-[26px]">{{ line.n }}</strong>
-            {{ line.label }}
-          </div>
-        </div>
-        <ul class="m-0 list-none p-0" data-testid="summary-list">
-          <li
-            v-for="pick in picks"
-            :key="pick.id"
-            class="flex flex-wrap justify-between gap-x-4 gap-y-1 border-t border-line py-2.5"
-          >
-            <span class="font-medium">{{ pick.title }}</span>
-            <span class="text-muted">{{
-              confirmMode ? pick.result : pick.label
-            }}</span>
-          </li>
-        </ul>
-
-        <div
-          v-if="!confirmMode && hasProposals && !outcome"
-          class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
-        >
-          <button
-            type="button"
-            class="min-h-[52px] rounded-xl bg-accent px-4.5 font-semibold text-accent-fg disabled:opacity-60 sm:min-h-12"
-            :disabled="busy"
-            data-action="finish"
-            @click="finishAndNotify"
-          >
-            {{ finishedLabel }}
-          </button>
-          <button
-            type="button"
-            class="min-h-12 rounded-xl border border-line bg-surface px-3.5 disabled:opacity-60"
-            :disabled="busy"
-            data-action="decide-now"
-            @click="decideNow"
-          >
-            Décider sans attendre
-          </button>
-          <span class="text-xs text-muted">
-            « Décider sans attendre » applique tes choix tout de suite et
-            l’inscrit au journal.
-          </span>
-        </div>
-        <div
-          v-if="outcome"
-          class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 rounded-xl bg-accent-soft px-3.5 py-3 text-accent"
-          data-testid="triage-outcome"
-        >
-          <span>{{ outcomeText }}</span>
-          <button
-            type="button"
-            class="inline-flex min-h-11 items-center bg-transparent font-semibold underline underline-offset-2"
-            @click="quit"
-          >
-            Retour aux annonces
-          </button>
-        </div>
-        <div
-          v-else-if="confirmMode || !hasProposals"
-          class="flex flex-wrap gap-2"
-        >
-          <RouterLink
-            v-if="hasClash"
-            :to="{ name: 'settle' }"
-            class="inline-flex min-h-12 items-center rounded-xl bg-accent px-4.5 font-semibold text-accent-fg"
-            data-action="go-settle"
-            >Voir ce qui reste à trancher</RouterLink
-          >
-          <button
-            type="button"
-            class="inline-flex min-h-12 items-center rounded-xl border border-line bg-surface px-3.5"
-            data-action="back"
-            @click="quit"
-          >
-            Retour aux annonces
-          </button>
-        </div>
-      </article>
+      </QueryState>
     </main>
   </div>
 </template>

@@ -6,6 +6,9 @@
     DialogRoot,
     DialogTitle,
   } from 'reka-ui'
+  import FeedbackHost from './FeedbackHost.vue'
+  import UiButton from './UiButton.vue'
+  import UiIcon from './UiIcon.vue'
 
   defineProps<{
     title: string
@@ -20,7 +23,7 @@
     <DialogPortal>
       <DialogOverlay class="fixed inset-0 z-20 bg-black/30" />
       <DialogContent
-        class="fixed inset-y-0 right-0 z-30 flex w-full flex-col bg-surface shadow-panel outline-none"
+        class="fixed inset-y-0 right-0 z-30 flex w-full flex-col bg-surface pt-[env(safe-area-inset-top)] shadow-panel outline-none"
         :class="
           wide
             ? 'sm:w-[min(760px,100%)] lg:w-[min(1160px,100%)]'
@@ -40,14 +43,9 @@
           <DialogTitle class="font-display text-lg font-bold">
             {{ title }}
           </DialogTitle>
-          <button
-            type="button"
-            class="rounded-lg border border-line px-2 py-1 text-sm text-muted hover:bg-surface-2"
-            aria-label="Fermer"
-            @click="emit('close')"
-          >
-            ✕
-          </button>
+          <UiButton size="icon" aria-label="Fermer" @click="emit('close')">
+            <UiIcon name="close" class="size-5" />
+          </UiButton>
         </header>
         <div
           v-if="$slots.top"
@@ -64,10 +62,15 @@
         </div>
         <footer
           v-if="$slots.footer"
-          class="border-t border-line bg-surface px-4 py-3"
+          class="border-t border-line bg-surface px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
         >
           <slot name="footer" />
         </footer>
+        <!--
+          Lot 22 : un panneau modal rend la page inerte ; ses messages
+          (« Enregistré », « Annuler ») s'affichent dans sa propre zone.
+        -->
+        <FeedbackHost />
       </DialogContent>
     </DialogPortal>
   </DialogRoot>

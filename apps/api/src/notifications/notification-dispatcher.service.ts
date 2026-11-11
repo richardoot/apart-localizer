@@ -201,7 +201,7 @@ export class NotificationDispatcher {
         await this.email.send({
           to,
           subject: `[apart-localizer] ${notification.title}`,
-          text: `${notification.body}\n\n${appLink(notification.url)}\n\nRéglez vos notifications dans l'application : ${appLink('/notifications')}`,
+          text: `${notification.body}\n\n${appLink(notification.url)}\n\nRègle tes notifications dans l'application : ${appLink('/notifications')}`,
         })
         report.email.sent += 1
       } catch (error) {

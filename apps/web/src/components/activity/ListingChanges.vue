@@ -9,12 +9,12 @@
 <template>
   <section
     v-if="changes.entries.length"
-    class="grid gap-2 rounded-xl border border-accent bg-accent-soft/40 px-3 py-3"
+    class="grid gap-2 rounded-2xl border border-accent bg-accent-soft/40 p-4"
     data-testid="listing-changes"
     aria-labelledby="changes-title"
   >
-    <h3 id="changes-title" class="font-display text-sm font-semibold">
-      Depuis votre dernière ouverture ({{ formatDate(changes.since) }})
+    <h3 id="changes-title" class="font-display text-sm font-bold">
+      Depuis ta dernière ouverture ({{ formatDate(changes.since) }})
     </h3>
     <ActivityList :entries="changes.entries" />
   </section>

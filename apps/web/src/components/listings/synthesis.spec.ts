@@ -358,7 +358,7 @@ describe('ListingSynthesis (lot 19)', () => {
     const good = wrapper.get('[data-testid="highlights-good"]')
     const liked = good.get('[data-highlight="opinions_liked"]')
     expect(liked.text()).toContain(
-      'Vous aimez tous les deux : extérieur et vue (5 et 5), luminosité (5 et 4), agencement (4 et 4)'
+      'Plaît à tous les deux : extérieur et vue (5 et 5), luminosité (5 et 4), agencement (4 et 4)'
     )
     const link = liked.get('button')
     expect(link.text()).toBe('Nos avis')
@@ -370,11 +370,11 @@ describe('ListingSynthesis (lot 19)', () => {
     expect(
       watch.get('[data-highlight="opinions_disagreement"]').text()
     ).toContain(
-      'Vous n’êtes pas d’accord sur le calme (Richard 4, Chloé 2) et « on s’y voit » (4 et 2)'
+      'Désaccord sur le calme (Richard 4, Chloé 2) et « on s’y voit » (4 et 2)'
     )
     const discuss = wrapper.get('[data-step="discuss"]')
     expect(discuss.text()).toBe(
-      'À rediscuterLe calme et « on s’y voit » : vos notes s’écartent de 2 points'
+      'À rediscuterLe calme et « on s’y voit » : les notes s’écartent de 2 points'
     )
     wrapper.unmount()
   })
@@ -395,7 +395,7 @@ describe('ListingSynthesis (lot 19)', () => {
         assumptions: null,
       },
     })
-    expect(wrapper.text()).toContain('Saisissez un prix et un loyer visé')
+    expect(wrapper.text()).toContain('Saisis un prix et un loyer visé')
     expect(wrapper.find('[data-figure]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="highlights-good"]').text()).toContain(
       'Rien à mettre en avant pour l’instant.'

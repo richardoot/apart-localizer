@@ -429,7 +429,7 @@ export class DecisionsService {
     } catch (error) {
       if (!isUniqueViolation(error)) throw error
       throw new ConflictException(
-        'Une proposition est déjà en cours sur cette annonce : répondez-y, ou retirez la vôtre.'
+        'Une proposition est déjà en cours sur cette annonce : réponds-y, ou retire la tienne.'
       )
     }
   }
@@ -539,8 +539,8 @@ export class DecisionsService {
     }
     throw new ConflictException(
       view.state === 'to_settle'
-        ? 'Vos choix diffèrent sur cette annonce : tranchez-la dans « À trancher ensemble ».'
-        : 'Une proposition est déjà en cours sur cette annonce : répondez-y, ou retirez la vôtre.'
+        ? 'Les choix diffèrent sur cette annonce : tranche-la dans « À trancher ensemble ».'
+        : 'Une proposition est déjà en cours sur cette annonce : réponds-y, ou retire la tienne.'
     )
   }
 
@@ -688,7 +688,7 @@ export class DecisionsService {
       })
     } catch (error) {
       if (!isUniqueViolation(error)) throw error
-      throw new ConflictException('Vous avez déjà répondu à cette proposition.')
+      throw new ConflictException('Tu as déjà répondu à cette proposition.')
     }
     const fresh = await this.row(member, id)
     const step = stepAfterResponse(

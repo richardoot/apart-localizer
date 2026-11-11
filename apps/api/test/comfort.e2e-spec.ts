@@ -624,9 +624,7 @@ describe('Lot 6 : confort (e2e)', () => {
         'task_assigned',
         'listing_created',
       ])
-      expect(bell.body.items[1].title).toBe(
-        "Tâche pour vous : Appeler l'agence"
-      )
+      expect(bell.body.items[1].title).toBe("Tâche pour toi : Appeler l'agence")
       // Le statut n'apparaît pas dans la cloche (préférence), ni en push.
       expect(
         await ctx.prisma.notification.count({

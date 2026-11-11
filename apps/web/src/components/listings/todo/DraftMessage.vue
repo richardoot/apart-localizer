@@ -3,6 +3,9 @@
   import { AGENCY_CHANNEL_LABELS } from '@apart/contracts'
   import type { AgencyRequest, Member } from '@apart/contracts'
   import { activityActorName, formatShortParisDay } from '@apart/domain'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import { plural } from '@/lib/format'
 
   /**
    * Lot 19 : un message à l'annonceur à valider, dans la ligne de sa question
@@ -63,8 +66,6 @@
     )
   )
   const ids = computed(() => `draft-${props.request.id}`)
-  const button =
-    'inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm hover:bg-surface-2 disabled:opacity-60 sm:min-h-10'
 </script>
 
 <template>
@@ -76,8 +77,7 @@
     <p class="text-xs text-muted">
       {{ AGENCY_CHANNEL_LABELS[request.channel] }} ·
       {{ request.recipientName ?? 'destinataire à préciser' }} ·
-      {{ request.questions.length }} question{{
-        request.questions.length > 1 ? 's' : ''
+      {{ plural(request.questions.length, 'question')
       }}<template v-if="request.followUpOfId"> · relance</template> · préparé
       par {{ author }} le
       {{ formatShortParisDay(request.createdAt) }}
@@ -90,74 +90,67 @@
         >{{ request.body }}</pre>
     </template>
     <template v-else>
-      <label :for="`${ids}-subject`" class="text-xs font-medium text-muted"
-        >Objet</label
-      >
-      <input
+      <!-- Le message va à l'agence : son texte reste au « vous ». -->
+      <UiField
         :id="`${ids}-subject`"
         v-model="subject"
+        label="Objet"
+        quiet
         maxlength="200"
-        class="min-h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm text-fg sm:min-h-10"
         data-testid="draft-subject"
       />
-      <label :for="`${ids}-body`" class="text-xs font-medium text-muted"
-        >Message</label
-      >
-      <textarea
+      <UiField
         :id="`${ids}-body`"
         v-model="body"
+        as="textarea"
+        label="Message"
+        quiet
         :rows="rows"
         maxlength="8000"
-        class="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm leading-relaxed text-fg"
         data-testid="draft-body"
       />
       <p v-if="changed" class="text-xs text-warn">
-        Texte modifié : enregistrez-le avant de valider.
+        Texte modifié : enregistre-le avant de valider.
       </p>
     </template>
     <div class="flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center rounded-lg bg-accent px-3.5 text-sm font-semibold text-accent-fg disabled:opacity-60 sm:min-h-10"
+      <UiButton
+        variant="primary"
         :disabled="busy || changed"
         data-testid="draft-approve"
         @click="emit('approve', request.id)"
       >
         Valider le message
-      </button>
-      <button
+      </UiButton>
+      <UiButton
         v-if="!editing"
-        type="button"
-        :class="button"
         :aria-expanded="false"
         data-testid="draft-edit"
         @click="editing = true"
       >
         Modifier
-      </button>
+      </UiButton>
       <template v-else>
-        <button
-          type="button"
-          class="inline-flex min-h-11 items-center rounded-lg border border-accent bg-surface px-3 text-sm text-accent disabled:opacity-60 sm:min-h-10"
+        <UiButton
+          variant="outline"
           :disabled="busy || !changed"
           data-testid="draft-save"
           @click="emit('save', request.id, { subject, body })"
         >
           Enregistrer le texte
-        </button>
-        <button type="button" :class="button" @click="reset">
-          Revenir au texte
-        </button>
+        </UiButton>
+        <UiButton @click="reset">Revenir au texte</UiButton>
       </template>
-      <button
-        type="button"
-        class="ml-auto inline-flex min-h-11 items-center text-xs text-muted underline hover:text-bad sm:min-h-0"
+      <UiButton
+        variant="danger-soft"
+        size="sm"
+        class="ml-auto"
         :disabled="busy"
         data-testid="draft-cancel"
         @click="emit('cancel', request.id)"
       >
         Annuler ce message
-      </button>
+      </UiButton>
     </div>
   </div>
 </template>

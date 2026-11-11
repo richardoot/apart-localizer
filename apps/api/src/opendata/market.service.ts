@@ -71,7 +71,7 @@ export class MarketService {
     if (dataYears.length === 0) {
       return {
         ...empty,
-        reasons: ['Aucune vente DVF importée : lancez pnpm import:dvf.'],
+        reasons: ['Aucune vente DVF importée : lance pnpm import:dvf.'],
       }
     }
     if (!target.point) {

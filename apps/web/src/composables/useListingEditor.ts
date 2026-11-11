@@ -1,6 +1,7 @@
 import { computed, inject, provide, ref, watch } from 'vue'
 import type { ComputedRef, InjectionKey, Ref } from 'vue'
 import type { FieldProvenanceMap, Listing } from '@apart/contracts'
+import { errorMessage } from '@/lib/errors'
 import { emptyForm, formFromListing } from '@/lib/listing-form'
 import type { ListingForm } from '@/lib/listing-form'
 import {
@@ -44,7 +45,11 @@ export interface ListingEditor {
   draft: Ref<ListingForm>
   /** La section en édition, ou null. */
   editing: Ref<EditorSectionId | null>
-  /** Erreurs de la dernière tentative d'enregistrement, par champ. */
+  /**
+   * Erreurs de la dernière tentative d'enregistrement, par champ ;
+   * `_section` : une autre section est invalide ; `_submit` : le serveur a
+   * refusé (lot 22 : dit dans la section).
+   */
   errors: Ref<Record<string, string>>
   /** La section en édition a des modifications non enregistrées. */
   dirty: ComputedRef<boolean>
@@ -170,14 +175,20 @@ export function createListingEditor(
     const { patch, errors: issues } = validateSection(section, draft.value)
     errors.value = issues
     if (!patch) {
-      const elsewhere = Object.keys(issues).some(
-        key => sectionOfErrorKey(key) !== section
+      // Lot 22 : une erreur dans une autre section est nommée, avec son
+      // message ; celles de la section ouverte sont au champ.
+      const elsewhere = Object.entries(issues).find(
+        ([key]) => sectionOfErrorKey(key) !== section
       )
       if (elsewhere) {
+        const [key, text] = elsewhere
+        const other = sectionOfErrorKey(key)
+        const where = other
+          ? `La section « ${LISTING_SECTIONS[other].title} »`
+          : 'Une autre partie de la fiche'
         errors.value = {
           ...issues,
-          _section:
-            'Une autre partie de la fiche est invalide : rouvrez-la pour la corriger.',
+          _section: `${where} a une erreur (${text}) : enregistre ou annule ici, puis ouvre-la pour la corriger.`,
         }
       }
       return false
@@ -190,7 +201,11 @@ export function createListingEditor(
       // La fiche relue arrive par le cache ; le brouillon s'y recale.
       reset()
       return true
-    } catch {
+    } catch (err) {
+      // Lot 22 : le refus du serveur se dit dans la section, pas en haut.
+      errors.value = {
+        _submit: errorMessage(err, 'L’enregistrement a échoué.'),
+      }
       return false
     } finally {
       saving.value = false

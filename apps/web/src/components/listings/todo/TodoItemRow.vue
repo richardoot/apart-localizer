@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
+  import { computed } from 'vue'
   import type {
     AgencyAnswerValueKey,
     AgencyRequest,
@@ -8,7 +8,12 @@
   } from '@apart/contracts'
   import type { TodoItem, TodoState } from '@apart/domain'
   import RequestsTimeline from '@/components/agency/RequestsTimeline.vue'
-  import { TODO_GROUP_CLASSES, TODO_GROUP_LABELS } from '@/lib/todo'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import UiConfirm from '@/components/ui/UiConfirm.vue'
+  import { TODO_GROUP_LABELS, TODO_GROUP_TONES } from '@/lib/todo'
   import DraftMessage from './DraftMessage.vue'
 
   /**
@@ -18,7 +23,8 @@
    * première ligne de la demande seulement, ses actions : le message à
    * valider, « Je l'ai envoyé » pour un message validé, le suivi de la
    * demande (relance, pas de réponse, réponse et valeur à appliquer). Une
-   * visite mène à sa carte.
+   * visite mène à sa carte. Lot 22 : l'erreur d'une action de la ligne
+   * s'affiche dans la ligne (`error`).
    */
   const props = defineProps<{
     item: TodoItem
@@ -30,6 +36,8 @@
     sameMessage: string[]
     members: Member[]
     busy?: boolean
+    /** Lot 22 : l'échec de la dernière action lancée depuis cette ligne. */
+    error?: string | null
   }>()
   const emit = defineEmits<{
     toggle: [done: boolean]
@@ -44,7 +52,6 @@
     showVisit: [visitId: string]
   }>()
 
-  const confirmingRemove = ref(false)
   const assignee = computed(() => {
     const id = props.task?.assigneeId ?? null
     return id
@@ -73,8 +80,6 @@
       ['sent', 'answered', 'no_answer'].includes(props.request.status)
   )
   const checkboxId = computed(() => `todo-${props.item.key.replace(':', '-')}`)
-  const button =
-    'inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm hover:bg-surface-2 disabled:opacity-60 sm:min-h-10'
 </script>
 
 <template>
@@ -87,26 +92,20 @@
     data-testid="todo-item"
   >
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <label
+      <UiCheckbox
         v-if="item.kind === 'task'"
-        :for="checkboxId"
-        class="-my-2 -ml-2 inline-flex size-11 flex-none cursor-pointer items-center justify-center"
-      >
-        <input
-          :id="checkboxId"
-          type="checkbox"
-          class="size-[18px] accent-accent"
-          :checked="item.done"
-          :aria-label="`${item.done ? 'Rouvrir' : 'Marquer comme fait'} : ${item.title}`"
-          data-testid="todo-toggle"
-          @change="emit('toggle', ($event.target as HTMLInputElement).checked)"
-        />
-      </label>
-      <span
-        class="flex-none rounded-md px-2 py-0.5 text-xs font-semibold"
-        :class="TODO_GROUP_CLASSES[item.group]"
+        :id="checkboxId"
+        class="-my-2 -ml-1 flex-none px-1"
+        :model-value="item.done"
+        :aria-label="`${item.done ? 'Rouvrir' : 'Marquer comme fait'} : ${item.title}`"
+        data-testid="todo-toggle"
+        @update:model-value="value => emit('toggle', value === true)"
+      />
+      <UiBadge
+        class="flex-none"
+        :tone="TODO_GROUP_TONES[item.group]"
         data-testid="todo-kind"
-        >{{ TODO_GROUP_LABELS[item.group] }}</span
+        >{{ TODO_GROUP_LABELS[item.group] }}</UiBadge
       >
       <span
         class="min-w-0 flex-[1_1_16rem] font-semibold break-words"
@@ -114,12 +113,13 @@
         data-testid="todo-title"
       >
         {{ item.title }}
-        <span
+        <UiBadge
           v-if="task?.origin === 'missing_field'"
-          class="ml-1 rounded-md bg-ai-soft px-1.5 py-px text-[11px] font-semibold text-ai no-underline"
-          title="Champ non trouvé par l’extraction IA, transformé en tâche"
+          tone="ai"
+          class="ml-1 no-underline"
+          title="Champ pas trouvé par l’extraction IA, transformé en tâche"
           data-testid="task-ai"
-          >IA · champ manquant</span
+          >IA · champ manquant</UiBadge
         >
       </span>
       <span
@@ -129,20 +129,25 @@
         data-testid="todo-state"
         >{{ stateText }}</span
       >
-      <button
-        v-if="
-          (task?.origin === 'manual' || task?.origin === 'opinion') &&
-          !confirmingRemove
-        "
-        type="button"
-        class="-my-2 inline-flex size-11 flex-none items-center justify-center rounded-lg text-muted hover:text-bad"
-        aria-label="Supprimer la tâche"
-        data-testid="todo-remove"
-        @click="confirmingRemove = true"
+      <span
+        v-if="task?.origin === 'manual' || task?.origin === 'opinion'"
+        class="inline-flex flex-wrap items-center gap-2"
+        data-testid="todo-remove-confirm"
       >
-        <span aria-hidden="true">✕</span>
-      </button>
+        <UiConfirm
+          label="Supprimer"
+          variant="ghost"
+          icon="trash"
+          :question="`Supprimer « ${item.title} » ?`"
+          cancel-label="Garder"
+          :aria-label="`Supprimer la tâche : ${item.title}`"
+          :confirm-attrs="{ 'data-testid': 'todo-remove-yes' }"
+          data-testid="todo-remove"
+          @confirm="emit('remove')"
+        />
+      </span>
     </div>
+    <UiAlert v-if="error" data-testid="todo-row-error">{{ error }}</UiAlert>
 
     <p
       v-if="task?.details"
@@ -158,31 +163,6 @@
     >
       Proposée depuis « Nos avis », ajoutée d’un clic.
     </p>
-
-    <div
-      v-if="confirmingRemove"
-      class="flex flex-wrap items-center gap-2 rounded-lg bg-bad-soft px-3 py-2 text-sm"
-      role="alert"
-      data-testid="todo-remove-confirm"
-    >
-      <span class="min-w-0 flex-1">Supprimer « {{ item.title }} » ?</span>
-      <button type="button" :class="button" @click="confirmingRemove = false">
-        Garder
-      </button>
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center rounded-lg bg-bad px-3 text-sm font-medium text-surface sm:min-h-10"
-        data-testid="todo-remove-yes"
-        @click="
-          () => {
-            confirmingRemove = false
-            emit('remove')
-          }
-        "
-      >
-        Supprimer
-      </button>
-    </div>
 
     <template v-if="request">
       <p
@@ -215,29 +195,25 @@
           data-testid="todo-approved"
         >
           <p>
-            Claude l’enverra par vos outils (Gmail, messagerie du portail) quand
-            vous le lui demanderez dans claude.ai (prompt « Questions aux
-            agences »).
+            Claude l’enverra par tes outils (Gmail, messagerie du portail) quand
+            tu le lui demanderas dans claude.ai (demande « Questions aux agences
+            »).
           </p>
           <div class="flex flex-wrap gap-2">
-            <button
-              type="button"
-              :class="button"
+            <UiButton
               :disabled="busy"
               data-testid="mark-sent"
               @click="emit('markSent', request.id)"
             >
               Je l’ai envoyé
-            </button>
-            <button
-              type="button"
-              :class="button"
+            </UiButton>
+            <UiButton
               :disabled="busy"
               data-testid="approved-cancel"
               @click="emit('cancel', request.id)"
             >
               Annuler
-            </button>
+            </UiButton>
           </div>
         </div>
         <details
@@ -266,14 +242,15 @@
     </template>
 
     <div v-if="item.kind === 'visit'" class="flex flex-wrap gap-2">
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center text-sm font-semibold text-accent underline-offset-2 hover:underline sm:min-h-9"
+      <UiButton
+        variant="link"
+        icon-right="arrow-right"
+        class="font-semibold"
         data-testid="todo-show-visit"
         @click="emit('showVisit', item.id)"
       >
-        Voir la visite →
-      </button>
+        Voir la visite
+      </UiButton>
     </div>
   </li>
 </template>

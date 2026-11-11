@@ -28,6 +28,10 @@
   import CriteriaFitSection from './CriteriaFitSection.vue'
   import FitBadge from './FitBadge.vue'
   import OpinionsSection from './OpinionsSection.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import { cardClasses } from '@/lib/ui'
+  import type { Tone } from '@/lib/ui'
 
   /**
    * La Synthèse (lot 19, ADR 0029) : « Faut-il y aller ? ». Quatre chiffres
@@ -123,14 +127,13 @@
       opinions: props.item.opinionSummary,
     })
   )
-  const STEP_KINDS: Record<NextStep['kind'], { label: string; tone: string }> =
-    {
-      visit: { label: 'Visite', tone: 'bg-info-soft text-info' },
-      discuss: { label: 'À rediscuter', tone: 'bg-ai-soft text-ai' },
-      draft: { label: 'À valider', tone: 'bg-warn-soft text-warn' },
-      follow_up: { label: 'Relance', tone: 'bg-warn-soft text-warn' },
-      task: { label: 'Tâche', tone: 'bg-surface-2 text-fg' },
-    }
+  const STEP_KINDS: Record<NextStep['kind'], { label: string; tone: Tone }> = {
+    visit: { label: 'Visite', tone: 'info' },
+    discuss: { label: 'À rediscuter', tone: 'ai' },
+    draft: { label: 'À valider', tone: 'warn' },
+    follow_up: { label: 'Relance', tone: 'warn' },
+    task: { label: 'Tâche', tone: 'neutral' },
+  }
 
   /** La dernière vérification sur le portail, en une phrase. */
   const freshness = computed(() =>
@@ -157,9 +160,7 @@
     )
   })
 
-  const card = 'rounded-2xl border border-line bg-surface p-4 sm:px-5'
-  const linkClass =
-    'inline-flex min-h-11 flex-none items-center text-sm text-accent underline-offset-2 hover:underline sm:min-h-0'
+  const card = cardClasses()
 </script>
 
 <template>
@@ -173,17 +174,20 @@
     >
       <div class="flex items-center justify-between gap-2">
         <h2 id="key-figures-title" class="sr-only">L’essentiel</h2>
-        <span
+        <UiBadge
           v-if="live"
-          class="ml-auto rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-semibold text-fg"
+          tone="accent"
+          class="ml-auto"
           data-testid="live-badge"
-          >aperçu en direct</span
+          >aperçu en direct</UiBadge
         >
       </div>
       <p v-if="!evaluation" class="text-sm text-muted">
-        Saisissez un prix et un loyer visé pour voir les indicateurs.
+        Saisis un prix et un loyer visé pour voir les indicateurs.
       </p>
       <div v-else class="grid grid-cols-2 gap-2.5 @3xl:grid-cols-4 @3xl:gap-3">
+        <!-- Lot 22 : une tuile chiffrée cliquable (grille, texte à gauche),
+             pas un bouton d'action : son habit ne peut pas être un UiButton. -->
         <button
           v-for="figure in figures"
           :key="figure.key"
@@ -198,12 +202,12 @@
           @click="emit('go', figure.tab)"
         >
           <span
-            class="text-xs"
+            class="text-sm"
             :class="figure.accent ? 'text-fg' : 'text-muted'"
             >{{ figure.label }}</span
           >
           <strong
-            class="font-display text-[19px] leading-tight font-bold tabular-nums @3xl:text-2xl"
+            class="font-display text-xl leading-tight font-bold tabular-nums @3xl:text-2xl"
             >{{ figure.value }}</strong
           >
           <span
@@ -224,16 +228,16 @@
       >
         <FitBadge v-if="fit.activeCriteria > 0" :level="fit.level" />
         <span class="min-w-0 flex-[1_1_22rem] text-sm">{{ fitLine(fit) }}</span>
-        <button
-          type="button"
-          class="inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm hover:bg-surface-2 sm:min-h-10"
+        <UiButton
+          size="sm"
+          :icon-right="fitOpen ? 'chevron-up' : 'chevron-down'"
           :aria-expanded="fitOpen"
           aria-controls="fit-detail"
           data-testid="fit-toggle"
           @click="fitOpen = !fitOpen"
         >
           {{ fitOpen ? 'Masquer le détail' : 'Voir le détail' }}
-        </button>
+        </UiButton>
       </div>
       <div v-if="fitOpen" id="fit-detail">
         <CriteriaFitSection
@@ -263,9 +267,9 @@
             :data-highlight="point.key"
           >
             <span class="min-w-0 break-words">{{ point.text }}</span>
-            <button
-              type="button"
-              :class="linkClass"
+            <UiButton
+              variant="link"
+              class="flex-none"
               :aria-label="
                 point.section === 'opinions'
                   ? `${point.text} : voir nos avis`
@@ -274,7 +278,7 @@
               @click="openPoint(point)"
             >
               {{ pointLabel(point) }}
-            </button>
+            </UiButton>
           </li>
         </ul>
         <p v-else class="text-sm text-muted">
@@ -305,14 +309,13 @@
           <h2 id="next-steps-title" class="text-base font-semibold">
             Prochaines étapes
           </h2>
-          <button
-            type="button"
-            :class="linkClass"
+          <UiButton
+            variant="link"
             data-testid="go-todo"
             @click="emit('go', 'a-faire')"
           >
             Tout voir dans À faire
-          </button>
+          </UiButton>
         </div>
         <ul v-if="steps.length" class="grid gap-2 leading-snug">
           <li
@@ -321,11 +324,9 @@
             class="flex items-baseline gap-2.5"
             :data-step="step.kind"
           >
-            <span
-              class="flex-none rounded-md px-1.5 py-0.5 text-xs font-semibold"
-              :class="STEP_KINDS[step.kind].tone"
-              >{{ STEP_KINDS[step.kind].label }}</span
-            >
+            <UiBadge :tone="STEP_KINDS[step.kind].tone" class="flex-none">{{
+              STEP_KINDS[step.kind].label
+            }}</UiBadge>
             <span class="min-w-0 break-words">{{ step.text }}</span>
           </li>
         </ul>
@@ -340,14 +341,15 @@
         {{ item.lastCheck.summary }}
       </template>
       <template v-else>{{ freshness.title }}.</template>
-      <button
-        type="button"
-        class="ml-1 text-accent underline-offset-2 hover:underline"
+      <UiButton
+        variant="link"
+        size="inline"
+        class="ml-1"
         data-testid="go-history"
         @click="emit('go', 'historique')"
       >
         Historique
-      </button>
+      </UiButton>
     </p>
   </div>
 </template>

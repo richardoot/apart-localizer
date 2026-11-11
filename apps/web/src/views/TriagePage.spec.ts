@@ -14,6 +14,8 @@ const state = vi.hoisted(() => ({
   drafts: [] as unknown[],
   cards: [] as unknown[],
   overview: null as unknown,
+  draftsError: null as Error | null,
+  refetch: vi.fn(),
 }))
 
 const actions = vi.hoisted(() => ({
@@ -32,7 +34,12 @@ const apiMock = vi.hoisted(() => ({
 
 vi.mock('@/composables/useDrafts', () => ({
   useDrafts: () => ({
-    data: ref(state.drafts),
+    data: ref(state.draftsError ? undefined : state.drafts),
+    isPending: ref(state.draftsError === null && false),
+    isError: ref(state.draftsError !== null),
+    error: ref(state.draftsError),
+    isFetching: ref(false),
+    refetch: state.refetch,
     merge: { mutateAsync: vi.fn() },
   }),
   useDismissedDrafts: () => ({ data: ref([]) }),
@@ -142,6 +149,7 @@ const press = async (key: string, target: EventTarget = window) => {
 describe('le mode tri', () => {
   beforeEach(() => {
     sessionStorage.clear()
+    state.draftsError = null
     state.drafts = [draftAt(1), draftAt(2)]
     state.cards = []
     state.overview = overview()
@@ -382,6 +390,22 @@ describe('le mode tri', () => {
       true
     )
     second.wrapper.unmount()
+  })
+
+  it('lot 22 : réseau coupé pendant le tri, l’erreur et « Réessayer », jamais « Chargement… »', async () => {
+    state.draftsError = new TypeError('Failed to fetch')
+    state.refetch.mockReset()
+    const { wrapper } = await mountPage({
+      etape: 'a-valider',
+      session: SESSION,
+    })
+    const alert = wrapper.get('[data-state="error"] [role="alert"]')
+    expect(alert.text()).toContain('Pas de connexion au serveur')
+    expect(wrapper.text()).not.toContain('Chargement')
+    expect(wrapper.find('[data-testid="triage-empty"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="retry"]').trigger('click')
+    expect(state.refetch).toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('rien à trier', async () => {

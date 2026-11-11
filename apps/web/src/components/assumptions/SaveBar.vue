@@ -3,6 +3,9 @@
   import type { AssumptionsImpact } from '@apart/contracts'
   import type { FieldChange } from '@/lib/assumptions-form'
   import { pendingChangesLabel } from '@/lib/assumptions-summary'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiInput from '@/components/ui/UiInput.vue'
   import ImpactPanel from './ImpactPanel.vue'
 
   /**
@@ -36,9 +39,6 @@
   const changedLabels = computed(() =>
     props.changes.map(change => change.label).join(', ')
   )
-
-  const secondary =
-    'min-h-12 rounded-lg border px-3.5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60 lg:min-h-11'
 </script>
 
 <template>
@@ -65,25 +65,22 @@
         <p class="font-semibold">À corriger avant d'enregistrer :</p>
         <ul class="grid gap-0.5">
           <li v-for="error in errors" :key="error.key">
-            <button
-              type="button"
-              class="min-h-6 font-medium underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
+            <UiButton
+              variant="link"
+              size="inline"
+              class="font-medium text-bad"
               @click="emit('reveal', error.key)"
             >
-              {{ error.label }}</button
+              {{ error.label }}</UiButton
             >&nbsp;: {{ error.message }}
           </li>
         </ul>
       </div>
-      <p
-        v-if="failure"
-        role="alert"
-        class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-      >
+      <UiAlert v-if="failure">
         {{ failure }}
-      </p>
+      </UiAlert>
       <p v-if="rebased && pending" class="text-xs text-muted">
-        Une nouvelle version est en vigueur : vos modifications sont gardées,
+        Une nouvelle version est en vigueur : tes modifications sont gardées,
         les autres valeurs sont celles de cette version.
       </p>
 
@@ -105,16 +102,14 @@
             >
             <span v-else-if="message" class="text-good">{{ message }}</span>
           </p>
-          <button
+          <UiButton
             v-if="pending"
-            type="button"
-            class="shrink-0 border-line bg-surface text-fg hover:bg-surface-2 lg:order-3"
-            :class="secondary"
+            class="shrink-0 font-semibold lg:order-3"
             data-testid="cancel"
             @click="emit('cancel')"
           >
             Annuler
-          </button>
+          </UiButton>
         </div>
         <label
           v-if="pending"
@@ -123,37 +118,38 @@
           <span class="sr-only lg:not-sr-only lg:whitespace-nowrap"
             >Nom de la version</span
           >
-          <input
+          <UiInput
             id="h-label"
             v-model="label"
             maxlength="120"
             autocomplete="off"
             placeholder="facultatif, ex. « apport revu »"
-            class="h-12 min-w-0 flex-1 rounded-lg border border-muted/70 bg-surface px-3 text-base text-fg lg:h-11 placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+            class="min-w-0 flex-1"
           />
         </label>
         <div
           v-if="pending"
           class="grid grid-cols-2 gap-2 lg:order-4 lg:flex lg:gap-2.5"
         >
-          <button
-            type="button"
-            class="border-accent bg-surface text-accent hover:bg-accent-soft"
-            :class="secondary"
-            :disabled="previewing"
+          <UiButton
+            variant="outline"
+            :loading="previewing"
+            loading-label="Calcul…"
             data-testid="preview"
             @click="emit('preview')"
           >
-            {{ previewing ? 'Calcul…' : "Voir l'impact" }}
-          </button>
-          <button
+            Voir l'impact
+          </UiButton>
+          <UiButton
             type="submit"
-            class="min-h-12 rounded-lg bg-accent px-5 text-sm font-semibold text-accent-fg hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60 lg:min-h-11"
-            :disabled="saving"
+            variant="primary"
+            class="px-5"
+            :loading="saving"
+            loading-label="Enregistrement…"
             data-testid="save"
           >
-            {{ saving ? 'Enregistrement…' : 'Enregistrer' }}
-          </button>
+            Enregistrer
+          </UiButton>
         </div>
       </div>
     </div>

@@ -3,6 +3,9 @@
   import { useRoute, useRouter } from 'vue-router'
   import { useAuthStore } from '@/stores/auth'
   import { passwordSignInEnabled, safeRedirectPath } from '@/lib/auth-options'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiField from '@/components/ui/UiField.vue'
 
   const auth = useAuthStore()
   const route = useRoute()
@@ -60,82 +63,74 @@
         Suivi partagé des annonces d'appartement : comparateur, carte,
         rentabilité et prix cible.
       </p>
-      <button
-        type="button"
+      <UiButton
+        variant="primary"
+        block
+        class="mt-8 min-h-12! text-base"
         data-testid="google-sign-in"
-        class="mt-8 w-full rounded-lg bg-accent px-4 py-3 font-medium text-accent-fg hover:opacity-90 disabled:opacity-60"
-        :disabled="busy"
+        :loading="busy"
+        loading-label="Redirection…"
         @click="signIn"
       >
-        {{ busy ? 'Redirection…' : 'Se connecter avec Google' }}
-      </button>
+        Se connecter avec Google
+      </UiButton>
 
       <form
         v-if="passwordEnabled"
         data-testid="password-form"
-        class="mt-6 space-y-3 border-t border-line pt-6"
+        class="mt-6 grid gap-3 border-t border-line pt-6"
         @submit.prevent="withPassword('sign-in')"
       >
-        <p class="text-sm font-medium">Connexion locale (développement)</p>
-        <label class="block text-sm">
-          <span class="text-muted">E-mail</span>
-          <input
-            v-model="email"
-            type="email"
-            name="email"
-            autocomplete="username"
-            required
-            class="mt-1 w-full rounded-lg border border-line bg-bg px-3 py-2"
-          />
-        </label>
-        <label class="block text-sm">
-          <span class="text-muted">Mot de passe</span>
-          <input
-            v-model="password"
-            type="password"
-            name="password"
-            autocomplete="current-password"
-            required
-            minlength="6"
-            class="mt-1 w-full rounded-lg border border-line bg-bg px-3 py-2"
-          />
-        </label>
+        <p class="text-sm font-medium">Connexion sur cet ordinateur (essai)</p>
+        <UiField
+          id="login-email"
+          v-model="email"
+          label="E-mail"
+          type="email"
+          name="email"
+          autocomplete="username"
+          required
+        />
+        <UiField
+          id="login-password"
+          v-model="password"
+          label="Mot de passe"
+          type="password"
+          name="password"
+          autocomplete="current-password"
+          required
+          minlength="6"
+        />
         <div class="flex gap-2">
-          <button
+          <UiButton
             type="submit"
+            variant="outline"
+            class="flex-1"
             data-testid="password-sign-in"
-            class="flex-1 rounded-lg border border-accent px-4 py-2 font-medium text-accent hover:bg-accent hover:text-accent-fg disabled:opacity-60"
             :disabled="busy"
           >
             Se connecter
-          </button>
-          <button
-            type="button"
+          </UiButton>
+          <UiButton
+            class="flex-1"
             data-testid="password-sign-up"
-            class="flex-1 rounded-lg border border-line px-4 py-2 text-sm hover:border-accent disabled:opacity-60"
             :disabled="busy"
             @click="withPassword('sign-up')"
           >
-            Créer un compte local
-          </button>
+            Créer un compte
+          </UiButton>
         </div>
-        <p class="text-xs text-muted">
-          Comptes de démonstration : demo@apart.local et demo2@apart.local
-          (<code>pnpm stack:up --dataset demo</code>, mot de passe dans
-          docs/developpement-local.md). Un compte local créé avec l'e-mail d'un
-          membre importé le rattache à ses annonces.
+        <p class="text-sm text-muted">
+          Comptes de démonstration : demo@apart.local et demo2@apart.local. Un
+          compte créé ici avec l'e-mail d'un membre le rattache à ses annonces.
         </p>
       </form>
 
-      <p
-        v-if="auth.error"
-        role="alert"
-        class="mt-4 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-      >
+      <UiAlert v-if="auth.error" class="mt-4">
         {{ auth.error }}
-      </p>
-      <p class="mt-6 text-xs text-muted">
-        Accès réservé aux membres de l'espace de travail.
+      </UiAlert>
+      <p class="mt-6 text-sm text-muted">
+        Accès réservé aux membres de l'espace.
       </p>
     </div>
   </section>

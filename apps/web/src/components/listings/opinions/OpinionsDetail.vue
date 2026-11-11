@@ -1,5 +1,8 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import { errorMessage } from '@/lib/errors'
   import type { OpinionSummary, Task } from '@apart/contracts'
   import { counterVisitTask } from '@apart/domain'
   import {
@@ -68,17 +71,11 @@
       added.value = [...added.value, task.label]
       proposed.value = null
     } catch (error) {
-      failure.value =
-        error instanceof Error && error.message
-          ? error.message
-          : 'La tâche n’a pas pu être ajoutée.'
+      failure.value = errorMessage(error, 'La tâche n’a pas pu être ajoutée.')
     } finally {
       busy.value = false
     }
   }
-
-  const button =
-    'inline-flex min-h-11 items-center rounded-lg px-3.5 text-sm sm:min-h-10'
 </script>
 
 <template>
@@ -98,7 +95,7 @@
             </th>
             <th scope="col" class="px-2.5 py-2 font-semibold">Écart</th>
             <th scope="col" class="px-2.5 py-2 font-semibold">
-              Ce que vous en dites
+              Ce qu’en dit chacun
             </th>
           </tr>
         </thead>
@@ -120,7 +117,7 @@
               class="px-2.5 py-2.5"
             >
               <span
-                class="inline-block min-w-24 rounded-lg px-2 py-0.5 text-[13px] font-semibold"
+                class="inline-block min-w-24 rounded-lg px-2 py-0.5 text-sm font-semibold"
                 :class="scoreToneClass(scoreOf(row, member.memberId))"
                 >{{ scoreChip(scoreOf(row, member.memberId)) }}</span
               >
@@ -131,14 +128,14 @@
             >
               {{ gapText(row.gap) }}
             </td>
-            <td class="px-2.5 py-2.5 text-[13px] leading-snug text-muted">
+            <td class="px-2.5 py-2.5 text-sm leading-snug text-muted">
               {{ rowNotes(row, summary) }}
             </td>
           </tr>
         </tbody>
       </table>
     </div>
-    <p class="text-xs text-muted">
+    <p class="text-sm text-muted">
       Écart de 2 points ou plus : à rediscuter. « — » : pas encore d’avis.
       <template v-if="visitNote">{{ visitNote }}</template>
     </p>
@@ -167,53 +164,39 @@
           v-else-if="proposed === p.key"
           role="group"
           :aria-labelledby="`proposal-${p.key}-title`"
-          class="grid gap-2 rounded-xl border border-line bg-bg px-3.5 py-3"
+          class="grid gap-2 rounded-2xl border border-line bg-bg px-3.5 py-3"
           data-testid="counter-visit-proposal"
         >
-          <span class="text-xs font-semibold text-muted"
+          <span class="text-sm font-semibold text-muted"
             >Tâche proposée pour « À faire »</span
           >
           <strong :id="`proposal-${p.key}-title`">{{ p.task.label }}</strong>
           <p class="text-sm leading-snug text-muted">{{ p.task.details }}</p>
           <div class="flex flex-wrap gap-2">
-            <button
-              type="button"
-              :class="[
-                button,
-                'bg-accent font-semibold text-accent-fg disabled:opacity-60',
-              ]"
-              :disabled="busy || !addTask"
+            <UiButton
+              variant="primary"
+              :disabled="!addTask"
+              :loading="busy"
               data-testid="counter-visit-confirm"
               @click="confirm(p.task)"
             >
               Ajouter à À faire
-            </button>
-            <button
-              type="button"
-              :class="[
-                button,
-                'border border-line bg-surface hover:bg-surface-2',
-              ]"
-              @click="proposed = null"
-            >
-              Annuler
-            </button>
+            </UiButton>
+            <UiButton @click="proposed = null">Annuler</UiButton>
           </div>
         </div>
-        <button
+        <UiButton
           v-else
-          type="button"
-          :class="[
-            button,
-            'justify-self-start bg-accent font-semibold text-accent-fg',
-          ]"
+          variant="primary"
+          icon="plus"
+          class="justify-self-start"
           data-testid="counter-visit"
           @click="proposed = p.key"
         >
           {{ p.task.label }}
-        </button>
+        </UiButton>
       </li>
     </ul>
-    <p v-if="failure" role="alert" class="text-sm text-bad">{{ failure }}</p>
+    <UiAlert v-if="failure">{{ failure }}</UiAlert>
   </div>
 </template>

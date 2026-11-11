@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import UiButton from '@/components/ui/UiButton.vue'
   import { computed } from 'vue'
   import type {
     CompareItem,
@@ -244,7 +245,7 @@
 
 <template>
   <div
-    class="relative overflow-x-auto rounded-xl border border-line bg-surface"
+    class="relative overflow-x-auto rounded-2xl border border-line bg-surface"
   >
     <table class="w-full text-sm" data-testid="compare-table">
       <thead class="bg-surface-2 text-left text-xs text-muted">
@@ -256,13 +257,14 @@
             scope="col"
             class="px-3 py-2 font-medium"
           >
-            <button
-              type="button"
-              class="text-left font-display text-sm font-semibold text-fg hover:text-accent"
+            <UiButton
+              variant="link"
+              size="sm"
+              class="justify-start text-left font-display font-bold text-fg no-underline hover:text-accent"
               @click="emit('open', item.listing.id)"
             >
               {{ item.listing.title }}
-            </button>
+            </UiButton>
           </th>
         </tr>
       </thead>

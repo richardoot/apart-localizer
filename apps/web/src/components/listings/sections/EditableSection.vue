@@ -1,14 +1,18 @@
 <script setup lang="ts">
-  import { computed } from 'vue'
+  import { computed, nextTick, ref } from 'vue'
   import { useListingEditor } from '@/composables/useListingEditor'
   import type { ListingSectionId } from '@/lib/listing-sections'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import { cardClasses } from '@/lib/ui'
   import PreviewLine from './PreviewLine.vue'
 
   /**
    * Lot 19 : une section de la fiche qui se lit, puis se modifie sur place
    * (« Modifier » → les champs de la section, l'aperçu en direct, « Annuler »
    * et « Enregistrer »). Une seule section s'édite à la fois ; en quitter
-   * une modifiée demande confirmation (bandeau de la fiche).
+   * une modifiée demande confirmation (bandeau de la fiche). Lot 22 : à
+   * l'échec, le premier champ en erreur reçoit le focus.
    */
   const props = withDefaults(
     defineProps<{
@@ -29,16 +33,27 @@
   const open = computed(() => editor.editing.value === props.section)
   const titleId = computed(() => `section-${props.section}-title`)
   const editId = computed(() => `section-${props.section}-edit`)
-  const sectionError = computed(() => editor.errors.value._section ?? null)
+  const sectionError = computed(
+    () => editor.errors.value._section ?? editor.errors.value._submit ?? null
+  )
+  const formRef = ref<HTMLFormElement | null>(null)
 
-  const button =
-    'inline-flex min-h-11 items-center justify-center rounded-lg border border-line bg-surface px-3 text-sm hover:bg-surface-2 disabled:opacity-60 sm:min-h-10'
+  async function submit(): Promise<void> {
+    const saved = await editor.save(props.section)
+    if (saved) return
+    await nextTick()
+    const invalid =
+      formRef.value?.querySelector<HTMLElement>('[aria-invalid="true"]') ??
+      formRef.value?.querySelector<HTMLElement>('[role="alert"]')
+    invalid?.focus?.({ preventScroll: true })
+    invalid?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+  }
 </script>
 
 <template>
   <section
-    class="grid gap-3 rounded-2xl bg-surface p-4 sm:px-5"
-    :class="highlight ? 'border-[1.5px] border-accent' : 'border border-line'"
+    class="grid gap-3"
+    :class="cardClasses(highlight ? 'accent' : 'default')"
     :aria-labelledby="titleId"
     :data-section="section"
     :data-editing="open ? 'true' : undefined"
@@ -49,17 +64,15 @@
       }}</component>
       <div class="flex flex-wrap items-center gap-2">
         <slot name="actions" />
-        <button
+        <UiButton
           v-if="!open"
-          type="button"
-          :class="button"
           :aria-expanded="false"
           :aria-controls="editId"
           :data-testid="`edit-${section}`"
           @click="editor.start(section)"
         >
           {{ editLabel }}
-        </button>
+        </UiButton>
       </div>
     </header>
 
@@ -69,10 +82,11 @@
     <form
       v-else
       :id="editId"
+      ref="formRef"
       class="grid gap-3"
       :aria-label="`Modifier : ${title}`"
       novalidate
-      @submit.prevent="editor.save(section)"
+      @submit.prevent="submit"
     >
       <slot
         name="edit"
@@ -80,32 +94,28 @@
         :errors="editor.errors.value"
       />
       <PreviewLine v-if="preview" />
-      <p
-        v-if="sectionError"
-        role="alert"
-        class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-      >
+      <UiAlert v-if="sectionError" tabindex="-1">
         {{ sectionError }}
-      </p>
+      </UiAlert>
+      <slot name="feedback" />
       <div class="flex flex-wrap justify-end gap-2">
-        <button
-          type="button"
-          :class="button"
+        <UiButton
           :aria-expanded="true"
           :aria-controls="editId"
           :data-testid="`cancel-${section}`"
           @click="editor.cancel()"
         >
           Annuler
-        </button>
-        <button
+        </UiButton>
+        <UiButton
           type="submit"
-          class="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-4 text-sm font-semibold text-accent-fg disabled:opacity-60 sm:min-h-10"
-          :disabled="editor.saving.value"
+          variant="primary"
+          :loading="editor.saving.value"
+          loading-label="Enregistrement…"
           :data-testid="`save-${section}`"
         >
-          {{ editor.saving.value ? 'Enregistrement…' : 'Enregistrer' }}
-        </button>
+          Enregistrer
+        </UiButton>
       </div>
     </form>
   </section>

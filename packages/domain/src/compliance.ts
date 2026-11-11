@@ -13,7 +13,12 @@ import type {
 import { STUDY_DISCLAIMER } from '@apart/contracts'
 import { addMonths } from './dates.js'
 import { DPE_NEW_METHOD_FROM, DPE_VALIDITY_YEARS } from './dpe.js'
-import { formatEuros } from './format.js'
+import { formatEuros, plural, pluralWord } from './format.js'
+
+/** « 2 aléas recensés », « 1 aléa recensé ». */
+function hazardsText(count: number): string {
+  return `${plural(count, 'aléa')} ${pluralWord(count, 'recensé')}`
+}
 
 /**
  * Checklist réglementaire datée (besoin L5) : chaque règle de la table de
@@ -211,7 +216,7 @@ function energyItems(
         level: 'unknown',
         title: 'Validité du DPE',
         message:
-          'Date du DPE inconnue : vérifiez qu’il date d’après le 1er juillet 2021.',
+          'Date du DPE inconnue : vérifie qu’il date d’après le 1er juillet 2021.',
         date: null,
       })
     )
@@ -339,7 +344,7 @@ function permitItem(
     category: 'permit',
     level: 'unknown',
     title,
-    message: `${listed ? `Une partie de ${input.commune ?? 'la commune'} y est soumise` : 'Certaines communes de la métropole ont des secteurs soumis'} : vérifiez l’adresse${rule?.mapUrl ? ` sur la carte (${rule.mapUrl})` : ' auprès de la mairie'}.`,
+    message: `${listed ? `Une partie de ${input.commune ?? 'la commune'} y est soumise` : 'Certaines communes de la métropole ont des secteurs soumis'} : vérifie l’adresse${rule?.mapUrl ? ` sur la carte (${rule.mapUrl})` : ' auprès de la mairie'}.`,
     date: null,
   })
 }
@@ -416,7 +421,7 @@ function diagnosticItems(
             ...base,
             level: 'ok',
             message: concerned
-              ? `À annexer au bail (${rule.validity}) : la commune est exposée à ${georisques.hazards.filter(h => h.present).length} aléa(s) recensé(s) par Géorisques.`
+              ? `À annexer au bail (${rule.validity}) : la commune est exposée à ${hazardsText(georisques.hazards.filter(h => h.present).length)} par Géorisques.`
               : `Aucun aléa recensé par Géorisques dans la commune ; état des risques à vérifier (${rule.validity}).`,
             date: null,
             provenance: 'open_data',

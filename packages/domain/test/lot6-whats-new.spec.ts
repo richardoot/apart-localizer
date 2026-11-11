@@ -505,7 +505,7 @@ describe('notifications', () => {
     )
     expect(drafts.map(d => d.recipientId)).toEqual([RICHARD, CHLOE])
     expect(drafts[0]).toMatchObject({
-      title: '2 annonce(s) reçue(s) par e-mail',
+      title: '2 annonces reçues par e-mail',
       body: 'À valider : « Alerte SeLoger ».',
       url: '/annonces?etape=a-valider',
     })
@@ -534,7 +534,7 @@ describe('notifications', () => {
       expect.objectContaining({
         recipientId: RICHARD,
         type: 'task_assigned',
-        title: 'Tâche pour vous : Appeler',
+        title: 'Tâche pour toi : Appeler',
         body: 'Assignée par Chloé, annonce « T2 ».',
       }),
     ])
@@ -556,7 +556,7 @@ describe('notifications', () => {
         }),
         { members, listingTitle: 'T2' }
       )[0]?.title
-    ).toBe('Tâche pour vous : PV')
+    ).toBe('Tâche pour toi : PV')
     expect(
       notificationsForActivity(
         ev({
@@ -585,7 +585,7 @@ describe('notifications', () => {
         ev({ action: 'task.created', after: { assigneeId: RICHARD } }),
         { members, listingTitle: 'T2' }
       )[0]?.title
-    ).toBe('Tâche pour vous : nouvelle tâche')
+    ).toBe('Tâche pour toi : nouvelle tâche')
   })
 
   it("rien pour les actions qui n'en font pas naître", () => {

@@ -2,6 +2,8 @@
   import { useRoute } from 'vue-router'
   import AppHeader from '@/components/AppHeader.vue'
   import InvitationBanner from '@/components/workspace/InvitationBanner.vue'
+  import FeedbackHost from '@/components/ui/FeedbackHost.vue'
+  import UnsavedDialog from '@/components/ui/UnsavedDialog.vue'
   import { useAuthStore } from '@/stores/auth'
 
   const auth = useAuthStore()
@@ -21,5 +23,7 @@
       <InvitationBanner v-if="auth.isAuthenticated && !route.meta.bare" />
       <RouterView />
     </main>
+    <FeedbackHost />
+    <UnsavedDialog />
   </div>
 </template>

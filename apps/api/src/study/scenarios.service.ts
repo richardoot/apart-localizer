@@ -107,7 +107,7 @@ export class ScenariosService {
       Date.parse(update.expectedUpdatedAt) !== Date.parse(current.updatedAt)
     ) {
       throw new ConflictException(
-        `Le scénario a changé depuis votre lecture (modifié le ${current.updatedAt}) : relisez-le`
+        `Le scénario a changé depuis ta lecture (modifié le ${current.updatedAt}) : relis-le`
       )
     }
     const { expectedUpdatedAt: _guard, ...patch } = update

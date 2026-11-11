@@ -659,7 +659,7 @@ describe('pastille de précision et réserves « ≈ »', () => {
       commune: 'Bordeaux',
     })
     expect(commune.note).toBe(
-      'Repère approché : distances mesurées depuis le centre de la commune (Bordeaux), à lire « ≈ ». Précisez l’adresse pour les fiabiliser.'
+      'Repère approché : distances mesurées depuis le centre de la commune (Bordeaux), à lire « ≈ ». Précise l’adresse pour les fiabiliser.'
     )
     expect(approximationReason('transit', commune)).toContain('Desserte')
     expect(approximationReason('market', commune)).toContain(

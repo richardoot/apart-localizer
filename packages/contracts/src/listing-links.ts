@@ -238,6 +238,6 @@ export const ListingLinkPatchSchema = z
       value.online !== undefined ||
       value.portal !== undefined ||
       value.externalId !== undefined,
-    { message: 'Donnez le prix, l’état, le portail ou l’identifiant du lien' }
+    { message: 'Donne le prix, l’état, le portail ou l’identifiant du lien' }
   )
 export type ListingLinkPatch = z.infer<typeof ListingLinkPatchSchema>

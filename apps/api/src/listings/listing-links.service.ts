@@ -148,7 +148,7 @@ export class ListingLinksService {
     const own = item.links.find(l => l.normalizedUrl === normalizedUrl)
     if (own) {
       throw new ConflictException(
-        `Ce lien est déjà sur cette fiche (${LISTING_PORTAL_LABELS[own.portal]}) [lien ${own.id}] : vérifiez-le plutôt (apply_listing_check avec linkId, ou « Vue en ligne aujourd’hui »)`
+        `Ce lien est déjà sur cette fiche (${LISTING_PORTAL_LABELS[own.portal]}) [lien ${own.id}] : vérifie-le plutôt (apply_listing_check avec linkId, ou « Vue en ligne aujourd’hui »)`
       )
     }
     if (item.links.length >= LISTING_LINKS_MAX) {
@@ -425,7 +425,7 @@ export class ListingLinksService {
     }
     if (item.links.length <= 1) {
       throw new ConflictException(
-        'Le dernier lien d’une annonce ne se retire pas : il reste son lien d’origine (écartez l’annonce si elle n’est plus suivie)'
+        'Le dernier lien d’une annonce ne se retire pas : il reste son lien d’origine (écarte l’annonce si elle n’est plus suivie)'
       )
     }
     return this.drop(member, item, linkId, 'listing_link.removed', 'web', null)

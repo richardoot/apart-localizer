@@ -1,6 +1,9 @@
 <script setup lang="ts">
   import { nextTick, ref } from 'vue'
   import { DECISION_REASON_MAX, DISCARD_QUICK_REASONS } from '@apart/contracts'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiChip from '@/components/ui/UiChip.vue'
+  import UiField from '@/components/ui/UiField.vue'
 
   /**
    * Lot 21 (ADR 0031) : écarter demande une raison, en un clic parmi les
@@ -14,11 +17,9 @@
 
   const other = ref(false)
   const text = ref('')
-  const input = ref<HTMLInputElement | null>(null)
-
   function askOther(): void {
     other.value = true
-    void nextTick(() => input.value?.focus())
+    void nextTick(() => document.getElementById('discard-reason-text')?.focus())
   }
 
   function submit(): void {
@@ -35,59 +36,56 @@
       role="group"
       aria-labelledby="discard-reasons-title"
     >
-      <button
+      <UiChip
         v-for="reason in DISCARD_QUICK_REASONS"
         :key="reason"
-        type="button"
-        class="min-h-12 rounded-xl border border-line bg-surface px-3.5 text-fg hover:border-accent disabled:opacity-60 sm:min-h-11 sm:rounded-full"
+        :toggle="false"
+        class="justify-center sm:justify-start"
         :disabled="busy"
         data-action="reason"
         @click="emit('pick', reason)"
       >
         {{ reason }}
-      </button>
-      <button
-        type="button"
-        class="min-h-12 rounded-xl border border-line bg-surface px-3.5 text-fg hover:border-accent sm:min-h-11 sm:rounded-full"
-        :aria-pressed="other"
+      </UiChip>
+      <UiChip
+        :selected="other"
+        class="justify-center sm:justify-start"
         data-action="reason-other"
         @click="askOther"
       >
         Autre
-      </button>
+      </UiChip>
     </div>
     <form
       v-if="other"
       class="flex flex-wrap items-end gap-2"
       @submit.prevent="submit"
     >
-      <label class="grid min-w-0 flex-[1_1_16rem] gap-1 text-sm">
-        Ta raison
-        <input
-          ref="input"
-          v-model="text"
-          type="text"
-          :maxlength="DECISION_REASON_MAX"
-          class="min-h-11 rounded-lg border border-line bg-bg px-3"
-          data-testid="reason-text"
-        />
-      </label>
-      <button
+      <UiField
+        id="discard-reason-text"
+        v-model="text"
+        class="flex-[1_1_16rem]"
+        label="Ta raison"
+        :maxlength="DECISION_REASON_MAX"
+        align="left"
+        data-testid="reason-text"
+      />
+      <UiButton
         type="submit"
-        class="min-h-11 rounded-[10px] bg-accent px-4 font-semibold text-accent-fg disabled:opacity-60"
+        variant="primary"
         :disabled="busy || !text.trim()"
         data-action="reason-submit"
       >
         Écarter
-      </button>
+      </UiButton>
     </form>
-    <button
-      type="button"
-      class="min-h-11 w-fit bg-transparent px-1 text-accent"
+    <UiButton
+      variant="link"
+      class="w-fit no-underline"
       data-action="reason-cancel"
       @click="emit('cancel')"
     >
       Revenir
-    </button>
+    </UiButton>
   </div>
 </template>

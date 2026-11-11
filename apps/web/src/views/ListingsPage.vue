@@ -56,7 +56,15 @@
   } from '@/lib/listing-tabs'
   import type { ListingTab } from '@/lib/listing-tabs'
   import { criteriaFeatures } from '@/lib/perimeter'
-  import { ApiError } from '@/lib/api'
+  import { useAction } from '@/composables/useAction'
+  import type { ActionOptions } from '@/composables/useAction'
+  import QueryState from '@/components/ui/QueryState.vue'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCard from '@/components/ui/UiCard.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import { useFeedbackStore } from '@/stores/feedback'
   import {
     confirmLabel,
     dismissedDraftRow,
@@ -148,7 +156,12 @@
   )
 
   // Lot 21 : les compteurs de la barre et « Ce qui t'attend ».
-  const { data: overview, isSuccess: overviewReady } = useWorkflowOverview()
+  // Lot 22 : un échec des compteurs se dit (avec « Réessayer ») et
+  // n'empêche pas la liste de se lire.
+  const overviewQuery = useWorkflowOverview()
+  const overview = overviewQuery.data
+  const overviewReady = overviewQuery.isSuccess
+  const overviewFailed = computed(() => overviewQuery.isError?.value === true)
   /** L'étape ouverte : celle de l'URL, sinon la première qui a quelque chose. */
   const stage = computed<WorkflowStage>(
     () => store.stage ?? defaultStage(overview.value?.stages ?? [])
@@ -166,10 +179,12 @@
   }))
   /** À valider : pas d'appel de liste ; sinon, l'étape est connue. */
   const listEnabled = computed(
-    () => !draftsStage.value && (store.stage !== null || overviewReady.value)
+    () =>
+      !draftsStage.value &&
+      (store.stage !== null || overviewReady.value || overviewFailed.value)
   )
-  const { data, isPending, isFetching, isPlaceholderData, error } =
-    useListingList(listFilters, listEnabled)
+  const listQuery = useListingList(listFilters, listEnabled)
+  const { data, isPending, isFetching, isPlaceholderData, error } = listQuery
   // Lot 12 : contours des annonces au quartier, chargés pour la carte seulement.
   const listingAreas = useListingAreas(computed(() => store.view === 'map'))
   /** Les annonces de l'étape (les précédentes s'effacent le temps du chargement). */
@@ -308,8 +323,9 @@
 
   /** Le message de création (« entre dans le critère… »), montré à l'ouverture de la fiche. */
   const notice = ref<string | null>(null)
-  const pageMessage = ref<string | null>(null)
-  const pageFailure = ref<string | null>(null)
+  /** Lot 22 : les échecs des actions de la page, dits près des lignes. */
+  const pageAction = useAction('L’action a échoué.')
+  const feedback = useFeedbackStore()
 
   /** Une autre fiche s'ouvre sur sa synthèse : l'onglet ne suit pas. */
   function open(id: string, tab?: ListingTab): void {
@@ -345,15 +361,14 @@
   function selectStage(next: WorkflowStage): void {
     store.setStage(next)
     showAllArchives.value = false
-    pageMessage.value = null
+    pageAction.clear()
   }
 
   const mutations = useListingMutations()
 
   /** Ce que fait le bouton d'une ligne. */
   function onRowAction(row: StageRowView): void {
-    pageMessage.value = null
-    pageFailure.value = null
+    pageAction.clear()
     switch (row.action.kind) {
       case 'sort':
         void router.push({
@@ -378,26 +393,64 @@
     }
   }
 
-  /** « Repêcher » : un fait, appliqué tout de suite, retour À étudier ou À valider. */
+  /**
+   * « Repêcher » : un fait, appliqué tout de suite, retour À étudier ou À
+   * valider. Lot 22 : « Annuler » le remet aux archives comme il était
+   * (même statut, même raison), par les mêmes routes.
+   */
   async function rescue(row: StageRowView): Promise<void> {
-    try {
-      if (row.kind === 'draft') {
-        await draftQueries.decide.mutateAsync({
-          id: row.id,
-          decision: { status: 'pending' },
-        })
-        pageMessage.value = `« ${row.title} » revient À valider.`
-        return
-      }
-      await mutations.setStatus.mutateAsync({
-        id: row.id,
-        change: { status: 'to_study', reason: null },
-      })
-      pageMessage.value = `« ${row.title} » revient À étudier.`
-    } catch (err) {
-      pageFailure.value =
-        err instanceof ApiError ? err.message : 'L’action a échoué.'
+    if (row.kind === 'draft') {
+      const before = dismissedOf(row.id)
+      await pageAction.run(
+        () =>
+          draftQueries.decide.mutateAsync({
+            id: row.id,
+            decision: { status: 'pending' },
+          }),
+        {
+          success: `« ${row.title} » revient À valider.`,
+          undo: () =>
+            draftQueries.decide.mutateAsync({
+              id: row.id,
+              decision: before?.dismissReason
+                ? { status: 'dismissed', reason: before.dismissReason }
+                : { status: 'dismissed' },
+            }),
+        }
+      )
+      return
     }
+    const before = items.value.find(i => i.listing.id === row.id)?.listing
+    const options: ActionOptions<unknown> = {
+      success: `« ${row.title} » revient À étudier.`,
+    }
+    if (before) {
+      options.undo = async () => {
+        const saved = await mutations.setStatus.mutateAsync({
+          id: row.id,
+          change: {
+            status: before.status,
+            reason: before.discardReason,
+            expectedStatus: 'to_study',
+          },
+        })
+        // À plusieurs, écarter de nouveau est une proposition.
+        if (saved?.decision && saved.listing.status !== before.status) {
+          feedback.notify(
+            `« ${row.title} » : la remise aux archives est proposée aux autres membres.`,
+            { tone: 'info' }
+          )
+        }
+      }
+    }
+    await pageAction.run(
+      () =>
+        mutations.setStatus.mutateAsync({
+          id: row.id,
+          change: { status: 'to_study', reason: null },
+        }),
+      options
+    )
   }
 
   const draftsExpandedId = ref<string | null>(null)
@@ -451,13 +504,19 @@
       !error.value &&
       rows.value.length === 0
   )
+  /** Lot 22 : les filtres actifs sont nommés quand l'étape paraît vide. */
+  const filtered = computed(() => store.activeCount > 0)
+  const COLOR_OPTIONS = [
+    { value: 'verdict', label: 'par verdict' },
+    { value: 'status', label: 'par statut' },
+  ]
 </script>
 
 <template>
   <section class="mx-auto grid max-w-7xl min-w-0 gap-3.5 px-4 py-5">
     <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <div>
-        <h1 class="font-display text-[26px] font-bold">Annonces</h1>
+        <h1 class="font-display text-3xl font-bold">Annonces</h1>
         <p
           v-if="isFetching && !isPending"
           class="text-sm text-muted"
@@ -468,36 +527,44 @@
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <ExportMenu :filters="draftsStage ? store.apiFilters() : listFilters" />
-        <RouterLink
+        <UiButton
           :to="{ name: 'listing-new', query: withoutListingTab(route.query) }"
-          class="inline-flex min-h-11 items-center rounded-[10px] bg-accent px-4 text-sm font-semibold text-accent-fg"
+          variant="primary"
+          icon="plus"
         >
-          + Ajouter
-        </RouterLink>
+          Ajouter
+        </UiButton>
       </div>
     </header>
 
     <WorkflowAgenda :items="overview?.agenda ?? []" @stage="selectStage" />
 
     <StageBar :stages="stages" :current="stage" @select="selectStage" />
+    <UiAlert
+      v-if="overviewFailed"
+      tone="warn"
+      retry
+      :retrying="overviewQuery.isFetching?.value ?? false"
+      data-testid="overview-error"
+      @retry="overviewQuery.refetch?.()"
+    >
+      Les compteurs des étapes et « Ce qui t’attend » n’ont pas pu être lus :
+      les chiffres affichés sont peut-être faux.
+    </UiAlert>
 
     <div
       class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5"
       data-testid="stage-head"
     >
       <div class="flex min-w-0 flex-[1_1_380px] flex-col gap-0.5">
-        <h2
-          class="font-display text-[19px] font-bold sm:text-xl"
-          data-testid="stage-question"
-        >
+        <h2 class="font-display text-xl font-bold" data-testid="stage-question">
           {{ WORKFLOW_STAGE_QUESTIONS[stage] }}
         </h2>
         <p class="text-sm text-muted">{{ WORKFLOW_STAGE_INTROS[stage] }}</p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          class="min-h-11 rounded-[10px] border border-line bg-surface px-3.5 text-sm"
+        <UiButton
+          icon="filter"
           :aria-expanded="filtersOpen"
           data-testid="filters-toggle"
           @click="filtersOpen = !filtersOpen"
@@ -505,55 +572,35 @@
           Filtres<template v-if="store.activeCount">
             ({{ store.activeCount }})</template
           >
-        </button>
+        </UiButton>
         <ViewSwitch v-model="store.view" />
-        <label
+        <UiField
           v-if="store.view === 'map'"
-          class="flex items-center gap-1 text-xs text-muted"
-        >
-          Couleur
-          <select
-            v-model="colorBy"
-            class="min-h-9 rounded-lg border border-line bg-bg px-2 text-xs"
-          >
-            <option value="verdict">par verdict</option>
-            <option value="status">par statut</option>
-          </select>
-        </label>
-        <RouterLink
+          id="map-color-by"
+          v-model="colorBy"
+          as="select"
+          label="Couleur des repères"
+          sr-label
+          :options="COLOR_OPTIONS"
+        />
+        <UiButton
           v-if="toConfirm > 0"
           :to="{ name: 'triage', query: { mode: 'confirmer' } }"
-          class="inline-flex min-h-11 items-center rounded-[10px] border-[1.5px] border-accent bg-surface px-3.5 text-sm font-semibold text-accent"
+          variant="outline"
           data-testid="stage-confirm"
-          >{{ confirmLabel(toConfirm) }}</RouterLink
+          >{{ confirmLabel(toConfirm) }}</UiButton
         >
-        <button
+        <UiButton
           v-if="ctaLabel"
-          type="button"
-          class="min-h-[52px] w-full rounded-xl bg-accent px-4 text-sm font-semibold text-accent-fg sm:min-h-11 sm:w-auto sm:rounded-[10px]"
+          variant="primary"
+          class="min-h-13! w-full sm:min-h-11! sm:w-auto"
           data-testid="stage-cta"
           @click="runCta"
         >
           {{ ctaLabel }}
-        </button>
+        </UiButton>
       </div>
     </div>
-
-    <p
-      v-if="pageFailure"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-    >
-      {{ pageFailure }}
-    </p>
-    <p
-      v-else-if="pageMessage"
-      aria-live="polite"
-      class="rounded-lg bg-good-soft px-3 py-2 text-sm text-good"
-      data-testid="page-message"
-    >
-      {{ pageMessage }}
-    </p>
 
     <div v-if="filtersOpen" class="grid gap-2" data-testid="filters-panel">
       <FiltersBar
@@ -582,10 +629,10 @@
           ></template
         >
       </p>
-      <button
+      <UiButton
         v-if="!draftsStage"
-        type="button"
-        class="min-h-11 w-fit text-sm text-accent underline-offset-2 hover:underline"
+        variant="link"
+        class="w-fit"
         data-testid="full-table"
         @click="store.view = store.view === 'table' ? 'list' : 'table'"
       >
@@ -594,7 +641,7 @@
             ? 'Revenir à la liste'
             : 'Voir le tableau complet (toutes les colonnes, comparer)'
         }}
-      </button>
+      </UiButton>
     </div>
 
     <template v-if="draftsStage && store.view !== 'map'">
@@ -604,7 +651,9 @@
         :keep-order="draftsKeepOrder"
         :agreement="agreement"
         :expanded="draftsExpandedId"
+        :filtered="filtered"
         @update:expanded="draftsExpandedId = $event"
+        @clear-filters="store.reset()"
       />
       <OutOfCriteria
         :label="outLabel('draft', outDraftRows.length)"
@@ -631,24 +680,38 @@
         @bounds="value => (bbox = value)"
       />
     </template>
-    <p
-      v-else-if="error"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
+    <QueryState
+      v-else
+      :query="listQuery"
+      :pending="switching"
+      :skeleton="store.view === 'cards' ? 'cards' : 'rows'"
+      loading-label="les annonces"
+      error-fallback="Impossible de lire les annonces."
     >
-      {{ error.message }}
-    </p>
-    <p v-else-if="isPending || switching" class="text-sm text-muted">
-      Chargement des annonces…
-    </p>
-    <template v-else>
-      <p
+      <UiCard
         v-if="stageEmpty && !switching"
-        class="rounded-[14px] border border-line bg-surface px-4 py-3 text-sm text-muted"
+        padding="sm"
+        class="grid gap-2 text-sm"
         data-testid="stage-empty"
       >
-        {{ STAGE_EMPTY_TEXT[stage] }}
-      </p>
+        <p class="text-muted">{{ STAGE_EMPTY_TEXT[stage] }}</p>
+        <template v-if="filtered">
+          <p class="text-muted" data-testid="stage-empty-filters">
+            Des filtres sont actifs ({{ store.activeCount }}) : ils cachent
+            peut-être des annonces de cette étape.
+          </p>
+          <UiButton
+            size="sm"
+            class="w-fit"
+            data-testid="clear-filters"
+            @click="store.reset()"
+            >Effacer les filtres</UiButton
+          >
+        </template>
+      </UiCard>
+      <UiAlert v-if="pageAction.error.value" data-testid="page-failure">
+        {{ pageAction.error.value }}
+      </UiAlert>
       <StageRows
         v-if="store.view === 'list'"
         :rows="visibleRows"
@@ -658,15 +721,16 @@
       >
         <template #expanded="{ row }">
           <div class="flex flex-col gap-2.5">
-            <a
+            <UiButton
               v-if="dismissedOf(row.id)?.url"
               :href="dismissedOf(row.id)?.url ?? undefined"
+              variant="link"
+              icon-right="external"
+              class="w-fit font-semibold"
               target="_blank"
               rel="noopener noreferrer"
-              class="w-fit font-semibold text-accent underline underline-offset-2"
               >Voir l’annonce en ligne
-              <span aria-hidden="true">↗</span>
-              <span class="sr-only">(nouvel onglet)</span></a
+              <span class="sr-only">(nouvel onglet)</span></UiButton
             >
             <PropertyFacts
               v-if="dismissedOf(row.id)"
@@ -710,7 +774,7 @@
         class="grid gap-2"
         data-testid="dismissed-drafts"
       >
-        <h3 class="text-[15px] font-semibold">Écartées à l’étape À valider</h3>
+        <h3 class="text-base font-semibold">Écartées à l’étape À valider</h3>
         <StageRows
           :rows="dismissedRows"
           :expanded="expandedDismissedIds"
@@ -727,15 +791,19 @@
           </template>
         </StageRows>
       </section>
-      <button
+      <UiButton
         v-if="store.view === 'list' && hiddenArchives > 0"
-        type="button"
-        class="min-h-11 w-fit text-sm text-accent underline-offset-2 hover:underline"
+        variant="link"
+        class="w-fit"
         data-testid="archives-more"
         @click="showAllArchives = true"
       >
-        Voir les {{ hiddenArchives }} autres
-      </button>
+        {{
+          hiddenArchives > 1
+            ? `Voir les ${hiddenArchives} autres`
+            : 'Voir l’autre'
+        }}
+      </UiButton>
       <OutOfCriteria
         v-if="store.view !== 'table'"
         :label="outLabel('listing', outRows.length)"
@@ -743,23 +811,22 @@
         :default-open="outOpenByDefault"
         @open="open"
       />
-    </template>
+    </QueryState>
 
     <p
       v-if="store.view === 'table' && !draftsStage"
       class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted"
     >
       <span
-        ><span class="rounded-full bg-good-soft px-2 text-good">Cible</span>
-        rendement brut ≥ seuil, effort ≤ maximum, DPE A à D</span
+        ><UiBadge tone="good">Cible</UiBadge> rendement brut ≥ seuil, effort ≤
+        maximum, DPE A à D</span
       >
       <span
-        ><span class="rounded-full bg-warn-soft px-2 text-warn">À creuser</span>
-        un critère manque de peu</span
+        ><UiBadge tone="warn">À creuser</UiBadge> un critère manque de peu</span
       >
       <span
-        ><span class="rounded-full bg-bad-soft px-2 text-bad">Hors cible</span>
-        rendement trop faible, DPE E à G ou effort trop lourd</span
+        ><UiBadge tone="bad">Hors cible</UiBadge> rendement trop faible, DPE E à
+        G ou effort trop lourd</span
       >
       <span
         >« ≈ » : valeur estimée faute de saisie (taxe foncière = 1 mois de

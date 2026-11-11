@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue'
+  import { computed, nextTick, ref, watch } from 'vue'
   import {
     CriteriaFiltersSchema,
     DEFAULT_CRITERIA_TOLERANCE,
@@ -31,9 +31,20 @@
   } from '@/composables/useSearchCriteria'
   import { fitReasonsText, toleranceThresholds } from '@apart/domain'
   import DefinitionButton from '@/components/ui/DefinitionButton.vue'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiChip from '@/components/ui/UiChip.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import UiInput from '@/components/ui/UiInput.vue'
+  import UiSegmented from '@/components/ui/UiSegmented.vue'
   import FitBadge from '@/components/listings/FitBadge.vue'
-  import { ApiError } from '@/lib/api'
-  import { formatEuros, parseNumberInput } from '@/lib/format'
+  import { errorMessage } from '@/lib/errors'
+  import {
+    formatEuros,
+    numberInputError,
+    parseNumberInput,
+    plural,
+  } from '@/lib/format'
   import { LISTING_STATUS_LABELS, VERDICT_LABELS } from '@/lib/labels'
   import { describePerimeter } from '@/lib/perimeter'
   import CriteriaMap from './CriteriaMap.vue'
@@ -44,6 +55,11 @@
    * désactivée), périmètre (aucun, point et rayon, polygone ou cercle
    * dessinés, isochrone par adresse ou clic), aperçu par niveau d'adéquation
    * calculé par le serveur avant d'enregistrer.
+   *
+   * Lot 22 : un nombre illisible (« 250k ») ou une marge hors de ses bornes
+   * est refusé au champ, jamais transformé en « pas de filtre » ni ramené en
+   * silence dans ses bornes ; l'enregistrement est bloqué et le premier
+   * champ en erreur reçoit le focus. `isDirty` sert à la garde du panneau.
    */
   const props = defineProps<{ criteria: SearchCriteriaSummary | null }>()
   const emit = defineEmits<{ saved: [criteria: SearchCriteriaSummary] }>()
@@ -127,6 +143,41 @@
   })
   const marginOn = computed(() => !isStrictTolerance(tolerance.value))
 
+  /** Une marge doit rester dans ses bornes : sinon, on le dit au champ. */
+  function rangeError(raw: string, max: number, unit: string): string | null {
+    const unreadable = numberInputError(raw)
+    if (unreadable) return unreadable
+    const value = parseNumberInput(raw)
+    if (value === null) return null
+    if (value < 0 || value > max) {
+      return `Entre 0 et ${max.toLocaleString('fr-FR')} ${unit}.`
+    }
+    return null
+  }
+
+  /** Les erreurs de saisie, par champ (identifiant du champ). */
+  const fieldErrors = computed<Record<string, string>>(() => {
+    const entries: [string, string | null][] = [
+      ['c-price-max', numberInputError(priceMax.value)],
+      ['c-price-min', numberInputError(priceMin.value)],
+      ['c-surface-min', numberInputError(surfaceMin.value)],
+      ['c-rooms-min', numberInputError(roomsMin.value)],
+      ['c-tram', numberInputError(tramMax.value)],
+      ['tol-perimeter', rangeError(tolPerimeter.value, 2000, 'm')],
+      ['tol-price-max', rangeError(tolPriceMax.value, 50, '%')],
+      ['tol-price-min', rangeError(tolPriceMin.value, 50, '%')],
+      ['tol-surface', rangeError(tolSurface.value, 50, '%')],
+      ['tol-rooms', rangeError(tolRooms.value, 3, 'pièces')],
+      ['tol-tram', rangeError(tolTram.value, 2000, 'm')],
+    ]
+    return Object.fromEntries(
+      entries.filter((entry): entry is [string, string] => entry[1] !== null)
+    )
+  })
+  const hasFieldErrors = computed(
+    () => Object.keys(fieldErrors.value).length > 0
+  )
+
   function setTolerance(t: CriteriaTolerance): void {
     tolPerimeter.value = String(t.perimeterMeters)
     tolPriceMax.value = percent(t.priceMaxShare)
@@ -207,6 +258,8 @@
       if (touched.value && kind.value !== 'none' && !perimeterInput.value) {
         return null
       }
+      // Une saisie refusée ne part pas, même en aperçu.
+      if (hasFieldErrors.value) return null
       return {
         filters: filters.value,
         perimeter: effectivePerimeter.value,
@@ -271,7 +324,7 @@
     touched.value = true
     const address = isoAddress.value.trim()
     if (!isoOrigin.value && address.length < 3) {
-      failure.value = 'Donnez une adresse de départ ou cliquez sur la carte.'
+      failure.value = 'Donne une adresse de départ ou clique sur la carte.'
       return
     }
     failure.value = null
@@ -293,21 +346,49 @@
     }
   }
 
+  /** Un champ numérique (`type="number"`) : seule une valeur lisible remplace l'ancienne. */
+  function setNumber(value: unknown, set: (next: number) => void): void {
+    const parsed = parseNumberInput(
+      typeof value === 'number' ? value : String(value ?? '')
+    )
+    if (parsed !== null) set(parsed)
+  }
+
   function toggle<T>(list: T[], value: T): T[] {
     return list.includes(value)
       ? list.filter(v => v !== value)
       : [...list, value]
   }
 
+  const formRef = ref<HTMLFormElement | null>(null)
+  const nameError = ref<string | null>(null)
+
+  /** Après un refus, le premier champ en erreur reçoit le focus. */
+  async function focusFirstInvalid(): Promise<void> {
+    await nextTick()
+    const field =
+      formRef.value?.querySelector<HTMLElement>('[aria-invalid="true"]') ?? null
+    field?.focus?.()
+    field?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+  }
+
   async function save(): Promise<void> {
     failure.value = null
+    nameError.value = null
     if (!name.value.trim()) {
-      failure.value = 'Donnez un nom au critère.'
+      nameError.value = 'Donne un nom au critère.'
+      await focusFirstInvalid()
+      return
+    }
+    if (hasFieldErrors.value) {
+      failure.value =
+        'Des valeurs ne sont pas lisibles : corrige les champs signalés.'
+      await focusFirstInvalid()
       return
     }
     if (touched.value && kind.value !== 'none' && !perimeterInput.value) {
       failure.value =
-        'Le périmètre n’est pas encore posé : dessinez-le, cliquez sur la carte, ou calculez l’isochrone.'
+        'Le périmètre n’est pas encore posé : dessine-le, clique sur la carte, ou calcule l’isochrone.'
       return
     }
     try {
@@ -335,10 +416,39 @@
           })
       emit('saved', saved)
     } catch (err) {
-      failure.value =
-        err instanceof ApiError ? err.message : "L'enregistrement a échoué."
+      failure.value = errorMessage(err, "L'enregistrement a échoué.")
     }
   }
+
+  /** L'état de la saisie, pour savoir si elle a changé depuis l'ouverture. */
+  function snapshot(): string {
+    return JSON.stringify([
+      name.value,
+      priceMax.value,
+      priceMin.value,
+      surfaceMin.value,
+      roomsMin.value,
+      tramMax.value,
+      dpeMax.value,
+      communes.value,
+      verdicts.value,
+      statuses.value,
+      tolPerimeter.value,
+      tolPriceMax.value,
+      tolPriceMin.value,
+      tolSurface.value,
+      tolRooms.value,
+      tolDpe.value,
+      tolTram.value,
+      isoAddress.value,
+    ])
+  }
+  const initialSnapshot = snapshot()
+  /** Lot 22 : vrai si la saisie ou le périmètre ont changé depuis l'ouverture. */
+  function isDirty(): boolean {
+    return touched.value || snapshot() !== initialSnapshot
+  }
+  defineExpose({ isDirty })
 
   const saving = computed(
     () => mutations.create.isPending.value || mutations.update.isPending.value
@@ -348,124 +458,111 @@
 </script>
 
 <template>
-  <form class="grid gap-4" @submit.prevent="save">
-    <div class="grid gap-1">
-      <label for="c-name" class="text-xs font-medium text-muted">Nom</label>
-      <input
-        id="c-name"
-        v-model="name"
-        class="rounded-lg border border-line bg-bg px-3 py-1.5 text-sm"
-        placeholder="Talence à 10 minutes du tram"
-      />
-    </div>
+  <form ref="formRef" class="grid gap-4" novalidate @submit.prevent="save">
+    <UiField
+      id="c-name"
+      v-model="name"
+      label="Nom"
+      placeholder="Talence à 10 minutes du tram"
+      :error="nameError"
+    />
 
-    <fieldset class="grid gap-3 rounded-xl border border-line p-3">
+    <fieldset class="grid gap-3 rounded-2xl border border-line p-4">
       <legend class="px-1 text-sm font-semibold">Filtres</legend>
       <div class="grid gap-3 sm:grid-cols-3">
-        <label class="grid gap-1 text-xs text-muted">
-          Prix maximal (€)
-          <input
-            v-model="priceMax"
-            inputmode="numeric"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-            data-testid="c-price-max"
-          />
-        </label>
-        <label class="grid gap-1 text-xs text-muted">
-          Prix minimal (€)
-          <input
-            v-model="priceMin"
-            inputmode="numeric"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-          />
-        </label>
-        <label class="grid gap-1 text-xs text-muted">
-          Surface minimale (m²)
-          <input
-            v-model="surfaceMin"
-            inputmode="decimal"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-          />
-        </label>
-        <label class="grid gap-1 text-xs text-muted">
-          Pièces minimum
-          <input
-            v-model="roomsMin"
-            inputmode="numeric"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-          />
-        </label>
-        <label class="grid gap-1 text-xs text-muted">
-          DPE au plus
-          <select
-            v-model="dpeMax"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-          >
-            <option value="">Tous</option>
-            <option v-for="dpe in dpeClasses" :key="dpe" :value="dpe">
-              {{ dpe }}
-            </option>
-          </select>
-        </label>
-        <label class="grid gap-1 text-xs text-muted">
-          Tram à moins de (m)
-          <input
-            v-model="tramMax"
-            inputmode="numeric"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-            data-testid="c-tram"
-          />
-        </label>
-      </div>
-      <label class="grid gap-1 text-xs text-muted">
-        Communes (séparées par des virgules ; vide = toutes)
-        <input
-          v-model="communes"
-          class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
+        <UiField
+          id="c-price-max"
+          v-model="priceMax"
+          label="Prix maximal"
+          unit="€"
+          quiet
+          inputmode="numeric"
+          :error="fieldErrors['c-price-max']"
+          data-testid="c-price-max"
         />
-      </label>
+        <UiField
+          id="c-price-min"
+          v-model="priceMin"
+          label="Prix minimal"
+          unit="€"
+          quiet
+          inputmode="numeric"
+          :error="fieldErrors['c-price-min']"
+        />
+        <UiField
+          id="c-surface-min"
+          v-model="surfaceMin"
+          label="Surface minimale"
+          unit="m²"
+          quiet
+          inputmode="decimal"
+          :error="fieldErrors['c-surface-min']"
+        />
+        <UiField
+          id="c-rooms-min"
+          v-model="roomsMin"
+          label="Pièces minimum"
+          quiet
+          inputmode="numeric"
+          :error="fieldErrors['c-rooms-min']"
+        />
+        <UiField
+          id="c-dpe-max"
+          v-model="dpeMax"
+          as="select"
+          label="DPE au plus"
+          quiet
+          :options="[
+            { value: '', label: 'Tous' },
+            ...dpeClasses.map(dpe => ({ value: dpe, label: dpe })),
+          ]"
+        />
+        <UiField
+          id="c-tram"
+          v-model="tramMax"
+          label="Tram à moins de"
+          unit="m"
+          quiet
+          inputmode="numeric"
+          :error="fieldErrors['c-tram']"
+          data-testid="c-tram"
+        />
+      </div>
+      <UiField
+        id="c-communes"
+        v-model="communes"
+        label="Communes"
+        quiet
+        hint="séparées par des virgules ; vide = toutes"
+      />
       <div class="flex flex-wrap gap-1.5" role="group" aria-label="Verdicts">
-        <button
+        <UiChip
           v-for="verdict in VerdictSchema.options"
           :key="verdict"
-          type="button"
-          class="rounded-full border px-2.5 py-0.5 text-xs"
-          :class="
-            verdicts.includes(verdict)
-              ? 'border-accent bg-accent-soft'
-              : 'border-line text-muted'
-          "
-          :aria-pressed="verdicts.includes(verdict)"
+          :selected="verdicts.includes(verdict)"
           @click="verdicts = toggle(verdicts, verdict)"
         >
           {{ VERDICT_LABELS[verdict] }}
-        </button>
+        </UiChip>
       </div>
       <div
         class="flex flex-wrap gap-1.5"
         role="group"
         aria-label="Statuts (vide = actifs)"
       >
-        <button
+        <UiChip
           v-for="status in ListingStatusSchema.options"
           :key="status"
-          type="button"
-          class="rounded-full border px-2.5 py-0.5 text-xs"
-          :class="
-            statuses.includes(status)
-              ? 'border-accent bg-accent-soft'
-              : 'border-line text-muted'
-          "
-          :aria-pressed="statuses.includes(status)"
+          :selected="statuses.includes(status)"
           @click="statuses = toggle(statuses, status)"
         >
           {{ LISTING_STATUS_LABELS[status] }}
-        </button>
+        </UiChip>
       </div>
     </fieldset>
 
     <fieldset
-      class="grid gap-3 rounded-xl border border-line p-3"
+      class="grid gap-3 rounded-2xl border border-line p-4"
       data-testid="tolerance"
     >
       <legend class="px-1 text-sm font-semibold">
@@ -474,111 +571,125 @@
         /></span>
       </legend>
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <p class="max-w-xl text-xs text-muted">
+        <p class="max-w-xl text-sm text-muted">
           Une annonce qui dépasse un peu reste visible, « à la marge », avec la
           raison. Au-delà, elle passe « hors critères » sans être perdue.
         </p>
-        <button
-          type="button"
-          class="min-h-11 rounded-full border px-4 text-sm font-semibold"
-          :class="
-            marginOn
-              ? 'border-accent bg-accent text-accent-fg'
-              : 'border-line bg-surface text-fg'
-          "
+        <UiButton
+          :variant="marginOn ? 'primary' : 'secondary'"
+          class="rounded-full! px-4 font-semibold"
           :aria-pressed="marginOn"
           data-testid="tolerance-toggle"
           @click="toggleMargin"
         >
           {{ marginOn ? 'Marge appliquée' : 'Marge désactivée' }}
-        </button>
+        </UiButton>
       </div>
       <div class="grid gap-3 sm:grid-cols-3">
-        <label class="grid content-start gap-1 text-xs text-muted">
-          Autour du périmètre (m)
-          <input
-            v-model="tolPerimeter"
-            inputmode="numeric"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-            data-testid="tol-perimeter"
-          />
-          <span>adresse exacte ou à la rue ; contour du quartier sinon</span>
-        </label>
-        <label class="grid content-start gap-1 text-xs text-muted">
-          Au-dessus du prix maximal (%)
-          <input
-            v-model="tolPriceMax"
-            inputmode="decimal"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-            data-testid="tol-price-max"
-          />
-          <span
-            v-if="thresholds?.priceMax != null"
-            data-testid="tol-price-max-threshold"
-            >soit {{ formatEuros(thresholds.priceMax) }}</span
-          >
-        </label>
-        <label class="grid content-start gap-1 text-xs text-muted">
-          Sous le prix minimal (%)
-          <input
-            v-model="tolPriceMin"
-            inputmode="decimal"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-          />
-          <span v-if="thresholds?.priceMin != null"
-            >soit {{ formatEuros(thresholds.priceMin) }}</span
-          >
-        </label>
-        <label class="grid content-start gap-1 text-xs text-muted">
-          Sous la surface minimale (%)
-          <input
-            v-model="tolSurface"
-            inputmode="decimal"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-          />
-          <span v-if="thresholds?.surfaceMin != null"
-            >soit {{ thresholds.surfaceMin.toLocaleString('fr-FR') }} m²</span
-          >
-        </label>
-        <label class="grid content-start gap-1 text-xs text-muted">
-          Pièces de moins
-          <input
-            v-model="tolRooms"
-            inputmode="numeric"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-          />
-          <span v-if="thresholds?.roomsMin != null"
-            >soit {{ thresholds.roomsMin }} pièce(s)</span
-          >
-        </label>
-        <label class="grid content-start gap-1 text-xs text-muted">
-          DPE en plus
-          <select
-            v-model.number="tolDpe"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-          >
-            <option v-for="m in DPE_MARGINS" :key="m.value" :value="m.value">
-              {{ m.label }}
-            </option>
-          </select>
-          <span v-if="thresholds?.dpeMax != null"
-            >soit {{ thresholds.dpeMax }}</span
-          >
-        </label>
-        <label class="grid content-start gap-1 text-xs text-muted">
-          Distance au tram en plus (m)
-          <input
-            v-model="tolTram"
-            inputmode="numeric"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-          />
-          <span v-if="thresholds?.tramMeters != null"
-            >soit {{ thresholds.tramMeters.toLocaleString('fr-FR') }} m</span
-          >
-        </label>
+        <UiField
+          id="tol-perimeter"
+          v-model="tolPerimeter"
+          label="Autour du périmètre"
+          unit="m"
+          quiet
+          inputmode="numeric"
+          hint="adresse exacte ou à la rue ; contour du quartier sinon"
+          :error="fieldErrors['tol-perimeter']"
+          data-testid="tol-perimeter"
+        />
+        <UiField
+          id="tol-price-max"
+          label="Au-dessus du prix maximal"
+          quiet
+          :error="fieldErrors['tol-price-max']"
+        >
+          <template #default="{ id, describedBy, invalid }">
+            <UiInput
+              :id="id"
+              v-model="tolPriceMax"
+              unit="%"
+              inputmode="decimal"
+              :invalid="invalid"
+              :described-by="describedBy"
+              data-testid="tol-price-max"
+            />
+            <span
+              v-if="thresholds?.priceMax != null"
+              class="text-xs text-muted"
+              data-testid="tol-price-max-threshold"
+              >soit {{ formatEuros(thresholds.priceMax) }}</span
+            >
+          </template>
+        </UiField>
+        <UiField
+          id="tol-price-min"
+          v-model="tolPriceMin"
+          label="Sous le prix minimal"
+          unit="%"
+          quiet
+          inputmode="decimal"
+          :hint="
+            thresholds?.priceMin != null
+              ? `soit ${formatEuros(thresholds.priceMin)}`
+              : null
+          "
+          :error="fieldErrors['tol-price-min']"
+        />
+        <UiField
+          id="tol-surface"
+          v-model="tolSurface"
+          label="Sous la surface minimale"
+          unit="%"
+          quiet
+          inputmode="decimal"
+          :hint="
+            thresholds?.surfaceMin != null
+              ? `soit ${thresholds.surfaceMin.toLocaleString('fr-FR')} m²`
+              : null
+          "
+          :error="fieldErrors['tol-surface']"
+        />
+        <UiField
+          id="tol-rooms"
+          v-model="tolRooms"
+          label="Pièces de moins"
+          quiet
+          inputmode="numeric"
+          :hint="
+            thresholds?.roomsMin != null
+              ? `soit ${plural(thresholds.roomsMin, 'pièce')}`
+              : null
+          "
+          :error="fieldErrors['tol-rooms']"
+        />
+        <UiField
+          id="tol-dpe"
+          v-model="tolDpe"
+          as="select"
+          label="DPE en plus"
+          quiet
+          :options="DPE_MARGINS"
+          :hint="
+            thresholds?.dpeMax != null ? `soit ${thresholds.dpeMax}` : null
+          "
+        />
+        <UiField
+          id="tol-tram"
+          v-model="tolTram"
+          label="Distance au tram en plus"
+          unit="m"
+          quiet
+          inputmode="numeric"
+          :hint="
+            thresholds?.tramMeters != null
+              ? `soit ${thresholds.tramMeters.toLocaleString('fr-FR')} m`
+              : null
+          "
+          :error="fieldErrors['tol-tram']"
+        />
       </div>
       <section
-        class="grid gap-1.5 rounded-lg border border-accent/40 bg-accent-soft px-3 py-2.5 text-xs leading-relaxed text-fg"
+        class="grid gap-1.5 rounded-xl border border-accent/40 bg-accent-soft px-3 py-2.5 text-sm leading-relaxed text-fg"
         aria-labelledby="imprecise-rule-title"
       >
         <h3 id="imprecise-rule-title" class="text-sm font-semibold">
@@ -603,12 +714,12 @@
 
     <section
       v-if="preview.data.value"
-      class="grid gap-2 rounded-xl border border-line p-3"
+      class="grid gap-2 rounded-2xl border border-line p-4"
       aria-labelledby="fit-preview-title"
       data-testid="fit-preview"
     >
       <h3 id="fit-preview-title" class="text-sm font-semibold">
-        Aperçu sur vos annonces actives
+        Aperçu sur tes annonces actives
       </h3>
       <dl class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2">
         <template v-for="level in PREVIEW_LEVELS" :key="level">
@@ -621,7 +732,7 @@
           </dd>
         </template>
       </dl>
-      <p class="text-xs text-muted" data-testid="fit-preview-note">
+      <p class="text-sm text-muted" data-testid="fit-preview-note">
         <template v-if="!marginOn"
           >Marge désactivée : une annonce qui dépasse un seuil passe hors
           critères.</template
@@ -634,98 +745,82 @@
       </p>
     </section>
 
-    <fieldset class="grid gap-3 rounded-xl border border-line p-3">
+    <fieldset class="grid gap-3 rounded-2xl border border-line p-4">
       <legend class="px-1 text-sm font-semibold">Périmètre</legend>
-      <div
-        class="flex flex-wrap gap-1.5"
-        role="radiogroup"
-        aria-label="Type de périmètre"
-      >
-        <button
-          v-for="k in KINDS"
-          :key="k.value"
-          type="button"
-          role="radio"
-          class="rounded-lg border px-2.5 py-1 text-xs"
-          :class="
-            kind === k.value
-              ? 'border-accent bg-accent-soft'
-              : 'border-line text-muted'
-          "
-          :aria-checked="kind === k.value"
-          :data-kind="k.value"
-          @click="setKind(k.value)"
-        >
-          {{ k.label }}
-        </button>
-      </div>
-      <label
+      <UiSegmented
+        :model-value="kind"
+        :options="KINDS"
+        label="Type de périmètre"
+        class="flex-wrap"
+        @update:model-value="setKind"
+      />
+      <UiField
         v-if="kind === 'point_radius'"
-        class="flex items-center gap-2 text-xs text-muted"
-      >
-        Rayon (m)
-        <input
-          v-model.number="radius"
-          type="number"
-          min="50"
-          max="50000"
-          step="50"
-          class="w-28 rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-        />
-      </label>
+        id="c-radius"
+        :model-value="radius"
+        label="Rayon"
+        unit="m"
+        quiet
+        class="max-w-40"
+        type="number"
+        min="50"
+        max="50000"
+        step="50"
+        @update:model-value="value => setNumber(value, next => (radius = next))"
+      />
       <div
         v-if="kind === 'isochrone'"
         class="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end"
       >
-        <label class="grid gap-1 text-xs text-muted">
-          Adresse de départ (ou clic sur la carte)
-          <input
-            v-model="isoAddress"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-            data-testid="iso-address"
-            :placeholder="
-              isoOrigin
-                ? `Point ${isoOrigin.latitude}, ${isoOrigin.longitude}`
-                : '1 place de la Bourse, Bordeaux'
-            "
-            @input="isoOrigin = null"
-          />
-        </label>
-        <label class="grid gap-1 text-xs text-muted">
-          Mode
-          <select
-            v-model="isoMode"
-            class="rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-          >
-            <option v-for="m in isoModes" :key="m" :value="m">
-              {{ ISOCHRONE_MODE_LABELS[m] }}
-            </option>
-          </select>
-        </label>
-        <label class="grid gap-1 text-xs text-muted">
-          Minutes
-          <input
-            v-model.number="isoMinutes"
-            type="number"
-            min="1"
-            max="60"
-            class="w-20 rounded-lg border border-line bg-bg px-2 py-1 text-sm text-fg"
-          />
-        </label>
-        <button
-          type="button"
-          class="rounded-lg border border-accent px-3 py-1 text-sm"
+        <UiField
+          id="c-iso-address"
+          v-model="isoAddress"
+          label="Adresse de départ (ou clic sur la carte)"
+          quiet
+          data-testid="iso-address"
+          :placeholder="
+            isoOrigin
+              ? `Point ${isoOrigin.latitude}, ${isoOrigin.longitude}`
+              : '1 place de la Bourse, Bordeaux'
+          "
+          @input="isoOrigin = null"
+        />
+        <UiField
+          id="c-iso-mode"
+          v-model="isoMode"
+          as="select"
+          label="Mode"
+          quiet
+          :options="
+            isoModes.map(m => ({ value: m, label: ISOCHRONE_MODE_LABELS[m] }))
+          "
+        />
+        <UiField
+          id="c-iso-minutes"
+          :model-value="isoMinutes"
+          label="Minutes"
+          quiet
+          class="w-24"
+          type="number"
+          min="1"
+          max="60"
+          @update:model-value="
+            value => setNumber(value, next => (isoMinutes = next))
+          "
+        />
+        <UiButton
+          variant="outline"
           data-testid="iso-compute"
           @click="computeIsochrone"
         >
           Calculer
-        </button>
+        </UiButton>
         <p
           v-if="isoMode === 'cycling'"
-          class="text-xs text-muted sm:col-span-4"
+          class="text-sm text-muted sm:col-span-4"
         >
-          À vélo : la Géoplateforme n'a pas de profil vélo, l'isochrone est
-          approchée par la distance sur le réseau piéton à 15 km/h.
+          À vélo, il n’y a pas d’itinéraire vélo : l'isochrone est approchée par
+          la distance à pied sur le réseau, à 15 km/h.
         </p>
       </div>
       <CriteriaMap
@@ -736,12 +831,23 @@
       />
       <p class="text-sm" aria-live="polite" data-testid="preview">
         {{ describePerimeter(shownPerimeter) }} ·
-        <template v-if="preview.isFetching.value">calcul…</template>
+        <template v-if="hasFieldErrors"
+          >aperçu en attente des corrections</template
+        >
+        <template v-else-if="preview.isFetching.value">calcul…</template>
         <template v-else-if="preview.error.value">
-          <span class="text-bad">{{ preview.error.value.message }}</span>
+          <span class="text-bad">{{
+            errorMessage(preview.error.value, 'L’aperçu a échoué.')
+          }}</span>
         </template>
         <template v-else-if="preview.data.value">
-          {{ preview.data.value.listingCount }} annonce(s) gardée(s)
+          {{
+            plural(
+              preview.data.value.listingCount,
+              'annonce gardée',
+              'annonces gardées'
+            )
+          }}
           <template v-if="preview.data.value.approximateCount">
             dont {{ preview.data.value.approximateCount }} à confirmer faute
             d’adresse
@@ -750,27 +856,18 @@
         <template v-else>périmètre à poser</template>
       </p>
     </fieldset>
-    <p
-      v-if="failure"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-    >
+    <UiAlert v-if="failure">
       {{ failure }}
-    </p>
+    </UiAlert>
     <div class="flex justify-end">
-      <button
+      <UiButton
         type="submit"
-        class="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-accent-fg disabled:opacity-60"
-        :disabled="saving"
+        variant="primary"
+        :loading="saving"
+        loading-label="Enregistrement…"
       >
-        {{
-          saving
-            ? 'Enregistrement…'
-            : criteria
-              ? 'Enregistrer'
-              : 'Créer le critère'
-        }}
-      </button>
+        {{ criteria ? 'Enregistrer' : 'Créer le critère' }}
+      </UiButton>
     </div>
   </form>
 </template>

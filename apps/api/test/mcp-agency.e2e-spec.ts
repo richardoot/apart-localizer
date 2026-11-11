@@ -357,7 +357,7 @@ describe('Lot 17 : questions aux agences au connecteur MCP (e2e)', () => {
       expectedUpdatedAt: '2026-01-01T00:00:00.000Z',
     })
     expect(stale.isError).toBe(true)
-    expect(stale.content[0]?.text).toContain('a changé depuis votre lecture')
+    expect(stale.content[0]?.text).toContain('a changé depuis ta lecture')
     const answered = await callTool(richard, 'record_agency_answer', {
       requestId: second?.id,
       receivedAt: '2026-11-07T15:00:00.000Z',

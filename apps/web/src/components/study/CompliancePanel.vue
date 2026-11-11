@@ -2,7 +2,7 @@
   import { computed } from 'vue'
   import type { ComplianceCategory, ComplianceItem } from '@apart/contracts'
   import { useCompliance } from '@/composables/useStudy'
-  import { formatDate } from '@/lib/format'
+  import { formatDate, plural } from '@/lib/format'
   import {
     CHECK_LEVEL_CLASSES,
     CHECK_LEVEL_LABELS,
@@ -51,8 +51,9 @@
         <span>
           pour une mise en location le
           <strong>{{ formatDate(report.rentalStartDate) }}</strong> :
-          {{ report.counts.bad }} bloquant(s), {{ report.counts.warn }} point(s)
-          d’attention, {{ report.counts.unknown }} à vérifier
+          {{ plural(report.counts.bad, 'bloquant') }},
+          {{ plural(report.counts.warn, 'point') }} d’attention,
+          {{ report.counts.unknown }} à vérifier
         </span>
       </header>
       <section

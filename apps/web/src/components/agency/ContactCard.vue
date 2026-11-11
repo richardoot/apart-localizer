@@ -2,8 +2,13 @@
   import { computed, ref } from 'vue'
   import { AGENCY_CHANNEL_LABELS, AgencyChannelSchema } from '@apart/contracts'
   import type { AgencyChannel, ListingContact } from '@apart/contracts'
-  import { ApiError } from '@/lib/api'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiConfirm from '@/components/ui/UiConfirm.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import { errorMessage } from '@/lib/errors'
   import { formatDate } from '@/lib/format'
+  import { cardClasses } from '@/lib/ui'
 
   /**
    * Lot 17 : la carte du contact de l'annonceur (agence, interlocuteur,
@@ -30,7 +35,6 @@
   }>()
 
   const editing = ref(false)
-  const confirmingClear = ref(false)
   const failure = ref<string | null>(null)
   const form = ref({
     agencyName: '',
@@ -41,7 +45,15 @@
     preferredChannel: '' as AgencyChannel | '',
   })
 
-  const channels = AgencyChannelSchema.options
+  // Lot 22 : en constante (vue-tsc lit mal « https://… » écrit dans l'attribut d'un composant).
+  const URL_PLACEHOLDER = 'https://…'
+  const channelOptions = [
+    { value: '', label: 'Selon ce qui est connu' },
+    ...AgencyChannelSchema.options.map(c => ({
+      value: c,
+      label: AGENCY_CHANNEL_LABELS[c],
+    })),
+  ]
 
   function startEditing(): void {
     const c = props.contact
@@ -65,7 +77,7 @@
 
   function submit(): void {
     if (empty.value) {
-      failure.value = 'Renseignez au moins un champ, ou effacez le contact.'
+      failure.value = 'Renseigne au moins un champ, ou efface le contact.'
       return
     }
     emit('save', {
@@ -81,30 +93,24 @@
   /** Appelé par le parent une fois l'enregistrement fait, ou en échec. */
   function done(error?: unknown): void {
     if (error) {
-      failure.value =
-        error instanceof ApiError ? error.message : "L'enregistrement a échoué."
+      failure.value = errorMessage(error, 'L’enregistrement a échoué.')
       return
     }
     editing.value = false
-    confirmingClear.value = false
   }
   defineExpose({ done })
-
-  const inputClass =
-    'min-h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm sm:min-h-9'
-  const buttonClass =
-    'inline-flex min-h-11 items-center rounded-lg border border-line px-3 text-sm hover:bg-surface-2 disabled:opacity-60 sm:min-h-9'
 </script>
 
 <template>
   <section
-    class="grid gap-3 rounded-xl border border-line p-4"
+    class="grid gap-3"
+    :class="cardClasses()"
     aria-labelledby="contact-title"
     data-testid="agency-contact"
   >
     <header class="flex flex-wrap items-start justify-between gap-2">
       <div class="grid gap-0.5">
-        <h3 id="contact-title" class="font-display text-base font-semibold">
+        <h3 id="contact-title" class="font-display text-base font-bold">
           Contact de l’annonceur
         </h3>
         <p class="text-xs text-muted">
@@ -112,147 +118,106 @@
           moment.
         </p>
       </div>
-      <div v-if="!editing" class="flex flex-wrap gap-2">
-        <button
-          type="button"
-          :class="buttonClass"
-          data-testid="contact-edit"
-          @click="startEditing"
-        >
+      <div
+        v-if="!editing"
+        class="flex flex-wrap items-center gap-2"
+        data-testid="contact-clear-confirm"
+      >
+        <UiButton size="sm" data-testid="contact-edit" @click="startEditing">
           {{ contact ? 'Modifier' : 'Ajouter un contact' }}
-        </button>
-        <button
-          v-if="contact && !confirmingClear"
-          type="button"
-          :class="buttonClass"
+        </UiButton>
+        <UiConfirm
+          v-if="contact"
+          label="Effacer"
+          question="Effacer le contact de l’annonceur ? Les messages déjà envoyés restent dans la chronologie, avec le nom affiché seulement."
+          confirm-label="Effacer le contact"
+          cancel-label="Garder"
+          :busy="busy"
+          :confirm-attrs="{ 'data-testid': 'contact-clear-yes' }"
           data-testid="contact-clear"
-          @click="confirmingClear = true"
-        >
-          Effacer
-        </button>
+          @confirm="emit('clear')"
+        />
       </div>
     </header>
-
-    <div
-      v-if="confirmingClear"
-      class="flex flex-wrap items-center gap-2 rounded-lg bg-bad-soft px-3 py-2 text-sm"
-      role="alert"
-      data-testid="contact-clear-confirm"
-    >
-      <span class="flex-1"
-        >Effacer le contact de l’annonceur ? Les messages déjà envoyés restent
-        dans la chronologie, avec le nom affiché seulement.</span
-      >
-      <button
-        type="button"
-        :class="buttonClass"
-        @click="confirmingClear = false"
-      >
-        Garder
-      </button>
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center rounded-lg bg-bad px-3 text-sm font-medium text-accent-fg disabled:opacity-60 sm:min-h-9"
-        :disabled="busy"
-        data-testid="contact-clear-yes"
-        @click="emit('clear')"
-      >
-        Effacer le contact
-      </button>
-    </div>
 
     <form
       v-if="editing"
       class="grid gap-3 sm:grid-cols-2"
       data-testid="contact-form"
+      novalidate
       @submit.prevent="submit"
     >
-      <label class="grid gap-1 text-xs font-medium text-muted">
-        Agence (ou « particulier »)
-        <input
-          v-model="form.agencyName"
-          :class="inputClass"
-          maxlength="120"
-          autocomplete="off"
-          data-testid="contact-agency"
-        />
-      </label>
-      <label class="grid gap-1 text-xs font-medium text-muted">
-        Interlocuteur
-        <input
-          v-model="form.contactName"
-          :class="inputClass"
-          maxlength="120"
-          autocomplete="off"
-          placeholder="Mme [Exemple]"
-        />
-      </label>
-      <label class="grid gap-1 text-xs font-medium text-muted">
-        E-mail
-        <input
-          v-model="form.email"
-          type="email"
-          inputmode="email"
-          :class="inputClass"
-          maxlength="254"
-          autocomplete="off"
-          data-testid="contact-email"
-        />
-      </label>
-      <label class="grid gap-1 text-xs font-medium text-muted">
-        Téléphone
-        <input
-          v-model="form.phone"
-          type="tel"
-          inputmode="tel"
-          :class="inputClass"
-          maxlength="30"
-          autocomplete="off"
-        />
-      </label>
-      <label class="grid gap-1 text-xs font-medium text-muted sm:col-span-2">
-        Lien de la messagerie du portail
-        <input
-          v-model="form.portalMessageUrl"
-          type="url"
-          inputmode="url"
-          :class="inputClass"
-          maxlength="2000"
-          placeholder="https://…"
-        />
-      </label>
-      <label class="grid gap-1 text-xs font-medium text-muted">
-        Canal préféré
-        <select
-          v-model="form.preferredChannel"
-          :class="inputClass"
-          data-testid="contact-channel"
-        >
-          <option value="">Selon ce qui est connu</option>
-          <option v-for="c in channels" :key="c" :value="c">
-            {{ AGENCY_CHANNEL_LABELS[c] }}
-          </option>
-        </select>
-      </label>
-      <p
-        v-if="failure"
-        role="alert"
-        class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad sm:col-span-2"
-      >
-        {{ failure }}
-      </p>
+      <UiField
+        id="contact-agency"
+        v-model="form.agencyName"
+        label="Agence (ou « particulier »)"
+        quiet
+        maxlength="120"
+        autocomplete="off"
+        data-testid="contact-agency"
+      />
+      <UiField
+        id="contact-name"
+        v-model="form.contactName"
+        label="Interlocuteur"
+        quiet
+        maxlength="120"
+        autocomplete="off"
+        placeholder="Mme [Exemple]"
+      />
+      <UiField
+        id="contact-email"
+        v-model="form.email"
+        label="E-mail"
+        quiet
+        type="email"
+        inputmode="email"
+        maxlength="254"
+        autocomplete="off"
+        data-testid="contact-email"
+      />
+      <UiField
+        id="contact-phone"
+        v-model="form.phone"
+        label="Téléphone"
+        quiet
+        type="tel"
+        inputmode="tel"
+        align="left"
+        maxlength="30"
+        autocomplete="off"
+      />
+      <UiField
+        id="contact-portal"
+        v-model="form.portalMessageUrl"
+        label="Lien de la messagerie du portail"
+        quiet
+        full
+        type="url"
+        inputmode="url"
+        maxlength="2000"
+        :placeholder="URL_PLACEHOLDER"
+      />
+      <UiField
+        id="contact-channel"
+        v-model="form.preferredChannel"
+        as="select"
+        label="Canal préféré"
+        quiet
+        :options="channelOptions"
+        data-testid="contact-channel"
+      />
+      <UiAlert v-if="failure" class="sm:col-span-2">{{ failure }}</UiAlert>
       <div class="flex flex-wrap justify-end gap-2 sm:col-span-2">
-        <button type="button" :class="buttonClass" @click="editing = false">
-          Annuler
-        </button>
-        <button
+        <UiButton @click="editing = false">Annuler</UiButton>
+        <UiButton
           type="submit"
-          class="inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-medium text-accent-fg disabled:opacity-60 sm:min-h-9"
-          :disabled="busy"
+          variant="primary"
+          :loading="busy"
           data-testid="contact-save"
         >
           Enregistrer
-        </button>
+        </UiButton>
       </div>
     </form>
 
@@ -280,12 +245,14 @@
       <template v-if="contact.portalMessageUrl">
         <dt class="text-xs text-muted sm:pt-0.5">Messagerie</dt>
         <dd>
-          <a
+          <UiButton
             :href="contact.portalMessageUrl"
+            variant="link"
             target="_blank"
             rel="noopener noreferrer"
-            class="break-all text-accent underline"
-            >ouvrir la conversation</a
+            icon-right="external"
+            class="break-all"
+            >ouvrir la conversation</UiButton
           >
         </dd>
       </template>
@@ -299,7 +266,7 @@
     </dl>
     <p v-else class="text-sm text-muted" data-testid="contact-empty">
       Aucun contact enregistré. Claude le lit sur l’annonce quand il prépare un
-      message ; vous pouvez aussi le saisir.
+      message ; tu peux aussi le saisir.
     </p>
   </section>
 </template>

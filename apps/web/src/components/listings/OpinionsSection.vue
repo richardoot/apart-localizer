@@ -17,7 +17,10 @@
   import { useOptionalListingEditor } from '@/composables/useListingEditor'
   import { useMediaQuery } from '@/composables/useMediaQuery'
   import { useOpinionDraft } from '@/composables/useOpinionDraft'
-  import { ApiError } from '@/lib/api'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import { errorMessage } from '@/lib/errors'
+  import { cardClasses } from '@/lib/ui'
   import {
     maskedText,
     memberMeta,
@@ -104,7 +107,7 @@
   const nameOf = (id: string): string =>
     props.members.find(m => m.id === id)?.displayName ?? 'Ancien membre'
 
-  /** La dernière visite faite avec moi (« après visite », « notez pendant que c'est frais »). */
+  /** La dernière visite faite avec moi (« après visite », « note pendant que c'est frais »). */
   const myVisit = computed(() =>
     props.meId
       ? opinionAfterVisit(
@@ -179,10 +182,10 @@
       await props.actions.save(state.payload())
       close()
     } catch (error) {
-      formError.value =
-        error instanceof ApiError || error instanceof Error
-          ? error.message
-          : 'L’avis n’a pas pu être enregistré.'
+      formError.value = errorMessage(
+        error,
+        'L’avis n’a pas pu être enregistré.'
+      )
     }
   }
 
@@ -196,10 +199,10 @@
     try {
       await props.actions.reveal()
     } catch (error) {
-      revealError.value =
-        error instanceof Error
-          ? error.message
-          : 'Les avis n’ont pas pu être affichés.'
+      revealError.value = errorMessage(
+        error,
+        'Les avis n’ont pas pu être affichés.'
+      )
     } finally {
       revealing.value = false
     }
@@ -243,8 +246,6 @@
   )
 
   const card = 'grid content-start gap-1.5 rounded-xl px-3.5 py-3'
-  const button =
-    'inline-flex min-h-11 items-center rounded-lg px-3.5 text-sm sm:min-h-10'
 </script>
 
 <template>
@@ -252,8 +253,8 @@
     <section
       id="nos-avis"
       tabindex="-1"
-      class="grid scroll-mt-28 gap-3.5 rounded-2xl bg-surface p-4 outline-none sm:px-5"
-      :class="editing ? 'border-[1.5px] border-accent' : 'border border-line'"
+      class="grid scroll-mt-28 gap-3.5 outline-none"
+      :class="cardClasses(editing ? 'accent' : 'default')"
       :aria-labelledby="editing ? 'my-opinion-title' : 'opinions-title'"
       data-testid="opinions"
       :data-editing="editing ? 'true' : undefined"
@@ -276,19 +277,15 @@
           class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
         >
           <h2 id="opinions-title" class="text-base font-semibold">Nos avis</h2>
-          <button
+          <UiButton
             v-if="me?.state === 'rated'"
-            type="button"
-            :class="[
-              button,
-              'border border-accent bg-surface font-semibold text-accent',
-            ]"
+            variant="outline"
             aria-controls="nos-avis"
             data-testid="opinion-edit"
             @click="start"
           >
             Modifier mon avis
-          </button>
+          </UiButton>
         </div>
 
         <div class="grid gap-3 @xl:grid-cols-2">
@@ -302,14 +299,14 @@
               :data-member="member.memberId"
               data-state="me-missing"
             >
-              <strong class="text-[15px]">{{ member.displayName }}</strong>
+              <strong class="text-base">{{ member.displayName }}</strong>
               <template v-if="myVisit">
                 <span class="font-semibold"
                   >Visite faite le {{ shortDay(myVisit.visitedAt) }}</span
                 >
                 <p class="leading-snug" data-testid="fresh-visit">
-                  Notez pendant que c’est frais. Ce que vous ne savez pas,
-                  laissez « — ».
+                  Note pendant que c’est frais. Ce que tu ne sais pas, laisse «
+                  — ».
                 </p>
               </template>
               <p class="leading-snug" data-testid="my-card-text">
@@ -323,22 +320,19 @@
               </p>
               <p
                 v-if="revealedNote"
-                class="text-xs text-muted"
+                class="text-sm text-muted"
                 data-testid="revealed-note"
               >
                 {{ revealedNote }}
               </p>
-              <button
-                type="button"
-                :class="[
-                  button,
-                  'min-h-11 justify-self-start bg-accent font-semibold text-accent-fg',
-                ]"
+              <UiButton
+                variant="primary"
+                class="justify-self-start"
                 data-testid="opinion-edit"
                 @click="start"
               >
                 Donner mon avis
-              </button>
+              </UiButton>
             </div>
             <div
               v-else-if="member.state === 'masked'"
@@ -346,7 +340,7 @@
               :data-member="member.memberId"
               data-state="masked"
             >
-              <strong class="text-[15px]">{{ member.displayName }}</strong>
+              <strong class="text-base">{{ member.displayName }}</strong>
               <p class="leading-snug">{{ maskedText(member) }}</p>
               <div aria-hidden="true" class="flex flex-wrap gap-1.5">
                 <span
@@ -355,21 +349,16 @@
                   class="h-6 w-[5.75rem] rounded-lg bg-surface-2"
                 />
               </div>
-              <button
-                type="button"
-                :class="[
-                  button,
-                  'justify-self-start border border-line bg-surface hover:bg-surface-2 disabled:opacity-60',
-                ]"
-                :disabled="revealing || !actions"
+              <UiButton
+                class="justify-self-start"
+                :disabled="!actions"
+                :loading="revealing"
                 data-testid="opinion-reveal"
                 @click="reveal"
               >
                 Voir quand même
-              </button>
-              <p v-if="revealError" role="alert" class="text-sm text-bad">
-                {{ revealError }}
-              </p>
+              </UiButton>
+              <UiAlert v-if="revealError">{{ revealError }}</UiAlert>
             </div>
             <div
               v-else-if="member.state === 'rated'"
@@ -378,10 +367,10 @@
               data-state="rated"
             >
               <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <strong class="text-[15px]">{{ member.displayName }}</strong>
+                <strong class="text-base">{{ member.displayName }}</strong>
                 <span
                   v-if="member.rating"
-                  class="font-display text-[22px] font-bold text-accent tabular-nums"
+                  class="font-display text-2xl font-bold text-accent tabular-nums"
                   :aria-label="`note globale ${member.rating} sur 5`"
                   >{{ member.rating }}/5</span
                 >
@@ -396,7 +385,7 @@
               <p class="leading-snug whitespace-pre-line break-words">
                 {{ textOf(member.memberId) || 'Pas de phrase.' }}
               </p>
-              <span class="text-xs text-muted" data-testid="member-meta">{{
+              <span class="text-sm text-muted" data-testid="member-meta">{{
                 memberMeta(member)
               }}</span>
             </div>
@@ -406,7 +395,7 @@
               :data-member="member.memberId"
               data-state="missing"
             >
-              <strong class="text-[15px]">{{ member.displayName }}</strong>
+              <strong class="text-base">{{ member.displayName }}</strong>
               <p class="text-muted">Pas encore donné</p>
             </div>
           </template>
@@ -447,20 +436,17 @@
               ><template v-if="commonText"> / 5</template
               ><template v-else> en attente</template></span
             >
-            <button
+            <UiButton
               v-if="hasScores"
-              type="button"
-              :class="[
-                button,
-                'border border-line bg-surface hover:bg-surface-2',
-              ]"
+              size="sm"
+              :icon-right="detailOpen ? 'chevron-up' : 'chevron-down'"
               :aria-expanded="detailOpen"
               aria-controls="opinions-detail"
               data-testid="opinions-toggle"
               @click="detailOpen = !detailOpen"
             >
               {{ detailOpen ? 'Masquer le détail' : 'Voir le détail' }}
-            </button>
+            </UiButton>
           </div>
         </div>
         <OpinionsDetail
@@ -480,8 +466,8 @@
       <strong>Pourquoi masquer ?</strong>
       <span class="text-muted"
         >Voir l’avis de l’autre avant de noter pousse à s’aligner. Les
-        désaccords n’apparaissent qu’une fois que vous avez noté tous les deux,
-        ou quand quelqu’un choisit « Voir quand même ».</span
+        désaccords n’apparaissent qu’une fois que chacun a noté, ou quand
+        quelqu’un choisit « Voir quand même ».</span
       >
       <span class="text-muted"
         >Ailleurs (liste, comparaison, Claude), la note commune ne se calcule

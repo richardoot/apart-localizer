@@ -2,6 +2,7 @@
   import { nextTick, onMounted, ref, watch } from 'vue'
   import { LISTING_TABS } from '@/lib/listing-tabs'
   import type { ListingTab } from '@/lib/listing-tabs'
+  import UiBadge from '@/components/ui/UiBadge.vue'
 
   /**
    * Les sept onglets de la fiche (lot 19), en vrai motif d'onglets :
@@ -70,6 +71,7 @@
     class="relative -mx-4 flex gap-0.5 overflow-x-auto overscroll-x-contain px-2 [scrollbar-width:none] sm:mx-0 sm:px-0"
     @keydown="onKey"
   >
+    <!-- Lot 22 : un vrai onglet (role="tab", souligné), pas un UiButton. -->
     <button
       v-for="(choice, i) in LISTING_TABS"
       :id="`listing-tab-${choice.id}`"
@@ -94,12 +96,13 @@
       @click="select(choice.id)"
     >
       {{ choice.label }}
-      <span
+      <UiBadge
         v-if="choice.id === 'a-faire' && todoCount"
-        class="rounded-full bg-accent px-1.5 text-xs leading-5 font-semibold text-accent-fg"
+        tone="accent"
+        variant="solid"
         data-testid="todo-count"
         ><span class="sr-only">, </span>{{ todoCount
-        }}<span class="sr-only"> à traiter</span></span
+        }}<span class="sr-only"> à traiter</span></UiBadge
       >
     </button>
   </div>

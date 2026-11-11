@@ -293,7 +293,7 @@ describe('Lot 18 : une annonce, plusieurs portails au connecteur MCP (e2e)', () 
     })
     expect(stale.isError).toBe(true)
     expect(stale.content[0]?.text).toContain(
-      "L'annonce a changé depuis votre lecture"
+      "L'annonce a changé depuis ta lecture"
     )
     const denied = await callTool(reader, 'add_listing_link', {
       listingId: id,

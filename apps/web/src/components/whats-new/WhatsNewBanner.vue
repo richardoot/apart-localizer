@@ -3,6 +3,7 @@
   import { WHATS_NEW_KIND_LABELS } from '@apart/contracts'
   import type { WhatsNewKind } from '@apart/contracts'
   import { useWhatsNew } from '@/composables/useWhatsNew'
+  import UiButton from '@/components/ui/UiButton.vue'
 
   const emit = defineEmits<{ open: [listingId: string] }>()
   const { data, markSeen } = useWhatsNew()
@@ -31,33 +32,33 @@
 <template>
   <section
     v-if="data && data.total > 0"
-    class="grid gap-2 rounded-xl border border-accent bg-accent-soft/50 px-4 py-3"
+    class="grid gap-2 rounded-2xl border border-accent bg-accent-soft/50 p-4 sm:px-5"
     aria-labelledby="whats-new-title"
     data-testid="whats-new"
   >
     <div class="flex flex-wrap items-baseline justify-between gap-2">
-      <h2 id="whats-new-title" class="font-display text-base font-semibold">
-        Depuis votre dernière visite
+      <h2 id="whats-new-title" class="font-display text-base font-bold">
+        Depuis ta dernière visite
         <span class="text-sm font-normal text-muted">({{ since }})</span>
       </h2>
       <div class="flex gap-2">
-        <button
-          type="button"
-          class="rounded-lg border border-line bg-surface px-3 py-1 text-xs"
+        <UiButton
+          size="sm"
+          :icon-right="expanded ? 'chevron-up' : 'chevron-down'"
           :aria-expanded="expanded"
           @click="expanded = !expanded"
         >
           {{ expanded ? 'Masquer' : 'Voir le détail' }}
-        </button>
-        <button
-          type="button"
-          class="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-accent-fg disabled:opacity-60"
-          :disabled="markSeen.isPending.value"
+        </UiButton>
+        <UiButton
+          variant="primary"
+          size="sm"
+          :loading="markSeen.isPending.value"
           data-testid="mark-all-seen"
           @click="markSeen.mutate()"
         >
           Tout marquer comme vu
-        </button>
+        </UiButton>
       </div>
     </div>
     <p class="text-sm" data-testid="whats-new-counts">
@@ -65,13 +66,16 @@
     </p>
     <ul v-if="expanded" class="grid gap-1 text-sm">
       <li v-for="(item, index) in data.items" :key="index">
-        <button
-          type="button"
-          class="text-left hover:text-accent"
+        <UiButton
+          variant="ghost"
+          size="sm"
+          class="justify-start! px-1 text-left text-fg"
           @click="emit('open', item.listingId)"
         >
-          <strong>{{ item.listingTitle }}</strong> — {{ item.summary }}
-        </button>
+          <span
+            ><strong>{{ item.listingTitle }}</strong> — {{ item.summary }}</span
+          >
+        </UiButton>
       </li>
     </ul>
   </section>

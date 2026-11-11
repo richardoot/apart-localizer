@@ -83,7 +83,7 @@ export class AssumptionsService {
       update.expectedVersion !== previous.id
     ) {
       throw new ConflictException(
-        `Les hypothèses ont changé depuis votre lecture (version en vigueur : « ${previous.label ?? 'sans libellé'} », ${previous.id}) : relisez-les avant de les modifier`
+        `Les hypothèses ont changé depuis ta lecture (version en vigueur : « ${previous.label ?? 'sans libellé'} », ${previous.id}) : relis-les avant de les modifier`
       )
     }
     const impact = await this.impact(

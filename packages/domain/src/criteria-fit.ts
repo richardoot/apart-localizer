@@ -1229,7 +1229,7 @@ export function describeListingFit(fit: ListingCriteriaFit): string {
  */
 export function fitExplanation(fit: ListingCriteriaFit): string {
   if (fit.activeCriteria === 0) {
-    return 'Aucun critère actif : l’annonce est « dans les critères » par défaut. Créez un critère dans la page Critères pour la comparer à ce que vous cherchez.'
+    return 'Aucun critère actif : l’annonce est « dans les critères » par défaut. Crée un critère dans la page Critères pour la comparer à ce que tu cherches.'
   }
   const reasons = fitReasonsText(fit.reasons)
   switch (fit.level) {

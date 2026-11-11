@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import UiButton from '@/components/ui/UiButton.vue'
   import { computed } from 'vue'
   import type { AssumptionsImpact } from '@apart/contracts'
   import { impactLine, impactSummary } from '@/lib/assumptions-summary'
@@ -36,13 +37,9 @@
             : "Calcul de l'impact sur les annonces actives…"
         }}
       </p>
-      <button
-        type="button"
-        class="min-h-11 shrink-0 rounded-lg px-2.5 text-sm text-muted hover:bg-surface-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"
-        @click="emit('hide')"
-      >
+      <UiButton variant="ghost" class="shrink-0" @click="emit('hide')">
         Masquer
-      </button>
+      </UiButton>
     </div>
     <template v-if="impact && summary">
       <p class="text-xs text-muted">{{ summary.distribution }}</p>
@@ -51,8 +48,8 @@
           {{ impactLine(change) }}
         </li>
       </ul>
-      <p v-if="stale" class="text-xs font-medium text-warn">
-        Saisie modifiée depuis ce calcul : relancez « Voir l'impact ».
+      <p v-if="stale" class="text-sm font-medium text-warn">
+        Saisie modifiée depuis ce calcul : relance « Voir l'impact ».
       </p>
     </template>
   </section>

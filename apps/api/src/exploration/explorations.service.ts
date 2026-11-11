@@ -220,7 +220,7 @@ export class ExplorationsService {
       items,
       counts,
       activeCriteria: run.activeCriteria,
-      summary: `${explorationSummaryText(counts)}${run.dropped ? ` (${run.dropped} lien(s) envoyé(s) deux fois, comptés une fois)` : ''}`,
+      summary: `${explorationSummaryText(counts)}${run.dropped ? ` (${run.dropped > 1 ? `${run.dropped} liens envoyés deux fois, comptés une fois` : '1 lien envoyé deux fois, compté une fois'})` : ''}`,
       persisted: false,
     }
   }

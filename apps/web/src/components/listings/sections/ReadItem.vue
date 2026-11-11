@@ -43,8 +43,8 @@
       <AiMark :provenance="provenance" />
       <span
         v-if="changed"
-        class="ml-1 inline-block rounded-md bg-accent px-1.5 align-[1px] text-[11px] leading-[18px] font-semibold text-accent-fg"
-        title="Modifié depuis votre dernière ouverture de la fiche"
+        class="ml-1 inline-block rounded-md bg-accent px-1.5 align-[1px] text-xs leading-[18px] font-semibold text-accent-fg"
+        title="Modifié depuis ta dernière ouverture de la fiche"
         >modifié</span
       >
     </dd>

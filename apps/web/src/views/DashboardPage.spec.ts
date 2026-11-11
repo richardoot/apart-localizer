@@ -62,8 +62,8 @@ describe('DashboardPage', () => {
       '[data-criteria-count="cccccccc-cccc-4ccc-8ccc-cccccccccccc"]'
     )
     expect(row.text()).toContain('Talence fictif')
-    expect(row.text()).toContain('3 annonce(s)')
-    expect(row.text()).toContain('1 nouvelle(s)')
+    expect(row.text()).toContain('3 annonces')
+    expect(row.text()).toContain('1 nouvelle')
     expect(row.text()).toContain('dont 1 à confirmer')
     wrapper.unmount()
   })

@@ -150,7 +150,7 @@ export class TasksService {
     const task = await this.findTask(member, listingId, taskId)
     if (task.origin !== 'manual' && task.origin !== 'opinion') {
       throw new BadRequestException(
-        'Seules les tâches saisies à la main ou ajoutées depuis « Nos avis » peuvent être supprimées ; cochez les autres.'
+        'Seules les tâches saisies à la main ou ajoutées depuis « Nos avis » peuvent être supprimées ; coche les autres.'
       )
     }
     await this.prisma.$transaction(async tx => {

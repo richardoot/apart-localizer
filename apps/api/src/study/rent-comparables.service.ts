@@ -75,7 +75,7 @@ export class RentComparablesService {
     const existing = await this.rows(member, listingId)
     if (existing.length >= RENT_COMPARABLES_MAX) {
       throw new BadRequestException(
-        `${RENT_COMPARABLES_MAX} comparables au plus par annonce : modifiez-en un plutôt que d'en ajouter`
+        `${RENT_COMPARABLES_MAX} comparables au plus par annonce : modifies-en un plutôt que d'en ajouter`
       )
     }
     const row = await this.prisma.$transaction(async tx => {

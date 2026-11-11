@@ -49,10 +49,14 @@ vi.mock('@/lib/api', async () => {
   return { ...actual, api: apiMock }
 })
 
+import { useFeedbackStore } from '@/stores/feedback'
 import TodoTab from '../tabs/TodoTab.vue'
 import DraftMessage from './DraftMessage.vue'
 
 enableAutoUnmount(afterEach)
+
+/** Lot 22 : le dernier message de la zone commune. */
+const lastMessage = () => useFeedbackStore().messages.at(-1)?.text ?? null
 
 const LISTING = '11111111-1111-4111-8111-111111111111'
 const RICHARD = MEMBERS[0]?.id ?? ''
@@ -316,10 +320,10 @@ describe('onglet « À faire » (lot 19)', () => {
     const filters = wrapper.get('[data-testid="todo-filters"]')
     expect(filters.attributes('role')).toBe('group')
     expect(filters.findAll('button').map(b => b.text())).toEqual([
-      'Tout(9)',
-      'Nous(3)',
-      'Agence(5)',
-      'Visites(1)',
+      'Tout9',
+      'Nous3',
+      'Agence5',
+      'Visites1',
     ])
     await filters.get('[data-filter="agency"]').trigger('click')
     expect(
@@ -351,9 +355,13 @@ describe('onglet « À faire » (lot 19)', () => {
     expect(apiMock.tasks.update).toHaveBeenCalledWith(LISTING, id(6), {
       done: true,
     })
-    expect(wrapper.get('[data-testid="todo-notice"]').text()).toBe(
-      'Tâche faite.'
-    )
+    expect(lastMessage()).toBe('Tâche cochée.')
+    // Lot 22 : « Annuler » dans la zone de messages décoche la tâche.
+    await useFeedbackStore().act(useFeedbackStore().messages.at(-1)?.id ?? 0)
+    await flushPromises()
+    expect(apiMock.tasks.update).toHaveBeenLastCalledWith(LISTING, id(6), {
+      done: false,
+    })
     const done = row(wrapper, `task:${id(8)}`).get(
       '[data-testid="todo-toggle"]'
     )
@@ -380,7 +388,7 @@ describe('onglet « À faire » (lot 19)', () => {
 
     const form = wrapper.get('[data-testid="todo-add"]')
     await form.trigger('submit')
-    expect(form.text()).toContain('Écrivez la tâche ou la question.')
+    expect(form.text()).toContain('Écris la tâche ou la question.')
     await form
       .get('[data-testid="todo-add-text"]')
       .setValue('  Appeler le syndic ')
@@ -398,7 +406,7 @@ describe('onglet « À faire » (lot 19)', () => {
     expect(apiMock.tasks.create).toHaveBeenLastCalledWith(LISTING, {
       label: 'Demander la date du dernier ravalement',
     })
-    expect(wrapper.text()).toContain(
+    expect(lastMessage()).toContain(
       'Question ajoutée : « Demander la date du dernier ravalement »'
     )
     expect(
@@ -435,9 +443,7 @@ describe('onglet « À faire » (lot 19)', () => {
     await draft.get('[data-testid="draft-approve"]').trigger('click')
     await flushPromises()
     expect(apiMock.agency.approve).toHaveBeenCalledWith([DRAFT.id])
-    expect(wrapper.get('[data-testid="todo-notice"]').text()).toContain(
-      'Message validé : demandez à Claude'
-    )
+    expect(lastMessage()).toContain('Message validé : demande à Claude')
     await draft.get('[data-testid="draft-cancel"]').trigger('click')
     await flushPromises()
     expect(apiMock.agency.cancel).toHaveBeenCalledWith(DRAFT.id)
@@ -477,13 +483,13 @@ describe('onglet « À faire » (lot 19)', () => {
       DRAFT.id,
       '44444444-4444-4444-8444-444444444444',
     ])
-    expect(wrapper.text()).toContain('2 messages validés')
+    expect(lastMessage()).toContain('2 messages validés')
 
     const draft = mount(DraftMessage, { props: { request: DRAFT } })
     await draft.get('[data-testid="draft-edit"]').trigger('click')
     await draft.get('[data-testid="draft-subject"]').setValue('Autre objet')
     expect(draft.text()).toContain(
-      'Texte modifié : enregistrez-le avant de valider.'
+      'Texte modifié : enregistre-le avant de valider.'
     )
     await draft
       .findAll('button')
@@ -509,7 +515,7 @@ describe('onglet « À faire » (lot 19)', () => {
     await flushPromises()
     const approved = row(wrapper, `task:${id(4)}`)
     expect(approved.get('[data-testid="todo-approved"]').text()).toContain(
-      'Claude l’enverra par vos outils'
+      'Claude l’enverra par tes outils'
     )
     await approved.get('[data-testid="mark-sent"]').trigger('click')
     await flushPromises()
@@ -540,9 +546,7 @@ describe('onglet « À faire » (lot 19)', () => {
       keys: ['propertyTax'],
       expectedUpdatedAt: '2026-11-03T10:00:00.000Z',
     })
-    expect(wrapper.text()).toContain(
-      'Valeur de l’annonceur appliquée à la fiche.'
-    )
+    expect(lastMessage()).toBe('Valeur de l’annonceur appliquée à la fiche.')
   })
 
   it('« Préparer un message » pour les questions pas encore posées ; l’erreur de l’API est dite', async () => {
@@ -563,14 +567,14 @@ describe('onglet « À faire » (lot 19)', () => {
     )
   })
 
-  it('à droite : le contact (messages par vos outils), « Pendant la visite », les visites ; « Voir la visite »', async () => {
+  it('à droite : le contact (messages par tes outils), « Pendant la visite », les visites ; « Voir la visite »', async () => {
     const wrapper = mountTab()
     await flushPromises()
     expect(wrapper.get('[data-testid="agency-contact"]').text()).toContain(
       'Contact de l’annonceur'
     )
     expect(wrapper.get('[data-testid="exchanges-outbound"]').text()).toBe(
-      'Les messages partent par vos outils (Gmail, messagerie du portail), jamais par le serveur.'
+      'Les messages partent par tes outils (Gmail, messagerie du portail), jamais par le serveur.'
     )
     expect(wrapper.get('[data-testid="signature"]').text()).toContain(
       'Richard et Chloé'
@@ -602,7 +606,7 @@ describe('onglet « À faire » (lot 19)', () => {
     await wrapper.get('[data-testid="visit-remove"]').trigger('click')
     expect(
       wrapper.get('[data-testid="visit-remove-confirm"]').text()
-    ).toContain('Supprimer cette visite et vos photos ?')
+    ).toContain('Supprimer cette visite et tes photos ?')
     expect(apiMock.visits.remove).not.toHaveBeenCalled()
     await wrapper.get('[data-testid="visit-remove-yes"]').trigger('click')
     await flushPromises()
@@ -648,5 +652,57 @@ describe('onglet « À faire » (lot 19)', () => {
       VISIT.id,
       '33333333-3333-4333-8333-333333333333'
     )
+  })
+})
+
+describe('lot 22 : retours au bon endroit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiMock.agency.exchanges.mockResolvedValue(exchanges())
+    apiMock.agency.settings.mockResolvedValue({
+      signature: 'Richard et Chloé',
+      custom: false,
+      defaultSignature: 'Richard et Chloé',
+      followUpBusinessDays: 5,
+    })
+    apiMock.visits.list.mockResolvedValue([VISIT])
+  })
+
+  it('une tâche qui ne se coche pas : l’erreur dans sa ligne, pas en haut de l’onglet', async () => {
+    const { ApiError } =
+      await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+    apiMock.tasks.update.mockRejectedValue(
+      new ApiError(409, 'La tâche a changé entre-temps.')
+    )
+    const wrapper = mountTab()
+    await flushPromises()
+    const loan = row(wrapper, `task:${id(6)}`)
+    await loan.get('[data-testid="todo-toggle"]').setValue(true)
+    await flushPromises()
+    expect(loan.get('[data-testid="todo-row-error"]').text()).toContain(
+      'La tâche a changé entre-temps.'
+    )
+    expect(
+      row(wrapper, `task:${id(8)}`)
+        .find('[data-testid="todo-row-error"]')
+        .exists()
+    ).toBe(false)
+    expect(useFeedbackStore().messages).toHaveLength(0)
+  })
+
+  it('la lecture des visites échoue : « Réessayer », jamais « Aucune visite »', async () => {
+    const { ApiError } =
+      await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+    apiMock.visits.list.mockRejectedValue(
+      new ApiError(500, 'Le serveur ne répond pas.')
+    )
+    const wrapper = mountTab()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Aucune visite')
+    expect(wrapper.text()).toContain('Le serveur ne répond pas.')
+    apiMock.visits.list.mockResolvedValue([VISIT])
+    await wrapper.get('[data-testid="retry"]').trigger('click')
+    await flushPromises()
+    expect(document.getElementById(`visit-${VISIT.id}`)).not.toBeNull()
   })
 })

@@ -2,7 +2,8 @@
   import { computed } from 'vue'
   import type { Listing } from '@apart/contracts'
   import { precisionBadge } from '@apart/domain'
-  import FormField from '@/components/ui/FormField.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiField from '@/components/ui/UiField.vue'
   import { useListingEditor } from '@/composables/useListingEditor'
   import { formatSurface } from '@/lib/format'
   import { ADDRESS_FIELD_ID } from '@/lib/listing-sections'
@@ -22,7 +23,12 @@
   const editor = useListingEditor()
   const form = computed(() => editor.draft.value)
   const meta = (path: string) =>
-    fieldMeta(editor.fieldSources.value, editor.changedFields.value, path)
+    fieldMeta(
+      editor.fieldSources.value,
+      editor.changedFields.value,
+      path,
+      editor.errors.value
+    )
 
   const l = computed(() => props.listing)
   const rooms = computed(() => {
@@ -101,8 +107,11 @@
     },
   })
 
-  const inputClass =
-    'min-h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm text-fg sm:min-h-10'
+  const ELEVATOR_OPTIONS = [
+    { value: '', label: 'Inconnu' },
+    { value: 'yes', label: 'Oui' },
+    { value: 'no', label: 'Non' },
+  ]
 </script>
 
 <template>
@@ -158,123 +167,87 @@
       <ReadItem label="Adresse" source="addressRaw" :changed-keys="addressKeys">
         <span class="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
           <PrecisionBadge :location="listing.location" compact />
-          <button
+          <UiButton
             v-if="precise"
-            type="button"
-            class="inline-flex min-h-11 items-center text-sm font-normal text-accent underline-offset-2 hover:underline sm:min-h-0"
+            variant="link"
+            class="font-normal"
             data-testid="features-precise"
             @click="editor.start('listing', ADDRESS_FIELD_ID)"
           >
             préciser
-          </button>
+          </UiButton>
         </span>
       </ReadItem>
     </dl>
 
     <template #edit>
       <div class="grid gap-3 sm:grid-cols-2">
-        <FormField
-          label="Surface Carrez (m²)"
-          for-id="f-surface"
+        <UiField
+          id="f-surface"
+          v-model="form.surface"
+          label="Surface Carrez"
+          unit="m²"
+          inputmode="decimal"
           v-bind="meta('surface')"
-          :error="editor.errors.value.surface"
-        >
-          <input
-            id="f-surface"
-            v-model="form.surface"
-            :class="inputClass"
-            inputmode="decimal"
-          />
-        </FormField>
-        <FormField label="Pièces" for-id="f-rooms" v-bind="meta('rooms')">
-          <input
-            id="f-rooms"
-            v-model="form.rooms"
-            :class="inputClass"
-            inputmode="numeric"
-          />
-        </FormField>
-        <FormField
+        />
+        <UiField
+          id="f-rooms"
+          v-model="form.rooms"
+          label="Pièces"
+          inputmode="numeric"
+          v-bind="meta('rooms')"
+        />
+        <UiField
+          id="f-bedrooms"
+          v-model="form.bedrooms"
           label="Chambres"
-          for-id="f-bedrooms"
+          inputmode="numeric"
           v-bind="meta('bedrooms')"
-        >
-          <input
-            id="f-bedrooms"
-            v-model="form.bedrooms"
-            :class="inputClass"
-            inputmode="numeric"
-          />
-        </FormField>
-        <FormField label="Étage" for-id="f-floor" v-bind="meta('floorLabel')">
-          <input
-            id="f-floor"
-            v-model="form.floorLabel"
-            :class="inputClass"
-            placeholder="3e sur 5"
-          />
-        </FormField>
-        <FormField
+        />
+        <UiField
+          id="f-floor"
+          v-model="form.floorLabel"
+          label="Étage"
+          placeholder="3e sur 5"
+          v-bind="meta('floorLabel')"
+        />
+        <UiField
+          id="f-elevator"
+          v-model="elevator"
+          as="select"
           label="Ascenseur"
-          for-id="f-elevator"
+          :options="ELEVATOR_OPTIONS"
           v-bind="meta('elevator')"
-        >
-          <select id="f-elevator" v-model="elevator" :class="inputClass">
-            <option value="">Inconnu</option>
-            <option value="yes">Oui</option>
-            <option value="no">Non</option>
-          </select>
-        </FormField>
-        <FormField
+        />
+        <UiField
+          id="f-year"
+          v-model="form.constructionYear"
           label="Année de construction"
-          for-id="f-year"
+          inputmode="numeric"
           v-bind="meta('constructionYear')"
-          :error="editor.errors.value.constructionYear"
-        >
-          <input
-            id="f-year"
-            v-model="form.constructionYear"
-            :class="inputClass"
-            inputmode="numeric"
-          />
-        </FormField>
-        <FormField
+        />
+        <UiField
+          id="f-outdoor"
+          v-model="form.outdoor"
           label="Extérieur"
-          for-id="f-outdoor"
+          placeholder="Balcon 6 m²"
           v-bind="meta('outdoor')"
-        >
-          <input
-            id="f-outdoor"
-            v-model="form.outdoor"
-            :class="inputClass"
-            placeholder="Balcon 6 m²"
-          />
-        </FormField>
-        <FormField
+        />
+        <UiField
+          id="f-parking"
+          v-model="form.parking"
           label="Stationnement"
-          for-id="f-parking"
+          placeholder="Place en sous-sol"
           v-bind="meta('parking')"
-        >
-          <input
-            id="f-parking"
-            v-model="form.parking"
-            :class="inputClass"
-            placeholder="Place en sous-sol"
-          />
-        </FormField>
-        <FormField
+        />
+        <UiField
+          id="f-heating"
+          v-model="form.heatingType"
           label="Chauffage"
-          for-id="f-heating"
-          v-bind="meta('heatingType')"
+          placeholder="Gaz individuel"
           full
-        >
-          <input
-            id="f-heating"
-            v-model="form.heatingType"
-            :class="inputClass"
-            placeholder="Gaz individuel"
-          />
-        </FormField>
+          v-bind="meta('heatingType')"
+        />
       </div>
     </template>
   </EditableSection>

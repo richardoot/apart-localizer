@@ -1,22 +1,31 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue'
   import { RENT_MARKET_MIN_COMPARABLES } from '@apart/contracts'
-  import type { RentComparableInputRaw } from '@apart/contracts'
-  import FormField from '@/components/ui/FormField.vue'
+  import type { CheckLevel, RentComparableInputRaw } from '@apart/contracts'
+  import QueryState from '@/components/ui/QueryState.vue'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import UiConfirm from '@/components/ui/UiConfirm.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import { useAction } from '@/composables/useAction'
   import {
     useRentComparableMutations,
     useRentComparables,
   } from '@/composables/useStudy'
-  import { ApiError } from '@/lib/api'
   import {
     formatDate,
     formatEuros,
     formatEurosPerMonth,
     formatPercent,
     formatSurface,
+    numberInputError,
     parseNumberInput,
+    plural,
   } from '@/lib/format'
-  import { CHECK_LEVEL_CLASSES, CHECK_LEVEL_LABELS } from '@/lib/labels'
+  import { CHECK_LEVEL_LABELS } from '@/lib/labels'
+  import type { Tone } from '@/lib/ui'
 
   /**
    * Loyer de marché (besoin L4) : 5 à 10 annonces de location comparables
@@ -35,9 +44,22 @@
   const emit = defineEmits<{ retain: [rent: number] }>()
 
   const id = computed(() => props.listingId)
-  const { data, isPending, error } = useRentComparables(id)
+  const comparablesQuery = useRentComparables(id)
+  const { data } = comparablesQuery
   const mutations = useRentComparableMutations(id)
-  const failure = ref<string | null>(null)
+  // Lot 22 : l'échec d'un ajout ou d'une suppression se dit sous le
+  // formulaire ; un nombre illisible, à son champ.
+  const action = useAction('L’ajout a échoué.')
+  const fieldErrors = ref<{ rent: string | null; surface: string | null }>({
+    rent: null,
+    surface: null,
+  })
+  const LEVEL_TONES: Record<CheckLevel, Tone> = {
+    ok: 'good',
+    warn: 'warn',
+    bad: 'bad',
+    unknown: 'neutral',
+  }
 
   const blank = () => ({
     rent: '',
@@ -50,11 +72,21 @@
   const draft = ref(blank())
 
   async function add(): Promise<void> {
-    failure.value = null
+    action.clear()
     const rent = parseNumberInput(draft.value.rent)
     const surface = parseNumberInput(draft.value.surface)
-    if (rent === null || surface === null) {
-      failure.value = 'Loyer et surface sont nécessaires.'
+    fieldErrors.value = {
+      rent:
+        numberInputError(draft.value.rent) ??
+        (rent === null ? 'Le loyer est nécessaire.' : null),
+      surface:
+        numberInputError(draft.value.surface) ??
+        (surface === null ? 'La surface est nécessaire.' : null),
+    }
+    if (rent === null || surface === null || fieldErrors.value.rent) {
+      document
+        .getElementById(fieldErrors.value.rent ? 'rc-rent' : 'rc-surface')
+        ?.focus()
       return
     }
     const input: RentComparableInputRaw = {
@@ -65,23 +97,17 @@
       url: draft.value.url.trim() || null,
       note: draft.value.note.trim() || null,
     }
-    try {
-      await mutations.add.mutateAsync(input)
-      draft.value = blank()
-    } catch (err) {
-      failure.value =
-        err instanceof ApiError ? err.message : "L'ajout a échoué."
-    }
+    const added = await action.run(() => mutations.add.mutateAsync(input), {
+      success: 'Comparable ajouté.',
+    })
+    if (added) draft.value = blank()
   }
 
   async function remove(comparableId: string): Promise<void> {
-    failure.value = null
-    try {
-      await mutations.remove.mutateAsync(comparableId)
-    } catch (err) {
-      failure.value =
-        err instanceof ApiError ? err.message : 'La suppression a échoué.'
-    }
+    await action.run(() => mutations.remove.mutateAsync(comparableId), {
+      success: 'Comparable supprimé.',
+      fallback: 'La suppression a échoué.',
+    })
   }
 
   const market = computed(() => data.value?.market ?? null)
@@ -90,204 +116,193 @@
       ? null
       : Math.round(market.value.estimatedRent)
   )
-  const inputClass =
-    'rounded-lg border border-line bg-bg px-2 py-1 text-sm w-full'
 </script>
 
 <template>
   <div class="grid gap-3 text-sm" data-testid="rent-market">
-    <p v-if="isPending" class="text-muted">Chargement des comparables…</p>
-    <p v-else-if="error" role="alert" class="text-bad">{{ error.message }}</p>
-    <template v-else-if="data && market">
-      <div class="grid gap-1" data-testid="rent-market-summary">
-        <p>
-          <span
-            class="rounded-full px-2 py-0.5 text-xs font-semibold"
-            :class="CHECK_LEVEL_CLASSES[market.level]"
-            >{{ CHECK_LEVEL_LABELS[market.level] }}</span
-          >
-          <template v-if="market.stats">
-            Médiane
-            <strong
-              >{{
-                market.stats.medianRentPerM2.toLocaleString('fr-FR', {
-                  maximumFractionDigits: 2,
-                })
-              }}
-              €/m²</strong
-            >
-            sur {{ market.stats.count }} comparable(s) ({{
-              market.stats.p25RentPerM2.toLocaleString('fr-FR', {
-                maximumFractionDigits: 2,
-              })
-            }}
-            à
-            {{
-              market.stats.p75RentPerM2.toLocaleString('fr-FR', {
-                maximumFractionDigits: 2,
-              })
-            }}
-            €/m² pour la moitié centrale)
-            <template v-if="market.estimatedRent !== null">
-              · loyer estimé ≈
-              <strong>{{ formatEurosPerMonth(market.estimatedRent) }}</strong>
-            </template>
-          </template>
-          <template v-else>
-            Aucun comparable {{ furnished ? 'meublé' : 'vide' }} : saisissez-en
-            {{ RENT_MARKET_MIN_COMPARABLES }} à 10.
-          </template>
-        </p>
-        <p
-          v-if="market.gapToMarket !== null || market.rentCap !== null"
-          class="text-xs text-muted"
-        >
-          <template v-if="market.gapToMarket !== null">
-            Loyer visé {{ market.gapToMarket >= 0 ? '+' : '−'
-            }}{{ formatPercent(Math.abs(market.gapToMarket)) }} par rapport au
-            marché estimé
-            <template v-if="market.targetPercentile !== null">
-              (au-dessus de {{ Math.round(market.targetPercentile * 100) }} %
-              des comparables au m²)</template
-            >.
-          </template>
-          <template v-if="market.rentCap !== null">
-            Plafond d’encadrement {{ formatEurosPerMonth(market.rentCap) }}
-            <template v-if="market.capGapToMarket !== null">
-              ({{ market.capGapToMarket >= 0 ? '+' : '−'
-              }}{{ formatPercent(Math.abs(market.capGapToMarket)) }} par rapport
-              au marché)</template
-            >.
-          </template>
-        </p>
-        <ul class="grid gap-0.5 text-xs text-muted">
-          <li v-for="m in market.messages" :key="m">{{ m }}</li>
-        </ul>
-        <button
-          v-if="rounded !== null && market.enough"
-          type="button"
-          class="justify-self-start rounded-lg border border-accent px-2 py-1 text-xs disabled:opacity-60"
-          :disabled="busy || rounded === currentMarketRent"
-          data-action="retain-market-rent"
-          @click="emit('retain', rounded)"
-        >
-          {{
-            rounded === currentMarketRent
-              ? `Loyer de marché retenu : ${formatEuros(rounded)}`
-              : `Retenir ${formatEuros(rounded)} comme loyer de marché (phase 2)`
-          }}
-        </button>
-      </div>
-
-      <table
-        v-if="market.comparables.length"
-        class="w-full text-xs tabular-nums"
-      >
-        <thead class="text-left text-muted">
-          <tr>
-            <th class="py-1">Loyer</th>
-            <th>Surface</th>
-            <th>€/m²</th>
-            <th>Type</th>
-            <th>Date</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="c in market.comparables"
-            :key="c.id ?? c.rent"
-            class="border-t border-line"
-            :class="c.included ? '' : 'text-muted line-through'"
-            :title="c.reason ?? undefined"
-          >
-            <td class="py-0.5">{{ formatEurosPerMonth(c.rent) }}</td>
-            <td>{{ formatSurface(c.surface) }}</td>
-            <td>
-              {{
-                c.rentPerM2.toLocaleString('fr-FR', {
-                  maximumFractionDigits: 2,
-                })
-              }}
-            </td>
-            <td>{{ c.furnished ? 'meublé' : 'vide' }}</td>
-            <td :class="c.stale ? 'text-warn' : ''">
-              {{ formatDate(c.observedAt) }}
-            </td>
-            <td class="text-right">
-              <button
-                v-if="c.id"
-                type="button"
-                class="rounded border border-line px-1.5 text-muted"
-                :aria-label="`Supprimer le comparable à ${formatEuros(c.rent)}`"
-                @click="remove(c.id)"
+    <QueryState
+      :query="comparablesQuery"
+      loading-label="des comparables"
+      error-fallback="La lecture des comparables a échoué."
+    >
+      <template v-if="data && market">
+        <div class="grid gap-1" data-testid="rent-market-summary">
+          <p>
+            <UiBadge :tone="LEVEL_TONES[market.level]">{{
+              CHECK_LEVEL_LABELS[market.level]
+            }}</UiBadge>
+            <template v-if="market.stats">
+              Médiane
+              <strong
+                >{{
+                  market.stats.medianRentPerM2.toLocaleString('fr-FR', {
+                    maximumFractionDigits: 2,
+                  })
+                }}
+                €/m²</strong
               >
-                ✕
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+              sur {{ plural(market.stats.count, 'comparable') }} ({{
+                market.stats.p25RentPerM2.toLocaleString('fr-FR', {
+                  maximumFractionDigits: 2,
+                })
+              }}
+              à
+              {{
+                market.stats.p75RentPerM2.toLocaleString('fr-FR', {
+                  maximumFractionDigits: 2,
+                })
+              }}
+              €/m² pour la moitié centrale)
+              <template v-if="market.estimatedRent !== null">
+                · loyer estimé ≈
+                <strong>{{ formatEurosPerMonth(market.estimatedRent) }}</strong>
+              </template>
+            </template>
+            <template v-else>
+              Aucun comparable {{ furnished ? 'meublé' : 'vide' }} : saisis-en
+              {{ RENT_MARKET_MIN_COMPARABLES }} à 10.
+            </template>
+          </p>
+          <p
+            v-if="market.gapToMarket !== null || market.rentCap !== null"
+            class="text-sm text-muted"
+          >
+            <template v-if="market.gapToMarket !== null">
+              Loyer visé {{ market.gapToMarket >= 0 ? '+' : '−'
+              }}{{ formatPercent(Math.abs(market.gapToMarket)) }} par rapport au
+              marché estimé
+              <template v-if="market.targetPercentile !== null">
+                (au-dessus de {{ Math.round(market.targetPercentile * 100) }} %
+                des comparables au m²)</template
+              >.
+            </template>
+            <template v-if="market.rentCap !== null">
+              Plafond d’encadrement {{ formatEurosPerMonth(market.rentCap) }}
+              <template v-if="market.capGapToMarket !== null">
+                ({{ market.capGapToMarket >= 0 ? '+' : '−'
+                }}{{ formatPercent(Math.abs(market.capGapToMarket)) }} par
+                rapport au marché)</template
+              >.
+            </template>
+          </p>
+          <ul class="grid gap-0.5 text-sm text-muted">
+            <li v-for="m in market.messages" :key="m">{{ m }}</li>
+          </ul>
+          <UiButton
+            v-if="rounded !== null && market.enough"
+            variant="outline"
+            size="sm"
+            class="justify-self-start"
+            :disabled="busy || rounded === currentMarketRent"
+            data-action="retain-market-rent"
+            @click="emit('retain', rounded)"
+          >
+            {{
+              rounded === currentMarketRent
+                ? `Loyer de marché retenu : ${formatEuros(rounded)}`
+                : `Retenir ${formatEuros(rounded)} comme loyer de marché (phase 2)`
+            }}
+          </UiButton>
+        </div>
 
-      <form class="grid gap-2 sm:grid-cols-3" @submit.prevent="add">
-        <FormField label="Loyer HC (€/mois)" for-id="rc-rent">
-          <input
+        <table
+          v-if="market.comparables.length"
+          class="w-full text-sm tabular-nums"
+        >
+          <thead class="text-left text-muted">
+            <tr>
+              <th class="py-1">Loyer</th>
+              <th>Surface</th>
+              <th>€/m²</th>
+              <th>Type</th>
+              <th>Date</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="c in market.comparables"
+              :key="c.id ?? c.rent"
+              class="border-t border-line"
+              :class="c.included ? '' : 'text-muted line-through'"
+              :title="c.reason ?? undefined"
+            >
+              <td class="py-0.5">{{ formatEurosPerMonth(c.rent) }}</td>
+              <td>{{ formatSurface(c.surface) }}</td>
+              <td>
+                {{
+                  c.rentPerM2.toLocaleString('fr-FR', {
+                    maximumFractionDigits: 2,
+                  })
+                }}
+              </td>
+              <td>{{ c.furnished ? 'meublé' : 'vide' }}</td>
+              <td :class="c.stale ? 'text-warn' : ''">
+                {{ formatDate(c.observedAt) }}
+              </td>
+              <td class="text-right">
+                <UiConfirm
+                  v-if="c.id"
+                  label="Supprimer"
+                  variant="ghost"
+                  icon="trash"
+                  question="Supprimer ce comparable ?"
+                  :aria-label="`Supprimer le comparable à ${formatEuros(c.rent)}`"
+                  :busy="mutations.remove.isPending.value"
+                  @confirm="remove(c.id)"
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <form
+          class="grid gap-2 sm:grid-cols-3"
+          novalidate
+          @submit.prevent="add"
+        >
+          <UiField
             id="rc-rent"
             v-model="draft.rent"
-            :class="inputClass"
+            label="Loyer HC"
+            unit="€/mois"
             inputmode="numeric"
+            :error="fieldErrors.rent"
           />
-        </FormField>
-        <FormField label="Surface (m²)" for-id="rc-surface">
-          <input
+          <UiField
             id="rc-surface"
             v-model="draft.surface"
-            :class="inputClass"
+            label="Surface"
+            unit="m²"
             inputmode="decimal"
+            :error="fieldErrors.surface"
           />
-        </FormField>
-        <FormField label="Date de l’annonce" for-id="rc-date">
-          <input
+          <UiField
             id="rc-date"
             v-model="draft.observedAt"
+            label="Date de l’annonce"
             type="date"
-            :class="inputClass"
+            align="left"
           />
-        </FormField>
-        <FormField label="Lien" for-id="rc-url">
-          <input
-            id="rc-url"
-            v-model="draft.url"
-            :class="inputClass"
-            type="url"
-          />
-        </FormField>
-        <FormField label="Note" for-id="rc-note">
-          <input id="rc-note" v-model="draft.note" :class="inputClass" />
-        </FormField>
-        <div class="flex items-end gap-2">
-          <label class="flex items-center gap-1.5 text-xs">
-            <input
-              v-model="draft.furnished"
-              type="checkbox"
-              class="size-4 accent-[var(--accent)]"
-            />
-            meublé
-          </label>
-          <button
-            type="submit"
-            class="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg disabled:opacity-60"
-            :disabled="mutations.add.isPending.value"
-          >
-            Ajouter
-          </button>
-        </div>
-      </form>
-      <p class="text-xs text-muted">
-        Relevez les annonces de location vous-même (portails, agences) : rien
-        n’est collecté automatiquement.
-      </p>
-    </template>
-    <p v-if="failure" role="alert" class="text-xs text-bad">{{ failure }}</p>
+          <UiField id="rc-url" v-model="draft.url" label="Lien" type="url" />
+          <UiField id="rc-note" v-model="draft.note" label="Note" />
+          <div class="flex items-end gap-2">
+            <UiCheckbox v-model="draft.furnished" label="meublé" />
+            <UiButton
+              type="submit"
+              variant="primary"
+              :loading="mutations.add.isPending.value"
+            >
+              Ajouter
+            </UiButton>
+          </div>
+        </form>
+        <UiAlert v-if="action.error.value">{{ action.error.value }}</UiAlert>
+        <p class="text-sm text-muted">
+          Relève les annonces de location toi-même (portails, agences) : rien
+          n’est collecté automatiquement.
+        </p>
+      </template>
+    </QueryState>
   </div>
 </template>

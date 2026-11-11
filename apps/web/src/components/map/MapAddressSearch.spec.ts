@@ -107,7 +107,7 @@ describe('MapAddressSearch (API mockée, aucun appel réseau)', () => {
     await input.setValue('ab')
     await go.trigger('click')
     expect(apiMock.opendata.geocode).not.toHaveBeenCalled()
-    expect(message().text()).toBe('Saisissez au moins trois caractères.')
+    expect(message().text()).toBe('Écris au moins trois caractères.')
     expect(message().classes()).toContain('text-bad')
 
     apiMock.opendata.geocode.mockResolvedValueOnce({
@@ -118,7 +118,7 @@ describe('MapAddressSearch (API mockée, aucun appel réseau)', () => {
     await input.setValue('Nulle part')
     await go.trigger('click')
     await flushPromises()
-    expect(message().text()).toBe('Adresse introuvable : précisez la commune.')
+    expect(message().text()).toBe('Adresse introuvable : précise la commune.')
 
     apiMock.opendata.geocode.mockResolvedValueOnce({
       query: 'Nulle part',
@@ -128,7 +128,7 @@ describe('MapAddressSearch (API mockée, aucun appel réseau)', () => {
     await go.trigger('click')
     await flushPromises()
     expect(message().text()).toBe(
-      'Le géocodeur ne répond pas ; réessayez dans un instant.'
+      'La recherche d’adresse ne répond pas ; réessaie dans un instant.'
     )
 
     apiMock.opendata.geocode.mockRejectedValueOnce(

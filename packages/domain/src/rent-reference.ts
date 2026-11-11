@@ -7,7 +7,7 @@ import type {
   RentReferenceRow,
   RentReferenceTable,
 } from '@apart/contracts'
-import { formatEuros } from './format.js'
+import { formatEuros, plural } from './format.js'
 
 /**
  * Plafond automatique de l'encadrement des loyers (besoin L2) : choix de
@@ -188,7 +188,7 @@ export function lookupRentReference(
       ...base,
       status: 'unavailable',
       reasons: [
-        "Aucun arrêté de loyers de référence importé : lancez l'import de l'encadrement (pnpm import:rent-control).",
+        "Aucun arrêté de loyers de référence importé : lance l'import de l'encadrement (pnpm import:rent-control).",
       ],
     }
   }
@@ -201,7 +201,7 @@ export function lookupRentReference(
   }
   if (expired) {
     reasons.push(
-      `L'arrêté du ${frDate(table.decreeDate)} ne s'applique plus depuis le ${frDate(nextDay(table.validUntil as string))} (fin de l'expérimentation sauf prolongation) : vérifiez si l'encadrement a été prolongé et importez l'arrêté en vigueur.`
+      `L'arrêté du ${frDate(table.decreeDate)} ne s'applique plus depuis le ${frDate(nextDay(table.validUntil as string))} (fin de l'expérimentation sauf prolongation) : vérifie si l'encadrement a été prolongé et importe l'arrêté en vigueur.`
     )
   }
 
@@ -209,7 +209,7 @@ export function lookupRentReference(
     // Le point BAN d'une rue est son milieu : une rue peut traverser
     // plusieurs zones, le numéro seul fixe la zone.
     reasons.push(
-      `Adresse localisée à la rue, sans numéro${query.zones[0] ? ` : zone ${query.zones[0].zone} probable` : ''} ; précisez le numéro pour confirmer la zone.`
+      `Adresse localisée à la rue, sans numéro${query.zones[0] ? ` : zone ${query.zones[0].zone} probable` : ''} ; précise le numéro pour confirmer la zone.`
     )
   } else if (query.precision !== 'exact') {
     reasons.push(approximateZoneReason(query))
@@ -236,7 +236,7 @@ export function lookupRentReference(
     )
   }
   if (query.leaseType === 'shared') {
-    reasons.push('Colocation : précisez si le bail sera meublé ou vide.')
+    reasons.push('Colocation : précise si le bail sera meublé ou vide.')
   } else if (query.leaseType === null) {
     notes.push('Location vide supposée (phase 2 non saisie).')
   }
@@ -258,7 +258,7 @@ export function lookupRentReference(
       ) ?? null
     if (!row) {
       reasons.push(
-        `Aucune ligne de l'arrêté pour la zone ${zone.zone}, ${base.rooms} pièce(s), cette époque : à vérifier.`
+        `Aucune ligne de l'arrêté pour la zone ${zone.zone}, ${plural(base.rooms, 'pièce')}, cette époque : à vérifier.`
       )
     }
   }

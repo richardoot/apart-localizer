@@ -15,15 +15,21 @@
   } from '@apart/contracts'
   import { compareScenario } from '@apart/domain'
   import type { StudyInput } from '@apart/domain'
-  import FormField from '@/components/ui/FormField.vue'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import UiConfirm from '@/components/ui/UiConfirm.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import { useAction } from '@/composables/useAction'
+  import { useFeedbackStore } from '@/stores/feedback'
   import { useScenarioMutations, useScenarios } from '@/composables/useStudy'
-  import { ApiError } from '@/lib/api'
   import { formatEuros, formatPercent } from '@/lib/format'
   import {
     emptyScenarioForm,
     scenarioFormFromOverrides,
     scenarioOverridesFromForm,
   } from '@/lib/scenario-form'
+  import type { ScenarioNumberField } from '@/lib/scenario-form'
 
   /**
    * Scénarios « et si » (besoin E4) : l'éditeur recalcule la comparaison à
@@ -41,8 +47,11 @@
   const form = ref(emptyScenarioForm())
   const name = ref('')
   const forWorkspace = ref(false)
-  const failure = ref<string | null>(null)
-  const message = ref<string | null>(null)
+  // Lot 22 : l'échec se dit sous les boutons, la réussite dans la zone.
+  const action = useAction('L’enregistrement a échoué.')
+  const feedback = useFeedbackStore()
+  const fieldError = (field: ScenarioNumberField): string | null =>
+    parsed.value.fieldErrors?.[field] ?? null
   const { data: saved } = useScenarios(computed(() => props.listingId))
   const mutations = useScenarioMutations()
 
@@ -65,8 +74,20 @@
     () => Object.keys(parsed.value.overrides ?? {}).length === 0
   )
 
-  const LEASE_TYPES = Object.keys(LEASE_TYPE_LABELS) as LeaseType[]
-  const REGIMES = Object.keys(TAX_REGIME_LABELS) as TaxRegime[]
+  const LEASE_OPTIONS = [
+    { value: '', label: 'Inchangé' },
+    ...(Object.keys(LEASE_TYPE_LABELS) as LeaseType[]).map(lease => ({
+      value: lease,
+      label: LEASE_TYPE_LABELS[lease],
+    })),
+  ]
+  const REGIME_OPTIONS = [
+    { value: '', label: 'Inchangé' },
+    ...(Object.keys(TAX_REGIME_LABELS) as TaxRegime[]).map(regime => ({
+      value: regime,
+      label: TAX_REGIME_LABELS[regime],
+    })),
+  ]
 
   function show(delta: ScenarioDelta, value: number | null): string {
     if (value === null) return '—'
@@ -83,171 +104,172 @@
   function apply(scenario: Scenario): void {
     form.value = scenarioFormFromOverrides(scenario.overrides)
     name.value = scenario.name
-    message.value = `Scénario « ${scenario.name} » appliqué : modifiable avant d’être enregistré à nouveau.`
+    feedback.success(
+      `Scénario « ${scenario.name} » appliqué : modifiable avant d’être enregistré à nouveau.`
+    )
   }
 
   async function save(): Promise<void> {
-    failure.value = null
-    if (!parsed.value.overrides || empty.value || !name.value.trim()) {
-      failure.value = 'Donnez un nom et au moins une valeur à changer.'
+    action.clear()
+    const overrides = parsed.value.overrides
+    if (parsed.value.fieldErrors) {
+      document
+        .querySelector<HTMLElement>(
+          '[data-testid="scenarios"] [aria-invalid="true"]'
+        )
+        ?.focus()
       return
     }
-    try {
-      await mutations.create.mutateAsync({
-        name: name.value.trim(),
-        listingId: forWorkspace.value ? null : props.listingId,
-        overrides: parsed.value.overrides,
-      })
-      message.value = `Scénario « ${name.value.trim()} » enregistré.`
-    } catch (err) {
-      failure.value =
-        err instanceof ApiError ? err.message : "L'enregistrement a échoué."
+    if (!overrides || empty.value || !name.value.trim()) {
+      action.fail('Donne un nom et au moins une valeur à changer.')
+      return
     }
+    const scenarioName = name.value.trim()
+    await action.run(
+      () =>
+        mutations.create.mutateAsync({
+          name: scenarioName,
+          listingId: forWorkspace.value ? null : props.listingId,
+          overrides,
+        }),
+      { success: `Scénario « ${scenarioName} » enregistré.` }
+    )
   }
 
   async function remove(scenario: Scenario): Promise<void> {
-    failure.value = null
-    try {
-      await mutations.remove.mutateAsync(scenario.id)
-    } catch (err) {
-      failure.value =
-        err instanceof ApiError ? err.message : 'La suppression a échoué.'
-    }
+    await action.run(() => mutations.remove.mutateAsync(scenario.id), {
+      success: `Scénario « ${scenario.name} » supprimé.`,
+      fallback: 'La suppression a échoué.',
+    })
   }
-
-  const inputClass =
-    'rounded-lg border border-line bg-bg px-2 py-1 text-sm w-full'
 </script>
 
 <template>
   <div class="grid gap-3 text-sm" data-testid="scenarios">
     <div class="grid gap-2 sm:grid-cols-3">
-      <FormField label="Prix (€)" for-id="sc-price">
-        <input
-          id="sc-price"
-          v-model="form.price"
-          :class="inputClass"
-          inputmode="numeric"
-          :placeholder="formatEuros(input.financials.price)"
-        />
-      </FormField>
-      <FormField label="Loyer visé (€/mois)" for-id="sc-rent">
-        <input
-          id="sc-rent"
-          v-model="form.targetRent"
-          :class="inputClass"
-          inputmode="numeric"
-          :placeholder="String(input.financials.targetRent)"
-        />
-      </FormField>
-      <FormField label="Travaux (€)" for-id="sc-works">
-        <input
-          id="sc-works"
-          v-model="form.renovationTotal"
-          :class="inputClass"
-          inputmode="numeric"
-          :placeholder="String(input.financials.renovationTotal)"
-        />
-      </FormField>
-      <FormField label="Bail" for-id="sc-lease">
-        <select id="sc-lease" v-model="form.leaseType" :class="inputClass">
-          <option value="">Inchangé</option>
-          <option v-for="lease in LEASE_TYPES" :key="lease" :value="lease">
-            {{ LEASE_TYPE_LABELS[lease] }}
-          </option>
-        </select>
-      </FormField>
-      <FormField label="Taux (%)" for-id="sc-rate">
-        <input
-          id="sc-rate"
-          v-model="form.interestRatePercent"
-          :class="inputClass"
-          inputmode="decimal"
-          :placeholder="formatPercent(assumptions.interestRate)"
-        />
-      </FormField>
-      <FormField label="Apport (€)" for-id="sc-down">
-        <input
-          id="sc-down"
-          v-model="form.downPayment"
-          :class="inputClass"
-          inputmode="numeric"
-          :placeholder="String(assumptions.downPayment)"
-        />
-      </FormField>
-      <FormField label="Durée (ans)" for-id="sc-years">
-        <input
-          id="sc-years"
-          v-model="form.durationYears"
-          :class="inputClass"
-          inputmode="numeric"
-          :placeholder="String(assumptions.durationYears)"
-        />
-      </FormField>
-      <FormField label="Vacance (mois/an)" for-id="sc-vacancy">
-        <input
-          id="sc-vacancy"
-          v-model="form.vacancyMonths"
-          :class="inputClass"
-          inputmode="decimal"
-          :placeholder="String(assumptions.vacancyMonths)"
-        />
-      </FormField>
-      <FormField label="Mise en location" for-id="sc-start">
-        <input
-          id="sc-start"
-          v-model="form.rentalStartDate"
-          type="date"
-          :class="inputClass"
-        />
-      </FormField>
-      <FormField label="TMI (%)" for-id="sc-tmi">
-        <input
-          id="sc-tmi"
-          v-model="form.marginalTaxPercent"
-          :class="inputClass"
-          inputmode="decimal"
-          :placeholder="
-            assumptions.marginalTaxRate === null
-              ? 'non renseignée'
-              : formatPercent(assumptions.marginalTaxRate)
-          "
-        />
-      </FormField>
-      <FormField label="Régime fiscal" for-id="sc-regime">
-        <select id="sc-regime" v-model="form.taxRegime" :class="inputClass">
-          <option value="">Inchangé</option>
-          <option v-for="regime in REGIMES" :key="regime" :value="regime">
-            {{ TAX_REGIME_LABELS[regime] }}
-          </option>
-        </select>
-      </FormField>
-      <FormField label="Horizon (ans)" for-id="sc-horizon">
-        <input
-          id="sc-horizon"
-          v-model="form.horizonYears"
-          :class="inputClass"
-          inputmode="numeric"
-          :placeholder="String(assumptions.horizonYears)"
-        />
-      </FormField>
-      <FormField label="Revalorisation (%/an)" for-id="sc-appreciation">
-        <input
-          id="sc-appreciation"
-          v-model="form.appreciationPercent"
-          :class="inputClass"
-          inputmode="decimal"
-          :placeholder="formatPercent(assumptions.appreciationRate)"
-        />
-      </FormField>
+      <UiField
+        id="sc-price"
+        v-model="form.price"
+        :error="fieldError('price')"
+        label="Prix"
+        unit="€"
+        inputmode="numeric"
+        :placeholder="formatEuros(input.financials.price)"
+      />
+      <UiField
+        id="sc-rent"
+        v-model="form.targetRent"
+        :error="fieldError('targetRent')"
+        label="Loyer visé"
+        unit="€/mois"
+        inputmode="numeric"
+        :placeholder="String(input.financials.targetRent)"
+      />
+      <UiField
+        id="sc-works"
+        v-model="form.renovationTotal"
+        :error="fieldError('renovationTotal')"
+        label="Travaux"
+        unit="€"
+        inputmode="numeric"
+        :placeholder="String(input.financials.renovationTotal)"
+      />
+      <UiField
+        id="sc-lease"
+        v-model="form.leaseType"
+        as="select"
+        label="Bail"
+        :options="LEASE_OPTIONS"
+      />
+      <UiField
+        id="sc-rate"
+        v-model="form.interestRatePercent"
+        :error="fieldError('interestRatePercent')"
+        label="Taux"
+        unit="%"
+        inputmode="decimal"
+        :placeholder="formatPercent(assumptions.interestRate)"
+      />
+      <UiField
+        id="sc-down"
+        v-model="form.downPayment"
+        :error="fieldError('downPayment')"
+        label="Apport"
+        unit="€"
+        inputmode="numeric"
+        :placeholder="String(assumptions.downPayment)"
+      />
+      <UiField
+        id="sc-years"
+        v-model="form.durationYears"
+        :error="fieldError('durationYears')"
+        label="Durée"
+        unit="ans"
+        inputmode="numeric"
+        :placeholder="String(assumptions.durationYears)"
+      />
+      <UiField
+        id="sc-vacancy"
+        v-model="form.vacancyMonths"
+        :error="fieldError('vacancyMonths')"
+        label="Vacance"
+        unit="mois/an"
+        inputmode="decimal"
+        :placeholder="String(assumptions.vacancyMonths)"
+      />
+      <UiField
+        id="sc-start"
+        v-model="form.rentalStartDate"
+        label="Mise en location"
+        type="date"
+        align="left"
+      />
+      <UiField
+        id="sc-tmi"
+        v-model="form.marginalTaxPercent"
+        :error="fieldError('marginalTaxPercent')"
+        label="TMI"
+        unit="%"
+        inputmode="decimal"
+        :placeholder="
+          assumptions.marginalTaxRate === null
+            ? 'non renseignée'
+            : formatPercent(assumptions.marginalTaxRate)
+        "
+      />
+      <UiField
+        id="sc-regime"
+        v-model="form.taxRegime"
+        as="select"
+        label="Régime fiscal"
+        :options="REGIME_OPTIONS"
+      />
+      <UiField
+        id="sc-horizon"
+        v-model="form.horizonYears"
+        :error="fieldError('horizonYears')"
+        label="Horizon"
+        unit="ans"
+        inputmode="numeric"
+        :placeholder="String(assumptions.horizonYears)"
+      />
+      <UiField
+        id="sc-appreciation"
+        v-model="form.appreciationPercent"
+        :error="fieldError('appreciationPercent')"
+        label="Revalorisation"
+        unit="%/an"
+        inputmode="decimal"
+        :placeholder="formatPercent(assumptions.appreciationRate)"
+      />
     </div>
-    <p v-if="parsed.error" role="alert" class="text-xs text-bad">
+    <UiAlert v-if="parsed.error && !parsed.fieldErrors">
       {{ parsed.error }}
-    </p>
+    </UiAlert>
 
     <table
       v-if="comparison"
-      class="w-full text-xs tabular-nums"
+      class="w-full text-sm tabular-nums"
       data-testid="scenario-compare"
     >
       <caption class="pb-1 text-left text-muted">
@@ -305,46 +327,28 @@
         </tr>
       </tbody>
     </table>
-    <p class="text-xs text-muted">{{ comparison?.disclaimer }}</p>
+    <p class="text-sm text-muted">{{ comparison?.disclaimer }}</p>
 
     <div class="flex flex-wrap items-end gap-2">
-      <FormField label="Nom du scénario" for-id="sc-name">
-        <input
-          id="sc-name"
-          v-model="name"
-          :class="inputClass"
-          placeholder="Taux négocié 3,2 %"
-        />
-      </FormField>
-      <label class="flex items-center gap-1.5 text-xs">
-        <input
-          v-model="forWorkspace"
-          type="checkbox"
-          class="size-4 accent-[var(--accent)]"
-        />
-        pour toutes les annonces
-      </label>
-      <button
-        type="button"
-        class="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg disabled:opacity-60"
-        :disabled="mutations.create.isPending.value || empty"
+      <UiField
+        id="sc-name"
+        v-model="name"
+        label="Nom du scénario"
+        placeholder="Taux négocié 3,2 %"
+      />
+      <UiCheckbox v-model="forWorkspace" label="pour toutes les annonces" />
+      <UiButton
+        variant="primary"
+        :disabled="empty && !parsed.fieldErrors"
+        :loading="mutations.create.isPending.value"
         data-action="save-scenario"
         @click="save"
       >
         Enregistrer le scénario
-      </button>
-      <button
-        type="button"
-        class="rounded-lg border border-line px-3 py-1.5 text-sm"
-        @click="form = emptyScenarioForm()"
-      >
-        Revenir à la base
-      </button>
+      </UiButton>
+      <UiButton @click="form = emptyScenarioForm()">Revenir à la base</UiButton>
     </div>
-    <p v-if="failure" role="alert" class="text-xs text-bad">{{ failure }}</p>
-    <p v-else-if="message" class="text-xs text-good" aria-live="polite">
-      {{ message }}
-    </p>
+    <UiAlert v-if="action.error.value">{{ action.error.value }}</UiAlert>
 
     <ul
       v-if="saved?.length"
@@ -354,26 +358,26 @@
       <li
         v-for="scenario in saved"
         :key="scenario.id"
-        class="flex flex-wrap items-center gap-2 rounded-lg border border-line px-2 py-1 text-xs"
+        class="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm"
       >
         <strong>{{ scenario.name }}</strong>
         <span class="text-muted">{{
           scenario.listingId ? 'cette annonce' : 'tout l’espace'
         }}</span>
-        <button
-          type="button"
-          class="ml-auto rounded border border-accent px-2"
+        <UiButton
+          variant="outline"
+          size="sm"
+          class="ml-auto"
           @click="apply(scenario)"
         >
           Appliquer
-        </button>
-        <button
-          type="button"
-          class="rounded border border-line px-2 text-muted"
-          @click="remove(scenario)"
-        >
-          Supprimer
-        </button>
+        </UiButton>
+        <UiConfirm
+          label="Supprimer"
+          :question="`Supprimer « ${scenario.name} » ?`"
+          :busy="mutations.remove.isPending.value"
+          @confirm="remove(scenario)"
+        />
       </li>
     </ul>
   </div>

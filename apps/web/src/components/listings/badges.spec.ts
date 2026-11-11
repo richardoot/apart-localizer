@@ -79,7 +79,7 @@ describe('ProvenanceBadge', () => {
       mount(ProvenanceBadge, {
         props: { provenance: { source: 'user' } },
       }).text()
-    ).toBe('vous')
+    ).toBe('saisi')
     expect(
       mount(ProvenanceBadge, {
         props: { provenance: { source: 'open_data' } },

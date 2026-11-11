@@ -330,14 +330,14 @@ export const ASSUMPTIONS_SECTIONS: readonly SectionSpec[] = [
     id: 'financement',
     index: 1,
     shortTitle: 'Financement',
-    question: "Comment financez-vous l'achat ?",
+    question: "Comment finances-tu l'achat ?",
     purpose: 'Sert à : mensualité, coût du crédit, effort mensuel, prix cible.',
   },
   {
     id: 'criteres',
     index: 2,
     shortTitle: 'Bonne affaire',
-    question: "Qu'est-ce qu'une bonne affaire pour vous ?",
+    question: "Qu'est-ce qu'une bonne affaire pour toi ?",
     purpose:
       'Sert à : verdict de chaque annonce et prix cible. Les seuils cochés « prix cible » fixent le prix à négocier : le plus exigeant l’emporte.',
   },
@@ -345,9 +345,9 @@ export const ASSUMPTIONS_SECTIONS: readonly SectionSpec[] = [
     id: 'calendrier',
     index: 3,
     shortTitle: 'Calendrier et location',
-    question: 'Quel est votre calendrier ?',
+    question: 'Quel est ton calendrier ?',
     purpose:
-      "Sert à : coût d'occupation pendant que vous y habitez (phase 1), puis loyers encaissés, rendement net et effort une fois loué (phase 2).",
+      "Sert à : coût d'occupation pendant que tu y habites (phase 1), puis loyers encaissés, rendement net et effort une fois loué (phase 2).",
   },
   {
     id: 'notaire',
@@ -363,7 +363,7 @@ export const ASSUMPTIONS_SECTIONS: readonly SectionSpec[] = [
     shortTitle: 'Fiscalité et revente',
     question: 'Fiscalité et revente',
     purpose:
-      'Sert à : onglet « Étude » de la fiche (impôt, projection, TRI, VAN). Estimations, pas un conseil fiscal.',
+      'Sert à : onglet « Budget » de la fiche (impôt, projection, TRI, VAN). Estimations, pas un conseil fiscal.',
   },
 ]
 
@@ -1054,7 +1054,7 @@ export function valuesFromForm(
       if (errors[key]) continue
       errors[key] =
         key === CRITERIA_ERROR_KEY
-          ? 'retenez au moins un critère pour le prix cible'
+          ? 'retiens au moins un critère pour le prix cible'
           : issueMessage(issue, spec)
     }
     return { values: null, errors }
@@ -1065,7 +1065,7 @@ export function valuesFromForm(
     parsed.data.netYieldThreshold === null
   ) {
     errors.netYieldThresholdPercent =
-      'saisissez un seuil pour retenir ce critère dans le prix cible'
+      'saisis un seuil pour retenir ce critère dans le prix cible'
   }
   if (parsed.data.tightDiscount < parsed.data.negotiableDiscount) {
     errors.tightDiscountPercent =

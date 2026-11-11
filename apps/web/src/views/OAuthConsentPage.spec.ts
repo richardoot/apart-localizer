@@ -46,7 +46,9 @@ describe('OAuthConsentPage', () => {
   it('refuses without authorization_id, and reads nothing', async () => {
     route.query = {}
     const wrapper = await mountPage()
-    expect(wrapper.get('[role="alert"]').text()).toMatch(/authorization_id/)
+    expect(wrapper.get('[role="alert"]').text()).toMatch(
+      /demande est incomplète/
+    )
     expect(oauth.getAuthorizationDetails).not.toHaveBeenCalled()
   })
 
@@ -61,7 +63,7 @@ describe('OAuthConsentPage', () => {
       'localhost:33418'
     )
     expect(wrapper.get('[data-testid="scope-email"]').text()).toBe(
-      'Connaître votre adresse e-mail'
+      'Connaître ton adresse e-mail'
     )
     expect(wrapper.find('[data-testid="scope-openid"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="consent-warning"]').text()).toMatch(

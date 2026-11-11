@@ -15,6 +15,7 @@
     Surroundings,
   } from '@apart/contracts'
   import { formatDistance } from '@/lib/format'
+  import UiBadge from '@/components/ui/UiBadge.vue'
 
   /**
    * Quartier et équipements les plus proches de l'annonce (lot 11) : tout
@@ -91,13 +92,6 @@
     if (lookup.status === 'unavailable') return 'non disponible'
     return lookup.reasons.join(' ') || 'non disponible'
   }
-
-  const STATUS_CLASSES = {
-    ok: 'bg-good-soft text-good',
-    to_verify: 'bg-warn-soft text-warn',
-    not_applicable: 'bg-surface-2 text-muted',
-    unavailable: 'bg-surface-2 text-muted',
-  } as const
 </script>
 
 <template>
@@ -128,12 +122,9 @@
         <span class="text-xs text-muted">
           · {{ NEIGHBOURHOOD_KIND_LABELS[n.value.kind].toLowerCase() }}</span
         >
-        <span
-          v-if="n.status === 'to_verify'"
-          :class="STATUS_CLASSES.to_verify"
-          class="ml-1 rounded-full px-2 text-xs"
-          >{{ OPEN_DATA_STATUS_LABELS.to_verify }}</span
-        >
+        <UiBadge v-if="n.status === 'to_verify'" tone="warn" class="ml-1">{{
+          OPEN_DATA_STATUS_LABELS.to_verify
+        }}</UiBadge>
       </p>
       <p v-else class="text-muted">Quartier : {{ missing(n) }}</p>
       <p v-if="n.value" class="text-xs text-muted">
@@ -202,11 +193,10 @@
                   drives.approximate
                 )
               }}
-              <span
+              <UiBadge
                 v-if="drives.preferred[brand]?.drive === 'to_verify'"
-                :class="STATUS_CLASSES.to_verify"
-                class="rounded-full px-2 text-xs"
-                >{{ DRIVE_STATUS_LABELS.to_verify }}</span
+                tone="warn"
+                >{{ DRIVE_STATUS_LABELS.to_verify }}</UiBadge
               >
             </template>
             <span v-else class="text-muted"
@@ -219,11 +209,10 @@
             <template v-if="drives.nearest">
               {{ nearestLabel }} à
               {{ distance(drives.nearest.distanceMeters, drives.approximate) }}
-              <span
+              <UiBadge
                 v-if="drives.nearest.drive === 'to_verify'"
-                :class="STATUS_CLASSES.to_verify"
-                class="rounded-full px-2 text-xs"
-                >{{ DRIVE_STATUS_LABELS.to_verify }}</span
+                tone="warn"
+                >{{ DRIVE_STATUS_LABELS.to_verify }}</UiBadge
               >
             </template>
             <span v-else class="text-muted">aucun dans le rayon</span>

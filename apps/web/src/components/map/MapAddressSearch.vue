@@ -2,7 +2,10 @@
   import { ref, useId } from 'vue'
   import { useMutation } from '@tanstack/vue-query'
   import type { GeocodeLookup } from '@apart/contracts'
-  import { ApiError, api } from '@/lib/api'
+  import { api } from '@/lib/api'
+  import { errorMessage } from '@/lib/errors'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiInput from '@/components/ui/UiInput.vue'
 
   /**
    * Aller à une adresse avant de dessiner : le texte part vers l'API
@@ -27,7 +30,7 @@
     const q = query.value.trim()
     if (q.length < 3) {
       failed.value = true
-      message.value = 'Saisissez au moins trois caractères.'
+      message.value = 'Écris au moins trois caractères.'
       return
     }
     try {
@@ -44,12 +47,11 @@
       failed.value = true
       message.value =
         lookup.status === 'unavailable'
-          ? 'Le géocodeur ne répond pas ; réessayez dans un instant.'
-          : 'Adresse introuvable : précisez la commune.'
+          ? 'La recherche d’adresse ne répond pas ; réessaie dans un instant.'
+          : 'Adresse introuvable : précise la commune.'
     } catch (err) {
       failed.value = true
-      message.value =
-        err instanceof ApiError ? err.message : 'La recherche a échoué.'
+      message.value = errorMessage(err, 'La recherche a échoué.')
     }
   }
 </script>
@@ -58,29 +60,31 @@
   <div role="search" class="grid gap-1" aria-label="Aller à une adresse">
     <div class="flex items-center gap-2">
       <label :for="id" class="sr-only">Adresse ou commune</label>
-      <input
+      <UiInput
         :id="id"
         v-model="query"
+        class="flex-1"
+        align="left"
         type="search"
         autocomplete="off"
         enterkeyhint="search"
-        class="min-h-11 min-w-0 flex-1 rounded-lg border border-line bg-bg px-3 text-sm text-fg sm:min-h-8"
         placeholder="Adresse ou commune"
         data-testid="map-address"
         @keydown.enter.prevent="submit"
       />
-      <button
-        type="button"
-        class="min-h-11 rounded-lg border border-accent px-3 text-sm text-fg hover:bg-accent-soft disabled:opacity-60 sm:min-h-8"
-        :disabled="search.isPending.value"
+      <UiButton
+        variant="outline"
+        icon="search"
+        :loading="search.isPending.value"
+        loading-label="Recherche…"
         data-testid="map-address-go"
         @click="submit"
       >
-        {{ search.isPending.value ? 'Recherche…' : 'Centrer' }}
-      </button>
+        Centrer
+      </UiButton>
     </div>
     <p
-      class="min-h-4 text-xs"
+      class="min-h-5 text-sm"
       :class="failed ? 'text-bad' : 'text-muted'"
       aria-live="polite"
       data-testid="map-address-message"

@@ -4,6 +4,7 @@ import type { VueWrapper } from '@vue/test-utils'
 import { DEFAULT_ASSUMPTIONS } from '@apart/contracts'
 import type { Assumptions, AssumptionsImpact } from '@apart/contracts'
 import { DESKTOP_QUERY } from '@/composables/useMediaQuery'
+import { useLeaveGuardStore } from '@/stores/leave-guard'
 import AssumptionsForm from './AssumptionsForm.vue'
 import { LEGACY_SAVES } from './legacy-save.fixture'
 
@@ -177,9 +178,9 @@ describe('AssumptionsForm : sections et sommaire (ordinateur)', () => {
       .findAll('section[data-section] h2')
       .map(h => h.text())
     expect(titles).toEqual([
-      "Comment financez-vous l'achat ?",
-      "Qu'est-ce qu'une bonne affaire pour vous ?",
-      'Quel est votre calendrier ?',
+      "Comment finances-tu l'achat ?",
+      "Qu'est-ce qu'une bonne affaire pour toi ?",
+      'Quel est ton calendrier ?',
       'Frais de notaire',
       'Fiscalité et revente',
     ])
@@ -301,7 +302,7 @@ describe('AssumptionsForm : bonne affaire et prix cible', () => {
       'Rendement net minimum'
     )
     expect(wrapper.get('[data-criterion="net_yield"]').text()).toContain(
-      'saisissez un seuil pour retenir ce critère dans le prix cible'
+      'saisis un seuil pour retenir ce critère dans le prix cible'
     )
     expect(input(wrapper, '#h-net-yield').getAttribute('aria-invalid')).toBe(
       'true'
@@ -314,7 +315,7 @@ describe('AssumptionsForm : bonne affaire et prix cible', () => {
     await wrapper.get('#h-crit-effort').setValue(false)
     expect(await submit(wrapper)).toBeUndefined()
     expect(wrapper.text()).toContain(
-      'Prix cible : retenez au moins un critère pour le prix cible'
+      'Prix cible : retiens au moins un critère pour le prix cible'
     )
   })
 
@@ -361,10 +362,10 @@ describe('AssumptionsForm : calendrier, notaire, fiscalité', () => {
   it('phase 1 puis phase 2, l’année par défaut sous la date et dans le détail', async () => {
     wrapper = mountForm()
     expect(wrapper.get('[data-testid="phase-1"]').text()).toContain(
-      'Vous y habitez'
+      'Tu y habites'
     )
     const phase2 = wrapper.get('[data-testid="phase-2"]')
-    expect(phase2.text()).toContain('Vous le louez')
+    expect(phase2.text()).toContain('Tu le loues')
     expect(phase2.text()).toContain(
       'vide = 1er janvier 2028 (année par défaut)'
     )
@@ -661,5 +662,18 @@ describe('AssumptionsForm : mobile', () => {
     expect(document.activeElement?.id).toBe('h-vacancy')
     await wrapper.get('[data-testid="form-errors"] button').trigger('click')
     expect(document.activeElement?.id).toBe('h-vacancy')
+  })
+})
+
+describe('AssumptionsForm : garde des modifications (lot 22)', () => {
+  it('une saisie non enregistrée est gardée ; Annuler la libère', async () => {
+    wrapper = mountForm()
+    const guard = useLeaveGuardStore()
+    expect(guard.anyDirty()).toBe(false)
+    await wrapper.get('#h-rate').setValue('3,2')
+    expect(guard.anyDirty()).toBe(true)
+    expect(guard.dirtySource()?.title()).toBe('Hypothèses')
+    await wrapper.get('[data-testid="cancel"]').trigger('click')
+    expect(guard.anyDirty()).toBe(false)
   })
 })

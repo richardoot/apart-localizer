@@ -991,7 +991,7 @@ export function precisionBadge(location: LocationLike): PrecisionBadge {
       tone: 'none',
       label: LOCATION_PRECISION_LABELS.none,
       title:
-        'Ni adresse ni commune géocodée : pas de repère, aucune distance calculée. Saisissez une adresse ou une commune.',
+        'Ni adresse ni commune géocodée : pas de repère, aucune distance calculée. Saisis une adresse ou une commune.',
     }
   }
   if (location.precision === 'exact') {
@@ -1020,7 +1020,7 @@ export function precisionBadge(location: LocationLike): PrecisionBadge {
         ? `Pas d’adresse au numéro : repère au centre ${areaWording(area).of}, reconnu dans ${quoted(placement.matchedText ?? location.district ?? '')} (${area.source}). Distances approchées ; précisez l’adresse pour les fiabiliser.${verify}`
         : placement?.method === 'osm_place' && area
           ? `Pas d’adresse au numéro ni de contour de quartier : repère sur le lieu-dit ${quoted(area.name)} d’OpenStreetMap, reconnu dans ${quoted(placement.matchedText ?? location.district ?? '')}. Distances approchées ; précisez l’adresse pour les fiabiliser.${verify}`
-          : 'Le géocodeur n’a trouvé qu’un lieu-dit ou un quartier : repère approché. Précisez l’adresse pour fiabiliser les distances.'
+          : 'Le géocodeur n’a trouvé qu’un lieu-dit ou un quartier : repère approché. Précise l’adresse pour fiabiliser les distances.'
     return {
       tone: 'district',
       label: name
@@ -1064,7 +1064,7 @@ export function locationApproximation(
   return {
     approximate: true,
     origin,
-    note: `Repère approché : distances mesurées depuis le ${origin}, à lire « ≈ ». Précisez l’adresse pour les fiabiliser.`,
+    note: `Repère approché : distances mesurées depuis le ${origin}, à lire « ≈ ». Précise l’adresse pour les fiabiliser.`,
   }
 }
 

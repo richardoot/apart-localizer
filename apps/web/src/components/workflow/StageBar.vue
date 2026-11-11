@@ -2,6 +2,7 @@
   import { WORKFLOW_STAGES, WORKFLOW_STAGE_LABELS } from '@apart/contracts'
   import type { WorkflowStage, WorkflowStageCount } from '@apart/contracts'
   import { computed } from 'vue'
+  import UiIcon from '@/components/ui/UiIcon.vue'
 
   /**
    * Lot 21 (ADR 0031) : la barre des six étapes, à la place des onglets
@@ -43,6 +44,7 @@
         class="flex items-center gap-1 sm:flex-[1_1_0]"
         :class="index === lastIndex ? 'sm:ml-3.5 sm:flex-[0_0_190px]' : ''"
       >
+        <!-- Lot 22 : contrôle spécialisé (étape d'un parcours, `aria-current="step"`), sa recette n'est pas celle d'un bouton. -->
         <button
           type="button"
           class="flex min-h-11 flex-auto cursor-pointer items-center gap-1.5 rounded-full border px-3.5 text-left sm:min-h-[76px] sm:flex-col sm:items-stretch sm:justify-center sm:gap-0.5 sm:rounded-xl sm:px-3.5 sm:py-2"
@@ -60,7 +62,7 @@
           >
             <span class="whitespace-nowrap">{{ item.label }}</span>
             <span
-              class="font-display tabular-nums sm:text-[22px] sm:font-bold"
+              class="font-display tabular-nums sm:text-2xl sm:font-bold"
               data-testid="stage-count"
               >{{ item.count }}</span
             >
@@ -71,23 +73,11 @@
             >{{ item.sub }}</span
           >
         </button>
-        <svg
+        <UiIcon
           v-if="index < lastIndex - 1"
-          class="hidden shrink-0 text-muted sm:block"
-          width="12"
-          height="20"
-          viewBox="0 0 12 20"
-          aria-hidden="true"
-        >
-          <path
-            d="M3 3l6 7-6 7"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
+          name="chevron-right"
+          class="hidden size-4 text-muted sm:block"
+        />
       </li>
     </ol>
   </nav>

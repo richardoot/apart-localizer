@@ -114,7 +114,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         return {
           statusCode: HttpStatus.SERVICE_UNAVAILABLE,
           message:
-            "L'écriture a pris trop de temps et a été annulée : rien n'a été enregistré. Réessayez.",
+            "L'écriture a pris trop de temps et a été annulée : rien n'a été enregistré. Réessaie.",
         }
       default:
         this.logger.error(

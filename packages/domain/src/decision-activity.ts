@@ -343,7 +343,7 @@ export function decisionNotificationText(input: {
     case 'decision.disagreed':
       return {
         title: `${actorName} n’est pas d’accord : ${title}`,
-        body: 'Vos choix diffèrent : à trancher ensemble.',
+        body: 'Les choix diffèrent : à trancher ensemble.',
         url: SETTLE_URL,
       }
     case 'decision.withdrawn':

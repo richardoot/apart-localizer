@@ -1,7 +1,8 @@
 import { computed, ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import type { NotificationPreferencesUpdate } from '@apart/contracts'
-import { ApiError, api } from '@/lib/api'
+import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { pushSupport, urlBase64ToUint8Array } from '@/lib/push'
 
 export const notificationKeys = {
@@ -67,7 +68,7 @@ export function useNotificationSettings() {
       pushError.value =
         support === 'denied'
           ? 'Les notifications sont bloquées pour ce site dans le navigateur.'
-          : "Cet appareil ne sait pas recevoir de notifications push (installez l'application sur l'écran d'accueil)."
+          : "Cet appareil ne sait pas recevoir de notifications push (installe l'application sur l'écran d'accueil)."
       return false
     }
     pushBusy.value = true
@@ -98,9 +99,9 @@ export function useNotificationSettings() {
       return true
     } catch (error) {
       pushError.value =
-        error instanceof ApiError || error instanceof Error
-          ? error.message
-          : "L'abonnement a échoué."
+        error instanceof Error && !(error instanceof TypeError)
+          ? errorMessage(error, error.message)
+          : errorMessage(error, "L'abonnement a échoué.")
       return false
     } finally {
       pushBusy.value = false
@@ -119,7 +120,9 @@ export function useNotificationSettings() {
       }
     } catch (error) {
       pushError.value =
-        error instanceof Error ? error.message : 'Le désabonnement a échoué.'
+        error instanceof Error && !(error instanceof TypeError)
+          ? errorMessage(error, error.message)
+          : errorMessage(error, 'Le désabonnement a échoué.')
     } finally {
       pushBusy.value = false
     }

@@ -53,13 +53,13 @@ export function dpeValidity(input: DpeValidityInput): DpeValidity {
   if (!input.dpeClass) {
     worsen('unknown')
     messages.push(
-      'DPE inconnu : demandez-le, il est obligatoire dans l’annonce.'
+      'DPE inconnu : demande-le, il est obligatoire dans l’annonce.'
     )
   }
   if (!input.dpeDate) {
     worsen('unknown')
     messages.push(
-      'Date du DPE inconnue : vérifiez qu’il a été établi après le 1er juillet 2021 (sinon il n’est plus valable).'
+      'Date du DPE inconnue : vérifie qu’il a été établi après le 1er juillet 2021 (sinon il n’est plus valable).'
     )
   } else if (input.dpeDate < DPE_NEW_METHOD_FROM) {
     const invalidFrom =

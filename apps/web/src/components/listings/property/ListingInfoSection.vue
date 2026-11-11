@@ -2,7 +2,7 @@
   import { computed } from 'vue'
   import { ListingSourceSchema } from '@apart/contracts'
   import type { Listing, ListingSource } from '@apart/contracts'
-  import FormField from '@/components/ui/FormField.vue'
+  import UiField from '@/components/ui/UiField.vue'
   import { useListingEditor } from '@/composables/useListingEditor'
   import { formatEuros } from '@/lib/format'
   import { SUGGESTED_COMMUNES } from '@/lib/labels'
@@ -24,8 +24,12 @@
   const editor = useListingEditor()
   const form = computed(() => editor.draft.value)
   const meta = (path: string) =>
-    fieldMeta(editor.fieldSources.value, editor.changedFields.value, path)
-  const sources = ListingSourceSchema.options
+    fieldMeta(
+      editor.fieldSources.value,
+      editor.changedFields.value,
+      path,
+      editor.errors.value
+    )
 
   const SOURCE_LABELS: Record<ListingSource, string> = {
     seloger: 'SeLoger',
@@ -35,6 +39,10 @@
     agence: 'Agence',
     autre: 'Autre',
   }
+  const SOURCE_OPTIONS = ListingSourceSchema.options.map(value => ({
+    value,
+    label: SOURCE_LABELS[value],
+  }))
 
   const source = computed(() =>
     [SOURCE_LABELS[props.listing.source], props.listing.sourceLabel]
@@ -52,9 +60,6 @@
     const [lng, lat] = point.coordinates
     return `${lat.toLocaleString('fr-FR', { maximumFractionDigits: 5 })}, ${lng.toLocaleString('fr-FR', { maximumFractionDigits: 5 })}`
   })
-
-  const inputClass =
-    'min-h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm text-fg sm:min-h-10'
 </script>
 
 <template>
@@ -124,115 +129,85 @@
 
     <template #edit>
       <div class="grid gap-3 sm:grid-cols-2">
-        <FormField
+        <UiField
+          id="f-title"
+          v-model="form.title"
           label="Titre *"
-          for-id="f-title"
           v-bind="meta('title')"
-          :error="editor.errors.value.title"
           full
-        >
-          <input id="f-title" v-model="form.title" :class="inputClass" />
-        </FormField>
-        <FormField
-          label="Prix FAI (€) *"
-          for-id="f-price"
+        />
+        <UiField
+          id="f-price"
+          v-model="form.price"
+          label="Prix FAI *"
+          unit="€"
           v-bind="meta('price')"
-          :error="editor.errors.value.price"
-        >
-          <input
-            id="f-price"
-            v-model="form.price"
-            :class="inputClass"
-            inputmode="numeric"
-          />
-        </FormField>
-        <FormField label="Source" for-id="f-source" v-bind="meta('source')">
-          <select id="f-source" v-model="form.source" :class="inputClass">
-            <option v-for="s in sources" :key="s" :value="s">
-              {{ SOURCE_LABELS[s] }}
-            </option>
-          </select>
-        </FormField>
-        <FormField
+          inputmode="numeric"
+        />
+        <UiField
+          id="f-source"
+          v-model="form.source"
+          as="select"
+          label="Source"
+          :options="SOURCE_OPTIONS"
+          v-bind="meta('source')"
+        />
+        <UiField
+          id="f-url"
+          v-model="form.url"
           label="Lien de l'annonce"
-          for-id="f-url"
           v-bind="meta('url')"
-          :error="editor.errors.value.url"
           full
-        >
-          <input
-            id="f-url"
-            v-model="form.url"
-            type="url"
-            :class="inputClass"
-            placeholder="https://…"
-          />
-        </FormField>
-        <FormField
+          type="url"
+          placeholder="https://…"
+        />
+        <UiField
+          :id="ADDRESS_FIELD_ID"
+          v-model="form.addressRaw"
           label="Adresse exacte"
-          :for-id="ADDRESS_FIELD_ID"
-          v-bind="meta('addressRaw')"
+          placeholder="12 rue …, 33400 Talence (à demander à l'agence)"
           full
-        >
-          <input
-            :id="ADDRESS_FIELD_ID"
-            v-model="form.addressRaw"
-            :class="inputClass"
-            placeholder="12 rue …, 33400 Talence (à demander à l'agence)"
+          v-bind="meta('addressRaw')"
+        />
+        <UiField
+          id="f-commune"
+          v-model="form.commune"
+          label="Commune"
+          list="property-communes"
+          v-bind="meta('commune')"
+        />
+        <datalist id="property-communes">
+          <option
+            v-for="commune in SUGGESTED_COMMUNES"
+            :key="commune"
+            :value="commune"
           />
-        </FormField>
-        <FormField label="Commune" for-id="f-commune" v-bind="meta('commune')">
-          <input
-            id="f-commune"
-            v-model="form.commune"
-            :class="inputClass"
-            list="property-communes"
-          />
-          <datalist id="property-communes">
-            <option
-              v-for="commune in SUGGESTED_COMMUNES"
-              :key="commune"
-              :value="commune"
-            />
-          </datalist>
-        </FormField>
-        <FormField
+        </datalist>
+        <UiField
+          id="f-district"
+          v-model="form.district"
           label="Quartier ou secteur"
-          for-id="f-district"
           v-bind="meta('district')"
           hint="Sans numéro, le repère va au centre du quartier reconnu, sinon de la commune"
-        >
-          <input
-            id="f-district"
-            v-model="form.district"
-            :class="inputClass"
-            placeholder="Bordeaux Sud, Victoire"
-          />
-        </FormField>
-        <FormField
+          placeholder="Bordeaux Sud, Victoire"
+        />
+        <UiField
+          id="f-lng"
+          v-model="form.longitude"
           label="Longitude"
-          for-id="f-lng"
           v-bind="meta('longitude')"
-          :error="editor.errors.value['location.point']"
           hint="WGS 84 ; vide = pas de point sur la carte"
-        >
-          <input
-            id="f-lng"
-            v-model="form.longitude"
-            :class="inputClass"
-            inputmode="decimal"
-            placeholder="-0.5906"
-          />
-        </FormField>
-        <FormField label="Latitude" for-id="f-lat" v-bind="meta('latitude')">
-          <input
-            id="f-lat"
-            v-model="form.latitude"
-            :class="inputClass"
-            inputmode="decimal"
-            placeholder="44.8083"
-          />
-        </FormField>
+          inputmode="decimal"
+          placeholder="-0.5906"
+        />
+        <UiField
+          id="f-lat"
+          v-model="form.latitude"
+          label="Latitude"
+          v-bind="meta('latitude')"
+          inputmode="decimal"
+          placeholder="44.8083"
+        />
       </div>
     </template>
   </EditableSection>

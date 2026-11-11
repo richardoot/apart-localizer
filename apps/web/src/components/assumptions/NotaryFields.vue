@@ -7,8 +7,10 @@
   import { NOTARY_MODE_LABELS } from '@/lib/assumptions-form'
   import { changedCountLabel } from '@/lib/assumptions-summary'
   import { formatEuros, formatPercent, parseNumberInput } from '@/lib/format'
-  import ChangeNote from './ChangeNote.vue'
-  import UnitField from './UnitField.vue'
+  import ChangeNote from '@/components/ui/ChangeNote.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import UiInput from '@/components/ui/UiInput.vue'
 
   /**
    * « Frais de notaire » (lot 13) : choix segmenté barème officiel ou taux
@@ -47,13 +49,6 @@
     if (current.trim() === '') return `au-delà de ${euros(previous)}`
     return `${index === 0 ? '0 €' : euros(previous)} à ${euros(current)}`
   }
-
-  const boxClass = (key: string): string =>
-    changeOf(key)
-      ? 'border border-accent ring-1 ring-accent'
-      : errorOf(key)
-        ? 'border border-bad ring-1 ring-bad'
-        : 'border border-muted/70'
 </script>
 
 <template>
@@ -69,6 +64,7 @@
           class="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-lg px-3.5 text-sm text-muted has-[:checked]:bg-surface has-[:checked]:font-semibold has-[:checked]:text-fg has-[:checked]:shadow-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-accent sm:flex-none"
           :data-testid="`notary-mode-${mode}`"
         >
+          <!-- Lot 22 : choix segmenté en vrais boutons radio (fieldset et légende), gardé tel quel. -->
           <input
             :id="`h-notary-mode-${mode}`"
             v-model="form.notaryMode"
@@ -83,7 +79,7 @@
       <ChangeNote :change="changeOf('notaryMode')" />
     </fieldset>
 
-    <UnitField
+    <UiField
       v-if="form.notaryMode === 'rate'"
       id="h-notary"
       v-model="form.notaryRatePercent"
@@ -113,23 +109,21 @@
         <span v-else class="text-bad">barème incomplet : voir le détail</span>
       </p>
       <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <button
-          type="button"
-          class="inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-left font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+        <UiButton
+          variant="ghost"
+          class="px-1 text-left font-semibold text-accent"
+          :icon="openPanels.scaleDetail ? 'chevron-down' : 'chevron-right'"
           :aria-expanded="openPanels.scaleDetail"
           aria-controls="scale-detail"
           data-testid="toggle-scale-detail"
           @click="openPanels.scaleDetail = !openPanels.scaleDetail"
         >
-          <span aria-hidden="true">{{
-            openPanels.scaleDetail ? '▾' : '▸'
-          }}</span>
           Détail du barème
           <span class="font-normal text-muted"
             >· {{ SCALE_PARAMETERS }} paramètres et
             {{ form.scale.bands.length }} tranches</span
           >
-        </button>
+        </UiButton>
         <DefinitionButton term="notary_fees" />
         <span
           v-if="detailChanged && !openPanels.scaleDetail"
@@ -148,7 +142,7 @@
         <div
           class="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(10.5rem,1fr))]"
         >
-          <UnitField
+          <UiField
             id="h-dept"
             v-model="form.scale.departmentalRatePercent"
             quiet
@@ -159,7 +153,7 @@
             :change="changeOf('scale.departmentalRatePercent')"
             :error="errorOf('scale.departmentalRatePercent')"
           />
-          <UnitField
+          <UiField
             id="h-communal"
             v-model="form.scale.communalRatePercent"
             quiet
@@ -169,7 +163,7 @@
             :change="changeOf('scale.communalRatePercent')"
             :error="errorOf('scale.communalRatePercent')"
           />
-          <UnitField
+          <UiField
             id="h-collection"
             v-model="form.scale.collectionFeeRatePercent"
             quiet
@@ -218,60 +212,46 @@
                 }}</span>
               </th>
               <td class="px-1 py-1.5">
-                <div
-                  class="flex h-12 min-w-0 items-center rounded-lg bg-surface px-2.5 focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent lg:h-11"
-                  :class="boxClass(`scale.bands.${index}.upTo`)"
-                >
-                  <input
-                    :id="`h-band-${index}-up`"
-                    v-model="band.upTo"
-                    inputmode="numeric"
-                    autocomplete="off"
-                    :placeholder="
-                      index === form.scale.bands.length - 1 ? 'au-delà' : ''
-                    "
-                    :aria-label="`Borne supérieure de la tranche ${index + 1} en euros`"
-                    :aria-invalid="
-                      errorOf(`scale.bands.${index}.upTo`) ? 'true' : undefined
-                    "
-                    class="h-full w-full min-w-0 flex-1 bg-transparent text-right text-base outline-none placeholder:text-muted"
-                  />
-                  <span class="ml-1 text-sm text-muted">€</span>
-                </div>
+                <UiInput
+                  :id="`h-band-${index}-up`"
+                  v-model="band.upTo"
+                  unit="€"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  :placeholder="
+                    index === form.scale.bands.length - 1 ? 'au-delà' : ''
+                  "
+                  :aria-label="`Borne supérieure de la tranche ${index + 1} en euros`"
+                  :invalid="!!errorOf(`scale.bands.${index}.upTo`)"
+                  :changed="!!changeOf(`scale.bands.${index}.upTo`)"
+                  class="px-2.5"
+                />
                 <ChangeNote :change="changeOf(`scale.bands.${index}.upTo`)" />
                 <p
                   v-if="errorOf(`scale.bands.${index}.upTo`)"
-                  class="text-xs font-medium text-bad"
+                  class="text-sm font-medium text-bad"
                 >
                   {{ errorOf(`scale.bands.${index}.upTo`) }}
                 </p>
               </td>
               <td class="py-1.5 pl-1">
-                <div
-                  class="flex h-12 min-w-0 items-center rounded-lg bg-surface px-2.5 focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent lg:h-11"
-                  :class="boxClass(`scale.bands.${index}.ratePercent`)"
-                >
-                  <input
-                    :id="`h-band-${index}-rate`"
-                    v-model="band.ratePercent"
-                    inputmode="decimal"
-                    autocomplete="off"
-                    :aria-label="`Taux de la tranche ${index + 1} en pourcentage`"
-                    :aria-invalid="
-                      errorOf(`scale.bands.${index}.ratePercent`)
-                        ? 'true'
-                        : undefined
-                    "
-                    class="h-full w-full min-w-0 flex-1 bg-transparent text-right text-base outline-none"
-                  />
-                  <span class="ml-1 text-sm text-muted">%</span>
-                </div>
+                <UiInput
+                  :id="`h-band-${index}-rate`"
+                  v-model="band.ratePercent"
+                  unit="%"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  :aria-label="`Taux de la tranche ${index + 1} en pourcentage`"
+                  :invalid="!!errorOf(`scale.bands.${index}.ratePercent`)"
+                  :changed="!!changeOf(`scale.bands.${index}.ratePercent`)"
+                  class="px-2.5"
+                />
                 <ChangeNote
                   :change="changeOf(`scale.bands.${index}.ratePercent`)"
                 />
                 <p
                   v-if="errorOf(`scale.bands.${index}.ratePercent`)"
-                  class="text-xs font-medium text-bad"
+                  class="text-sm font-medium text-bad"
                 >
                   {{ errorOf(`scale.bands.${index}.ratePercent`) }}
                 </p>
@@ -288,7 +268,7 @@
         <div
           class="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(10.5rem,1fr))]"
         >
-          <UnitField
+          <UiField
             id="h-vat"
             v-model="form.scale.emolumentVatRatePercent"
             quiet
@@ -298,7 +278,7 @@
             :change="changeOf('scale.emolumentVatRatePercent')"
             :error="errorOf('scale.emolumentVatRatePercent')"
           />
-          <UnitField
+          <UiField
             id="h-csi"
             v-model="form.scale.securityContributionRatePercent"
             quiet
@@ -308,7 +288,7 @@
             :change="changeOf('scale.securityContributionRatePercent')"
             :error="errorOf('scale.securityContributionRatePercent')"
           />
-          <UnitField
+          <UiField
             id="h-csi-min"
             v-model="form.scale.securityContributionMinimum"
             quiet
@@ -318,7 +298,7 @@
             :change="changeOf('scale.securityContributionMinimum')"
             :error="errorOf('scale.securityContributionMinimum')"
           />
-          <UnitField
+          <UiField
             id="h-disbursements"
             v-model="form.scale.disbursements"
             quiet
@@ -329,7 +309,7 @@
             :error="errorOf('scale.disbursements')"
           />
         </div>
-        <UnitField
+        <UiField
           id="h-scale-label"
           v-model="form.scale.label"
           quiet
@@ -339,15 +319,15 @@
           :change="changeOf('scale.label')"
           :error="errorOf('scale.label')"
         />
-        <button
+        <UiButton
           v-if="!readings.scaleIsDefault"
-          type="button"
-          class="inline-flex min-h-11 items-center justify-self-start rounded-lg px-1 text-sm font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+          variant="ghost"
+          class="justify-self-start px-1 font-semibold text-accent"
           data-testid="restore-default-scale"
           @click="restoreDefaultScale"
         >
           Revenir au barème officiel
-        </button>
+        </UiButton>
       </div>
     </template>
   </div>

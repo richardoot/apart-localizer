@@ -155,7 +155,7 @@ describe('Alertes e-mail entrantes (e2e)', () => {
         .expect(200)
       expect(bell.body.items[0]).toMatchObject({
         type: 'drafts_received',
-        title: '2 annonce(s) reçue(s) par e-mail',
+        title: '2 annonces reçues par e-mail',
         url: '/annonces?etape=a-valider',
       })
       // La même alerte reçue deux fois ne double pas les brouillons.

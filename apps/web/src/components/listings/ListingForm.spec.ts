@@ -37,7 +37,9 @@ describe('ListingForm', () => {
       title: 'Le titre est obligatoire.',
       price: 'Le prix FAI est obligatoire (en euros).',
     })
-    const alerts = wrapper.findAll('[role="alert"]').map(a => a.text())
+    const alerts = wrapper
+      .findAll('[data-testid="field-error"]')
+      .map(a => a.text())
     expect(alerts).toContain('Le titre est obligatoire.')
     expect(alerts).toContain('Le prix FAI est obligatoire (en euros).')
   })

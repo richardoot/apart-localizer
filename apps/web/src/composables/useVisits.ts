@@ -2,6 +2,7 @@ import { computed, ref, unref } from 'vue'
 import type { MaybeRef } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import type { VisitInputRaw, VisitUpdate } from '@apart/contracts'
+import { errorMessage, isNetworkError } from '@/lib/errors'
 import { ApiError, api, uploadToSignedUrl } from '@/lib/api'
 import { preparePhoto } from '@/lib/photos'
 import { listingKeys } from './useListings'
@@ -116,10 +117,13 @@ export function useVisits(listingId: MaybeRef<string>) {
       } catch (error) {
         set({
           step: 'failed',
+          // Une photo refusée (lourde, illisible) dit pourquoi ; sinon le réseau.
           error:
-            error instanceof ApiError || error instanceof Error
-              ? error.message
-              : "L'envoi a échoué.",
+            error instanceof ApiError || !(error instanceof Error)
+              ? errorMessage(error, 'L’envoi a échoué.')
+              : isNetworkError(error)
+                ? errorMessage(error)
+                : error.message,
         })
       }
     }

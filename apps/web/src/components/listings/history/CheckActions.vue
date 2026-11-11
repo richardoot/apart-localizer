@@ -7,8 +7,12 @@
     ListingStatus,
   } from '@apart/contracts'
   import { checkFreshness, orderLinks } from '@apart/domain'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCard from '@/components/ui/UiCard.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import { useAction } from '@/composables/useAction'
   import { useListingChecks } from '@/composables/useListingChecks'
-  import { ApiError } from '@/lib/api'
   import { formatDate } from '@/lib/format'
   import { LISTING_STATUS_LABELS } from '@/lib/labels'
 
@@ -20,6 +24,7 @@
    * portails), « Vue en ligne aujourd'hui » et « Plus en ligne » ; ce
    * dernier propose « Vendu ou retiré », appliqué seulement si le membre le
    * confirme. Aucun appel aux portails : le serveur ne lit aucune page.
+   * Lot 22 : l'erreur dans ce bloc, la réussite dans la zone de messages.
    */
   const props = withDefaults(
     defineProps<{
@@ -37,8 +42,7 @@
   const emit = defineEmits<{ 'set-status': [status: ListingStatus] }>()
 
   const checks = useListingChecks(computed(() => props.listingId))
-  const failure = ref<string | null>(null)
-  const notice = ref<string | null>(null)
+  const action = useAction('L’enregistrement a échoué.')
   const confirmingOffline = ref(false)
   const evidence = ref('')
   const suggestion = ref<ListingCheckSuggestion | null>(null)
@@ -60,6 +64,12 @@
         ? { checkedUrl: props.url }
         : {}
   )
+  const linkOptions = computed(() =>
+    orderedLinks.value.map(link => ({
+      value: link.id,
+      label: linkOption(link),
+    }))
+  )
   const linkOption = (link: ListingLink): string =>
     `${LISTING_PORTAL_LABELS[link.portal]}${link.primary ? ' (lien principal)' : ''}${link.online ? '' : ' (plus en ligne)'}`
   const portalName = computed(
@@ -79,65 +89,56 @@
     )
   )
 
-  function report(error: unknown): void {
-    notice.value = null
-    failure.value =
-      error instanceof ApiError ? error.message : "L'enregistrement a échoué."
-  }
-
   async function seenOnline(): Promise<void> {
-    failure.value = null
-    try {
-      await checks.apply.mutateAsync({
-        observed: { online: true },
-        outcome: 'unchanged',
-        expectedUpdatedAt: props.updatedAt,
-        ...target.value,
-      })
-      suggestion.value = null
-      notice.value = multiLink.value
-        ? `Lien ${portalName.value} noté en ligne aujourd’hui.`
-        : 'Annonce notée en ligne aujourd’hui.'
-    } catch (error) {
-      report(error)
-    }
+    const done = await action.run(
+      () =>
+        checks.apply.mutateAsync({
+          observed: { online: true },
+          outcome: 'unchanged',
+          expectedUpdatedAt: props.updatedAt,
+          ...target.value,
+        }),
+      {
+        success: multiLink.value
+          ? `Lien ${portalName.value} noté en ligne aujourd’hui.`
+          : 'Annonce notée en ligne aujourd’hui.',
+      }
+    )
+    if (done) suggestion.value = null
   }
 
   async function markOffline(): Promise<void> {
-    failure.value = null
-    try {
-      const result = await checks.apply.mutateAsync({
-        observed: { online: false },
-        outcome: 'offline',
-        expectedUpdatedAt: props.updatedAt,
-        ...(evidence.value.trim() ? { evidence: evidence.value.trim() } : {}),
-        ...target.value,
-      })
-      confirmingOffline.value = false
-      evidence.value = ''
-      suggestion.value = result.suggestion
-      notice.value = multiLink.value
-        ? `Lien ${portalName.value} noté « plus en ligne ».`
-        : 'Annonce notée « plus en ligne ».'
-    } catch (error) {
-      report(error)
-    }
+    const result = await action.run(
+      () =>
+        checks.apply.mutateAsync({
+          observed: { online: false },
+          outcome: 'offline',
+          expectedUpdatedAt: props.updatedAt,
+          ...(evidence.value.trim() ? { evidence: evidence.value.trim() } : {}),
+          ...target.value,
+        }),
+      {
+        success: multiLink.value
+          ? `Lien ${portalName.value} noté « plus en ligne ».`
+          : 'Annonce notée « plus en ligne ».',
+      }
+    )
+    if (!result) return
+    confirmingOffline.value = false
+    evidence.value = ''
+    suggestion.value = result.suggestion
   }
 
   function applySuggestion(): void {
     if (!suggestion.value) return
     emit('set-status', suggestion.value.status)
     suggestion.value = null
-    notice.value = null
   }
-
-  const buttonClass =
-    'inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm hover:bg-surface-2 disabled:opacity-60 sm:min-h-10'
 </script>
 
 <template>
-  <section
-    class="grid gap-3 rounded-2xl border border-line bg-surface p-4 sm:px-5"
+  <UiCard
+    class="grid gap-3"
     aria-labelledby="check-actions-title"
     data-testid="check-actions"
   >
@@ -160,54 +161,47 @@
       </p>
     </header>
     <p class="text-sm text-muted">
-      Claude revérifie les annonces depuis votre navigateur (prompt « Tournée de
+      Claude revérifie les annonces depuis ton navigateur (demande « Tournée de
       mise à jour ») : les faits lus sur le portail s’appliquent à la fiche, un
-      changement de statut n’est jamais appliqué sans votre accord. Vous pouvez
-      aussi noter ce que vous avez constaté :
+      changement de statut n’est jamais appliqué sans ton accord. Tu peux aussi
+      noter ce que tu as constaté :
     </p>
 
-    <label
+    <UiField
       v-if="multiLink"
-      class="grid gap-1 text-xs font-medium text-muted sm:max-w-sm"
-    >
-      Lien vérifié
-      <select
-        :value="chosenLink?.id"
-        class="min-h-11 rounded-lg border border-line bg-bg px-3 text-sm text-fg sm:min-h-10"
-        data-testid="check-link"
-        @change="chosenLinkId = ($event.target as HTMLSelectElement).value"
-      >
-        <option v-for="link in orderedLinks" :key="link.id" :value="link.id">
-          {{ linkOption(link) }}
-        </option>
-      </select>
-    </label>
+      id="check-link"
+      :model-value="chosenLink?.id"
+      as="select"
+      label="Lien vérifié"
+      quiet
+      class="sm:max-w-sm"
+      :options="linkOptions"
+      data-testid="check-link"
+      @update:model-value="value => (chosenLinkId = String(value))"
+    />
 
     <div class="flex flex-wrap gap-2">
-      <button
-        type="button"
-        :class="buttonClass"
+      <UiButton
         :disabled="checks.apply.isPending.value"
         data-testid="check-online"
         @click="seenOnline"
       >
         Vue en ligne aujourd’hui
-      </button>
-      <button
+      </UiButton>
+      <UiButton
         v-if="!confirmingOffline"
-        type="button"
-        :class="buttonClass"
         :disabled="checks.apply.isPending.value"
         data-testid="check-offline"
         @click="confirmingOffline = true"
       >
         Plus en ligne
-      </button>
+      </UiButton>
     </div>
 
     <form
       v-if="confirmingOffline"
       class="grid gap-2 rounded-xl bg-surface-2 p-3"
+      novalidate
       data-testid="check-offline-form"
       @submit.prevent="markOffline"
     >
@@ -218,48 +212,31 @@
       </p>
       <p v-else class="text-sm">
         Noter que l’annonce n’est plus en ligne ? Le statut ne change pas encore
-        : « {{ LISTING_STATUS_LABELS.sold_or_withdrawn }} » vous sera proposé.
+        : « {{ LISTING_STATUS_LABELS.sold_or_withdrawn }} » te sera proposé.
       </p>
-      <label class="grid gap-1 text-xs font-medium text-muted">
-        Ce que la page affiche (facultatif)
-        <input
-          v-model="evidence"
-          type="text"
-          maxlength="500"
-          placeholder="« Cette annonce a expiré », page introuvable…"
-          class="min-h-11 rounded-lg border border-line bg-bg px-3 text-sm text-fg"
-          data-testid="check-offline-evidence"
-        />
-      </label>
+      <UiField
+        id="check-offline-evidence"
+        v-model="evidence"
+        label="Ce que la page affiche (facultatif)"
+        quiet
+        maxlength="500"
+        placeholder="« Cette annonce a expiré », page introuvable…"
+        data-testid="check-offline-evidence"
+      />
       <div class="flex flex-wrap justify-end gap-2">
-        <button
-          type="button"
-          :class="buttonClass"
-          @click="confirmingOffline = false"
-        >
-          Annuler
-        </button>
-        <button
+        <UiButton @click="confirmingOffline = false">Annuler</UiButton>
+        <UiButton
           type="submit"
-          class="inline-flex min-h-11 items-center rounded-lg bg-accent px-3 text-sm font-semibold text-accent-fg disabled:opacity-60 sm:min-h-10"
-          :disabled="checks.apply.isPending.value"
+          variant="primary"
+          :loading="checks.apply.isPending.value"
           data-testid="check-offline-confirm"
         >
           Noter « plus en ligne »
-        </button>
+        </UiButton>
       </div>
     </form>
 
-    <p
-      v-if="failure"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-    >
-      {{ failure }}
-    </p>
-    <p v-else-if="notice" class="text-sm text-good" aria-live="polite">
-      {{ notice }}
-    </p>
+    <UiAlert v-if="action.error.value">{{ action.error.value }}</UiAlert>
 
     <div
       v-if="suggestion"
@@ -270,21 +247,17 @@
         >{{ suggestion.reason }} Passer l’annonce à «
         {{ LISTING_STATUS_LABELS[suggestion.status] }} » ?</span
       >
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center rounded-lg bg-accent px-3 text-sm font-semibold text-accent-fg sm:min-h-9"
+      <UiButton
+        variant="primary"
+        size="sm"
         data-testid="check-suggestion-apply"
         @click="applySuggestion"
       >
         Passer en « {{ LISTING_STATUS_LABELS[suggestion.status] }} »
-      </button>
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm sm:min-h-9"
-        @click="suggestion = null"
-      >
+      </UiButton>
+      <UiButton size="sm" @click="suggestion = null">
         Garder « {{ LISTING_STATUS_LABELS[suggestion.currentStatus] }} »
-      </button>
+      </UiButton>
     </div>
-  </section>
+  </UiCard>
 </template>

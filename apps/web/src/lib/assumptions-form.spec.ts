@@ -105,7 +105,7 @@ describe('formulaire des hypothèses : lecture et écriture', () => {
     const result = valuesFromForm(form, DEFAULT_ASSUMPTIONS)
     expect(result.errors).toEqual({
       netYieldThresholdPercent:
-        'saisissez un seuil pour retenir ce critère dans le prix cible',
+        'saisis un seuil pour retenir ce critère dans le prix cible',
       tightDiscountPercent:
         'doit être au moins égale à la décote « négociable »',
     })
@@ -116,7 +116,7 @@ describe('formulaire des hypothèses : lecture et écriture', () => {
     form.targetCriteria = []
     const result = valuesFromForm(form, DEFAULT_ASSUMPTIONS)
     expect(result.errors?.[CRITERIA_ERROR_KEY]).toBe(
-      'retenez au moins un critère pour le prix cible'
+      'retiens au moins un critère pour le prix cible'
     )
     expect(fieldLabel(CRITERIA_ERROR_KEY, 4)).toBe('Critères du prix cible')
     expect(fieldLocation(CRITERIA_ERROR_KEY, 4)).toEqual({

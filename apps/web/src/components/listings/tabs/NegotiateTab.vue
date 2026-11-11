@@ -16,6 +16,7 @@
   import { LISTING_EDITOR } from '@/composables/useListingEditor'
   import { useSensitivity } from '@/composables/useListings'
   import type { ListingTab } from '@/lib/listing-tabs'
+  import UiAlert from '@/components/ui/UiAlert.vue'
   import HistorySection from '../HistorySection.vue'
   import SensitivityTable from '../SensitivityTable.vue'
   import TargetPriceSection from '../TargetPriceSection.vue'
@@ -40,6 +41,8 @@
     live?: boolean
     busy?: boolean
     suggestedStatus?: ListingStatus | null
+    /** Lot 22 : l'échec du dernier prix ou de la dernière offre, sous « Prix et offres ». */
+    error?: string | null
   }>()
   const emit = defineEmits<{
     go: [tab: ListingTab]
@@ -119,6 +122,7 @@
       @update-offer="(offerId, update) => emit('updateOffer', offerId, update)"
       @set-status="status => emit('setStatus', status)"
     />
+    <UiAlert v-if="error" data-testid="negotiate-error">{{ error }}</UiAlert>
 
     <details
       class="rounded-2xl border border-line bg-surface px-4 sm:px-5"

@@ -6,7 +6,13 @@
   import { explorationHeading } from '@apart/domain'
   import { useDrafts } from '@/composables/useDrafts'
   import { useExplorationList } from '@/composables/useExplorations'
-  import { ApiError } from '@/lib/api'
+  import { errorMessage } from '@/lib/errors'
+  import { plural } from '@/lib/format'
+  import { useFeedbackStore } from '@/stores/feedback'
+  import QueryState from '@/components/ui/QueryState.vue'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCard from '@/components/ui/UiCard.vue'
   import { mergeDraftCards, pendingDuplicate } from '@/lib/drafts'
   import { draftRow, orderedRows } from '@/lib/workflow'
   import type { StageRowView } from '@/lib/workflow'
@@ -23,7 +29,9 @@
    * celles « dans les critères » »), et les décisions de la session gardées
    * à leur place (« Ajoutée », « Écartée… Annuler », « Fiche mise à jour »).
    * Lot 18 : en tête, les liens rattachés d'office (même agence, même
-   * référence), avec « Ce n'est pas la même ».
+   * référence), avec « Ce n'est pas la même ». Lot 22 : une lecture échouée
+   * dit l'erreur et « Réessayer », jamais « Rien à valider » ; le vide parle
+   * des filtres quand il y en a.
    */
   const props = withDefaults(
     defineProps<{
@@ -37,6 +45,8 @@
       expanded?: string | null
       /** Un tri est demandé : `drafts` est déjà dans l'ordre voulu. */
       keepOrder?: boolean
+      /** Lot 22 : des filtres sont actifs (le vide le dit). */
+      filtered?: boolean
     }>(),
     {
       view: 'cards',
@@ -44,9 +54,14 @@
       agreement: false,
       expanded: null,
       keepOrder: false,
+      filtered: false,
     }
   )
-  const emit = defineEmits<{ 'update:expanded': [id: string | null] }>()
+  const emit = defineEmits<{
+    'update:expanded': [id: string | null]
+    clearFilters: []
+  }>()
+  const feedback = useFeedbackStore()
 
   const router = useRouter()
   const draftQueries = useDrafts()
@@ -58,6 +73,7 @@
   const busy = ref<string | null>(null)
   const errors = ref<Record<string, string>>({})
   const batchMessage = ref<string | null>(null)
+  const batchError = ref<string | null>(null)
 
   const cards = computed(() => {
     const merged = mergeDraftCards(
@@ -140,7 +156,7 @@
     } catch (err) {
       errors.value = {
         ...errors.value,
-        [id]: err instanceof ApiError ? err.message : 'L’action a échoué.',
+        [id]: errorMessage(err),
       }
     } finally {
       busy.value = null
@@ -191,6 +207,7 @@
 
   async function addAllIn(): Promise<void> {
     batchMessage.value = null
+    batchError.value = null
     try {
       const result = await draftQueries.acceptInCriteria.mutateAsync(
         latest.value ? { explorationId: latest.value.id } : {}
@@ -202,14 +219,17 @@
           remember({ ...card, status: 'accepted', listingId: added.listingId })
         }
       }
-      batchMessage.value = result.proposed
-        ? `${result.proposed} proposition(s) envoyée(s) : l’annonce naît à l’accord complet.`
+      const text = result.proposed
+        ? `${plural(result.proposed, 'proposition envoyée', 'propositions envoyées')} : l’annonce naît à l’accord complet.`
         : result.accepted.length
-          ? `${result.accepted.length} annonce(s) ajoutée(s) à la liste.`
-          : 'Aucune annonce « dans les critères » sans doublon à trancher.'
+          ? `${plural(result.accepted.length, 'annonce ajoutée', 'annonces ajoutées')} à la liste.`
+          : null
+      if (text) feedback.success(text)
+      else
+        batchMessage.value =
+          'Aucune annonce « dans les critères » sans doublon à trancher.'
     } catch (err) {
-      batchMessage.value =
-        err instanceof ApiError ? err.message : 'L’ajout a échoué.'
+      batchError.value = errorMessage(err, 'L’ajout a échoué.')
     }
   }
 </script>
@@ -218,84 +238,113 @@
   <section class="grid gap-4" data-testid="drafts-tab">
     <p
       v-if="view === 'cards'"
-      class="max-w-3xl text-[13px] leading-normal text-muted"
+      class="max-w-3xl text-sm leading-normal text-muted"
     >
       Claude n’ajoute aucune annonce de lui-même : chaque annonce trouvée attend
-      votre choix. Ajoutée, elle rejoint la liste avec sa fiche pré-remplie ;
+      ton choix. Ajoutée, elle rejoint la liste avec sa fiche pré-remplie ;
       écartée, Claude ne la proposera plus. Seul le lien d’une annonce déjà
       suivie (même agence, même référence) rejoint sa fiche d’office.
     </p>
 
-    <p v-if="draftQueries.isPending.value" class="text-sm text-muted">
-      Chargement des annonces à valider…
-    </p>
-    <p
-      v-else-if="cards.length === 0"
-      class="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-muted"
-      data-testid="drafts-empty"
+    <QueryState
+      :query="draftQueries"
+      :empty="cards.length === 0"
+      :filtered="filtered && (draftQueries.data.value?.length ?? 0) > 0"
+      skeleton="rows"
+      loading-label="les annonces à valider"
+      error-fallback="Impossible de lire les annonces à valider."
+      @clear-filters="emit('clearFilters')"
     >
-      Rien à valider. Les annonces reçues par e-mail et celles que Claude trouve
-      en explorant les portails arrivent ici.
-      <RouterLink
-        :to="{ name: 'criteria' }"
-        class="font-semibold text-accent underline-offset-2 hover:underline"
-        >Lancer une exploration</RouterLink
-      >
-      depuis la page Critères.
-    </p>
-    <StageRows
-      v-else-if="view === 'list'"
-      :rows="rows"
-      :expanded="expandedIds"
-      @open="toggleExpanded"
-      @action="onRowAction"
-    >
-      <template #expanded="{ row }">
-        <DraftCard
-          v-if="cardOf(row.id)"
-          :draft="cardOf(row.id)!"
-          :busy="busy === row.id"
-          :error="errors[row.id] ?? null"
-          :agreement="agreement"
-          @accept="accept(cardOf(row.id)!)"
-          @edit="edit(cardOf(row.id)!)"
-          @dismiss="reason => dismiss(cardOf(row.id)!, reason)"
-          @undo="undo(cardOf(row.id)!)"
-          @same="listingId => same(cardOf(row.id)!, listingId)"
-          @other="other(cardOf(row.id)!)"
-        />
+      <template #empty>
+        <UiCard data-testid="drafts-empty" class="grid gap-2 text-sm">
+          <p class="font-semibold">Rien à valider.</p>
+          <p class="text-muted">
+            Les annonces reçues par e-mail et celles que Claude trouve en
+            explorant les portails arrivent ici.
+            <RouterLink
+              :to="{ name: 'criteria' }"
+              class="font-semibold text-accent underline-offset-2 hover:underline"
+              >Lancer une exploration</RouterLink
+            >
+            depuis la page Critères.
+          </p>
+          <template
+            v-if="filtered && (draftQueries.data.value?.length ?? 0) > 0"
+          >
+            <p class="text-muted">
+              Des filtres sont actifs : ils cachent
+              {{
+                plural(
+                  draftQueries.data.value?.length ?? 0,
+                  'annonce en attente',
+                  'annonces en attente'
+                )
+              }}.
+            </p>
+            <UiButton
+              size="sm"
+              class="w-fit"
+              data-testid="clear-filters"
+              @click="emit('clearFilters')"
+              >Effacer les filtres</UiButton
+            >
+          </template>
+        </UiCard>
       </template>
-    </StageRows>
-    <div v-else class="grid gap-3">
-      <DraftCard
-        v-for="draft in cards"
-        :key="draft.id"
-        :draft="draft"
-        :busy="busy === draft.id"
-        :error="errors[draft.id] ?? null"
-        :agreement="agreement"
-        @accept="accept(draft)"
-        @edit="edit(draft)"
-        @dismiss="reason => dismiss(draft, reason)"
-        @undo="undo(draft)"
-        @same="listingId => same(draft, listingId)"
-        @other="other(draft)"
-      />
-    </div>
+      <StageRows
+        v-if="view === 'list'"
+        :rows="rows"
+        :expanded="expandedIds"
+        @open="toggleExpanded"
+        @action="onRowAction"
+      >
+        <template #expanded="{ row }">
+          <DraftCard
+            v-if="cardOf(row.id)"
+            :draft="cardOf(row.id)!"
+            :busy="busy === row.id"
+            :error="errors[row.id] ?? null"
+            :agreement="agreement"
+            @accept="accept(cardOf(row.id)!)"
+            @edit="edit(cardOf(row.id)!)"
+            @dismiss="reason => dismiss(cardOf(row.id)!, reason)"
+            @undo="undo(cardOf(row.id)!)"
+            @same="listingId => same(cardOf(row.id)!, listingId)"
+            @other="other(cardOf(row.id)!)"
+          />
+        </template>
+      </StageRows>
+      <div v-else class="grid gap-3">
+        <DraftCard
+          v-for="draft in cards"
+          :key="draft.id"
+          :draft="draft"
+          :busy="busy === draft.id"
+          :error="errors[draft.id] ?? null"
+          :agreement="agreement"
+          @accept="accept(draft)"
+          @edit="edit(draft)"
+          @dismiss="reason => dismiss(draft, reason)"
+          @undo="undo(draft)"
+          @same="listingId => same(draft, listingId)"
+          @other="other(draft)"
+        />
+      </div>
+    </QueryState>
 
-    <section
+    <UiCard
       v-if="latest"
       aria-labelledby="run-title"
-      class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-2xl border border-line bg-surface p-4 sm:px-5"
+      class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3"
       data-testid="exploration-banner"
     >
       <div class="grid min-w-0 flex-[1_1_26rem] gap-1">
-        <h2 id="run-title" class="text-[15px] font-semibold">
+        <h2 id="run-title" class="text-base font-semibold">
           {{ explorationHeading(latest) }}
         </h2>
-        <p class="text-[13px] leading-normal text-muted">
+        <p class="text-sm leading-normal text-muted">
           <template v-if="latest.criteria.length"
-            >{{ latest.criteria.length }} critère(s) ·
+            >{{ plural(latest.criteria.length, 'critère') }} ·
           </template>
           <template v-if="latestPortals">{{ latestPortals }} · </template>
           {{ latest.summary }}.
@@ -307,12 +356,10 @@
         </p>
       </div>
       <div class="grid justify-items-stretch gap-1 sm:justify-items-end">
-        <button
-          type="button"
-          class="min-h-11 rounded-xl bg-accent px-4 text-sm font-semibold text-accent-fg disabled:opacity-60"
-          :disabled="
-            draftQueries.acceptInCriteria.isPending.value || pendingCount === 0
-          "
+        <UiButton
+          variant="primary"
+          :loading="draftQueries.acceptInCriteria.isPending.value"
+          :disabled="pendingCount === 0"
           data-action="add-all-in"
           @click="addAllIn"
         >
@@ -321,32 +368,35 @@
               ? 'Proposer celles « dans les critères »'
               : 'Ajouter celles « dans les critères »'
           }}
-        </button>
+        </UiButton>
         <span
           v-if="waitingDuplicates"
-          class="text-xs text-muted"
+          class="text-sm text-muted"
           data-testid="waiting-duplicates"
           >{{
             waitingDuplicates > 1
-              ? `${waitingDuplicates} doublons probables attendent toujours votre choix.`
-              : 'Un doublon probable attend toujours votre choix.'
+              ? `${waitingDuplicates} doublons probables attendent toujours ton choix.`
+              : 'Un doublon probable attend toujours ton choix.'
           }}</span
         >
         <span
           v-if="batchMessage"
-          class="text-xs text-muted"
+          class="text-sm text-muted"
           role="status"
           data-testid="batch-message"
           >{{ batchMessage }}</span
         >
+        <UiAlert v-if="batchError" data-testid="batch-message">{{
+          batchError
+        }}</UiAlert>
       </div>
-    </section>
+    </UiCard>
 
     <AttachedLinks />
 
     <p
       v-if="latest && latest.counts.out > 0"
-      class="rounded-xl border border-dashed border-line px-4 py-3.5 text-[13px] leading-normal text-muted"
+      class="rounded-xl border border-dashed border-line px-4 py-3.5 text-sm leading-normal text-muted"
       data-testid="out-note"
     >
       {{

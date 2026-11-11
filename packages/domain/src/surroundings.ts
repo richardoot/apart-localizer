@@ -202,7 +202,7 @@ export function neighbourhoodLookup(input: {
     return {
       status: 'not_applicable',
       value: null,
-      reasons: ['Annonce sans point : saisissez une adresse ou une commune.'],
+      reasons: ['Annonce sans point : saisis une adresse ou une commune.'],
     }
   }
   if (input.imported === 0) {
@@ -318,7 +318,7 @@ export function amenityLookup(input: {
       status: 'not_applicable',
       nearest: null,
       approximate: false,
-      reasons: ['Annonce sans point : saisissez une adresse ou une commune.'],
+      reasons: ['Annonce sans point : saisis une adresse ou une commune.'],
     }
   }
   if (input.imported === 0) {
@@ -389,7 +389,7 @@ export function supermarketsLookup(input: {
       preferred: none,
       nearest: null,
       approximate: false,
-      reasons: ['Annonce sans point : saisissez une adresse ou une commune.'],
+      reasons: ['Annonce sans point : saisis une adresse ou une commune.'],
     }
   }
   if (input.imported === 0) {

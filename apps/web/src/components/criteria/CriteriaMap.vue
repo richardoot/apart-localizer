@@ -252,16 +252,16 @@
 <template>
   <div class="grid gap-1">
     <MapAddressSearch @found="goTo" />
-    <p class="text-xs text-muted" data-testid="draw-hint">
+    <p class="text-sm text-muted" data-testid="draw-hint">
       <template v-if="drawMode === 'polygon'">
-        Cliquez pour poser les sommets, puis sur le premier ou le dernier pour
-        fermer le polygone ; faites glisser un sommet pour le modifier.
+        Clique pour poser les sommets, puis sur le premier ou le dernier pour
+        fermer le polygone ; fais glisser un sommet pour le modifier.
       </template>
       <template v-else-if="drawMode === 'circle'">
-        Cliquez au centre, puis cliquez à la distance voulue.
+        Clique au centre, puis à la distance voulue.
       </template>
       <template v-else-if="drawMode === 'pick'">
-        Cliquez sur la carte pour placer le point.
+        Clique sur la carte pour placer le point.
       </template>
       <template v-else>Le périmètre du critère.</template>
     </p>

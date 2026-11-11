@@ -39,7 +39,7 @@ describe('ListingsMap (MapLibre mocké)', () => {
     expect(marker?.lngLat).toEqual([-0.5906, 44.8083])
     expect(marker?.options.element.style.background).toBe('var(--bad)')
     expect(marker?.options.element.classList.contains('ring-accent')).toBe(true)
-    expect(wrapper.text()).toContain('1 annonce(s) placée(s)')
+    expect(wrapper.text()).toContain('1 annonce placée')
     wrapper.unmount()
     expect(map?.removed).toBe(true)
   })

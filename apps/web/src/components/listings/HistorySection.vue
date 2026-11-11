@@ -13,12 +13,22 @@
     PriceEvent,
   } from '@apart/contracts'
   import { outcomeAtPrice } from '@apart/domain'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCard from '@/components/ui/UiCard.vue'
+  import UiChip from '@/components/ui/UiChip.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import UiInput from '@/components/ui/UiInput.vue'
+  import UiSelect from '@/components/ui/UiSelect.vue'
   import {
     formatDate,
     formatEuros,
     formatEurosPerMonth,
+    numberInputError,
     parseNumberInput,
+    plural,
   } from '@/lib/format'
+  import { badgeClasses } from '@/lib/ui'
   import {
     LISTING_STATUS_LABELS,
     OFFER_CHANNEL_LABELS,
@@ -36,7 +46,8 @@
    * d'office), « Nouveau prix constaté » et « Préparer une offre » : choisir
    * un montant (offre suggérée, prix cible, ou libre) montre le coût tout
    * compris, la mensualité et le verdict à ce prix (`outcomeAtPrice` de
-   * `domain`), avant d'enregistrer l'offre.
+   * `domain`), avant d'enregistrer l'offre. Lot 22 : un montant illisible
+   * (« 150k ») est refusé au champ, jamais envoyé.
    */
   const props = defineProps<{
     events: PriceEvent[]
@@ -104,7 +115,8 @@
   function submitPrice(): void {
     const value = parseNumberInput(newPrice.value)
     if (value === null || value < 0) {
-      priceError.value = 'Saisissez le nouveau prix en euros.'
+      priceError.value =
+        numberInputError(newPrice.value) ?? 'Écris le nouveau prix en euros.'
       return
     }
     if (value === props.currentPrice) {
@@ -157,7 +169,9 @@
   function submitOffer(): void {
     const value = amount.value
     if (value === null || value <= 0) {
-      offerError.value = "Saisissez le montant de l'offre en euros."
+      offerError.value =
+        numberInputError(offerAmount.value) ??
+        'Écris le montant de l’offre en euros.'
       return
     }
     offerError.value = null
@@ -179,15 +193,27 @@
   // Réponse du vendeur
   const counters = ref<Record<string, string>>({})
   const responseError = ref<string | null>(null)
-  function respond(offer: Offer, event: Event): void {
-    const response = (event.target as HTMLSelectElement).value as OfferResponse
+  /** Le choix affiché dans la liste de chaque offre (revient en arrière sur un refus). */
+  const shownResponse = ref<Record<string, OfferResponse>>({})
+  const responseOf = (offer: Offer): OfferResponse =>
+    shownResponse.value[offer.id] ?? offer.response
+  function respond(offer: Offer, value: unknown): void {
+    const response = value as OfferResponse
     if (response === offer.response) return
     if (response === 'counter_offer') {
-      const value = parseNumberInput(counters.value[offer.id])
+      const raw = counters.value[offer.id]
+      const value = parseNumberInput(raw)
       if (value === null || value <= 0) {
         responseError.value =
-          'Saisissez le montant de la contre-proposition avant de la choisir.'
-        ;(event.target as HTMLSelectElement).value = offer.response
+          numberInputError(raw) ??
+          'Écris le montant de la contre-proposition avant de la choisir.'
+        shownResponse.value = { ...shownResponse.value, [offer.id]: response }
+        void Promise.resolve().then(() => {
+          shownResponse.value = {
+            ...shownResponse.value,
+            [offer.id]: offer.response,
+          }
+        })
         return
       }
       responseError.value = null
@@ -205,15 +231,22 @@
     })
   }
 
-  const inputClass =
-    'min-h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm sm:min-h-10'
-  const smallInput =
-    'min-h-11 rounded-lg border border-line bg-bg px-2 text-xs sm:min-h-9'
+  const responseOptions = OfferResponseSchema.options.map(r => ({
+    value: r,
+    label: OFFER_RESPONSE_LABELS[r],
+  }))
+  const channelOptions = [
+    { value: '', label: 'Canal…' },
+    ...OfferChannelSchema.options.map(c => ({
+      value: c,
+      label: OFFER_CHANNEL_LABELS[c],
+    })),
+  ]
 </script>
 
 <template>
-  <section
-    class="grid gap-3 rounded-2xl border border-line bg-surface p-4 text-sm sm:px-5"
+  <UiCard
+    class="grid gap-3 text-sm"
     aria-labelledby="history-title"
     data-testid="prices-offers"
   >
@@ -228,14 +261,14 @@
         Cette offre suggère le statut «
         {{ LISTING_STATUS_LABELS[suggestedStatus] }} ».
       </span>
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center rounded-lg bg-accent px-3 text-sm font-medium text-accent-fg disabled:opacity-60 sm:min-h-9"
+      <UiButton
+        variant="primary"
+        size="sm"
         :disabled="busy"
         @click="emit('setStatus', suggestedStatus)"
       >
         Passer à « {{ LISTING_STATUS_LABELS[suggestedStatus] }} »
-      </button>
+      </UiButton>
     </p>
 
     <ol class="grid tabular-nums" aria-label="Frise des prix et des offres">
@@ -251,7 +284,7 @@
           <span class="ml-2 font-semibold">{{
             formatEuros(entry.event.newPrice)
           }}</span>
-          <span class="ml-2 text-xs text-muted">{{ delta(entry.event) }}</span>
+          <span class="ml-2 text-sm text-muted">{{ delta(entry.event) }}</span>
         </div>
         <div v-else class="grid min-w-0 gap-1">
           <span class="flex flex-wrap items-center gap-2">
@@ -260,8 +293,10 @@
               formatEuros(entry.offer.amount)
             }}</span>
             <span
-              class="rounded-full px-2 py-0.5 text-xs font-semibold"
-              :class="OFFER_RESPONSE_CLASSES[entry.offer.response]"
+              :class="[
+                badgeClasses('neutral'),
+                OFFER_RESPONSE_CLASSES[entry.offer.response],
+              ]"
               :data-response="entry.offer.response"
             >
               {{ OFFER_RESPONSE_LABELS[entry.offer.response] }}
@@ -269,7 +304,7 @@
                 à {{ formatEuros(entry.offer.counterAmount) }}</template
               >
             </span>
-            <span class="text-xs text-muted">
+            <span class="text-sm text-muted">
               <template v-if="entry.offer.channel">
                 {{ OFFER_CHANNEL_LABELS[entry.offer.channel] }}</template
               >
@@ -278,34 +313,32 @@
               >
             </span>
           </span>
-          <p v-if="entry.offer.notes" class="text-xs text-muted">
+          <p v-if="entry.offer.notes" class="text-sm text-muted">
             {{ entry.offer.notes }}
           </p>
-          <div class="flex flex-wrap items-center gap-2 text-xs">
-            <label class="flex items-center gap-1 text-muted">
+          <div class="flex flex-wrap items-center gap-2 text-sm">
+            <label
+              class="flex flex-wrap items-center gap-2 text-muted"
+              :for="`offer-response-${entry.offer.id}`"
+            >
               Réponse du vendeur
-              <select
-                :class="smallInput"
-                :value="entry.offer.response"
-                :disabled="busy"
-                :aria-label="`Réponse à l'offre de ${formatEuros(entry.offer.amount)}`"
-                @change="respond(entry.offer, $event)"
-              >
-                <option
-                  v-for="r in OfferResponseSchema.options"
-                  :key="r"
-                  :value="r"
-                >
-                  {{ OFFER_RESPONSE_LABELS[r] }}
-                </option>
-              </select>
             </label>
-            <input
+            <UiSelect
+              :id="`offer-response-${entry.offer.id}`"
+              class="w-auto"
+              :model-value="responseOf(entry.offer)"
+              :options="responseOptions"
+              :disabled="busy"
+              :aria-label="`Réponse à l'offre de ${formatEuros(entry.offer.amount)}`"
+              @update:model-value="value => respond(entry.offer, value)"
+            />
+            <UiInput
               v-model="counters[entry.offer.id]"
-              :class="smallInput"
-              class="w-44"
+              class="w-48"
               inputmode="numeric"
-              placeholder="Contre-proposition (€)"
+              unit="€"
+              placeholder="Contre-proposition"
+              :invalid="!!responseError"
               :aria-label="`Contre-proposition à l'offre de ${formatEuros(entry.offer.amount)}`"
             />
           </div>
@@ -315,15 +348,14 @@
     <p v-if="timeline.length === 0" class="text-muted">
       Aucun prix ni aucune offre enregistrés.
     </p>
-    <p v-if="responseError" class="text-xs text-bad" role="alert">
-      {{ responseError }}
-    </p>
+    <UiAlert v-if="responseError">{{ responseError }}</UiAlert>
 
     <div class="grid gap-3 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <form
         class="grid content-start gap-2.5 rounded-xl bg-surface-2 p-3 sm:px-3.5"
         aria-label="Préparer une offre"
         data-testid="offer-prep"
+        novalidate
         @submit.prevent="submitOffer"
       >
         <p class="text-sm text-muted">
@@ -331,11 +363,9 @@
           <template v-if="offers.length === 0"
             >aucune offre faite pour l’instant</template
           >
-          <template v-else
-            >{{ offers.length }} offre{{ offers.length > 1 ? 's' : '' }} faite{{
-              offers.length > 1 ? 's' : ''
-            }}</template
-          >
+          <template v-else>{{
+            plural(offers.length, 'offre faite', 'offres faites')
+          }}</template>
         </p>
         <div
           v-if="proposals.length"
@@ -343,34 +373,27 @@
           aria-label="Montants proposés"
           class="flex flex-wrap gap-1.5"
         >
-          <button
+          <UiChip
             v-for="p in proposals"
             :key="p.key"
-            type="button"
-            class="inline-flex min-h-11 items-center gap-1.5 rounded-full border-[1.5px] px-3.5 text-sm tabular-nums"
-            :class="
-              amount === Math.round(p.amount)
-                ? 'border-accent bg-accent text-accent-fg'
-                : 'border-line bg-surface text-fg hover:bg-surface-2'
-            "
-            :aria-pressed="amount === Math.round(p.amount)"
+            class="tabular-nums"
+            :selected="amount === Math.round(p.amount)"
             :data-proposal="p.key"
             @click="pick(p.amount)"
           >
             {{ p.label }} · {{ formatEuros(p.amount) }}
-          </button>
+          </UiChip>
         </div>
-        <label class="grid gap-1 text-xs font-medium text-muted">
-          Montant de l’offre (€)
-          <input
-            v-model="offerAmount"
-            :class="inputClass"
-            class="text-fg"
-            inputmode="numeric"
-            placeholder="Montant de l'offre (€)"
-            aria-label="Montant de l'offre"
-          />
-        </label>
+        <UiField
+          id="offer-amount"
+          v-model="offerAmount"
+          label="Montant de l’offre"
+          quiet
+          unit="€"
+          inputmode="numeric"
+          :error="offerError"
+          aria-label="Montant de l'offre"
+        />
         <p
           v-if="outcome"
           class="text-sm text-fg"
@@ -384,65 +407,54 @@
           ><template v-if="outcomeWhy"> ({{ outcomeWhy }})</template>.
         </p>
         <div class="grid gap-2 sm:grid-cols-2">
-          <input
+          <UiInput
             v-model="offerDate"
-            :class="inputClass"
             type="date"
+            align="left"
             aria-label="Date de l'offre"
           />
-          <select
+          <UiSelect
             v-model="offerChannel"
-            :class="inputClass"
+            :options="channelOptions"
             aria-label="Canal de l'offre"
-          >
-            <option value="">Canal…</option>
-            <option v-for="c in OfferChannelSchema.options" :key="c" :value="c">
-              {{ OFFER_CHANNEL_LABELS[c] }}
-            </option>
-          </select>
+          />
         </div>
-        <input
+        <UiInput
           v-model="offerNotes"
-          :class="inputClass"
+          align="left"
           placeholder="Commentaire (facultatif)"
           aria-label="Commentaire de l'offre"
         />
-        <button
+        <UiButton
           type="submit"
-          class="inline-flex min-h-11 items-center justify-center justify-self-start rounded-lg bg-accent px-4 text-sm font-semibold text-accent-fg disabled:opacity-60"
+          variant="primary"
+          class="justify-self-start"
           :disabled="busy"
         >
-          Enregistrer l'offre
-        </button>
-        <p v-if="offerError" class="text-xs text-bad" role="alert">
-          {{ offerError }}
-        </p>
+          Enregistrer l’offre
+        </UiButton>
       </form>
 
       <form
         class="grid content-start gap-2 rounded-xl bg-surface-2 p-3 sm:px-3.5"
         aria-label="Nouveau prix constaté"
+        novalidate
         @submit.prevent="submitPrice"
       >
-        <span class="text-sm text-muted">Nouveau prix constaté</span>
-        <input
+        <UiField
+          id="new-price"
           v-model="newPrice"
-          :class="inputClass"
+          label="Nouveau prix constaté"
+          quiet
+          unit="€"
           inputmode="numeric"
-          placeholder="Nouveau prix constaté (€)"
+          :error="priceError"
           aria-label="Nouveau prix constaté"
         />
-        <button
-          type="submit"
-          class="inline-flex min-h-11 items-center justify-center rounded-lg border border-line bg-surface px-3 text-sm hover:bg-surface-2"
-          :disabled="busy"
-        >
+        <UiButton type="submit" :disabled="busy">
           Enregistrer la baisse ou la hausse
-        </button>
-        <p v-if="priceError" class="text-xs text-bad" role="alert">
-          {{ priceError }}
-        </p>
+        </UiButton>
       </form>
     </div>
-  </section>
+  </UiCard>
 </template>

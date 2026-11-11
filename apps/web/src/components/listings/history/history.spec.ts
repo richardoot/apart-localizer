@@ -32,9 +32,13 @@ vi.mock('@/lib/api', async () => {
   return { ...actual, api: apiMock }
 })
 
+import { useFeedbackStore } from '@/stores/feedback'
 import HistoryTab from '../tabs/HistoryTab.vue'
 
 enableAutoUnmount(afterEach)
+
+/** Lot 22 : le dernier message de la zone commune. */
+const lastMessage = () => useFeedbackStore().messages.at(-1)?.text ?? null
 
 const LISTING = '11111111-1111-4111-8111-111111111111'
 const OTHER = '99999999-9999-4999-8999-999999999999'
@@ -335,13 +339,13 @@ describe('onglet « Historique » (lot 19)', () => {
     await flushPromises()
     const filters = wrapper.get('[data-testid="history-filters"]')
     expect(filters.findAll('button').map(b => b.text())).toEqual([
-      'Tout(5)',
-      'Prix(1)',
-      'Vérifications(0)',
-      'Échanges(1)',
-      'Avis(0)',
-      'Décisions(0)',
-      'Fiche(3)',
+      'Tout5',
+      'Prix1',
+      'Vérifications0',
+      'Échanges1',
+      'Avis0',
+      'Décisions0',
+      'Fiche3',
     ])
     await filters.get('[data-filter="talk"]').trigger('click')
     expect(filters.get('[data-filter="talk"]').attributes('aria-pressed')).toBe(
@@ -354,7 +358,7 @@ describe('onglet « Historique » (lot 19)', () => {
     ])
     await filters.get('[data-filter="check"]').trigger('click')
     expect(wrapper.get('[data-testid="timeline-empty"]').text()).toBe(
-      'Rien de ce type pour cette annonce.'
+      'Rien de ce type pour cette annonce : choisis « Tout » pour voir le reste.'
     )
     await filters.get('[data-filter="all"]').trigger('click')
     expect(rows(wrapper)).toHaveLength(5)
@@ -415,7 +419,7 @@ describe('onglet « Historique » (lot 19)', () => {
     expect(actions.get('[data-testid="checks-freshness"]').text()).toContain(
       'Vérifiée'
     )
-    expect(actions.text()).toContain('prompt « Tournée de mise à jour »')
+    expect(actions.text()).toContain('demande « Tournée de mise à jour »')
     expect(actions.find('[data-testid="check-link"]').exists()).toBe(false)
     await actions.get('[data-testid="check-online"]').trigger('click')
     await flushPromises()
@@ -425,7 +429,7 @@ describe('onglet « Historique » (lot 19)', () => {
       expectedUpdatedAt: '2026-11-05T08:00:00.000Z',
       checkedUrl: LBC.url,
     })
-    expect(actions.text()).toContain('Annonce notée en ligne aujourd’hui.')
+    expect(lastMessage()).toBe('Annonce notée en ligne aujourd’hui.')
   })
 
   it('« Plus en ligne » : confirmation, extrait facultatif, statut proposé appliqué seulement sur accord', async () => {
@@ -499,7 +503,7 @@ describe('onglet « Historique » (lot 19)', () => {
       linkId: SL.id,
       checkedUrl: SL.url,
     })
-    expect(wrapper.text()).toContain('Lien SeLoger noté en ligne aujourd’hui.')
+    expect(lastMessage()).toBe('Lien SeLoger noté en ligne aujourd’hui.')
     await wrapper.get('[data-testid="check-offline"]').trigger('click')
     expect(wrapper.get('[data-testid="check-offline-form"]').text()).toContain(
       'ne sera proposé que si plus aucun lien n’est en ligne'

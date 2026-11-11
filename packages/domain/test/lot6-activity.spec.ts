@@ -93,9 +93,9 @@ describe('formatActivityValue', () => {
           { label: 'Divers' },
         ])
       )
-    ).toBe('3 poste(s), 5 000 €')
-    expect(formatActivityValue('items', [{ label: 'x' }])).toBe('1 poste(s)')
-    expect(formatActivityValue('tags', ['a', 'b'])).toBe('2 élément(s)')
+    ).toBe('3 postes, 5 000 €')
+    expect(formatActivityValue('items', [{ label: 'x' }])).toBe('1 poste')
+    expect(formatActivityValue('tags', ['a', 'b'])).toBe('2 éléments')
     expect(formatActivityValue('tags', [])).toBeNull()
     expect(
       formatActivityValue('point', {
@@ -420,12 +420,9 @@ describe('describeActivity', () => {
         action: 'draft.received',
         after: { created: 3, subject: 'Nouvelles annonces SeLoger' },
       },
-      '3 annonce(s) reçue(s) par e-mail « Nouvelles annonces SeLoger »',
+      '3 annonces reçues par e-mail « Nouvelles annonces SeLoger »',
     ],
-    [
-      { action: 'draft.received', after: {} },
-      '0 annonce(s) reçue(s) par e-mail',
-    ],
+    [{ action: 'draft.received', after: {} }, '0 annonce reçue par e-mail'],
     [
       { action: 'draft.accepted' },
       'a ajouté à la liste une annonce reçue par e-mail',

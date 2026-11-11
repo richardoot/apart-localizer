@@ -71,7 +71,7 @@ export class AiService {
     }
     if (response.stop_reason === 'max_tokens') {
       throw new AiBadResponseException(
-        'réponse tronquée (max_tokens) ; réduisez le texte collé ou le nombre de captures.'
+        'réponse tronquée (max_tokens) ; réduis le texte collé ou le nombre de captures.'
       )
     }
     if (!response.parsed_output) {
@@ -85,7 +85,7 @@ export class AiService {
   private checkImages(request: ExtractionRequest): void {
     if (request.images.length > this.config.maxImages) {
       throw new BadRequestException(
-        `Au plus ${this.config.maxImages} capture(s) par analyse (AI_MAX_IMAGES).`
+        `Au plus ${this.config.maxImages} capture${this.config.maxImages > 1 ? 's' : ''} par analyse (AI_MAX_IMAGES).`
       )
     }
     for (const image of request.images) {
@@ -148,7 +148,7 @@ function usageOf(
 function translate(error: unknown): Error {
   if (error instanceof Anthropic.AuthenticationError) {
     return new AiUnavailableException(
-      'clé refusée par Anthropic ; vérifiez ANTHROPIC_API_KEY.'
+      'clé refusée par Anthropic ; vérifie ANTHROPIC_API_KEY.'
     )
   }
   if (error instanceof Anthropic.PermissionDeniedError) {
@@ -158,7 +158,7 @@ function translate(error: unknown): Error {
   }
   if (error instanceof Anthropic.RateLimitError) {
     return new AiUnavailableException(
-      'limite de débit atteinte ; réessayez dans une minute.'
+      'limite de débit atteinte ; réessaie dans une minute.'
     )
   }
   if (error instanceof Anthropic.BadRequestError) {
@@ -167,11 +167,11 @@ function translate(error: unknown): Error {
     )
   }
   if (error instanceof Anthropic.APIConnectionError) {
-    return new AiUnavailableException('Anthropic est injoignable ; réessayez.')
+    return new AiUnavailableException('Anthropic est injoignable ; réessaie.')
   }
   if (error instanceof Anthropic.APIError) {
     return new AiUnavailableException(
-      `Anthropic a répondu ${error.status ?? 'sans statut'} ; réessayez.`
+      `Anthropic a répondu ${error.status ?? 'sans statut'} ; réessaie.`
     )
   }
   if (error instanceof Anthropic.AnthropicError) {

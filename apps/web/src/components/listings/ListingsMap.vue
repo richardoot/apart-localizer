@@ -1,4 +1,6 @@
 <script setup lang="ts">
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
   import '@/lib/maplibre-worker'
   import * as maplibregl from 'maplibre-gl'
@@ -46,7 +48,12 @@
     pointLayer,
     upsertGeoJsonLayer,
   } from '@/lib/map-layers'
-  import { formatDistance, formatEuros, formatPercent } from '@/lib/format'
+  import {
+    formatDistance,
+    formatEuros,
+    formatPercent,
+    plural,
+  } from '@/lib/format'
   import {
     LISTING_STATUS_LABELS,
     VERDICT_COLORS,
@@ -320,7 +327,8 @@
       `<span style="opacity:.7">${esc(LISTING_STATUS_LABELS[item.listing.status])}${esc(distance)}</span><br>` +
       `<span data-precision="${esc(badge.tone)}" style="opacity:.7">Repère : ${esc(badge.label)}</span><br>` +
       where +
-      `<button type="button" data-open="${esc(item.listing.id)}" style="margin-top:6px;color:var(--accent);text-decoration:underline">Ouvrir la fiche</button>`
+      // Lot 22 : HTML de la bulle MapLibre (pas de composant Vue possible ici).
+      `<button type="button" data-open="${esc(item.listing.id)}" style="min-height:44px;margin-top:2px;color:var(--accent);text-decoration:underline">Ouvrir la fiche</button>`
     )
   }
 
@@ -492,17 +500,18 @@
 <template>
   <div class="grid gap-2">
     <div
-      class="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2 text-sm"
+      class="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface px-3 py-2 text-sm"
     >
       <span class="text-muted">
         {{
           near
-            ? 'Cliquez sur la carte pour déplacer le point.'
-            : 'Cliquez sur la carte pour filtrer autour d’un point.'
+            ? 'Touche la carte pour déplacer le point.'
+            : 'Touche la carte pour filtrer autour d’un point.'
         }}
       </span>
       <label class="flex items-center gap-2">
-        <span class="text-xs text-muted">Rayon</span>
+        <span class="text-sm text-muted">Rayon</span>
+        <!-- Lot 22 : contrôle de carte (curseur du rayon), sans équivalent partagé. -->
         <input
           type="range"
           class="accent-accent"
@@ -513,21 +522,26 @@
           aria-label="Rayon du filtre"
           @input="onRadiusInput"
         />
-        <span class="font-mono text-xs" data-testid="radius-label">{{
+        <span class="font-mono text-sm" data-testid="radius-label">{{
           formatDistance(radius)
         }}</span>
       </label>
-      <button
+      <UiButton
         v-if="near"
-        type="button"
-        class="rounded-lg border border-line px-2 py-1 text-xs text-muted hover:text-fg"
+        size="sm"
+        icon="close"
         @click="emit('update:near', undefined)"
       >
         Retirer le point
-      </button>
-      <span class="ml-auto text-xs text-muted">
-        {{ items.filter(i => i.listing.location.point).length }} annonce(s)
-        placée(s)
+      </UiButton>
+      <span class="ml-auto text-sm text-muted">
+        {{
+          plural(
+            items.filter(i => i.listing.location.point).length,
+            'annonce placée',
+            'annonces placées'
+          )
+        }}
       </span>
     </div>
     <div
@@ -551,32 +565,26 @@
       </span>
       <span class="flex items-center gap-1">
         <span
-          class="inline-block h-3.5 w-3.5 rounded-full border-2 border-dashed border-muted opacity-75"
+          class="inline-block h-3.5 w-3.5 rounded-full border-2 border-dashed border-muted"
           aria-hidden="true"
         />
         commune seulement ({{ precisionCounts.commune }})
       </span>
     </div>
     <div
-      class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
+      class="flex flex-wrap items-center gap-x-4 gap-y-0 text-sm"
       role="group"
       aria-label="Couches de la carte"
     >
       <span class="text-muted">Couches :</span>
-      <label
+      <UiCheckbox
         v-for="layer in LAYER_LABELS"
         :key="layer.key"
-        class="flex items-center gap-1"
-      >
-        <input
-          type="checkbox"
-          class="accent-accent"
-          :checked="toggles[layer.key]"
-          :data-layer="layer.key"
-          @change="toggle(layer.key, $event)"
-        />
-        {{ layer.label }}
-      </label>
+        :label="layer.label"
+        :model-value="toggles[layer.key]"
+        :data-layer="layer.key"
+        @change="toggle(layer.key, $event)"
+      />
       <SurroundingsLegend :toggles="toggles" />
       <span
         v-if="toggles.rentZones"
@@ -599,7 +607,7 @@
     <div class="relative">
       <div
         ref="container"
-        class="h-[60vh] min-h-[360px] w-full overflow-hidden rounded-xl border border-line"
+        class="h-[60vh] min-h-[360px] w-full overflow-hidden rounded-2xl border border-line"
         role="region"
         aria-label="Carte des annonces"
       />

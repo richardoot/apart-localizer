@@ -11,6 +11,10 @@
   import ActivityList from '@/components/activity/ActivityList.vue'
   import { useActivity } from '@/composables/useActivity'
   import { useWorkspace } from '@/composables/useWorkspace'
+  import QueryState from '@/components/ui/QueryState.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import { plural } from '@/lib/format'
 
   const router = useRouter()
   const { members } = useWorkspace()
@@ -28,10 +32,18 @@
   watch([memberId, channel, kind], () => {
     page.value = 1
   })
-  const { data, isPending, isFetching, error } = useActivity(filters)
+  const activity = useActivity(filters)
+  const { data, isPending, isFetching } = activity
   const channels = ActivityChannelSchema.options
   const kinds = ActivityKindSchema.options
-  const selectClass = 'rounded-lg border border-line bg-bg px-2 py-1.5 text-sm'
+  const filtered = computed(
+    () => !!memberId.value || !!channel.value || !!kind.value
+  )
+  function clearFilters(): void {
+    memberId.value = ''
+    channel.value = ''
+    kind.value = ''
+  }
 
   function open(listingId: string): void {
     void router.push({ name: 'listing', params: { id: listingId } })
@@ -43,88 +55,95 @@
     <header class="grid gap-1">
       <h1 class="font-display text-2xl font-bold">Activité</h1>
       <p class="text-sm text-muted">
-        Qui a changé quoi, quand, et par quel canal (web, Claude au MCP, import,
+        Qui a changé quoi, quand, et par quel canal (web, Claude, import,
         système).
-        <template v-if="data">{{ data.total }} événement(s).</template>
+        <template v-if="data">{{ plural(data.total, 'événement') }}.</template>
         <span v-if="isFetching && !isPending"> · actualisation…</span>
       </p>
     </header>
     <form
-      class="flex flex-wrap gap-2"
+      class="grid gap-3 sm:grid-cols-3"
       aria-label="Filtres du journal"
       @submit.prevent
     >
-      <label class="grid gap-1 text-xs text-muted">
-        Membre
-        <select
-          v-model="memberId"
-          :class="selectClass"
-          data-testid="filter-member"
-        >
-          <option value="">Tous</option>
-          <option v-for="m in members" :key="m.id" :value="m.id">
-            {{ m.displayName }}
-          </option>
-        </select>
-      </label>
-      <label class="grid gap-1 text-xs text-muted">
-        Canal
-        <select
-          v-model="channel"
-          :class="selectClass"
-          data-testid="filter-channel"
-        >
-          <option value="">Tous</option>
-          <option v-for="c in channels" :key="c" :value="c">
-            {{ ACTIVITY_CHANNEL_LABELS[c] }}
-          </option>
-        </select>
-      </label>
-      <label class="grid gap-1 text-xs text-muted">
-        Type
-        <select v-model="kind" :class="selectClass" data-testid="filter-kind">
-          <option value="">Tous</option>
-          <option v-for="k in kinds" :key="k" :value="k">
-            {{ ACTIVITY_KIND_LABELS[k] }}
-          </option>
-        </select>
-      </label>
+      <UiField
+        id="activity-member"
+        v-model="memberId"
+        as="select"
+        label="Membre"
+        quiet
+        :options="[
+          { value: '', label: 'Tous' },
+          ...members.map(m => ({ value: m.id, label: m.displayName })),
+        ]"
+        data-testid="filter-member"
+      />
+      <UiField
+        id="activity-channel"
+        v-model="channel"
+        as="select"
+        label="Canal"
+        quiet
+        :options="[
+          { value: '', label: 'Tous' },
+          ...channels.map(c => ({
+            value: c,
+            label: ACTIVITY_CHANNEL_LABELS[c],
+          })),
+        ]"
+        data-testid="filter-channel"
+      />
+      <UiField
+        id="activity-kind"
+        v-model="kind"
+        as="select"
+        label="Type"
+        quiet
+        :options="[
+          { value: '', label: 'Tous' },
+          ...kinds.map(k => ({ value: k, label: ACTIVITY_KIND_LABELS[k] })),
+        ]"
+        data-testid="filter-kind"
+      />
     </form>
-    <p v-if="isPending" class="text-sm text-muted">Chargement du journal…</p>
-    <p
-      v-else-if="error"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
+    <QueryState
+      :query="activity"
+      :empty="data?.items.length === 0"
+      empty-title="Rien dans le journal."
+      empty-text="Chaque changement fait par un membre ou par Claude s’inscrit ici."
+      :filtered="filtered"
+      skeleton="rows"
+      loading-label="du journal"
+      @clear-filters="clearFilters"
     >
-      {{ error.message }}
-    </p>
-    <template v-else-if="data">
-      <ActivityList :entries="data.items" show-listing @open="open" />
-      <nav
-        v-if="data.pageCount > 1"
-        class="flex items-center justify-between text-sm"
-        aria-label="Pages"
-      >
-        <button
-          type="button"
-          class="rounded-lg border border-line px-3 py-1 disabled:opacity-50"
-          :disabled="page <= 1"
-          @click="page -= 1"
+      <template v-if="data">
+        <ActivityList :entries="data.items" show-listing @open="open" />
+        <nav
+          v-if="data.pageCount > 1"
+          class="flex items-center justify-between text-sm"
+          aria-label="Pages"
         >
-          Plus récents
-        </button>
-        <span class="text-xs text-muted"
-          >{{ page }} / {{ data.pageCount }}</span
-        >
-        <button
-          type="button"
-          class="rounded-lg border border-line px-3 py-1 disabled:opacity-50"
-          :disabled="page >= data.pageCount"
-          @click="page += 1"
-        >
-          Plus anciens
-        </button>
-      </nav>
-    </template>
+          <UiButton
+            size="sm"
+            icon="chevron-left"
+            :disabled="page <= 1"
+            @click="page -= 1"
+          >
+            Plus récents
+          </UiButton>
+          <span class="text-xs text-muted"
+            >{{ page }} / {{ data.pageCount }}</span
+          >
+          <UiButton
+            size="sm"
+            icon-right="chevron-right"
+            :disabled="page >= data.pageCount"
+            @click="page += 1"
+          >
+            Plus anciens
+          </UiButton>
+        </nav>
+      </template>
+    </QueryState>
   </section>
 </template>

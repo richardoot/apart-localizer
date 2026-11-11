@@ -5,6 +5,7 @@
  * lit sans pouvoir changer. API simulée ; données fictives.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useFeedbackStore } from '@/stores/feedback'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import type { OpinionSettings } from '@apart/contracts'
@@ -79,7 +80,7 @@ describe('Critères des avis (maquette « Réglages de l’espace »)', () => {
     apiMock.opinionSettings.updateCriterion.mockResolvedValue(current)
     const wrapper = mountPage()
     await flushPromises()
-    expect(wrapper.text()).toContain('← Espace « [Exemple] Bordeaux »')
+    expect(wrapper.text()).toContain('Espace « [Exemple] Bordeaux »')
     const items = wrapper.findAll('[data-criterion]')
     expect(items).toHaveLength(8)
     expect(wrapper.get('[data-testid="criteria-count"]').text()).toBe(
@@ -145,8 +146,14 @@ describe('Critères des avis (maquette « Réglages de l’espace »)', () => {
       'quiet',
       { hidden: true }
     )
-    expect(wrapper.get('[data-testid="criteria-notice"]').text()).toBe(
-      '« Calme » masqué : ses notes restent.'
+    // Lot 22 : la réussite part dans la zone commune, avec « Annuler ».
+    const message = useFeedbackStore().messages.at(-1)
+    expect(message?.text).toBe('« Calme » masqué : ses notes restent.')
+    expect(message?.action?.label).toBe('Annuler')
+    await useFeedbackStore().act(message?.id ?? 0)
+    expect(apiMock.opinionSettings.updateCriterion).toHaveBeenLastCalledWith(
+      'quiet',
+      { hidden: false }
     )
   })
 

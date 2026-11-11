@@ -56,6 +56,10 @@ vi.mock('@/lib/api', async () => {
   return { ...actual, api: apiMock }
 })
 
+import { createMemoryHistory, createRouter } from 'vue-router'
+import { ApiError } from '@/lib/api'
+import { installLeaveGuard } from '@/composables/useLeaveGuard'
+import { useLeaveGuardStore } from '@/stores/leave-guard'
 import { fakeContext } from '@/test/criteria-fixtures'
 import ListingPanel from './ListingPanel.vue'
 
@@ -376,6 +380,106 @@ describe('ListingPanel (lot 19 : une fiche, sept questions)', () => {
     window.confirm = original
   })
 
+  it('lot 22 : le bouton retour sur une section modifiée montre le même bandeau, puis navigue si on abandonne', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/annonces', component: { render: () => null } },
+        { path: '/annonces/:id', component: { render: () => null } },
+      ],
+    })
+    installLeaveGuard(router, () => useLeaveGuardStore(), {
+      addEventListener: () => undefined,
+      history: { state: null } as unknown as History,
+    })
+    await router.push(`/annonces/${item.listing.id}?onglet=bien`)
+    mountPanel({ tab: 'bien' })
+    await flushPromises()
+    await click('[data-testid="edit-notes"]')
+    await type('#f-notes', 'Vu en visite')
+    await router.push('/annonces')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe(`/annonces/${item.listing.id}`)
+    const bar = query('[data-testid="unsaved-changes"]')
+    expect(bar?.textContent).toContain(
+      '« Description de l’annonce et nos notes »'
+    )
+    expect(document.activeElement?.getAttribute('data-testid')).toBe(
+      'unsaved-stay'
+    )
+    // Changer d'onglet par l'URL est aussi une sortie de la section.
+    await click('[data-testid="unsaved-stay"]')
+    await router.push(`/annonces/${item.listing.id}?onglet=budget`)
+    await flushPromises()
+    expect(router.currentRoute.value.query.onglet).toBe('bien')
+    await click('[data-testid="unsaved-leave"]')
+    await flushPromises()
+    expect(router.currentRoute.value.query.onglet).toBe('budget')
+    await router.push('/annonces')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/annonces')
+    expect(apiMock.listings.update).not.toHaveBeenCalled()
+  })
+
+  it('lot 22 : une fiche illisible dit pourquoi et propose « Réessayer »', async () => {
+    apiMock.listings.get.mockRejectedValueOnce(
+      new ApiError(500, 'Le serveur ne répond pas.')
+    )
+    mountPanel()
+    await flushPromises()
+    expect(query('[role="alert"]')?.textContent).toContain(
+      'Le serveur ne répond pas.'
+    )
+    expect(text()).not.toContain('Chargement')
+    await click('[data-testid="retry"]')
+    await flushPromises()
+    expect(apiMock.listings.get).toHaveBeenCalledTimes(2)
+    expect(query('[data-testid="listing-header"]')).not.toBeNull()
+  })
+
+  it('lot 22 : « Annuler » après la réponse du vendeur remet la réponse d’avant', async () => {
+    const offer = fakeOffer({ response: 'pending', counterAmount: null })
+    const withOffer = fakeEvaluated({}, { offers: [offer] })
+    apiMock.listings.get.mockResolvedValue(withOffer)
+    apiMock.listings.markSeen.mockResolvedValue(withOffer)
+    apiMock.offers.update.mockResolvedValue({
+      offer,
+      suggestedStatus: null,
+    })
+    const wrapper = mountPanel({ tab: 'negocier' })
+    await flushPromises()
+    wrapper
+      .findComponent({ name: 'NegotiateTab' })
+      .vm.$emit('updateOffer', offer.id, {
+        response: 'countered',
+        counterAmount: 190_000,
+      })
+    await flushPromises()
+    expect(text()).toContain('Réponse enregistrée.')
+    await click('[data-testid="feedback-action"]')
+    await flushPromises()
+    expect(apiMock.offers.update).toHaveBeenLastCalledWith(
+      withOffer.listing.id,
+      offer.id,
+      { response: 'pending', counterAmount: null }
+    )
+  })
+
+  it('lot 22 : un refus d’offre se dit sous « Prix et offres », plus en haut de la fiche', async () => {
+    apiMock.offers.create.mockRejectedValueOnce(
+      new ApiError(409, 'La fiche a changé entre-temps.')
+    )
+    const wrapper = mountPanel({ tab: 'negocier' })
+    await flushPromises()
+    wrapper
+      .findComponent({ name: 'NegotiateTab' })
+      .vm.$emit('addOffer', { amount: 1, channel: null, notes: null })
+    await flushPromises()
+    expect(query('[data-testid="negotiate-error"]')?.textContent).toContain(
+      'La fiche a changé entre-temps.'
+    )
+  })
+
   it('« Préciser l’adresse » mène à Le bien, section de l’adresse ouverte, champ atteint', async () => {
     const pending = fakeEvaluated(
       {
@@ -494,7 +598,7 @@ describe('ListingPanel (lot 19 : une fiche, sept questions)', () => {
     bare.findComponent({ name: 'BudgetTab' }).vm.$emit('retainMarketRent', 700)
     await flushPromises()
     expect(apiMock.listings.update).not.toHaveBeenCalled()
-    expect(text()).toContain('Renseignez d’abord le loyer visé')
+    expect(text()).toContain('Renseigne d’abord le loyer visé')
   })
 
   it('À faire et Historique : la liste fusionnée et la chronologie se chargent à l’ouverture', async () => {

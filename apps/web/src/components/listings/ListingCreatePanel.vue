@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue'
+  import { computed, nextTick, onMounted, ref } from 'vue'
   import { useRoute } from 'vue-router'
   import type {
     CriteriaMatchChanges,
@@ -14,12 +14,18 @@
     missingListingFields,
   } from '@apart/contracts'
   import SidePanel from '@/components/ui/SidePanel.vue'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiSegmented from '@/components/ui/UiSegmented.vue'
   import { describeUsage } from '@/composables/useExtraction'
+  import { useLeaveGuard } from '@/composables/useLeaveGuard'
   import { useListingMutations } from '@/composables/useListings'
   import { useAttachLink } from '@/composables/useListingLinks'
   import { useLivePreview } from '@/composables/useLivePreview'
   import { useAssumptions, useWorkspace } from '@/composables/useWorkspace'
-  import { ApiError, api } from '@/lib/api'
+  import { api } from '@/lib/api'
+  import { errorMessage, isConflict } from '@/lib/errors'
+  import { cardClasses } from '@/lib/ui'
   import { useDrafts } from '@/composables/useDrafts'
   import {
     emptyForm,
@@ -49,6 +55,13 @@
 
   type Tab = 'paste' | 'manual'
   const tab = ref<Tab>('paste')
+  const tabOptions = computed(() => [
+    { value: 'paste' as const, label: 'Coller une annonce' },
+    {
+      value: 'manual' as const,
+      label: extraction.value ? 'Fiche pré-remplie' : 'Saisie manuelle',
+    },
+  ])
 
   // Sans routeur (tests du panneau seul), ni partage ni brouillon.
   const query = useRoute()?.query ?? {}
@@ -98,7 +111,37 @@
   const extractedForm = ref<ListingFormModel | null>(null)
   const ignoreDuplicates = ref(false)
 
-  /** La provenance courante : l'IA pour ce qui n'a pas bougé, « vous » (côté serveur) pour le reste. */
+  /**
+   * Lot 22 : la garde des modifications. Une fiche remplie (à la main, par
+   * l'IA, par un partage) ou un texte collé ne se perd pas en fermant le
+   * panneau (Échap, clic à côté, « Annuler ») ni par le bouton retour : la
+   * même question que les sections de la fiche. Une fois enregistrée (ou
+   * rattachée, écartée), plus rien à garder.
+   */
+  const pristine = JSON.stringify(emptyForm())
+  const pasted = ref(false)
+  const finished = ref(false)
+  const leave = useLeaveGuard({
+    title: () => 'Nouvelle annonce',
+    isDirty: () =>
+      !finished.value &&
+      (extraction.value !== null ||
+        pasted.value ||
+        JSON.stringify(form.value) !== pristine),
+    discard: () => {
+      finished.value = true
+    },
+  })
+  /** Fermer le panneau : confirmation s'il y a une saisie en cours. */
+  function requestClose(): void {
+    leave.guard(() => emit('close'))
+  }
+  /** Fini sans perte (enregistrée, rattachée, écartée) : on part sans question. */
+  function done(): void {
+    finished.value = true
+  }
+
+  /** La provenance courante : l'IA pour ce qui n'a pas bougé, « toi » (côté serveur) pour le reste. */
   const fieldSources = computed(() => {
     if (!extraction.value || !extractedForm.value) return null
     return provenanceAfterEdits(
@@ -170,10 +213,11 @@
         }
         await attachLink.mutateAsync({ listingId, input })
       }
+      done()
       emit('open', listingId)
     } catch (err) {
       failure.value = conflictText(
-        err instanceof ApiError ? err.message : "L'ajout du lien a échoué."
+        errorMessage(err, 'L’ajout du lien a échoué.')
       )
     }
   }
@@ -207,7 +251,7 @@
     form.value = filled
     tab.value = 'manual'
     notice.value =
-      "L'analyse par IA n'est pas configurée : le lien et le texte partagés sont repris, complétez la fiche."
+      "L'analyse par IA n'est pas configurée : le lien et le texte partagés sont repris, complète la fiche."
   }
 
   /** Un brouillon reçu par e-mail ouvre comme une fiche extraite, doublons compris. */
@@ -239,11 +283,10 @@
       })
       notice.value =
         loaded.origin === 'exploration'
-          ? `Trouvée par Claude${loaded.portal ? ` sur ${EXPLORATION_PORTAL_LABELS[loaded.portal]}` : ''} : vérifiez la fiche avant d'enregistrer.`
-          : `Reçue par e-mail${loaded.emailSubject ? ` (« ${loaded.emailSubject} »)` : ''} : vérifiez la fiche avant d'enregistrer.`
+          ? `Trouvée par Claude${loaded.portal ? ` sur ${EXPLORATION_PORTAL_LABELS[loaded.portal]}` : ''} : vérifie la fiche avant d’enregistrer.`
+          : `Reçue par e-mail${loaded.emailSubject ? ` (« ${loaded.emailSubject} »)` : ''} : vérifie la fiche avant d’enregistrer.`
     } catch (err) {
-      failure.value =
-        err instanceof ApiError ? err.message : 'Brouillon introuvable.'
+      failure.value = errorMessage(err, 'Brouillon introuvable.')
       tab.value = 'manual'
     }
   }
@@ -258,8 +301,40 @@
       id: draft.value.id,
       decision: { status: 'dismissed' },
     })
+    done()
     emit('close')
   }
+
+  /** Les erreurs qu'aucun champ du formulaire n'affiche (chemins du contrat). */
+  const otherErrors = computed(() => {
+    const shown = new Set([
+      'title',
+      'url',
+      'price',
+      'location.point',
+      'dpeDate',
+      'surface',
+      'rooms',
+      'bedrooms',
+      'constructionYear',
+      'annualCharges',
+      'nonRecoverableChargesMonthly',
+      'propertyTax',
+      'furnitureValue',
+      'feesAmount',
+      'lotsCount',
+      'renovation.durationMonths',
+      'rentalPlan.referenceRentPerM2',
+      'rentalPlan.targetRent',
+      'rentalPlan.marketRent',
+    ])
+    return Object.entries(errors.value)
+      .filter(
+        ([key]) =>
+          !shown.has(key) && !/^renovation\.items\.\d+\.amount$/.test(key)
+      )
+      .map(([, message]) => message)
+  })
 
   function startOver(): void {
     extraction.value = null
@@ -277,7 +352,16 @@
     }
     const { input, errors: issues } = validateForm(form.value)
     errors.value = issues
-    if (!input) return
+    if (!input) {
+      // Lot 22 : le premier champ en erreur reçoit le focus.
+      await nextTick()
+      const invalid = document.querySelector<HTMLElement>(
+        '[data-testid="create-form"] [aria-invalid="true"]'
+      )
+      invalid?.focus?.({ preventScroll: true })
+      invalid?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+      return
+    }
     failure.value = null
     conflict.value = null
     try {
@@ -300,52 +384,26 @@
           decision: { status: 'accepted', listingId: created.listing.id },
         })
       }
+      done()
       emit('created', created.listing.id, created.criteriaChanges)
     } catch (err) {
-      const message =
-        err instanceof ApiError ? err.message : "L'enregistrement a échoué."
-      conflict.value =
-        err instanceof ApiError && err.status === 409
-          ? conflictListingOf(message)
-          : null
+      const message = errorMessage(err, 'L’enregistrement a échoué.')
+      conflict.value = isConflict(err) ? conflictListingOf(message) : null
       failure.value = conflictText(message)
     }
   }
 </script>
 
 <template>
-  <SidePanel title="Nouvelle annonce" @close="emit('close')">
+  <SidePanel title="Nouvelle annonce" @close="requestClose">
     <div class="grid gap-6">
-      <div
-        class="flex gap-1 rounded-lg bg-surface-2 p-1 text-sm"
-        role="tablist"
-        aria-label="Mode de saisie"
-      >
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="tab === 'paste'"
-          class="flex-1 rounded-md px-3 py-1.5"
-          :class="
-            tab === 'paste' ? 'bg-surface font-medium shadow' : 'text-muted'
-          "
-          @click="tab = 'paste'"
-        >
-          Coller une annonce
-        </button>
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="tab === 'manual'"
-          class="flex-1 rounded-md px-3 py-1.5"
-          :class="
-            tab === 'manual' ? 'bg-surface font-medium shadow' : 'text-muted'
-          "
-          @click="tab = 'manual'"
-        >
-          {{ extraction ? 'Fiche pré-remplie' : 'Saisie manuelle' }}
-        </button>
-      </div>
+      <UiSegmented
+        v-model="tab"
+        :options="tabOptions"
+        label="Mode de saisie"
+        block
+        data-testid="create-mode"
+      />
 
       <p
         v-if="notice"
@@ -353,15 +411,16 @@
         data-testid="create-notice"
       >
         {{ notice }}
-        <button
+        <UiButton
           v-if="draft && !draftNeedsAgreement"
-          type="button"
-          class="ml-2 text-xs underline"
+          variant="link"
+          size="inline"
+          class="ml-2"
           data-testid="dismiss-draft"
           @click="dismissDraft"
         >
           Écarter ce brouillon
-        </button>
+        </UiButton>
       </p>
 
       <ExtractionPane
@@ -371,12 +430,14 @@
         :auto-analyze="Boolean(shared && (sharedText || shared.url))"
         @extracted="onExtracted"
         @unavailable="onUnavailable"
+        @dirty="value => (pasted = value)"
       />
 
       <template v-else>
         <div
           v-if="extraction"
-          class="grid gap-2 rounded-xl border border-line px-4 py-3 text-sm"
+          class="grid gap-2 text-sm"
+          :class="cardClasses('default', 'sm')"
           data-testid="extraction-summary"
         >
           <div class="flex flex-wrap items-center justify-between gap-2">
@@ -386,19 +447,13 @@
                   ? 'Fiche pré-remplie par l’analyseur simple.'
                   : draft?.extractedBy === 'claude'
                     ? 'Fiche pré-remplie avec ce que Claude a lu sur la page.'
-                    : "Fiche pré-remplie par l'IA."
+                    : 'Fiche pré-remplie par l’IA.'
               }}</strong>
-              Vérifiez chaque champ : les pastilles disent d'où vient la valeur
-              et avec quelle confiance ; survolez-les pour lire l'extrait. Un
-              champ que vous modifiez passe en « vous ».
+              Vérifie chaque champ : les pastilles disent d’où vient la valeur
+              et avec quelle confiance ; survole-les pour lire l’extrait. Un
+              champ que tu modifies passe en « toi ».
             </p>
-            <button
-              type="button"
-              class="rounded-lg border border-line px-3 py-1 text-xs"
-              @click="startOver"
-            >
-              Recommencer
-            </button>
+            <UiButton size="sm" @click="startOver">Recommencer</UiButton>
           </div>
           <p class="text-xs text-muted" data-testid="extraction-cost">
             {{ describeUsage(extraction.usage) }}
@@ -408,7 +463,7 @@
           </p>
           <ul
             v-if="extraction.warnings.length"
-            class="list-disc pl-5 text-xs text-muted"
+            class="list-disc pl-5 text-sm text-muted"
           >
             <li v-for="(warning, index) in extraction.warnings" :key="index">
               {{ warning }}
@@ -431,70 +486,68 @@
           v-if="preview.evaluation"
           :rental="preview.evaluation.rental"
         />
-        <ListingForm
-          v-model="form"
-          :errors="errors"
-          :field-sources="fieldSources"
-          :missing="missingPaths"
-        />
-        <div
-          v-if="failure"
-          role="alert"
-          class="grid gap-2 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-          data-testid="create-failure"
-        >
+        <div data-testid="create-form">
+          <ListingForm
+            v-model="form"
+            :errors="errors"
+            :field-sources="fieldSources"
+            :missing="missingPaths"
+          />
+        </div>
+        <UiAlert v-if="otherErrors.length" data-testid="create-other-errors">
+          <p class="font-semibold">À corriger avant d’enregistrer :</p>
+          <ul class="list-disc pl-5">
+            <li v-for="message in otherErrors" :key="message">
+              {{ message }}
+            </li>
+          </ul>
+        </UiAlert>
+        <UiAlert v-if="failure" data-testid="create-failure">
           <p>{{ failure }}</p>
-          <div v-if="conflict" class="flex flex-wrap gap-2">
-            <button
+          <template v-if="conflict" #actions>
+            <UiButton
               v-if="!conflict.sameLink && linkUrl"
-              type="button"
-              class="min-h-9 rounded-lg border border-accent bg-surface px-3 text-xs font-semibold text-accent disabled:opacity-60"
+              variant="outline"
+              size="sm"
               :disabled="attachLink.isPending.value || merge.isPending.value"
               data-action="conflict-attach"
               @click="attach(conflict.id)"
             >
               C’est la même : ajouter ce lien à « {{ conflict.title }} »
-            </button>
-            <button
-              type="button"
-              class="min-h-9 rounded-lg border border-line bg-surface px-3 text-xs text-fg"
+            </UiButton>
+            <UiButton
+              size="sm"
               data-action="conflict-open"
               @click="emit('open', conflict.id)"
             >
               Ouvrir « {{ conflict.title }} »
-            </button>
-            <button
+            </UiButton>
+            <UiButton
               v-if="!conflict.sameLink"
-              type="button"
-              class="min-h-9 rounded-lg border border-warn bg-surface px-3 text-xs text-warn"
+              size="sm"
+              class="text-warn"
               data-action="conflict-create"
               @click="createAnyway"
             >
               C’en est une autre : créer quand même
-            </button>
-          </div>
-        </div>
+            </UiButton>
+          </template>
+        </UiAlert>
       </template>
     </div>
     <template #footer>
       <div class="flex justify-end gap-2">
-        <button
-          type="button"
-          class="rounded-lg border border-line px-3 py-1.5 text-sm"
-          @click="emit('close')"
-        >
-          Annuler
-        </button>
-        <button
+        <UiButton @click="requestClose">Annuler</UiButton>
+        <UiButton
           v-if="tab === 'manual'"
-          type="button"
-          class="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-accent-fg disabled:opacity-60"
-          :disabled="create.isPending.value"
+          variant="primary"
+          :loading="create.isPending.value"
+          loading-label="Enregistrement…"
           data-testid="save"
           @click="save"
         >
-          {{ create.isPending.value ? 'Enregistrement…' : 'Enregistrer' }}
-        </button>
+          Enregistrer
+        </UiButton>
       </div>
     </template>
   </SidePanel>

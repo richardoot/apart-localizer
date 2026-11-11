@@ -107,7 +107,7 @@ describe('l’adéquation en une ligne', () => {
 
   it('sans critère, dans les critères, à la marge, hors critères', () => {
     expect(fitLine(NO_CRITERIA_FIT)).toBe(
-      'Aucun critère actif : créez-en un pour la comparer à ce que vous cherchez.'
+      'Aucun critère actif : crées-en un pour la comparer à ce que tu cherches.'
     )
     expect(fitLine(fit)).toBe(
       '« [Exemple] Talence T2 » : prix maximal 220 000 € (200 000 €), surface minimale 40 m² (45 m²).'

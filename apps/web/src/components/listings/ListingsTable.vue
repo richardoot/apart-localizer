@@ -24,8 +24,13 @@
     formatEurosPerMonth,
     formatPercent,
     formatSurface,
+    plural,
   } from '@/lib/format'
-  import { DISCOUNT_CLASS_CLASSES, DISCOUNT_CLASS_LABELS } from '@/lib/labels'
+  import { DISCOUNT_CLASS_LABELS, DISCOUNT_CLASS_TONES } from '@/lib/labels'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import UiIcon from '@/components/ui/UiIcon.vue'
   import {
     commonScoreText,
     disagreementsText,
@@ -175,19 +180,24 @@
       id: 'select',
       header: () =>
         h('span', { class: 'sr-only' }, 'Sélectionner pour comparer'),
+      // La case ne doit pas ouvrir la fiche : le clic s'arrête à la cellule.
       cell: ctx =>
-        h('input', {
-          type: 'checkbox',
-          class: 'size-4 accent-[var(--accent)]',
-          checked: selected.value.includes(ctx.row.original.listing.id),
-          'aria-label': `Sélectionner ${ctx.row.original.listing.title} pour comparer`,
-          onClick: (event: Event) => event.stopPropagation(),
-          onChange: (event: Event) =>
-            toggle(
-              ctx.row.original.listing.id,
-              (event.target as HTMLInputElement).checked
-            ),
-        }),
+        h(
+          'span',
+          {
+            class: 'inline-flex',
+            onClick: (event: Event) => event.stopPropagation(),
+          },
+          [
+            h(UiCheckbox, {
+              class: '-my-2.5 sm:-my-1.5',
+              modelValue: selected.value.includes(ctx.row.original.listing.id),
+              'aria-label': `Sélectionner ${ctx.row.original.listing.title} pour comparer`,
+              'onUpdate:modelValue': (checked: unknown) =>
+                toggle(ctx.row.original.listing.id, checked === true),
+            }),
+          ]
+        ),
     }),
     helper.accessor(row => row.listing.title, {
       id: 'title',
@@ -414,17 +424,19 @@
         header: withBasis('Décote', 'price'),
         cell: ctx => {
           const t = ctx.row.original.evaluation.targetPrice
-          if (t.discount === null || !t.discountClass) return '—'
+          const discount = t.discount
+          if (discount === null || !t.discountClass) return '—'
           return h(
-            'span',
+            UiBadge,
             {
-              class: `inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${DISCOUNT_CLASS_CLASSES[t.discountClass]}`,
+              tone: DISCOUNT_CLASS_TONES[t.discountClass],
               title: DISCOUNT_CLASS_LABELS[t.discountClass],
               'data-discount-class': t.discountClass,
             },
-            t.discount > 0
-              ? `−${formatPercent(t.discount)}`
-              : `+${formatPercent(-t.discount)}`
+            () =>
+              discount > 0
+                ? `−${formatPercent(discount)}`
+                : `+${formatPercent(-discount)}`
           )
         },
         sortFn: 'basic',
@@ -484,37 +496,49 @@
     getRowId: (row: EvaluatedListing) => row.listing.id,
   })
 
-  function arrow(sorted: false | 'asc' | 'desc'): string {
-    return sorted === 'asc' ? '↑' : sorted === 'desc' ? '↓' : '↕'
+  /** Le sens de tri d'une colonne, pour les lecteurs d'écran (`aria-sort`). */
+  function ariaSort(
+    sorted: false | 'asc' | 'desc'
+  ): 'ascending' | 'descending' | undefined {
+    return sorted === 'asc'
+      ? 'ascending'
+      : sorted === 'desc'
+        ? 'descending'
+        : undefined
   }
 </script>
 
 <template>
   <div
-    class="relative overflow-x-auto rounded-xl border border-line bg-surface"
+    class="relative overflow-x-auto rounded-2xl border border-line bg-surface"
   >
     <div
       v-if="selected.length > 0"
       class="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-accent-soft px-3 py-2 text-sm"
       data-testid="compare-bar"
     >
-      <span>{{ selected.length }} annonce(s) sélectionnée(s) (6 au plus)</span>
+      <span
+        >{{
+          plural(
+            selected.length,
+            'annonce sélectionnée',
+            'annonces sélectionnées'
+          )
+        }}
+        (6 au plus)</span
+      >
       <span class="flex gap-2">
-        <button
-          type="button"
-          class="rounded-lg border border-line px-3 py-1 text-xs hover:bg-surface"
-          @click="selected = []"
-        >
+        <UiButton size="sm" @click="selected = []">
           Tout désélectionner
-        </button>
-        <button
-          type="button"
-          class="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-accent-fg disabled:opacity-60"
+        </UiButton>
+        <UiButton
+          variant="primary"
+          size="sm"
           :disabled="selected.length < 2"
           @click="emit('compare', selected)"
         >
           Comparer ({{ selected.length }})
-        </button>
+        </UiButton>
       </span>
     </div>
     <table class="w-full min-w-[1600px] text-sm">
@@ -527,19 +551,30 @@
             v-for="header in headerGroup.headers"
             :key="header.id"
             scope="col"
-            class="px-3 py-2 font-medium whitespace-nowrap"
+            class="px-3 py-1 font-medium whitespace-nowrap"
             :class="header.column.getIsSorted() ? 'text-accent' : ''"
+            :aria-sort="ariaSort(header.column.getIsSorted())"
           >
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 hover:text-fg"
+            <UiButton
+              v-if="header.column.id !== 'select'"
+              variant="ghost"
+              size="sm"
+              class="-mx-2.5 font-medium"
+              :class="header.column.getIsSorted() ? 'text-accent' : ''"
+              :data-sort="header.column.getIsSorted() || undefined"
               @click="header.column.getToggleSortingHandler()?.($event)"
             >
               <FlexRender :header="header" />
-              <span aria-hidden="true">{{
-                arrow(header.column.getIsSorted())
-              }}</span>
-            </button>
+              <UiIcon
+                v-if="header.column.getIsSorted()"
+                :name="
+                  header.column.getIsSorted() === 'asc'
+                    ? 'chevron-up'
+                    : 'chevron-down'
+                "
+              />
+            </UiButton>
+            <FlexRender v-else :header="header" />
           </th>
         </tr>
       </thead>
@@ -549,7 +584,7 @@
           :key="row.id"
           class="cursor-pointer border-t border-line align-top hover:bg-surface-2"
           :class="
-            row.original.listing.status === 'discarded' ? 'opacity-60' : ''
+            row.original.listing.status === 'discarded' ? 'bg-surface-2' : ''
           "
           tabindex="0"
           :data-id="row.original.listing.id"
@@ -570,8 +605,8 @@
       v-if="items.length === 0"
       class="px-4 py-8 text-center text-sm text-muted"
     >
-      Aucune annonce ne correspond : élargissez les filtres de statut ou de
-      commune.
+      Aucune annonce ne correspond dans cette étape : change d’étape ou élargis
+      les filtres.
     </p>
   </div>
 </template>

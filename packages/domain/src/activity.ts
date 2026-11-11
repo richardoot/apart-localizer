@@ -19,7 +19,7 @@ import type {
   ActivityChannel,
   ActivityKind,
 } from '@apart/contracts'
-import { formatEuros } from './format.js'
+import { formatEuros, plural, pluralWord } from './format.js'
 import { describeAgencyActivity } from './agency-activity.js'
 import { describeLinkActivity, portalWhere } from './link-activity.js'
 import {
@@ -210,9 +210,9 @@ export function formatActivityValue(
           (isRecord(item) && typeof item.amount === 'number' ? item.amount : 0),
         0
       )
-      return `${value.length} poste(s)${total > 0 ? `, ${formatEuros(total)}` : ''}`
+      return `${plural(value.length, 'poste')}${total > 0 ? `, ${formatEuros(total)}` : ''}`
     }
-    return value.length === 0 ? null : `${value.length} élément(s)`
+    return value.length === 0 ? null : plural(value.length, 'élément')
   }
   if (isRecord(value)) {
     if (value.type === 'Point' && Array.isArray(value.coordinates)) {
@@ -587,7 +587,7 @@ export function describeActivity(
     case 'draft.received': {
       const count = num(after, 'created') ?? 0
       return describe(
-        `${count} annonce(s) reçue(s) par e-mail${quoted(text(after, 'subject'))}`
+        `${plural(count, 'annonce')} ${pluralWord(count, 'reçue')} par e-mail${quoted(text(after, 'subject'))}`
       )
     }
     case 'draft.accepted':
@@ -645,7 +645,7 @@ export function describeActivity(
     case 'member.left': {
       const canceled = num(after, 'canceledInvitations') ?? 0
       return describe(
-        `a quitté l'espace${canceled > 0 ? ` ; ${canceled} invitation(s) en attente annulée(s)` : ''}`
+        `a quitté l'espace${canceled > 0 ? ` ; ${plural(canceled, 'invitation')} en attente ${pluralWord(canceled, 'annulée')}` : ''}`
       )
     }
     case 'member.removed':

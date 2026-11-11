@@ -1,7 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { LocationQuery, RouteRecordRaw } from 'vue-router'
 import { parseSharedListing } from '@apart/contracts'
+import { installLeaveGuard } from '@/composables/useLeaveGuard'
 import { useAuthStore } from '@/stores/auth'
+import { useLeaveGuardStore } from '@/stores/leave-guard'
 
 const first = (value: LocationQuery[string] | undefined): string | null =>
   (Array.isArray(value) ? value[0] : value) ?? null
@@ -32,7 +34,7 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     name: 'home',
     component: () => import('@/views/DashboardPage.vue'),
-    meta: { title: 'Synthèse', requiresAuth: true },
+    meta: { title: 'Accueil', requiresAuth: true },
   },
   {
     // Lot 21 : le mode tri, une annonce à la fois.
@@ -187,6 +189,12 @@ router.beforeEach(async to => {
   }
   return true
 })
+
+// Lot 22 : le bouton retour (navigateur, glissé de l'iPhone) passe par la
+// garde des modifications, comme la fermeture d'une section de la fiche.
+if (typeof window !== 'undefined') {
+  installLeaveGuard(router, () => useLeaveGuardStore())
+}
 
 router.afterEach(to => {
   const title = [...to.matched].reverse().find(r => r.meta.title)?.meta.title

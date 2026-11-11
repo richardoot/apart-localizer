@@ -1,4 +1,6 @@
 <script setup lang="ts">
+  import UiButton from '@/components/ui/UiButton.vue'
+  import { cardClasses } from '@/lib/ui'
   import { computed } from 'vue'
   import type { Assumptions, ListingMetrics } from '@apart/contracts'
   import { costShares } from '@apart/domain'
@@ -42,7 +44,8 @@
 
 <template>
   <section
-    class="grid gap-3.5 rounded-2xl border border-line bg-surface p-4 sm:px-5"
+    class="grid gap-3.5"
+    :class="cardClasses()"
     aria-labelledby="buy-title"
     data-testid="block-cost"
   >
@@ -108,14 +111,14 @@
         </dt>
         <dd class="m-0 font-semibold">
           {{ formatEuros(metrics.renovationTotal) }} ·
-          <button
-            type="button"
-            class="inline-flex min-h-11 items-center font-normal text-accent underline-offset-2 hover:underline sm:min-h-0"
+          <UiButton
+            variant="link"
+            class="font-normal"
             data-testid="works-detail"
             @click="emit('works')"
           >
             détail
-          </button>
+          </UiButton>
         </dd>
       </div>
       <div

@@ -3,7 +3,7 @@ import { describeScope, redirectHost } from './oauth-consent'
 
 describe('describeScope', () => {
   it('turns the known scopes into sentences', () => {
-    expect(describeScope('email')).toBe('Connaître votre adresse e-mail')
+    expect(describeScope('email')).toBe('Connaître ton adresse e-mail')
     expect(describeScope('listings:write')).toMatch(/jamais de suppression/)
   })
 

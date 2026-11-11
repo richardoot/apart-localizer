@@ -15,6 +15,9 @@
   import ContextMap from '../ContextMap.vue'
   import SurroundingsDetails from '../SurroundingsDetails.vue'
   import PlacementDetails from '../neighbourhood/PlacementDetails.vue'
+  import QueryState from '@/components/ui/QueryState.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import { cardClasses } from '@/lib/ui'
   import TransitDetails from '../neighbourhood/TransitDetails.vue'
 
   /**
@@ -30,7 +33,8 @@
   const emit = defineEmits<{ precise: []; go: [tab: ListingTab] }>()
 
   const id = computed(() => props.item.listing.id)
-  const { data: context, isPending, error } = useListingContext(id)
+  const contextQuery = useListingContext(id)
+  const { data: context } = contextQuery
   const { data: compliance } = useCompliance(id)
 
   const tiles = computed(() =>
@@ -106,214 +110,221 @@
     target?.focus()
   }
 
-  const button =
-    'inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm hover:bg-surface-2 sm:min-h-10'
+  const card = cardClasses()
 </script>
 
 <template>
   <div class="grid gap-4" data-testid="tab-neighbourhood">
-    <p v-if="isPending" class="text-sm text-muted">Chargement du quartier…</p>
-    <p
-      v-else-if="error"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
+    <QueryState
+      :query="contextQuery"
+      skeleton="cards"
+      :skeleton-count="2"
+      loading-label="du quartier"
+      error-fallback="La lecture du quartier a échoué."
     >
-      {{ error.message }}
-    </p>
-    <template v-else-if="context">
-      <div
-        class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3"
-        role="group"
-        aria-label="Le quartier en six tuiles : choisissez-en une pour son détail"
-        data-testid="neighbourhood-tiles"
-        @keydown="onKey"
-      >
-        <button
-          v-for="tile in tiles"
-          :key="tile.id"
-          type="button"
-          class="grid min-h-24 content-start gap-1 rounded-2xl border-[1.5px] bg-surface px-3 py-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:min-h-28 sm:px-4 sm:py-3.5"
-          :class="
-            tile.id === selected
-              ? 'border-accent'
-              : 'border-line hover:border-muted'
-          "
-          :aria-pressed="tile.id === selected"
-          aria-controls="neighbourhood-detail"
-          :data-tile="tile.id"
-          :data-tone="tile.tone"
-          @click="selected = tile.id"
-        >
-          <span class="text-xs text-muted">{{ tile.kicker }}</span>
-          <strong
-            class="font-display text-base leading-tight font-bold break-words sm:text-[21px]"
-            :class="TONES[tile.tone]"
-            >{{ tile.value }}</strong
-          >
-          <span class="text-xs leading-snug text-muted sm:text-[13px]">{{
-            tile.sub
-          }}</span>
-        </button>
-      </div>
-
-      <section
-        v-if="current"
-        id="neighbourhood-detail"
-        class="grid gap-3 rounded-2xl border border-line bg-surface p-4 sm:px-5"
-        aria-labelledby="neighbourhood-detail-title"
-        :data-detail="current.id"
-        aria-live="polite"
-      >
-        <h2 id="neighbourhood-detail-title" class="text-base font-semibold">
-          {{ TITLES[current.id] }}
-        </h2>
-        <p
-          v-if="!context.point && current.id !== 'risks'"
-          class="text-sm text-warn"
-        >
-          Adresse non localisée : saisissez une adresse ou une commune pour
-          obtenir la desserte, les équipements et le quartier.
-        </p>
-        <TransitDetails
-          v-if="current.id === 'transit'"
-          :transit="context.transit"
-        />
-        <SurroundingsDetails
-          v-else-if="current.id === 'shopping'"
-          :surroundings="context.surroundings"
-          :approximation="context.approximation"
-          part="drives"
-        />
-        <SurroundingsDetails
-          v-else-if="current.id === 'sport'"
-          :surroundings="context.surroundings"
-          :approximation="context.approximation"
-          part="sport"
-        />
-        <SurroundingsDetails
-          v-else-if="current.id === 'neighbourhood'"
-          :surroundings="context.surroundings"
-          :approximation="context.approximation"
-          part="neighbourhood"
-        />
-        <CompliancePanel
-          v-else-if="current.id === 'risks'"
-          :listing-id="item.listing.id"
-          risks-only
-        />
-        <PlacementDetails
-          v-else
-          :listing-id="item.listing.id"
-          :context="context"
-          :location="item.listing.location"
-          @precise="emit('precise')"
-        />
-        <p class="text-xs text-muted" data-testid="detail-source">
-          {{ SOURCES[current.id] }}
-        </p>
-      </section>
-
-      <section
-        class="grid gap-3 rounded-2xl border border-line bg-surface p-4 sm:px-5"
-        aria-labelledby="neighbourhood-map-title"
-        data-testid="neighbourhood-map"
-      >
+      <template v-if="context">
         <div
-          class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"
+          class="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3"
+          role="group"
+          aria-label="Le quartier en six tuiles : choisis-en une pour son détail"
+          data-testid="neighbourhood-tiles"
+          @keydown="onKey"
         >
-          <h2 id="neighbourhood-map-title" class="text-base font-semibold">
-            Sur la carte
-          </h2>
-          <span
-            v-if="badge"
-            class="text-xs text-muted"
-            :title="badge.title"
-            data-testid="map-precision"
-            >Repère : {{ badge.label.toLowerCase() }}</span
-          >
-        </div>
-        <ContextMap v-if="context.point" :context="context" />
-        <p v-else class="text-sm text-warn">
-          Adresse non localisée : pas de carte tant qu’il n’y a ni adresse ni
-          commune.
-        </p>
-        <p
-          v-if="dashedArea || (badge && badge.tone !== 'exact')"
-          class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted"
-          data-testid="map-note"
-        >
-          <span v-if="dashedArea"
-            >Pointillé : le quartier retenu ; le repère est en son centre.</span
-          >
-          <!-- Le bouton et la fin de la phrase restent ensemble en se repliant. -->
-          <span v-if="badge && badge.tone !== 'exact'"
-            ><button
-              type="button"
-              class="inline-flex min-h-11 items-center text-sm font-semibold text-accent underline-offset-2 hover:underline sm:min-h-0"
-              data-action="map-precise"
-              @click="emit('precise')"
-            >
-              Préciser l’adresse
-            </button>
-            pour un repère exact et des distances justes.</span
-          >
-        </p>
-      </section>
-
-      <details
-        class="rounded-2xl border border-line bg-surface px-4 sm:px-5"
-        data-testid="neighbourhood-sources"
-      >
-        <summary
-          class="flex min-h-[52px] cursor-pointer items-center text-base font-semibold"
-        >
-          Sources et dates des données ouvertes
-        </summary>
-        <div class="grid gap-2 pb-4 text-sm text-muted">
-          <p>
-            Arrêts TBM (Bordeaux Métropole), DVF géolocalisées (Etalab, DGFiP),
-            arrêté préfectoral de l’encadrement (Gironde), observatoire DPE
-            (ADEME), équipements sportifs (ministère des Sports), ©
-            contributeurs OpenStreetMap (ODbL), contours des quartiers (source
-            indiquée sous le quartier).
-          </p>
-          <p data-testid="context-computed-at">
-            Contexte calculé le {{ formatDate(context.computedAt) }}, depuis les
-            données importées en base (aucun appel réseau à la lecture).
-          </p>
-          <p v-if="context.surroundings.neighbourhood.value">
-            Contour du quartier :
-            {{ context.surroundings.neighbourhood.value.source }}.
-          </p>
-          <p data-testid="sources-georisques">
-            <template v-if="compliance?.georisques?.status === 'ok'">
-              Géorisques : {{ compliance.georisques.address ?? 'adresse' }},
-              relevé le {{ formatDate(compliance.georisques.fetchedAt) }}
-              <a
-                v-if="compliance.georisques.reportUrl"
-                :href="compliance.georisques.reportUrl"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-accent underline"
-                >rapport complet</a
-              >
-              (BRGM, ministère de la Transition écologique, licence Etalab 2.0).
-            </template>
-            <template v-else>
-              Géorisques :
-              {{ compliance?.georisques?.message ?? 'rapport non lu.' }}
-            </template>
-          </p>
+          <!-- Lot 22 : une tuile chiffrée (grille, texte à gauche) qui choisit
+             le détail, pas un bouton d'action : son habit ne peut pas être
+             un UiButton. -->
           <button
+            v-for="tile in tiles"
+            :key="tile.id"
             type="button"
-            :class="button"
-            class="justify-self-start"
-            @click="emit('go', 'negocier')"
+            class="grid min-h-24 content-start gap-1 rounded-2xl border-[1.5px] bg-surface px-3 py-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:min-h-28 sm:px-4 sm:py-3.5"
+            :class="
+              tile.id === selected
+                ? 'border-accent'
+                : 'border-line hover:border-muted'
+            "
+            :aria-pressed="tile.id === selected"
+            aria-controls="neighbourhood-detail"
+            :data-tile="tile.id"
+            :data-tone="tile.tone"
+            @click="selected = tile.id"
           >
-            Les ventes comparables (DVF) sont dans Négocier →
+            <span class="text-sm text-muted">{{ tile.kicker }}</span>
+            <strong
+              class="font-display text-base leading-tight font-bold break-words sm:text-xl"
+              :class="TONES[tile.tone]"
+              >{{ tile.value }}</strong
+            >
+            <span class="text-xs leading-snug text-muted sm:text-sm">{{
+              tile.sub
+            }}</span>
           </button>
         </div>
-      </details>
-    </template>
+
+        <section
+          v-if="current"
+          id="neighbourhood-detail"
+          class="grid gap-3"
+          :class="card"
+          aria-labelledby="neighbourhood-detail-title"
+          :data-detail="current.id"
+          aria-live="polite"
+        >
+          <h2 id="neighbourhood-detail-title" class="text-base font-semibold">
+            {{ TITLES[current.id] }}
+          </h2>
+          <p
+            v-if="!context.point && current.id !== 'risks'"
+            class="text-sm text-warn"
+          >
+            Adresse non localisée : saisis une adresse ou une commune pour
+            obtenir la desserte, les équipements et le quartier.
+          </p>
+          <TransitDetails
+            v-if="current.id === 'transit'"
+            :transit="context.transit"
+          />
+          <SurroundingsDetails
+            v-else-if="current.id === 'shopping'"
+            :surroundings="context.surroundings"
+            :approximation="context.approximation"
+            part="drives"
+          />
+          <SurroundingsDetails
+            v-else-if="current.id === 'sport'"
+            :surroundings="context.surroundings"
+            :approximation="context.approximation"
+            part="sport"
+          />
+          <SurroundingsDetails
+            v-else-if="current.id === 'neighbourhood'"
+            :surroundings="context.surroundings"
+            :approximation="context.approximation"
+            part="neighbourhood"
+          />
+          <CompliancePanel
+            v-else-if="current.id === 'risks'"
+            :listing-id="item.listing.id"
+            risks-only
+          />
+          <PlacementDetails
+            v-else
+            :listing-id="item.listing.id"
+            :context="context"
+            :location="item.listing.location"
+            @precise="emit('precise')"
+          />
+          <p class="text-sm text-muted" data-testid="detail-source">
+            {{ SOURCES[current.id] }}
+          </p>
+        </section>
+
+        <section
+          class="grid gap-3"
+          :class="card"
+          aria-labelledby="neighbourhood-map-title"
+          data-testid="neighbourhood-map"
+        >
+          <div
+            class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"
+          >
+            <h2 id="neighbourhood-map-title" class="text-base font-semibold">
+              Sur la carte
+            </h2>
+            <span
+              v-if="badge"
+              class="text-sm text-muted"
+              :title="badge.title"
+              data-testid="map-precision"
+              >Repère : {{ badge.label.toLowerCase() }}</span
+            >
+          </div>
+          <ContextMap v-if="context.point" :context="context" />
+          <p v-else class="text-sm text-warn">
+            Adresse non localisée : pas de carte tant qu’il n’y a ni adresse ni
+            commune.
+          </p>
+          <p
+            v-if="dashedArea || (badge && badge.tone !== 'exact')"
+            class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted"
+            data-testid="map-note"
+          >
+            <span v-if="dashedArea"
+              >Pointillé : le quartier retenu ; le repère est en son
+              centre.</span
+            >
+            <!-- Le bouton et la fin de la phrase restent ensemble en se repliant. -->
+            <span v-if="badge && badge.tone !== 'exact'"
+              ><UiButton
+                variant="link"
+                class="font-semibold"
+                data-action="map-precise"
+                @click="emit('precise')"
+              >
+                Préciser l’adresse
+              </UiButton>
+              pour un repère exact et des distances justes.</span
+            >
+          </p>
+        </section>
+
+        <details
+          class="rounded-2xl border border-line bg-surface px-4 sm:px-5"
+          data-testid="neighbourhood-sources"
+        >
+          <summary
+            class="flex min-h-[52px] cursor-pointer items-center text-base font-semibold"
+          >
+            Sources et dates des données ouvertes
+          </summary>
+          <div class="grid gap-2 pb-4 text-sm text-muted">
+            <p>
+              Arrêts TBM (Bordeaux Métropole), DVF géolocalisées (Etalab,
+              DGFiP), arrêté préfectoral de l’encadrement (Gironde),
+              observatoire DPE (ADEME), équipements sportifs (ministère des
+              Sports), © contributeurs OpenStreetMap (ODbL), contours des
+              quartiers (source indiquée sous le quartier).
+            </p>
+            <p data-testid="context-computed-at">
+              Contexte calculé le {{ formatDate(context.computedAt) }}, depuis
+              les données importées en base (aucun appel réseau à la lecture).
+            </p>
+            <p v-if="context.surroundings.neighbourhood.value">
+              Contour du quartier :
+              {{ context.surroundings.neighbourhood.value.source }}.
+            </p>
+            <p data-testid="sources-georisques">
+              <template v-if="compliance?.georisques?.status === 'ok'">
+                Géorisques : {{ compliance.georisques.address ?? 'adresse' }},
+                relevé le {{ formatDate(compliance.georisques.fetchedAt) }}
+                <UiButton
+                  v-if="compliance.georisques.reportUrl"
+                  :href="compliance.georisques.reportUrl"
+                  variant="link"
+                  size="inline"
+                  icon-right="external"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >rapport complet</UiButton
+                >
+                (BRGM, ministère de la Transition écologique, licence Etalab
+                2.0).
+              </template>
+              <template v-else>
+                Géorisques :
+                {{ compliance?.georisques?.message ?? 'rapport non lu.' }}
+              </template>
+            </p>
+            <UiButton
+              class="justify-self-start"
+              icon-right="arrow-right"
+              @click="emit('go', 'negocier')"
+            >
+              Les ventes comparables (DVF) sont dans Négocier
+            </UiButton>
+          </div>
+        </details>
+      </template>
+    </QueryState>
   </div>
 </template>

@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import type { ExtractionImage, ExtractionResult } from '@apart/contracts'
 import { ApiError, api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { fileToExtractionImage } from '@/lib/images'
 
 /** Une capture déposée, avec un aperçu. */
@@ -72,12 +73,9 @@ export function useExtraction() {
       return result.value
     } catch (err) {
       unavailable.value = err instanceof ApiError && err.status === 503
-      error.value =
-        err instanceof ApiError
-          ? err.status === 503
-            ? `${err.message} L'analyse par IA est indisponible ; la saisie manuelle reste possible.`
-            : err.message
-          : "L'analyse a échoué."
+      error.value = unavailable.value
+        ? `${errorMessage(err)} L’analyse par IA est indisponible ; la saisie manuelle reste possible.`
+        : errorMessage(err, 'L’analyse a échoué.')
       return null
     } finally {
       pending.value = false

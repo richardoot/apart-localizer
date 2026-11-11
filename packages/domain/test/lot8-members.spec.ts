@@ -331,7 +331,7 @@ describe('annuler, retirer, partir, changer de rôle', () => {
     const chloe = member()
     expect(leaveRefusal(chloe, [me, chloe])).toBeNull()
     expect(leaveRefusal(me, [me, chloe])?.message).toContain(
-      'nommez un autre propriétaire'
+      'nomme un autre propriétaire'
     )
     expect(leaveRefusal(me, [me])?.message).toContain('seul membre')
     const other = owner()
@@ -415,7 +415,7 @@ describe('identifiants courts et e-mail', () => {
       link: 'https://apart.exemple.fr/login',
     })
     expect(mail.subject).toBe(
-      'Richard vous invite dans « Appartement » (apart-localizer)'
+      'Richard t’invite dans « Appartement » (apart-localizer)'
     )
     expect(mail.text).toContain('Bonjour Léa,')
     expect(mail.text).toContain('https://apart.exemple.fr/login')
@@ -430,7 +430,7 @@ describe('identifiants courts et e-mail', () => {
         expiresAt: new Date(LATER),
         link: 'https://apart.exemple.fr/login',
       }).subject
-    ).toBe('Richard vous invite dans « Appart Bcc: x » (apart-localizer)')
+    ).toBe('Richard t’invite dans « Appart Bcc: x » (apart-localizer)')
   })
 })
 
@@ -489,7 +489,7 @@ describe('journal et notifications des membres', () => {
     )
     expect(
       describeAction('member.left', null, { canceledInvitations: 2 }).summary
-    ).toBe("a quitté l'espace ; 2 invitation(s) en attente annulée(s)")
+    ).toBe("a quitté l'espace ; 2 invitations en attente annulées")
     expect(
       describeAction('member.removed', { displayName: 'Léa' }, null).summary
     ).toBe("a retiré « Léa » de l'espace")

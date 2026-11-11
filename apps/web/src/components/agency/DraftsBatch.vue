@@ -3,6 +3,10 @@
   import { AGENCY_CHANNEL_LABELS } from '@apart/contracts'
   import type { AgencyRequest, Member } from '@apart/contracts'
   import { activityActorName, formatShortParisDay } from '@apart/domain'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import { plural } from '@/lib/format'
 
   /**
    * Lot 17 : les messages à valider, par lot. Chaque message se relit (et,
@@ -82,9 +86,6 @@
       names.value
     )
   }
-
-  const buttonClass =
-    'inline-flex min-h-11 items-center rounded-lg border border-line px-3 text-sm hover:bg-surface-2 disabled:opacity-60 sm:min-h-9'
 </script>
 
 <template>
@@ -92,20 +93,17 @@
     <article
       v-for="request in requests"
       :key="request.id"
-      class="grid gap-2 rounded-lg border border-line bg-surface p-3"
+      class="grid gap-2 rounded-2xl border border-line bg-surface p-3"
       :data-request="request.id"
     >
       <header class="flex items-start gap-2">
-        <input
+        <UiCheckbox
           :id="`draft-${request.id}`"
-          type="checkbox"
-          class="mt-1 size-4 accent-accent"
-          :checked="selected.has(request.id)"
+          class="-my-2 flex-none"
+          :model-value="selected.has(request.id)"
           :aria-label="`Inclure le message pour « ${request.listing.title} » dans le lot`"
           data-testid="draft-select"
-          @change="
-            toggle(request.id, ($event.target as HTMLInputElement).checked)
-          "
+          @update:model-value="value => toggle(request.id, value === true)"
         />
         <div class="grid min-w-0 flex-1 gap-0.5">
           <label
@@ -128,9 +126,7 @@
           </label>
           <p class="text-xs text-muted">
             {{ AGENCY_CHANNEL_LABELS[request.channel] }} ·
-            {{ request.questions.length }} question{{
-              request.questions.length > 1 ? 's' : ''
-            }}
+            {{ plural(request.questions.length, 'question') }}
             <template v-if="request.followUpOfId"> · relance</template>
             · préparé par {{ author(request) }} le
             {{ formatShortParisDay(request.createdAt) }}
@@ -139,44 +135,45 @@
       </header>
 
       <template v-if="editable && texts[request.id]">
-        <label class="grid gap-1 text-xs font-medium text-muted">
-          Objet
-          <input
-            v-model="texts[request.id]!.subject"
-            maxlength="200"
-            class="min-h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm text-fg sm:min-h-9"
-            data-testid="draft-subject"
-          />
-        </label>
-        <label class="grid gap-1 text-xs font-medium text-muted">
-          Message
-          <textarea
-            v-model="texts[request.id]!.body"
-            :rows="rowsFor(texts[request.id]!.body)"
-            maxlength="8000"
-            class="field-sizing-content max-h-[70vh] min-h-40 w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm leading-relaxed text-fg"
-            data-testid="draft-body"
-          />
-        </label>
+        <!-- Le message va à l'agence : son texte reste au « vous ». -->
+        <UiField
+          :id="`draft-${request.id}-subject`"
+          v-model="texts[request.id]!.subject"
+          label="Objet"
+          quiet
+          maxlength="200"
+          data-testid="draft-subject"
+        />
+        <UiField
+          :id="`draft-${request.id}-body`"
+          v-model="texts[request.id]!.body"
+          as="textarea"
+          label="Message"
+          quiet
+          :rows="rowsFor(texts[request.id]!.body)"
+          maxlength="8000"
+          class="[&_textarea]:field-sizing-content [&_textarea]:max-h-[70vh] [&_textarea]:min-h-40"
+          data-testid="draft-body"
+        />
         <div
           v-if="changed(request)"
           class="flex flex-wrap items-center justify-end gap-2"
         >
           <span class="text-xs text-warn"
-            >Texte modifié : enregistrez-le avant de valider.</span
+            >Texte modifié : enregistre-le avant de valider.</span
           >
-          <button type="button" :class="buttonClass" @click="reset(request)">
+          <UiButton size="sm" @click="reset(request)">
             Revenir au texte
-          </button>
-          <button
-            type="button"
-            class="inline-flex min-h-11 items-center rounded-lg border border-accent px-3 text-sm text-accent disabled:opacity-60 sm:min-h-9"
+          </UiButton>
+          <UiButton
+            variant="outline"
+            size="sm"
             :disabled="busy"
             data-testid="draft-save"
             @click="emit('save', request.id, texts[request.id]!)"
           >
             Enregistrer le texte
-          </button>
+          </UiButton>
         </div>
       </template>
       <template v-else>
@@ -190,46 +187,48 @@
           </li>
         </ul>
         <details class="text-sm">
-          <summary class="cursor-pointer text-xs text-accent">
+          <summary
+            class="flex min-h-11 cursor-pointer items-center text-sm text-accent sm:min-h-8"
+          >
             Voir le message
           </summary>
           <p class="mt-1 text-xs font-medium">{{ request.subject }}</p>
           <pre
-            class="mt-1 rounded-lg bg-surface-2 p-2 font-sans text-[13px] break-words whitespace-pre-wrap"
+            class="mt-1 rounded-lg bg-surface-2 p-2 font-sans text-sm break-words whitespace-pre-wrap"
             >{{ request.body }}</pre>
         </details>
       </template>
 
       <div v-if="!hideCancel" class="flex justify-end">
-        <button
-          type="button"
-          class="text-xs text-muted underline hover:text-bad"
+        <UiButton
+          variant="danger-soft"
+          size="sm"
           :disabled="busy"
           data-testid="draft-cancel"
           @click="emit('cancel', request.id)"
         >
           Annuler ce message
-        </button>
+        </UiButton>
       </div>
     </article>
 
     <div
       class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-accent-soft px-3 py-2"
     >
-      <p class="max-w-prose text-xs">
-        Valider ne fait partir aucun message : Claude enverra ceux que vous
-        validez depuis votre Gmail ou la messagerie du portail, puis notera
+      <p class="max-w-prose text-sm">
+        Valider ne fait partir aucun message : Claude enverra ceux que tu
+        valides depuis ton Gmail ou la messagerie du portail, puis notera
         l’envoi ici.
       </p>
-      <button
-        type="button"
-        class="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-accent px-4 text-sm font-medium text-accent-fg disabled:opacity-60 sm:min-h-9 sm:w-auto"
+      <UiButton
+        variant="primary"
+        class="w-full sm:w-auto"
         :disabled="busy || chosen.length === 0 || requests.some(changed)"
         data-testid="drafts-approve"
         @click="emit('approve', chosen)"
       >
         Valider l’envoi{{ chosen.length > 1 ? ` (${chosen.length})` : '' }}
-      </button>
+      </UiButton>
     </div>
   </div>
 </template>

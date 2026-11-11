@@ -40,7 +40,7 @@
     >
       <span
         aria-hidden="true"
-        class="rounded-md bg-ai-soft px-1.5 text-[11px] leading-[18px] font-semibold text-ai"
+        class="rounded-md bg-ai-soft px-1.5 text-xs leading-[18px] font-semibold text-ai"
         >IA</span
       >
       valeur lue par l’IA dans l’annonce, à confirmer

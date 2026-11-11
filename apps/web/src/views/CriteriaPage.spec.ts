@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import { fakeCriteria } from '@/test/criteria-fixtures'
+import { useLeaveGuardStore } from '@/stores/leave-guard'
 
 const apiMock = vi.hoisted(() => ({
   searchCriteria: {
@@ -62,7 +63,7 @@ describe('CriteriaPage', () => {
     )
     expect(first.text()).toContain('Talence fictif')
     expect(first.get('[data-testid="count"]').text()).toBe('3')
-    expect(first.text()).toContain('1 nouvelle(s)')
+    expect(first.text()).toContain('1 nouvelle')
     expect(first.text()).toContain('dont 1 à confirmer faute d’adresse')
     // Lot 14 : annonces par niveau d'adéquation et marges appliquées.
     expect(
@@ -84,12 +85,17 @@ describe('CriteriaPage', () => {
       'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
       { active: false, expectedUpdatedAt: '2026-11-03T10:00:00.000Z' }
     )
-    const confirm = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true)
+    await flushPromises()
+    // Lot 22 : la suppression se confirme sur place, sans `window.confirm`.
+    const confirm = vi.fn()
     vi.stubGlobal('confirm', confirm)
-    window.confirm = confirm
     await first.get('[data-action="delete"]').trigger('click')
     expect(apiMock.searchCriteria.remove).not.toHaveBeenCalled()
-    await first.get('[data-action="delete"]').trigger('click')
+    expect(first.text()).toContain(
+      'Supprimer définitivement le critère « Talence fictif » ?'
+    )
+    await first.get('[data-action="confirm-delete"]').trigger('click')
+    expect(confirm).not.toHaveBeenCalled()
     expect(apiMock.searchCriteria.remove).toHaveBeenCalledWith(
       'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
     )
@@ -106,6 +112,44 @@ describe('CriteriaPage', () => {
     await wrapper.get('input[type="checkbox"]').setValue(true)
     await flushPromises()
     expect(apiMock.searchCriteria.list).toHaveBeenLastCalledWith(true)
+    wrapper.unmount()
+  })
+
+  it('lot 22 : fermer un critère modifié demande confirmation', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    const create = wrapper
+      .findAll('button')
+      .find(b => b.text().includes('Nouveau critère'))
+    await create?.trigger('click')
+    await flushPromises()
+    const close = () =>
+      (
+        document.body.querySelector('[aria-label="Fermer"]') as HTMLElement
+      ).click()
+    // Rien de saisi : le panneau se ferme.
+    close()
+    await flushPromises()
+    expect(document.body.querySelector('#c-name')).toBeNull()
+
+    await create?.trigger('click')
+    await flushPromises()
+    const name = document.body.querySelector('#c-name') as HTMLInputElement
+    name.value = 'Talence sud'
+    name.dispatchEvent(new Event('input'))
+    await flushPromises()
+    close()
+    await flushPromises()
+    const guard = useLeaveGuardStore()
+    expect(guard.pending?.title).toBe('Nouveau critère')
+    expect(document.body.querySelector('#c-name')).not.toBeNull()
+    guard.stay()
+    await flushPromises()
+    expect(document.body.querySelector('#c-name')).not.toBeNull()
+    close()
+    guard.confirmLeave()
+    await flushPromises()
+    expect(document.body.querySelector('#c-name')).toBeNull()
     wrapper.unmount()
   })
 })

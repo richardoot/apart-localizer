@@ -4,6 +4,9 @@
   import { supabase } from '@/lib/supabase'
   import { leaveApp } from '@/lib/redirect'
   import { describeScope, redirectHost } from '@/lib/oauth-consent'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiSkeleton from '@/components/ui/UiSkeleton.vue'
 
   /**
    * Page de consentement du serveur OAuth 2.1 de Supabase (GoTrue) : un
@@ -30,7 +33,7 @@
     const id = route.query.authorization_id
     if (typeof id !== 'string' || id === '') {
       error.value =
-        "Paramètre authorization_id manquant : relancez la connexion depuis l'application cliente."
+        "Cette demande est incomplète : relance la connexion depuis l'application qui demande l'accès (claude.ai, Claude Code)."
       loading.value = false
       return
     }
@@ -96,38 +99,34 @@
     <div class="rounded-2xl border border-line bg-surface p-8 shadow-panel">
       <h1 class="font-display text-2xl font-bold">Demande d'autorisation</h1>
 
-      <p
+      <div
         v-if="loading"
-        class="mt-6 text-sm text-muted"
+        class="mt-6"
+        role="status"
+        aria-busy="true"
         data-testid="consent-loading"
       >
-        Chargement de la demande…
-      </p>
+        <span class="sr-only">Chargement de la demande…</span>
+        <UiSkeleton :count="4" />
+      </div>
 
       <div v-else-if="error && !clientName" class="mt-6 space-y-4">
-        <p
-          role="alert"
-          class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-        >
+        <UiAlert>
           {{ error }}
-        </p>
-        <button
-          type="button"
-          class="w-full rounded-lg border border-line px-4 py-2 text-sm hover:border-accent"
-          @click="router.replace({ name: 'home' })"
-        >
-          Retour à la synthèse
-        </button>
+        </UiAlert>
+        <UiButton block @click="router.replace({ name: 'home' })">
+          Retour à l’accueil
+        </UiButton>
       </div>
 
       <div v-else class="mt-6 space-y-5">
-        <div class="rounded-xl bg-surface-2 p-4">
+        <div class="rounded-2xl bg-surface-2 p-4">
           <p class="text-sm text-muted">L'application</p>
           <p class="text-lg font-semibold" data-testid="consent-client">
             {{ clientName }}
           </p>
           <p class="mt-2 text-sm text-muted">
-            demande l'accès à votre compte<template v-if="userEmail">
+            demande l'accès à ton compte<template v-if="userEmail">
               <strong class="text-fg"> {{ userEmail }}</strong></template
             >.
           </p>
@@ -142,50 +141,46 @@
             v-for="scope in scopes"
             :key="scope"
             :data-testid="`scope-${scope}`"
-            class="rounded-lg border border-line px-3 py-2 text-sm"
+            class="rounded-xl border border-line px-3 py-2 text-sm"
           >
             {{ describeScope(scope) }}
           </li>
         </ul>
 
         <p
-          class="rounded-lg bg-warn-soft px-3 py-2 text-xs"
+          class="rounded-lg bg-warn-soft px-3 py-2 text-sm"
           data-testid="consent-warning"
         >
-          Une fois autorisée, cette application agit en votre nom par le
-          connecteur MCP : elle lit les annonces de votre espace et peut en
-          ajouter ou en modifier (avis, tâches, offres, statuts), sans jamais
-          rien supprimer. Chaque écriture est journalisée au canal « MCP ».
-          N'autorisez que des applications que vous avez lancées vous-même.
+          Une fois autorisée, cette application agit en ton nom : elle lit les
+          annonces de ton espace et peut en ajouter ou en modifier (avis,
+          tâches, offres, statuts), sans jamais rien supprimer. Chaque écriture
+          est inscrite au journal, au nom de Claude. N'autorise que des
+          applications que tu as lancées toi-même.
         </p>
 
-        <p
-          v-if="error"
-          role="alert"
-          class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-        >
+        <UiAlert v-if="error">
           {{ error }}
-        </p>
+        </UiAlert>
 
         <div class="flex gap-3">
-          <button
-            type="button"
+          <UiButton
+            class="flex-1"
             data-testid="consent-deny"
-            class="flex-1 rounded-lg border border-line px-4 py-2 hover:border-accent disabled:opacity-60"
             :disabled="submitting"
             @click="decide('deny')"
           >
             Refuser
-          </button>
-          <button
-            type="button"
+          </UiButton>
+          <UiButton
+            variant="primary"
+            class="flex-1"
             data-testid="consent-approve"
-            class="flex-1 rounded-lg bg-accent px-4 py-2 font-medium text-accent-fg hover:opacity-90 disabled:opacity-60"
-            :disabled="submitting"
+            :loading="submitting"
+            loading-label="Redirection…"
             @click="decide('approve')"
           >
-            {{ submitting ? 'Redirection…' : 'Autoriser' }}
-          </button>
+            Autoriser
+          </UiButton>
         </div>
       </div>
     </div>

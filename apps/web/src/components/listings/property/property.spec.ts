@@ -324,7 +324,9 @@ describe('Le bien : énergie', () => {
     )
     await wrapper.get('[data-action="search-dpe"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[role="alert"]').text()).toBe('Échec.')
+    expect(wrapper.get('[role="alert"]').text()).toBe(
+      'La recherche à l’ADEME a échoué.'
+    )
   })
 
   it('édition : DPE, GES et date', async () => {
@@ -569,5 +571,38 @@ describe('onglet « Le bien »', () => {
     await wrapper.get('[data-testid="edit-copro"]').trigger('click')
     expect(editor.pending.value?.section).toBe('features')
     expect(editor.editing.value).toBe('features')
+  })
+})
+
+describe('lot 22 : un nombre illisible est refusé au champ', () => {
+  it('« 45 m² » dans la surface : rien n’est envoyé, le message est au champ, qui reçoit le focus', async () => {
+    const listing = fakeListing()
+    const { wrapper, submit } = mountWith(FeaturesSection, { listing }, listing)
+    await wrapper.get('[data-testid="edit-features"]').trigger('click')
+    const surface = wrapper.get('#f-surface')
+    await surface.setValue('45 m²')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(submit).not.toHaveBeenCalled()
+    expect(surface.attributes('aria-invalid')).toBe('true')
+    expect(wrapper.get('[data-field="f-surface"]').text()).toContain(
+      '« 45 m² » n’est pas un nombre'
+    )
+    expect(document.activeElement?.id).toBe('f-surface')
+    // L'unité est dans la case, plus dans l'intitulé.
+    expect(wrapper.get('label[for="f-surface"]').text()).toBe('Surface Carrez')
+  })
+
+  it('le montant illisible d’un poste de travaux est dit sur son champ', async () => {
+    const listing = fakeListing()
+    const { wrapper, submit } = mountWith(WorksSection, { listing }, listing)
+    await wrapper.get('[data-testid="edit-works"]').trigger('click')
+    const amount = wrapper.findAll('[aria-label="Montant du poste"]')[0]
+    await amount?.setValue('8k')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(submit).not.toHaveBeenCalled()
+    expect(amount?.attributes('aria-invalid')).toBe('true')
+    expect(wrapper.text()).toContain('« 8k » n’est pas un nombre')
   })
 })

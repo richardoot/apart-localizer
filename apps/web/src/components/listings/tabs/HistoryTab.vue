@@ -5,6 +5,10 @@
     ListingStatus,
     Member,
   } from '@apart/contracts'
+  import QueryState from '@/components/ui/QueryState.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCard from '@/components/ui/UiCard.vue'
+  import UiChip from '@/components/ui/UiChip.vue'
   import { useCriteriaFitHistory } from '@/composables/useListings'
   import { useListingChecks } from '@/composables/useListingChecks'
   import {
@@ -52,18 +56,10 @@
   const filter = ref<TimelineFilter>('all')
   const shown = computed(() => filterTimeline(entries.value, filter.value))
   const counts = computed(() => timelineCounts(entries.value))
-  const loading = computed(
-    () => journal.isPending.value || checks.isPending.value
-  )
   const checking = ref(false)
   const footer = computed(() =>
     historyFooter(props.item.listing, props.item.links)
   )
-
-  const pill = (on: boolean) =>
-    on
-      ? 'border-accent bg-accent text-accent-fg'
-      : 'border-line bg-surface text-fg hover:bg-surface-2'
 </script>
 
 <template>
@@ -75,30 +71,26 @@
         class="flex flex-wrap gap-1.5"
         data-testid="history-filters"
       >
-        <button
+        <UiChip
           v-for="choice in TIMELINE_FILTERS"
           :key="choice.id"
-          type="button"
-          class="inline-flex min-h-11 items-center gap-1 rounded-full border-[1.5px] px-3.5 text-sm"
-          :class="pill(filter === choice.id)"
-          :aria-pressed="filter === choice.id"
+          :selected="filter === choice.id"
+          :count="counts[choice.id]"
           :data-filter="choice.id"
           @click="filter = choice.id"
         >
-          {{ choice.label
-          }}<span class="text-xs opacity-80">({{ counts[choice.id] }})</span>
-        </button>
+          {{ choice.label }}
+        </UiChip>
       </div>
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center rounded-lg border border-accent bg-surface px-3.5 text-sm font-semibold text-accent hover:bg-accent-soft"
+      <UiButton
+        variant="outline"
         :aria-expanded="checking"
         aria-controls="history-check-actions"
         data-testid="history-check"
         @click="checking = !checking"
       >
         Vérifier sur les portails
-      </button>
+      </UiButton>
     </div>
 
     <div id="history-check-actions" :hidden="!checking">
@@ -116,23 +108,31 @@
       />
     </div>
 
-    <section
-      class="rounded-2xl border border-line bg-surface px-4 pt-1 pb-2 sm:px-5"
-      aria-labelledby="history-title"
-    >
+    <UiCard class="pt-1 pb-2" aria-labelledby="history-title">
       <h2 id="history-title" class="sr-only">Chronologie</h2>
-      <p
-        v-if="journal.error.value"
-        role="alert"
-        class="my-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
+      <QueryState
+        :query="[journal, checks]"
+        :empty="shown.length === 0"
+        :empty-text="
+          filter === 'all'
+            ? 'Rien dans l’historique de cette annonce pour l’instant.'
+            : 'Rien de ce type pour cette annonce : choisis « Tout » pour voir le reste.'
+        "
+        skeleton="lines"
+        :skeleton-count="4"
+        loading-label="l’historique"
+        class="py-3"
       >
-        {{ journal.error.value.message }}
-      </p>
-      <p v-else-if="loading" class="py-4 text-sm text-muted">
-        Chargement de l’historique…
-      </p>
-      <template v-else>
-        <ol v-if="shown.length" data-testid="timeline">
+        <template #empty>
+          <p class="py-4 text-sm text-muted" data-testid="timeline-empty">
+            {{
+              filter === 'all'
+                ? 'Rien dans l’historique de cette annonce pour l’instant.'
+                : 'Rien de ce type pour cette annonce : choisis « Tout » pour voir le reste.'
+            }}
+          </p>
+        </template>
+        <ol data-testid="timeline">
           <TimelineRow
             v-for="(entry, index) in shown"
             :key="entry.key"
@@ -140,25 +140,22 @@
             :first="index === 0"
           />
         </ol>
-        <p v-else class="py-4 text-sm text-muted" data-testid="timeline-empty">
-          Rien de ce type pour cette annonce.
-        </p>
         <div
           v-if="journal.hasMore.value"
           class="flex justify-center border-t border-line pt-2"
         >
-          <button
-            type="button"
-            class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold text-accent hover:underline disabled:opacity-60"
-            :disabled="journal.isFetching.value"
+          <UiButton
+            variant="ghost"
+            class="font-semibold text-accent"
+            :loading="journal.isFetching.value"
             data-testid="history-more"
             @click="journal.loadMore()"
           >
             Plus anciens
-          </button>
+          </UiButton>
         </div>
-      </template>
-    </section>
+      </QueryState>
+    </UiCard>
 
     <p class="text-sm text-muted" data-testid="history-footer">{{ footer }}</p>
   </div>

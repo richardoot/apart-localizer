@@ -96,6 +96,7 @@
         : 'flex flex-wrap gap-1.5'
     "
   >
+    <!-- Lot 22 : un bouton radio (role="radio", flèches), pas un UiButton. -->
     <button
       v-for="(choice, index) in choices"
       :key="choice.num"
@@ -115,7 +116,7 @@
       :class="[
         classes(choice),
         compact || variant === 'global'
-          ? 'h-12 text-[17px] font-bold'
+          ? 'h-12 text-lg font-bold'
           : 'inline-flex min-h-11 min-w-11 flex-col items-center justify-center px-2.5 text-sm leading-tight',
         !compact && variant === 'global' ? 'w-12' : '',
       ]"
@@ -125,7 +126,7 @@
       <span>{{ choice.num }}</span>
       <span
         v-if="!compact && variant === 'score'"
-        class="text-[11px] font-medium"
+        class="text-xs font-medium"
         aria-hidden="true"
         >{{ choice.word }}</span
       >

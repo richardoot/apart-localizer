@@ -207,10 +207,12 @@ describe('AssumptionsPage', () => {
     )
   })
 
-  it('hypothèses illisibles : l’erreur, sans formulaire', async () => {
+  it('hypothèses illisibles : l’erreur et « Réessayer », sans formulaire', async () => {
     apiMock.assumptions.current.mockRejectedValue(new Error('Erreur 500'))
     const page = await mountPage()
-    expect(page.get('[role="alert"]').text()).toBe('Erreur 500')
+    // Lot 22 : un échec sans message du serveur dit « La lecture a échoué. ».
+    expect(page.get('[role="alert"]').text()).toContain('La lecture a échoué.')
+    expect(page.find('[data-testid="retry"]').exists()).toBe(true)
     expect(page.find('form').exists()).toBe(false)
   })
 })

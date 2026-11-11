@@ -33,6 +33,10 @@ Richard et Chloé sur ordinateur et sur téléphone ; lot 20 : une vraie visite 
 l'aveugle, puis confrontée ; lot 21 : un vrai tri à deux, par téléphone et sur ordinateur, jusqu'à
 une proposition tranchée), à constater après la mise en ligne.
 
+Audit d'interface du 10 novembre 2026 : les lots 22 à 26, en fin de document, sont **validés par
+Richard, à faire dans l'ordre** ; le téléphone visé est un iPhone. Le lot 22 (socle d'interface)
+est livré, sans migration ; les lots 23 à 26 restent à faire.
+
 ## Lot 0 : socle
 
 Statut : livré.
@@ -903,3 +907,217 @@ Fini quand : à deux, l'un trie et propose, l'autre confirme ou dit non, et un d
 d'un clic ; seul, tout s'applique tout de suite ; aucune annonce ne change d'étape à la
 migration. (Vérifié en tests automatisés, e2e REST et MCP JSON-RPC compris, et sur captures
 Chromium, jeu fictif ; à confirmer par Richard et Chloé sur leurs vraies annonces.)
+
+## Audit d'interface du 10 novembre 2026 : lots 22 à 26
+
+Statut : validés par Richard le 10 novembre 2026 ; à faire dans l'ordre, un lot à la fois.
+
+- **Méthode** : parcours de l'application sur le jeu fictif (ordinateur 1440 px, téléphone 390 px,
+  thème sombre, Chromium) et relecture du code de `apps/web`. Rien n'a été vérifié sur un vrai
+  téléphone ni avec un lecteur d'écran.
+- **Constat** : les écrans des lots 19 à 21 (fiche en sept onglets, avis, tri) sont bons. Trois
+  faiblesses reviennent partout : le téléphone est traité comme une mise en page et pas comme un
+  parcours ; l'accueil et le haut de la fiche montrent des données avant la réponse ; chaque
+  composant gère seul ses retours (ni message commun, ni état d'erreur commun, ni garde sur le
+  bouton retour).
+- **À garder tel quel** : le mode tri, la barre d'étapes avec une question par étape, la page
+  Hypothèses, la saisie des avis, la discipline des jetons de couleur.
+- **Décidé le 10 novembre 2026** : le téléphone visé est un **iPhone** (Safari, et l'application
+  installée sur l'écran d'accueil) : cibles de 44 px, champs à 16 px, marges des écrans à encoche,
+  et pas de cible de partage (à confirmer sur l'appareil), donc « coller le lien » au lot 24 ;
+  **« tu » partout**, sauf les messages aux agences, qui restent au « vous » ; la fiche en **pleine
+  page** sur ordinateur (notée « plus tard » au lot 19).
+- **Corrections rapides, rangées dans les lots** : les textes périmés (« onglet « Échanges » » sur
+  l'accueil, « Une fiche peut en surcharger certains » dans Hypothèses, « filtres de statut » dans
+  les cartes) et le texte blanc sur `bad` et `warn` en thème sombre au lot 22 ; « Ce qui t'attend »
+  en tête de l'accueil et les tâches cliquables au lot 23 ; les ventes comparables repliées, le
+  journal « Depuis ta dernière ouverture » replié et les « Prochaines étapes » cliquables au
+  lot 25.
+
+Chaque lot aura son ADR au moment où il sera fait.
+
+## Lot 22 : socle d'interface
+
+Statut : livré le 10 novembre 2026 (code, tests, documentation ; ADR 0032), sans migration ni
+variable nouvelle ; à relire sur un vrai iPhone.
+
+- **Pourquoi** : relevé dans `apps/web/src` : 281 boutons pour 159 recettes de classes, 144 champs
+  de texte pour 22, quatre composants partagés seulement (`components/ui`), 23 textes
+  « Chargement… » et aucun squelette, aucune mise à jour immédiate (`onMutate`), aucune garde de
+  navigation (`onBeforeRouteLeave`, `beforeunload`). Une requête échouée ressemble à « rien à
+  faire » (tri, « À trancher », « À valider »). « 250k » dans un critère devient « pas de filtre »
+  sans message ; « 45 m² » dans une fiche s'enregistre vide. « vous » dans 52 fichiers, « tu » dans
+  8.
+- **Composants partagés** : bouton (principal, secondaire, destructif, lien ; état « en cours »),
+  champ (le `UnitField` des Hypothèses généralisé : libellé, unité, aide, erreur), pastille, carte
+  de section, puce et sélecteur segmenté, menu et confirmation sur place avec reka-ui (la cloche,
+  l'export et la suppression d'un critère, seul `window.confirm` restant), un seul jeu d'icônes.
+- **Retours** : une zone de messages commune avec « Annuler » quand l'action s'y prête
+  (« Repêcher », réponse du vendeur, tâche cochée) ; l'erreur s'affiche dans la section où l'on a
+  cliqué, plus en haut de la page.
+- **États** : un composant commun pour le chargement (squelette), l'erreur (« Réessayer ») et le
+  vide (qui dit quoi faire, et parle des filtres quand il y en a).
+- **Garde des modifications** : le bouton retour du navigateur et du téléphone, la fermeture d'un
+  panneau (critère dessiné, nouvelle annonce remplie par l'IA) et le rechargement après une mise à
+  jour du service worker passent par la même garde que les sections de la fiche.
+- **Saisie** : un nombre illisible est refusé avec un message au champ, jamais vidé ; à l'échec, le
+  premier champ en erreur reçoit le focus ; une erreur dans une autre section est nommée.
+- **Tactile et lisibilité** : cibles de 44 px, champs à 16 px (pas de zoom à la saisie sur iOS, à
+  vérifier), focus visible partout, contraste du thème sombre, moins de textes à 11 et 12 px.
+- **Textes** : « tu » partout (les messages aux agences restent au « vous »), pluriels accordés (69 « (s) »), vocabulaire
+  de développeur retiré des écrans (VAPID, webhook, `docs/*.md`, `set_assumptions`), l'accueil
+  renommé « Accueil » (« Synthèse » reste le premier onglet de la fiche).
+- Aucun changement d'API, de schéma ni de calcul.
+
+Fini quand : plus aucun bouton ni champ écrit à la main dans une vue ; couper le réseau pendant un
+tri affiche une erreur et « Réessayer » ; revenir en arrière sur une section modifiée demande
+confirmation ; les tests existants passent sans changer une charge utile.
+
+Livré :
+
+- **Composants partagés** dans `components/ui` (recettes dans `lib/ui.ts`) : `UiButton`, `UiField`
+  et ses cases (`UiInput`, `UiSelect`, `UiTextarea`, `UiCheckbox`), `UiBadge`, `UiCard`, `UiChip`,
+  `UiSegmented`, `UiMenu` et `UiPopover` (la cloche, l'export), `UiConfirm` (la suppression d'un
+  critère, plus aucun `window.confirm`), `UiAlert`, `UiIcon` (un seul jeu d'icônes), `UiSkeleton`.
+  `UnitField`, `SelectField` et `FormField` sont retirés ; les constantes `buttonClass` /
+  `inputClass` des vues aussi.
+- **Retours** : zone de messages commune (une dans la page, une par panneau), « Annuler » sur la
+  tâche cochée, « Repêcher », la réponse du vendeur, « Plus en ligne », le critère d'avis masqué ;
+  les erreurs s'affichent dans la section où l'on a cliqué.
+- **États** : `QueryState` partout où une lecture alimente l'écran ; tri, « À trancher », « À
+  valider », notifications, la fiche et l'accueil disent l'échec et proposent « Réessayer ».
+- **Garde des modifications** : retour arrière (navigateur, glissé de l'iPhone), fermeture de la
+  nouvelle annonce, d'un critère, de la page Hypothèses, mise à jour du service worker et fermeture
+  de l'onglet (sauf Safari iOS, qui n'envoie pas `beforeunload`).
+- **Saisie** : « 45 m² », « 250k » refusés au champ avec ce qui a été tapé ; plus de bornes
+  appliquées en silence ; focus sur le premier champ en erreur ; l'erreur d'une autre section est
+  nommée ; le refus du serveur se dit dans la section.
+- **Tactile et lisibilité** : 44 px au téléphone et au toucher, champs à 16 px, focus visible
+  partout, encre des fonds pleins par jeton en thème sombre, DPE lisibles, plus d'opacité sur les
+  lignes écartées, plus de tailles de 10, 11 ou 13 px.
+- **Textes** : « tu » partout (web, `domain`, `contracts`, messages de l'API), « vous » gardé pour
+  les messages aux agences ; pluriels accordés ; vocabulaire de développeur retiré ; « Accueil ».
+
+Mesuré à la livraison : aucun `<button>`, `<input>`, `<select>` ni `<textarea>` écrit à la main
+dans `views/` ; 13 exceptions commentées « Lot 22 » dans les composants (onglets de la fiche,
+barre d'étapes, ligne de « Ce qui t'attend », notes en boutons radio, cases du tableau de
+sensibilité, tuiles, bascule du notaire, fond de carte, curseur de rayon, deux champs de fichier,
+le bouton de la bulle MapLibre). Couper l'API
+pendant un tri : « Pas de connexion au serveur » et « Réessayer » (capture Chromium au format
+téléphone). Retour arrière sur « Caractéristiques » modifiée : le bandeau demande, « Abandonner »
+navigue.
+
+Reste : les deux messages de louabilité de `domain/rental-checks.ts` encore au « vous » (figés par
+le test sur les annonces réelles, à régénérer avec Richard) ; un `UiButton` de grande taille (le
+tri le force) ; une vérification sur un vrai iPhone (zoom à 16 px, marges de l'encoche, glissé
+arrière dans l'application installée) et au lecteur d'écran.
+
+## Lot 23 : le téléphone et l'accueil
+
+Statut : validé, à faire après le lot 22.
+
+- **Pourquoi** : au téléphone l'en-tête collé prend trois lignes (130 px sur 844), l'accueil fait
+  5,9 écrans et une seule annonce tient sur le premier écran de la liste. « Ce qui t'attend »
+  n'existe que dans Annonces ; l'accueil montre six tuiles, un « Par statut » qui double les étapes
+  avec un autre vocabulaire, et « 71 tâches ouvertes » sans lien. Un espace vide affiche des zéros.
+  Rien ne dit qui est connecté.
+- **Navigation** : au téléphone, une barre en bas (Accueil, Annonces, Ajouter, Notifications,
+  Plus) et un en-tête d'une ligne ; sur ordinateur, thème, espace et déconnexion dans un menu du
+  compte qui montre le nom du membre ; chaque page secondaire (brief d'un critère, compte rendu
+  d'exploration, critères des avis, préférences de notification) allume son entrée du menu.
+- **Accueil « Ce qui t'attend »** : en tête, le bandeau du lot 21 étendu : à trier, à confirmer, à
+  trancher, messages à valider, relances dues, visites à venir, avis à donner, tâches en retard ;
+  chaque ligne ouvre le bon travail. « Depuis ta dernière visite » en une ligne. Les étapes
+  remplacent « Par statut ». Les chiffres généraux passent en bas.
+- **Toutes les tâches** : une vue des tâches ouvertes de toutes les annonces, par annonce et par
+  retard, depuis l'accueil.
+- **Mise en route** : pour un espace vide, la suite hypothèses, critères, première annonce,
+  connecter Claude, à la place des zéros.
+- **Annonces au téléphone** : le bandeau en une ligne, le sélecteur de vue rangé dans « Filtres »,
+  l'étape active ramenée à l'écran.
+- `domain` : le contenu de « Ce qui t'attend » reste calculé par `workflowOverview`, étendu.
+
+Fini quand : au téléphone, l'en-tête tient en une ligne et trois annonces sont visibles sans
+défiler ; l'accueil répond à « que faire maintenant ? » sur le premier écran ; un nouvel espace
+sait par où commencer.
+
+## Lot 24 : mode visite et capture mobile
+
+Statut : validé, à faire. Téléphone visé : iPhone.
+
+- **Pourquoi** : pendant une visite (parcours P4), cocher les points, photographier, noter les
+  critères et écrire une remarque se font dans trois onglets ; « Pendant la visite » est une liste
+  qu'on ne peut pas cocher ; une visite planifiée ne peut plus recevoir son compte rendu après
+  « Marquer faite ». Après un partage (parcours P2), l'analyse rend un formulaire de 45 champs
+  ouverts, et un retour en arrière le perd.
+- **Mode visite** : depuis une annonce « À visiter » ou la visite du jour sur l'accueil, un écran
+  unique : points à vérifier cochables, photo, remarque, notes par critère (la saisie du lot 20),
+  compte rendu ; tout s'enregistre au fil de l'eau et attend le réseau s'il manque.
+- **Visite modifiable** : compte rendu, points forts et faibles, note et participants se corrigent
+  après coup, par leur auteur ou un participant.
+- **Capture en cinq champs** : après l'analyse, titre, prix, surface, commune et lien, puis
+  « Enregistrer » ; le reste se complète dans la fiche, où les champs lus par l'IA sont déjà
+  marqués. La saisie complète reste disponible.
+- **Sur iPhone, coller le lien** : la feuille de partage d'iOS ne propose pas l'application (à
+  confirmer sur l'appareil) ; « Ajouter » dans la barre du bas lit le lien du presse-papiers ou le
+  laisse coller, et donne le même parcours. La cible de partage reste pour Android.
+- Tâches cochées et choix du tri appliqués tout de suite à l'écran, annulés si le serveur refuse.
+- Interdits inchangés : aucune page de portail téléchargée, photos privées.
+
+Fini quand : une visite se note d'une seule main sans changer d'onglet, même avec un réseau
+faible ; une annonce partagée s'enregistre en moins d'une minute. (À confirmer par une vraie
+visite.)
+
+## Lot 25 : la fiche répond d'abord
+
+Statut : validé, à faire.
+
+- **Pourquoi** : la fiche est un tiroir de 1160 px sur un écran de 1440, donc une page déguisée ;
+  titre, prix et verdict disparaissent au défilement. Le journal « Depuis votre dernière
+  ouverture » passe avant les quatre chiffres de la Synthèse. Trois jugements s'affichent en
+  pastilles sans étiquette (rentabilité « Cible », critères de recherche « Hors critères »,
+  louabilité « Sous conditions ») : une même carte porte « Cible » et « Hors critères ». Dans
+  Négocier, 65 ventes comparables précèdent « Prix et offres » (3,5 écrans, 5 au téléphone). Aucune
+  image ne distingue deux appartements.
+- **Pleine page** sur ordinateur (le panneau reste au téléphone), avec une ligne collée : retour,
+  titre, prix, verdict, statut.
+- **Une phrase et une action** en tête de la Synthèse : la réponse à « Faut-il y aller ? » écrite
+  par `domain` à partir du verdict, de l'adéquation et du prix cible (rien d'inventé), et l'action
+  de l'étape : planifier une visite, donner mon avis, préparer une offre.
+- **Trois jugements étiquetés** partout (liste, cartes, en-tête, tri) : « Rentabilité », « Recherche »,
+  « Location », toujours dans le même ordre.
+- **Négocier** : cinq ventes comparables puis « voir les 65 » ; « Prix et offres » remonte sous le
+  prix cible ; la réponse du vendeur se confirme et s'annule.
+- **Le bien au téléphone** : « Nos notes » visible sans déplier ; le prix se corrige depuis
+  l'en-tête.
+- **Image de couverture** : la première photo de visite, choisie par un membre ; jamais une image
+  prise sur un portail. Avant la première visite, rien.
+- TRI, VAN et flux de trésorerie reçoivent leur définition « ? » (glossaire de `contracts`).
+
+Fini quand : sur ordinateur comme au téléphone, le premier écran de chaque onglet donne la réponse
+et l'action suivante ; personne ne demande ce que veut dire « Cible » à côté de « Hors critères ».
+
+## Lot 26 : trouver, comparer, Claude
+
+Statut : validé, à faire.
+
+- **Pourquoi** : les filtres actifs restent cachés derrière « Filtres », suivent d'une étape à
+  l'autre, et les compteurs des étapes les ignorent ; un clic sur la carte pose un filtre de rayon.
+  Comparer demande « Filtres », puis « Voir le tableau complet », puis des cases, et perd l'étape
+  au retour. Fermer une fiche puis revenir en arrière la rouvre. Aucune page ne dit comment
+  connecter Claude ni ce qu'il a fait ; les explorations n'ont pas de liste.
+- **Filtres visibles** : une puce par filtre actif au-dessus de la liste, un vide qui les nomme,
+  des compteurs cohérents avec ce qui est affiché.
+- **Comparer** : cocher depuis la liste et les cartes, barre « Comparer (3) », sélection dans
+  l'URL, retour à l'étape d'origine.
+- **Vrais liens** : le titre d'une annonce est un lien (nouvel onglet possible) dans la liste, les
+  cartes et le tableau ; le bouton retour ferme la fiche sans la rouvrir.
+- **Page « Claude »** : l'adresse du connecteur et les étapes pour le brancher, les demandes à
+  copier (explorer, tournée de vérification, questions aux agences), la liste des explorations, ce
+  que Claude a écrit (journal du canal MCP), les messages à valider.
+- **Carte** : les couches et la légende repliées, le filtre de rayon posé par un bouton et plus par
+  un clic.
+- MCP : aucun outil nouveau.
+
+Fini quand : on sait d'un coup d'œil pourquoi une étape paraît vide ; comparer trois annonces prend
+trois clics ; un membre qui n'a jamais branché Claude y arrive depuis l'application.

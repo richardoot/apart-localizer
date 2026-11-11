@@ -4,12 +4,14 @@
   import { useAssumptionsDraftContext } from '@/composables/useAssumptionsDraft'
   import { LEASE_TYPE_LABELS } from '@/lib/labels'
   import { LEASE_TYPES } from '@/lib/assumptions-form'
-  import SelectField from './SelectField.vue'
-  import UnitField from './UnitField.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import UiIcon from '@/components/ui/UiIcon.vue'
 
   /**
-   * « Quel est votre calendrier ? » (lot 13) : phase 1 « Vous y habitez »
-   * (date d'achat, loyer actuel, entretien) puis phase 2 « Vous le louez »
+   * « Quel est ton calendrier ? » (lot 13) : phase 1 « Tu y habites »
+   * (date d'achat, loyer actuel, entretien) puis phase 2 « Tu le loues »
    * (date de mise en location, vacance, frais fixes). L'année de mise en
    * location par défaut est rappelée sous la date et se change à la demande.
    * Lot 19 : l'année et le type de location valent pour toutes les annonces
@@ -31,18 +33,15 @@
       <div
         role="group"
         aria-labelledby="phase-1-title"
-        class="grid flex-1 content-start gap-3 rounded-xl border border-line p-3.5"
+        class="grid flex-1 content-start gap-3 rounded-2xl border border-line p-4"
         data-testid="phase-1"
       >
         <p class="flex flex-wrap items-center gap-2">
-          <span
-            class="rounded-full bg-fg px-2.5 py-0.5 text-xs font-semibold text-bg"
-            >Phase 1</span
-          >
-          <strong id="phase-1-title">Vous y habitez</strong>
+          <UiBadge variant="solid" class="bg-fg! text-bg!">Phase 1</UiBadge>
+          <strong id="phase-1-title">Tu y habites</strong>
           <DefinitionButton term="occupancy_cost" />
         </p>
-        <UnitField
+        <UiField
           id="h-purchase"
           v-model="form.purchaseDate"
           type="date"
@@ -51,51 +50,46 @@
           :change="changeOf('purchaseDate')"
           :error="errorOf('purchaseDate')"
         />
-        <UnitField
+        <UiField
           id="h-current-rent"
           v-model="form.currentRent"
-          label="Votre loyer actuel"
+          label="Ton loyer actuel"
           unit="€/mois"
           inputmode="numeric"
           placeholder="non renseigné"
-          hint="celui du foyer, pour comparer avec ce que l'achat vous coûtera"
+          hint="celui du foyer, pour comparer avec ce que l'achat te coûtera"
           :change="changeOf('currentRent')"
           :error="errorOf('currentRent')"
         />
-        <UnitField
+        <UiField
           id="h-maintenance"
           v-model="form.maintenanceAnnual"
           label="Entretien"
           unit="€/an"
           inputmode="numeric"
           placeholder="0"
-          hint="pendant que vous y habitez ; vide = compté 0"
+          hint="pendant que tu y habites ; vide = compté 0"
           :change="changeOf('maintenanceAnnual')"
           :error="errorOf('maintenanceAnnual')"
         />
       </div>
-      <div
-        aria-hidden="true"
-        class="hidden self-center text-xl text-muted sm:block"
-      >
-        →
-      </div>
+      <UiIcon
+        name="arrow-right"
+        class="hidden size-6 self-center text-muted sm:block"
+      />
       <div
         role="group"
         aria-labelledby="phase-2-title"
-        class="grid flex-1 content-start gap-3 rounded-xl border border-line p-3.5"
+        class="grid flex-1 content-start gap-3 rounded-2xl border border-line p-4"
         data-testid="phase-2"
       >
         <p class="flex flex-wrap items-center gap-2">
-          <span
-            class="rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold text-accent-fg"
-            >Phase 2</span
-          >
-          <strong id="phase-2-title">Vous le louez</strong>
+          <UiBadge tone="accent" variant="solid">Phase 2</UiBadge>
+          <strong id="phase-2-title">Tu le loues</strong>
           <DefinitionButton term="rental_phases" />
         </p>
         <div class="grid gap-1.5">
-          <UnitField
+          <UiField
             id="h-rental-start"
             v-model="form.rentalStartDate"
             type="date"
@@ -104,25 +98,23 @@
             :change="changeOf('rentalStartDate')"
             :error="errorOf('rentalStartDate')"
           />
-          <button
-            type="button"
-            class="inline-flex min-h-11 items-center gap-2 justify-self-start rounded-lg px-1 text-sm font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+          <UiButton
+            variant="ghost"
+            class="justify-self-start px-1 font-semibold text-accent"
+            :icon="openPanels.rentalYear ? 'chevron-down' : 'chevron-right'"
             :aria-expanded="openPanels.rentalYear"
             aria-controls="rental-year-panel"
             data-testid="toggle-rental-year"
             @click="openPanels.rentalYear = !openPanels.rentalYear"
           >
-            <span aria-hidden="true">{{
-              openPanels.rentalYear ? '▾' : '▸'
-            }}</span>
             Changer l'année par défaut
-          </button>
+          </UiButton>
           <div
             v-if="openPanels.rentalYear"
             id="rental-year-panel"
             class="grid gap-1.5 rounded-xl bg-surface-2/60 p-3"
           >
-            <UnitField
+            <UiField
               id="h-year"
               v-model="form.rentalYear"
               label="Année de mise en location par défaut"
@@ -133,15 +125,16 @@
             />
           </div>
         </div>
-        <SelectField
+        <UiField
           id="h-lease-type"
           v-model="form.leaseType"
+          as="select"
           label="Type de location"
           :options="LEASE_OPTIONS"
           hint="pour toutes les annonces : plafond d’encadrement, loyers comparables, régime fiscal"
           :change="changeOf('leaseType')"
         />
-        <UnitField
+        <UiField
           id="h-vacancy"
           v-model="form.vacancyMonths"
           label="Vacance locative"
@@ -151,7 +144,7 @@
           :change="changeOf('vacancyMonths')"
           :error="errorOf('vacancyMonths')"
         />
-        <UnitField
+        <UiField
           id="h-fixed"
           v-model="form.fixedCostsAnnual"
           label="Frais fixes du bailleur"

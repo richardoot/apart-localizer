@@ -658,11 +658,11 @@ describe('Lot 20 : nos avis critère par critère (e2e, REST)', () => {
       label: 'À revoir à la contre-visite : le calme',
       origin: 'opinion',
       details:
-        'Vos notes s’écartent de 2 points : Richard 4 (« fenêtres fermées, ça va »), Chloé 2 (« bus devant la chambre »).',
+        'Les notes s’écartent de 2 points : Richard 4 (« fenêtres fermées, ça va »), Chloé 2 (« bus devant la chambre »).',
     }).expect(201)
     expect(task.body).toMatchObject({
       origin: 'opinion',
-      details: expect.stringContaining('Vos notes s’écartent'),
+      details: expect.stringContaining('Les notes s’écartent'),
     })
     // Rien n'est créé d'office par un avis.
     const tasks = await ctx.prisma.task.count({ where: { listingId: id } })

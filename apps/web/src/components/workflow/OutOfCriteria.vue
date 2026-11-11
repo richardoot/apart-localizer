@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { ref, watch } from 'vue'
+  import UiButton from '@/components/ui/UiButton.vue'
 
   /**
    * Lot 21 (ADR 0031) : les annonces hors critères d'une étape, repliées en
@@ -28,18 +29,19 @@
 
 <template>
   <section v-if="rows.length" class="grid gap-2" data-testid="out-of-criteria">
-    <button
-      type="button"
-      class="min-h-11 w-fit rounded-[10px] border border-dashed border-muted bg-transparent px-3.5 text-sm text-muted hover:text-fg"
+    <UiButton
+      variant="ghost"
+      class="w-fit border border-dashed border-muted"
+      :icon-right="open ? 'chevron-up' : 'chevron-down'"
       :aria-expanded="open"
       data-testid="out-toggle"
       @click="open = !open"
     >
       {{ label }}
-    </button>
+    </UiButton>
     <ul
       v-if="open"
-      class="m-0 list-none overflow-hidden rounded-[14px] border border-line bg-surface p-0"
+      class="m-0 list-none overflow-hidden rounded-2xl border border-line bg-surface p-0"
     >
       <li
         v-for="(row, index) in rows"
@@ -48,14 +50,14 @@
         :class="index ? 'border-t border-line' : ''"
         data-testid="out-row"
       >
-        <button
+        <UiButton
           v-if="openable"
-          type="button"
-          class="flex-[2_1_280px] text-left font-medium text-accent underline-offset-2 hover:underline"
+          variant="link"
+          class="flex-[2_1_280px] justify-start text-left font-medium"
           @click="emit('open', row.id)"
         >
           {{ row.title }}
-        </button>
+        </UiButton>
         <span v-else class="flex-[2_1_280px] font-medium">{{ row.title }}</span>
         <span class="flex-[3_1_320px] text-sm text-muted">{{ row.why }}</span>
       </li>

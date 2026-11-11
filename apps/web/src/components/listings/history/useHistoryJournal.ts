@@ -70,5 +70,8 @@ export function useHistoryJournal(listingId: MaybeRef<string>) {
     isPending: query.isPending,
     isFetching: query.isFetching,
     error: query.error,
+    /** Lot 22 : pour `QueryState` (« Réessayer »). */
+    isError: query.isError,
+    refetch: query.refetch,
   }
 }

@@ -87,3 +87,31 @@ describe('service worker (PWA)', () => {
     expect(sessionStorageOrNull()).not.toBeUndefined()
   })
 })
+
+describe('lot 22 : jamais de rechargement sur une saisie en cours', () => {
+  it('attend, et recharge quand le membre le demande', () => {
+    let options: RegisterSWOptions = {}
+    const reload = vi.fn()
+    const onDeferred = vi.fn()
+    let dirty = true
+    installServiceWorker({
+      register: o => {
+        options = o
+      },
+      storage: memoryStorage(),
+      reload,
+      now: () => 1,
+      setInterval: vi.fn(),
+      canReload: () => !dirty,
+      onDeferred,
+    })
+    options.onNeedReload?.()
+    expect(reload).not.toHaveBeenCalled()
+    expect(onDeferred).toHaveBeenCalledTimes(1)
+    ;(onDeferred.mock.calls[0]?.[0] as () => void)()
+    expect(reload).toHaveBeenCalledTimes(1)
+    dirty = false
+    options.onNeedReload?.()
+    expect(reload).toHaveBeenCalledTimes(2)
+  })
+})

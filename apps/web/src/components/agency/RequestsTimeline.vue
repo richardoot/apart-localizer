@@ -14,6 +14,10 @@
     Member,
   } from '@apart/contracts'
   import { activityActorName, formatShortParisDay } from '@apart/domain'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiIcon from '@/components/ui/UiIcon.vue'
+  import type { BadgeVariant, Tone } from '@/lib/ui'
 
   /**
    * Lot 17 : la chronologie des demandes à l'annonceur, de la plus récente à
@@ -45,13 +49,16 @@
 
   const day = (iso: string | null) => (iso ? formatShortParisDay(iso) : '—')
 
-  const STATUS_TONES: Record<AgencyRequestStatus, string> = {
-    draft: 'bg-warn-soft text-warn',
-    approved: 'bg-accent-soft text-accent',
-    sent: 'bg-accent-soft text-accent',
-    answered: 'bg-good-soft text-good',
-    no_answer: 'border border-dashed border-muted text-muted',
-    cancelled: 'border border-dashed border-muted text-muted',
+  const STATUS_TONES: Record<
+    AgencyRequestStatus,
+    { tone: Tone; variant: BadgeVariant }
+  > = {
+    draft: { tone: 'warn', variant: 'soft' },
+    approved: { tone: 'accent', variant: 'soft' },
+    sent: { tone: 'accent', variant: 'soft' },
+    answered: { tone: 'good', variant: 'soft' },
+    no_answer: { tone: 'neutral', variant: 'outline' },
+    cancelled: { tone: 'neutral', variant: 'outline' },
   }
   const DISPOSITION_TONES: Record<AgencyAnswerChange['disposition'], string> = {
     applied: 'text-good',
@@ -71,10 +78,10 @@
       :data-status="request.status"
     >
       <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-        <span
-          class="rounded-full px-2 py-px font-medium"
-          :class="STATUS_TONES[request.status]"
-          >{{ AGENCY_REQUEST_STATUS_LABELS[request.status] }}</span
+        <UiBadge
+          :tone="STATUS_TONES[request.status].tone"
+          :variant="STATUS_TONES[request.status].variant"
+          >{{ AGENCY_REQUEST_STATUS_LABELS[request.status] }}</UiBadge
         >
         <span class="text-muted">
           {{ AGENCY_CHANNEL_LABELS[request.channel] }}
@@ -98,13 +105,15 @@
         >
         <template v-if="request.threadRef">
           ·
-          <a
+          <UiButton
             v-if="isUrl(request.threadRef)"
             :href="request.threadRef"
+            variant="link"
+            size="inline"
             target="_blank"
             rel="noopener noreferrer"
-            class="underline hover:text-fg"
-            >conversation</a
+            class="text-xs"
+            >conversation</UiButton
           ><span v-else class="break-all"
             >fil {{ request.threadRef }}</span
           ></template
@@ -132,9 +141,15 @@
           class="flex items-baseline gap-1.5"
         >
           <span
+            class="inline-flex self-center"
             :class="q.done ? 'text-good' : 'text-muted'"
+            role="img"
             :aria-label="q.done ? 'répondue' : 'en attente'"
-            >{{ q.done ? '✓' : '○' }}</span
+            ><UiIcon v-if="q.done" name="check" /><span
+              v-else
+              aria-hidden="true"
+              >○</span
+            ></span
           >
           <span :class="q.done ? 'text-muted' : ''">{{ q.label }}</span>
         </li>
@@ -147,7 +162,9 @@
         :open="i === request.answers.length - 1"
         data-testid="request-answer"
       >
-        <summary class="cursor-pointer text-xs font-medium">
+        <summary
+          class="flex min-h-11 cursor-pointer flex-wrap items-center gap-x-1 text-sm font-medium sm:min-h-8"
+        >
           Réponse du {{ day(answer.receivedAt) }}
           <span class="font-normal text-muted"
             >· notée par {{ answeredBy(answer.channel, answer.authorId) }}</span
@@ -162,20 +179,20 @@
           >
             <span class="break-words">{{ change.text }}</span>
             <span
-              class="text-[11px] tracking-wide uppercase"
+              class="text-xs tracking-wide uppercase"
               :class="DISPOSITION_TONES[change.disposition]"
               >{{ AGENCY_ANSWER_DISPOSITION_LABELS[change.disposition] }}</span
             >
-            <button
+            <UiButton
               v-if="change.disposition === 'proposed'"
-              type="button"
-              class="inline-flex min-h-9 items-center rounded-lg bg-accent px-2.5 text-xs font-medium text-accent-fg disabled:opacity-60"
+              variant="primary"
+              size="sm"
               :disabled="busy"
               data-testid="apply-proposed"
               @click="emit('apply', request.id, [change.key])"
             >
               Appliquer
-            </button>
+            </UiButton>
           </li>
         </ul>
         <p v-else class="mt-1 text-xs text-muted">{{ answer.summary }}</p>
@@ -191,26 +208,25 @@
         v-if="request.status === 'sent' || request.followUpDue"
         class="flex flex-wrap gap-2"
       >
-        <button
+        <UiButton
           v-if="request.followUpDue"
-          type="button"
-          class="inline-flex min-h-11 items-center rounded-lg border border-accent px-3 text-sm text-accent disabled:opacity-60 sm:min-h-9"
+          variant="outline"
+          size="sm"
           :disabled="busy"
           data-testid="prepare-follow-up"
           @click="emit('follow-up', request.id)"
         >
           Préparer une relance
-        </button>
-        <button
+        </UiButton>
+        <UiButton
           v-if="request.status === 'sent'"
-          type="button"
-          class="inline-flex min-h-11 items-center rounded-lg border border-line px-3 text-sm hover:bg-surface-2 disabled:opacity-60 sm:min-h-9"
+          size="sm"
           :disabled="busy"
           data-testid="no-answer"
           @click="emit('no-answer', request.id)"
         >
           Pas de réponse
-        </button>
+        </UiButton>
       </div>
     </li>
   </ol>

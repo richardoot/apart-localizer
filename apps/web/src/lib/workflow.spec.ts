@@ -32,7 +32,7 @@ import {
   primaryLabel,
   progressText,
   questionsText,
-  rowPillClass,
+  rowPillTone,
   shortDay,
   shortVisit,
   stageCta,
@@ -312,9 +312,9 @@ describe('les lignes d’une annonce', () => {
     expect(tabOfAction('follow')).toBe('negocier')
     expect(tabOfAction('rate')).toBe('synthese')
     expect(tabOfAction('open')).toBeNull()
-    expect(rowPillClass('to_settle')).toContain('text-ai')
-    expect(rowPillClass('archived_refused')).toContain('text-bad')
-    expect(rowPillClass('to_sort')).toContain('text-fg')
+    expect(rowPillTone('to_settle')).toBe('ai')
+    expect(rowPillTone('archived_refused')).toBe('bad')
+    expect(rowPillTone('to_sort')).toBe('neutral')
   })
 
   it('une note visible, ou la moyenne sans note globale', () => {

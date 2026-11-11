@@ -1,7 +1,12 @@
 <script setup lang="ts">
-  import { onMounted, ref } from 'vue'
+  import { onMounted, ref, watch } from 'vue'
   import type { ExtractionResult } from '@apart/contracts'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import UiIcon from '@/components/ui/UiIcon.vue'
   import { useExtraction } from '@/composables/useExtraction'
+  import { buttonClasses } from '@/lib/ui'
 
   const props = defineProps<{
     /** Partage depuis le mobile : texte et lien transmis par la feuille de partage. */
@@ -14,14 +19,17 @@
     extracted: [result: ExtractionResult]
     /** L'IA n'est pas configurée (503) : passer à la saisie manuelle. */
     unavailable: []
+    /** Lot 22 : un texte, un lien ou une capture attend (garde des modifications). */
+    dirty: [value: boolean]
   }>()
 
   const extraction = useExtraction()
   if (props.initialText) extraction.text.value = props.initialText
   if (props.initialUrl) extraction.url.value = props.initialUrl
   const dragging = ref(false)
-  const inputClass =
-    'rounded-lg border border-line bg-bg px-3 py-1.5 text-sm w-full'
+  // Lot 22 : en constante (vue-tsc lit mal « https://… » écrit dans l'attribut d'un composant).
+  const URL_PLACEHOLDER = 'https://…'
+  const fileButton = buttonClasses({ size: 'sm' })
 
   async function onFiles(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement
@@ -52,43 +60,46 @@
   onMounted(() => {
     if (props.autoAnalyze && extraction.canAnalyze.value) void analyze()
   })
+
+  watch(
+    () =>
+      extraction.text.value.trim() !== '' ||
+      extraction.url.value.trim() !== '' ||
+      extraction.images.value.length > 0,
+    value => emit('dirty', value),
+    { immediate: true }
+  )
 </script>
 
 <template>
   <div class="grid gap-3" data-testid="extraction-pane">
     <p class="text-sm text-muted">
-      Collez le texte de la page d'annonce (ou le mail de l'agence) et, si vous
-      voulez, déposez des captures d'écran. L'IA remplit la fiche ; vous
-      vérifiez chaque champ avant d'enregistrer. Rien n'est téléchargé depuis le
-      portail.
+      Colle le texte de la page d’annonce (ou le mail de l’agence) et, si tu
+      veux, dépose des captures d’écran. L’IA remplit la fiche ; tu vérifies
+      chaque champ avant d’enregistrer. Rien n’est téléchargé depuis le portail.
     </p>
-    <div class="grid gap-1">
-      <label for="x-url" class="text-xs font-medium text-muted">
-        Lien de l'annonce
-      </label>
-      <input
-        id="x-url"
-        v-model="extraction.url.value"
-        type="url"
-        :class="inputClass"
-        placeholder="https://…"
-      />
-    </div>
-    <div class="grid gap-1">
-      <label for="x-text" class="text-xs font-medium text-muted">
-        Texte de l'annonce
-      </label>
-      <textarea
-        id="x-text"
-        v-model="extraction.text.value"
-        :class="inputClass"
-        rows="10"
-        placeholder="Sélectionnez tout le texte de la page d'annonce, copiez, collez ici."
-        @paste="onPaste"
-      />
-    </div>
+    <UiField
+      id="x-url"
+      v-model="extraction.url.value"
+      label="Lien de l’annonce"
+      quiet
+      type="url"
+      inputmode="url"
+      align="left"
+      :placeholder="URL_PLACEHOLDER"
+    />
+    <UiField
+      id="x-text"
+      v-model="extraction.text.value"
+      as="textarea"
+      label="Texte de l’annonce"
+      quiet
+      :rows="10"
+      placeholder="Sélectionne tout le texte de la page d’annonce, copie, colle ici."
+      @paste="onPaste"
+    />
     <div
-      class="grid gap-2 rounded-lg border border-dashed px-3 py-3 text-sm"
+      class="grid gap-2 rounded-2xl border border-dashed px-3 py-3 text-sm"
       :class="dragging ? 'border-accent bg-accent-soft' : 'border-line'"
       data-testid="dropzone"
       @dragover.prevent="dragging = true"
@@ -97,12 +108,11 @@
     >
       <div class="flex flex-wrap items-center justify-between gap-2">
         <span class="text-muted">
-          Captures d'écran (jpeg, png, webp ; réduites avant envoi)
+          Captures d’écran (jpeg, png, webp ; réduites avant envoi)
         </span>
-        <label
-          class="cursor-pointer rounded-lg border border-line px-3 py-1 text-xs"
-        >
+        <label :class="fileButton" class="cursor-pointer">
           Choisir des fichiers
+          <!-- Lot 22 : le sélecteur de fichiers du système, caché derrière le bouton. -->
           <input
             type="file"
             accept="image/jpeg,image/png,image/gif,image/webp"
@@ -117,7 +127,7 @@
         <li
           v-for="image in extraction.images.value"
           :key="image.key"
-          class="flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs"
+          class="flex items-center gap-1 rounded-full bg-surface-2 py-0.5 pl-2 text-sm"
         >
           <img
             :src="`data:${image.image.mediaType};base64,${image.image.data}`"
@@ -125,41 +135,39 @@
             class="h-6 w-6 rounded object-cover"
           />
           {{ image.name }}
-          <button
-            type="button"
-            class="text-muted hover:text-bad"
+          <UiButton
+            variant="ghost"
+            size="icon"
+            class="hover:text-bad"
             :aria-label="`Retirer ${image.name}`"
             @click="extraction.removeImage(image.key)"
           >
-            ✕
-          </button>
+            <UiIcon name="close" />
+          </UiButton>
         </li>
       </ul>
     </div>
-    <p
-      v-if="extraction.error.value"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-    >
-      {{ extraction.error.value }}
-    </p>
+    <UiAlert v-if="extraction.error.value">{{
+      extraction.error.value
+    }}</UiAlert>
     <div class="flex items-center justify-end gap-3">
       <span
         v-if="extraction.pending.value"
-        class="text-xs text-muted"
+        class="text-sm text-muted"
         aria-live="polite"
       >
         Analyse en cours, une vingtaine de secondes…
       </span>
-      <button
-        type="button"
-        class="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-accent-fg disabled:opacity-60"
+      <UiButton
+        variant="primary"
         :disabled="!extraction.canAnalyze.value"
+        :loading="extraction.pending.value"
+        loading-label="Analyse…"
         data-testid="analyze"
         @click="analyze"
       >
-        {{ extraction.pending.value ? 'Analyse…' : 'Analyser' }}
-      </button>
+        Analyser
+      </UiButton>
     </div>
   </div>
 </template>

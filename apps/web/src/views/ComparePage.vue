@@ -4,6 +4,9 @@
   import CompareTable from '@/components/listings/CompareTable.vue'
   import { useCompare } from '@/composables/useListings'
   import { useWorkspace } from '@/composables/useWorkspace'
+  import { plural } from '@/lib/format'
+  import QueryState from '@/components/ui/QueryState.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
 
   const route = useRoute()
   const router = useRouter()
@@ -21,7 +24,8 @@
       ),
     ].slice(0, 6)
   })
-  const { data, isPending, error } = useCompare(ids)
+  const compare = useCompare(ids)
+  const data = compare.data
   const { me } = useWorkspace()
 
   function open(id: string): void {
@@ -35,32 +39,30 @@
       <div>
         <h1 class="font-display text-2xl font-bold">Comparer</h1>
         <p class="text-sm text-muted">
-          {{ ids.length }} annonce(s) côte à côte ; ★ = la meilleure sur
-          l'indicateur.
+          {{ plural(ids.length, 'annonce') }} côte à côte ; ★ = la meilleure sur
+          l’indicateur.
         </p>
       </div>
-      <RouterLink
-        :to="{ name: 'listings' }"
-        class="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-surface-2"
-        >← Retour aux annonces</RouterLink
+      <UiButton :to="{ name: 'listings' }" icon="arrow-left"
+        >Retour aux annonces</UiButton
       >
     </header>
     <p v-if="ids.length < 2" class="text-sm text-muted">
-      Sélectionnez au moins deux annonces dans le tableau pour les comparer.
+      Sélectionne au moins deux annonces dans le tableau pour les comparer.
     </p>
-    <p
-      v-else-if="error"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
+    <QueryState
+      v-else
+      :query="compare"
+      skeleton="block"
+      loading-label="la comparaison"
+      error-fallback="La comparaison a échoué."
     >
-      {{ error.message }}
-    </p>
-    <p v-else-if="isPending" class="text-sm text-muted">Comparaison…</p>
-    <CompareTable
-      v-else-if="data"
-      :result="data"
-      :me-id="me?.id ?? null"
-      @open="open"
-    />
+      <CompareTable
+        v-if="data"
+        :result="data"
+        :me-id="me?.id ?? null"
+        @open="open"
+      />
+    </QueryState>
   </section>
 </template>

@@ -14,7 +14,15 @@
   import { useExchangeActions } from '@/composables/useExchangeActions'
   import { useListingMutations } from '@/composables/useListings'
   import { useVisits } from '@/composables/useVisits'
-  import { ApiError } from '@/lib/api'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCard from '@/components/ui/UiCard.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import UiChip from '@/components/ui/UiChip.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import { useAction } from '@/composables/useAction'
+  import { plural } from '@/lib/format'
+  import { cardClasses } from '@/lib/ui'
   import {
     TODO_FILTERS,
     requestRows,
@@ -78,36 +86,43 @@
   )
   const checklist = computed(() => visitChecklist(props.item.tasks))
 
-  // Les tâches : cocher, rouvrir, ajouter, supprimer.
-  const failure = ref<string | null>(null)
-  const notice = ref<string | null>(null)
-  async function runTask(action: Promise<unknown>, done: string) {
-    failure.value = null
+  // Les tâches : cocher, rouvrir, ajouter, supprimer. Lot 22 : la réussite
+  // dans la zone de messages (« Annuler » sur une tâche cochée ou rouverte),
+  // l'erreur dans le bloc où l'on a cliqué (`errorAt` : une ligne, la barre
+  // de l'agence, le formulaire d'ajout).
+  const taskAction = useAction('L’enregistrement a échoué.')
+  const errorAt = ref<string | null>(null)
+  function at(where: string): void {
+    errorAt.value = where
+    taskAction.clear()
     actions.failure.value = null
-    try {
-      await action
-      notice.value = done
-      actions.notice.value = null
-    } catch (error) {
-      notice.value = null
-      failure.value =
-        error instanceof ApiError ? error.message : "L'enregistrement a échoué."
-    }
   }
-  const toggle = (taskId: string, done: boolean) =>
-    runTask(
-      mutations.updateTask.mutateAsync({
-        id: listingId.value,
-        taskId,
-        update: { done },
-      }),
-      done ? 'Tâche faite.' : 'Tâche rouverte.'
+  const shownError = computed(
+    () => taskAction.error.value ?? actions.failure.value
+  )
+  const errorFor = (where: string) =>
+    errorAt.value === where ? shownError.value : null
+
+  const updateTask = (taskId: string, done: boolean) =>
+    mutations.updateTask.mutateAsync({
+      id: listingId.value,
+      taskId,
+      update: { done },
+    })
+  function toggle(key: string, taskId: string, done: boolean) {
+    at(key)
+    return taskAction.run(() => updateTask(taskId, done), {
+      success: done ? 'Tâche cochée.' : 'Tâche rouverte.',
+      undo: () => updateTask(taskId, !done),
+    })
+  }
+  function remove(key: string, taskId: string) {
+    at(key)
+    return taskAction.run(
+      () => mutations.removeTask.mutateAsync({ id: listingId.value, taskId }),
+      { success: 'Tâche supprimée.' }
     )
-  const remove = (taskId: string) =>
-    runTask(
-      mutations.removeTask.mutateAsync({ id: listingId.value, taskId }),
-      'Tâche supprimée.'
-    )
+  }
 
   const text = ref('')
   const askAgency = ref(false)
@@ -115,26 +130,23 @@
   async function add(): Promise<void> {
     const label = taskLabelFor(text.value, askAgency.value)
     if (!label) {
-      addError.value = 'Écrivez la tâche ou la question.'
+      addError.value = 'Écris la tâche ou la question.'
       return
     }
     addError.value = null
-    await runTask(
-      mutations.addTask.mutateAsync({ id: listingId.value, label }),
-      askAgency.value
-        ? `Question ajoutée : « ${label} ». Préparez le message quand vous voulez.`
-        : `Tâche ajoutée : « ${label} ».`
+    at('add')
+    await taskAction.run(
+      () => mutations.addTask.mutateAsync({ id: listingId.value, label }),
+      {
+        success: askAgency.value
+          ? `Question ajoutée : « ${label} ». Prépare le message quand tu veux.`
+          : `Tâche ajoutée : « ${label} ».`,
+      }
     )
-    if (!failure.value) {
+    if (!taskAction.error.value) {
       text.value = ''
       askAgency.value = false
     }
-  }
-
-  /** Les actions d'une demande : le message de l'onglet vient du composable. */
-  function onAction(): void {
-    notice.value = null
-    failure.value = null
   }
 
   function showVisit(visitId: string): void {
@@ -144,14 +156,6 @@
       card?.focus?.({ preventScroll: true })
     })
   }
-
-  const shownFailure = computed(() => failure.value ?? actions.failure.value)
-  const shownNotice = computed(() => notice.value ?? actions.notice.value)
-
-  const pill = (on: boolean) =>
-    on
-      ? 'border-accent bg-accent text-accent-fg'
-      : 'border-line bg-surface text-fg hover:bg-surface-2'
 </script>
 
 <template>
@@ -168,89 +172,74 @@
           class="flex flex-wrap gap-1.5"
           data-testid="todo-filters"
         >
-          <button
+          <UiChip
             v-for="choice in TODO_FILTERS"
             :key="choice.id"
-            type="button"
-            class="inline-flex min-h-11 items-center gap-1 rounded-full border-[1.5px] px-3.5 text-sm"
-            :class="pill(filter === choice.id)"
-            :aria-pressed="filter === choice.id"
+            :selected="filter === choice.id"
+            :count="counts[choice.id]"
             :data-filter="choice.id"
             @click="filter = choice.id"
           >
-            {{ choice.label
-            }}<span class="text-xs opacity-80">({{ counts[choice.id] }})</span>
-          </button>
+            {{ choice.label }}
+          </UiChip>
         </div>
         <span class="text-sm text-muted" data-testid="todo-progress"
           >{{ progress.done }} sur {{ progress.total }} faits</span
         >
       </div>
 
-      <p
-        v-if="shownFailure"
-        role="alert"
-        class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-      >
-        {{ shownFailure }}
-      </p>
-      <p
-        v-else-if="shownNotice"
-        class="text-sm text-good"
-        aria-live="polite"
-        data-testid="todo-notice"
-      >
-        {{ shownNotice }}
-      </p>
-
       <div
         v-if="
           (filter === 'all' || filter === 'agency') &&
           (toAsk.length || drafts.length > 1)
         "
-        class="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2.5 text-sm"
+        class="grid gap-2 text-sm"
+        :class="cardClasses('default', 'sm')"
         data-testid="todo-agency-bar"
       >
-        <span class="min-w-0 flex-1 text-muted">
-          <template v-if="toAsk.length"
-            >{{ toAsk.length }} question{{ toAsk.length > 1 ? 's' : '' }} pas
-            encore posée{{ toAsk.length > 1 ? 's' : '' }} à
-            l’annonceur.</template
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="min-w-0 flex-1 text-muted">
+            <template v-if="toAsk.length"
+              >{{ plural(toAsk.length, 'question') }} pas encore
+              {{ toAsk.length > 1 ? 'posées' : 'posée' }} à
+              l’annonceur.</template
+            >
+            <template v-if="drafts.length > 1">
+              {{ drafts.length }} messages attendent ta validation.</template
+            >
+          </span>
+          <UiButton
+            v-if="toAsk.length"
+            variant="outline"
+            :disabled="actions.busy.value"
+            data-testid="prepare-message"
+            @click="
+              () => {
+                at('agency-bar')
+                void actions.prepare()
+              }
+            "
           >
-          <template v-if="drafts.length > 1">
-            {{ drafts.length }} messages attendent votre validation.</template
+            Préparer un message ({{ toAsk.length }})
+          </UiButton>
+          <UiButton
+            v-if="drafts.length > 1"
+            variant="primary"
+            :disabled="actions.busy.value"
+            data-testid="approve-all"
+            @click="
+              () => {
+                at('agency-bar')
+                void actions.approve(drafts.map(d => d.id))
+              }
+            "
           >
-        </span>
-        <button
-          v-if="toAsk.length"
-          type="button"
-          class="inline-flex min-h-11 items-center rounded-lg border border-accent bg-surface px-3 text-sm font-semibold text-accent disabled:opacity-60 sm:min-h-10"
-          :disabled="actions.busy.value"
-          data-testid="prepare-message"
-          @click="
-            () => {
-              onAction()
-              void actions.prepare()
-            }
-          "
-        >
-          Préparer un message ({{ toAsk.length }})
-        </button>
-        <button
-          v-if="drafts.length > 1"
-          type="button"
-          class="inline-flex min-h-11 items-center rounded-lg bg-accent px-3 text-sm font-semibold text-accent-fg disabled:opacity-60 sm:min-h-10"
-          :disabled="actions.busy.value"
-          data-testid="approve-all"
-          @click="
-            () => {
-              onAction()
-              void actions.approve(drafts.map(d => d.id))
-            }
-          "
-        >
-          Tout valider ({{ drafts.length }})
-        </button>
+            Tout valider ({{ drafts.length }})
+          </UiButton>
+        </div>
+        <UiAlert v-if="errorFor('agency-bar')">{{
+          errorFor('agency-bar')
+        }}</UiAlert>
       </div>
 
       <ul
@@ -277,47 +266,48 @@
           "
           :members="members"
           :busy="actions.busy.value || mutations.updateTask.isPending.value"
-          @toggle="done => toggle(row.id, done)"
-          @remove="remove(row.id)"
+          :error="errorFor(row.key)"
+          @toggle="done => toggle(row.key, row.id, done)"
+          @remove="remove(row.key, row.id)"
           @approve="
             ids => {
-              onAction()
+              at(row.key)
               void actions.approve(ids)
             }
           "
           @save="
             (id, update) => {
-              onAction()
+              at(row.key)
               void actions.save(id, update)
             }
           "
           @cancel="
             id => {
-              onAction()
+              at(row.key)
               void actions.cancel(id)
             }
           "
           @mark-sent="
             id => {
-              onAction()
+              at(row.key)
               void actions.markSent(id)
             }
           "
           @follow-up="
             id => {
-              onAction()
+              at(row.key)
               void actions.followUp(id)
             }
           "
           @no-answer="
             id => {
-              onAction()
+              at(row.key)
               void actions.noAnswer(id)
             }
           "
           @apply="
             (id, keys) => {
-              onAction()
+              at(row.key)
               void actions.apply(id, keys)
             }
           "
@@ -326,55 +316,52 @@
       </ul>
       <p
         v-else
-        class="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-muted"
+        class="text-sm text-muted"
+        :class="cardClasses('default', 'sm')"
         data-testid="todo-empty"
       >
         {{
           filter === 'all'
-            ? 'Rien à faire pour cette annonce.'
-            : 'Rien de ce type pour cette annonce.'
+            ? 'Rien à faire pour cette annonce : ajoute une tâche ou une question ci-dessous.'
+            : 'Rien de ce type pour cette annonce : choisis « Tout » pour voir le reste.'
         }}
       </p>
 
       <form
-        class="flex flex-wrap items-end gap-2 rounded-xl border border-line bg-surface px-3 py-3 sm:px-3.5"
+        class="grid gap-2"
+        :class="cardClasses('default', 'sm')"
         aria-label="Ajouter une tâche ou une question"
         data-testid="todo-add"
+        novalidate
         @submit.prevent="add"
       >
-        <div class="grid min-w-0 flex-[1_1_18rem] gap-1">
-          <label for="todo-add-text" class="text-sm text-muted">Ajouter</label>
-          <input
+        <div class="flex flex-wrap items-end gap-2">
+          <UiField
             id="todo-add-text"
             v-model="text"
-            class="min-h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm text-fg"
+            class="min-w-0 flex-[1_1_18rem]"
+            label="Ajouter"
+            quiet
+            :error="addError"
             placeholder="Une tâche, ou une question pour l’agence"
             maxlength="290"
             data-testid="todo-add-text"
           />
-        </div>
-        <label
-          class="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm"
-        >
-          <input
+          <UiCheckbox
             v-model="askAgency"
-            type="checkbox"
-            class="size-[18px] accent-accent"
+            label="À demander à l’agence"
             data-testid="todo-add-agency"
           />
-          À demander à l’agence
-        </label>
-        <button
-          type="submit"
-          class="inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-accent-fg disabled:opacity-60"
-          :disabled="mutations.addTask.isPending.value"
-          data-testid="todo-add-submit"
-        >
-          Ajouter
-        </button>
-        <p v-if="addError" class="w-full text-xs text-bad" role="alert">
-          {{ addError }}
-        </p>
+          <UiButton
+            type="submit"
+            variant="primary"
+            :loading="mutations.addTask.isPending.value"
+            data-testid="todo-add-submit"
+          >
+            Ajouter
+          </UiButton>
+        </div>
+        <UiAlert v-if="errorFor('add')">{{ errorFor('add') }}</UiAlert>
       </form>
     </div>
 
@@ -383,15 +370,12 @@
       aria-label="Contact, visite et visites"
     >
       <ExchangesSection :listing-id="item.listing.id" />
-      <section
+      <UiCard
         v-if="checklist.length"
-        class="grid gap-2 rounded-2xl border border-line bg-surface p-4 sm:px-5"
-        aria-labelledby="visit-checklist-title"
+        title="Pendant la visite"
+        class="grid gap-2"
         data-testid="visit-checklist"
       >
-        <h2 id="visit-checklist-title" class="text-base font-semibold">
-          Pendant la visite
-        </h2>
         <ul class="grid list-disc gap-1 pl-5 text-sm leading-relaxed">
           <li v-for="point in checklist" :key="point.id">{{ point.label }}</li>
         </ul>
@@ -400,15 +384,15 @@
           contre-visite (« Nos avis »). Les photos et le compte rendu se
           saisissent dans la visite.
         </p>
-      </section>
-      <div class="rounded-2xl border border-line bg-surface p-4 sm:px-5">
+      </UiCard>
+      <UiCard as="div">
         <VisitsSection
           :listing-id="item.listing.id"
           :members="members"
           :me-id="meId"
           @set-status="status => emit('setStatus', status)"
         />
-      </div>
+      </UiCard>
     </aside>
   </div>
 </template>

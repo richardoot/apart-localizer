@@ -1486,7 +1486,7 @@ describe('journal et notifications', () => {
       url: DRAFTS_INBOX_URL,
     })
     expect(drafts[0]?.body).toBe(
-      'Claude (MCP, pour Richard) a exploré les portails (23 annonces vues : 5 à valider). Rien n’est ajouté à la liste sans votre choix.'
+      'Claude (MCP, pour Richard) a exploré les portails (23 annonces vues : 5 à valider). Rien n’est ajouté à la liste sans ton choix.'
     )
     const one = notificationsForActivity(
       { ...event, after: { draftsCreated: 1 } },
@@ -1494,7 +1494,7 @@ describe('journal et notifications', () => {
     )
     expect(one[0]?.title).toBe('Claude a trouvé 1 annonce à valider')
     expect(one[0]?.body).toBe(
-      'Claude (MCP, pour Richard) a exploré les portails. Rien n’est ajouté à la liste sans votre choix.'
+      'Claude (MCP, pour Richard) a exploré les portails. Rien n’est ajouté à la liste sans ton choix.'
     )
     expect(
       notificationTypeOf({ ...event, after: { draftsCreated: 0 } })

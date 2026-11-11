@@ -104,7 +104,11 @@ describe('ListingCreatePanel', () => {
       body().querySelector('[data-testid="extraction-pane"]')
     ).not.toBeNull()
     expect(body().querySelector('#f-title')).toBeNull()
-    const tabs = [...body().querySelectorAll<HTMLButtonElement>('[role="tab"]')]
+    const tabs = [
+      ...body().querySelectorAll<HTMLButtonElement>(
+        '[aria-label="Mode de saisie"] button'
+      ),
+    ]
     expect(tabs.map(t => t.textContent?.trim())).toEqual([
       'Coller une annonce',
       'Saisie manuelle',
@@ -145,13 +149,13 @@ describe('ListingCreatePanel', () => {
       '0,0453 $'
     )
     const priceBadge = body()
-      .querySelector('label[for="f-price"]')
+      .querySelector('[data-field="f-price"]')
       ?.querySelector('[data-source="ai"]')
     expect(priceBadge?.textContent?.trim()).toBe('IA 95 %')
     expect(priceBadge?.getAttribute('title')).toContain('189 000 € FAI')
     expect(
       body()
-        .querySelector('label[for="f-lng"]')
+        .querySelector('[data-field="f-lng"]')
         ?.querySelector('[data-source="open_data"]')
     ).not.toBeNull()
     expect(query('[data-testid="missing-fields"]').textContent).toContain(
@@ -172,7 +176,7 @@ describe('ListingCreatePanel', () => {
     await fill('#f-rent', '800')
     expect(
       body()
-        .querySelector('label[for="f-price"]')
+        .querySelector('[data-field="f-price"]')
         ?.querySelector('[data-source]')
     ).toBeNull()
     expect(
@@ -220,7 +224,7 @@ describe('ListingCreatePanel', () => {
     const banner = query('[data-testid="duplicates-banner"]')
     expect(banner.textContent).toContain('T2 fictif')
     ;[...banner.querySelectorAll('button')]
-      .find(b => b.textContent?.includes("ouvrir l'existante"))
+      .find(b => b.textContent?.includes('ouvrir l’existante'))
       ?.click()
     await flushPromises()
     expect(wrapper.emitted('open')).toEqual([[similar.listingId]])

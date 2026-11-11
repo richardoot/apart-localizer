@@ -9,6 +9,11 @@ import type { RegisterSWOptions } from 'virtual:pwa-register'
  * signal dans les `RELOAD_GUARD_MS` qui suivent un rechargement est ignoré
  * (pas de boucle si le navigateur rejoue l'événement). Les mises à jour sont
  * aussi cherchées toutes les heures quand l'application reste ouverte.
+ *
+ * Lot 22 : le rechargement passe par la garde des modifications. Si une
+ * saisie est en cours (`canReload` faux), il attend : `onDeferred` reçoit
+ * de quoi recharger quand le membre le choisit (« Mettre à jour », après la
+ * confirmation de la garde).
  */
 
 /** La clé (stockage de session) du dernier rechargement dû à une mise à jour. */
@@ -25,6 +30,10 @@ export interface PwaDeps {
   reload: () => void
   now: () => number
   setInterval: (callback: () => void, ms: number) => unknown
+  /** Lot 22 : faux tant qu'une saisie est en cours (garde des modifications). */
+  canReload?: () => boolean
+  /** Lot 22 : le rechargement attend ; `reload` le fera à la demande. */
+  onDeferred?: (reload: () => void) => void
 }
 
 /** Vrai si la page peut se recharger maintenant ; note l'instant du rechargement. */
@@ -50,6 +59,10 @@ export function installServiceWorker(deps: PwaDeps): unknown {
   return deps.register({
     immediate: true,
     onNeedReload: () => {
+      if (deps.canReload && !deps.canReload()) {
+        deps.onDeferred?.(() => deps.reload())
+        return
+      }
       if (shouldReload(deps.storage, deps.now())) deps.reload()
     },
     onRegisteredSW: (_url, registration) => {

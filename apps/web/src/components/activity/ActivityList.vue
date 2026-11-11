@@ -1,5 +1,9 @@
 <script setup lang="ts">
   import type { ActivityEntry } from '@apart/contracts'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiIcon from '@/components/ui/UiIcon.vue'
+  import type { Tone } from '@/lib/ui'
 
   defineProps<{
     entries: ActivityEntry[]
@@ -8,11 +12,11 @@
   }>()
   const emit = defineEmits<{ open: [listingId: string] }>()
 
-  const CHANNEL_CLASSES: Record<ActivityEntry['channel'], string> = {
-    web: 'bg-surface-2 text-muted',
-    mcp: 'bg-accent-soft text-fg',
-    import: 'bg-warn-soft text-warn',
-    system: 'bg-surface-2 text-muted',
+  const CHANNEL_TONES: Record<ActivityEntry['channel'], Tone> = {
+    web: 'neutral',
+    mcp: 'accent',
+    import: 'warn',
+    system: 'neutral',
   }
 
   function when(iso: string): string {
@@ -40,26 +44,24 @@
       <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <strong>{{ who(entry) }}</strong>
         <span>{{ entry.summary }}</span>
-        <button
+        <UiButton
           v-if="showListing && entry.listing"
-          type="button"
-          class="text-accent underline"
+          variant="link"
+          size="inline"
           @click="emit('open', entry.listing.id)"
         >
           {{ entry.listing.title }}
-        </button>
+        </UiButton>
         <span class="ml-auto flex items-center gap-2 text-xs text-muted">
-          <span
-            class="rounded-full px-2 py-0.5 text-[11px]"
-            :class="CHANNEL_CLASSES[entry.channel]"
-            >{{ entry.channelLabel }}</span
-          >
+          <UiBadge :tone="CHANNEL_TONES[entry.channel]">{{
+            entry.channelLabel
+          }}</UiBadge>
           <time :datetime="entry.createdAt">{{ when(entry.createdAt) }}</time>
         </span>
       </div>
       <dl
         v-if="entry.changes.length"
-        class="grid grid-cols-[minmax(0,auto)_1fr] gap-x-3 gap-y-0.5 text-xs"
+        class="grid grid-cols-[minmax(0,auto)_1fr] gap-x-3 gap-y-0.5 text-sm"
       >
         <template v-for="change in entry.changes" :key="change.field">
           <dt class="text-muted">{{ change.label }}</dt>
@@ -67,7 +69,9 @@
             <span class="text-muted line-through">{{
               change.before ?? '—'
             }}</span>
-            → <span>{{ change.after ?? '—' }}</span>
+            <UiIcon name="arrow-right" class="mx-0.5 inline align-[-0.125em]" />
+            <span class="sr-only">devient</span>
+            <span>{{ change.after ?? '—' }}</span>
           </dd>
         </template>
       </dl>

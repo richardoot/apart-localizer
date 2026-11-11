@@ -5,6 +5,9 @@
   import { formatOpinionAverage } from '@apart/domain'
   import type { OpinionDraftState } from '@/composables/useOpinionDraft'
   import { GLOBAL_CHOICES, SCORE_CHOICES, shortDay } from '@/lib/opinions'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiField from '@/components/ui/UiField.vue'
   import ScoreRadioGroup from './ScoreRadioGroup.vue'
 
   /**
@@ -61,9 +64,6 @@
         : `${names.slice(0, -1).join(', ')} et ${names[names.length - 1]}`
     return `Une notification prévient ${list} quand ton avis change.`
   })
-
-  const button =
-    'inline-flex min-h-11 items-center justify-center rounded-lg px-4 text-sm'
 </script>
 
 <template>
@@ -95,7 +95,7 @@
     >
       <strong>Visite marquée faite</strong>
       <span class="text-sm leading-snug"
-        >Notez pendant que c’est frais. Ce que vous ne savez pas, laissez « —
+        >Note pendant que c’est frais. Ce que tu ne sais pas, laisse « —
         ».</span
       >
     </div>
@@ -147,7 +147,7 @@
               aria-hidden="true"
               >{{ wordLabel(row.key) }}</span
             >
-            <span v-else-if="row.hint" class="text-xs text-muted">{{
+            <span v-else-if="row.hint" class="text-sm text-muted">{{
               row.hint
             }}</span>
           </div>
@@ -159,10 +159,9 @@
             :disabled="saving"
             @update:model-value="value => state.setScore(row.key, value)"
           />
-          <button
+          <UiButton
             v-if="showDetails"
-            type="button"
-            class="inline-flex min-h-11 items-center px-1 text-sm text-accent underline underline-offset-2"
+            variant="link"
             :aria-expanded="openWords[row.key] ?? false"
             :aria-controls="`crit-${row.key}-word`"
             :data-testid="`word-toggle-${row.key}`"
@@ -175,25 +174,23 @@
                   ? 'Voir le mot'
                   : 'Ajouter un mot'
             }}
-          </button>
+          </UiButton>
         </div>
         <div
           v-if="showDetails && openWords[row.key]"
           :id="`crit-${row.key}-word`"
           class="grid gap-1"
         >
-          <label :for="`crit-${row.key}-word-input`" class="text-xs text-muted"
-            >Un mot sur « {{ row.label }} » (facultatif)</label
-          >
-          <input
+          <UiField
             :id="`crit-${row.key}-word-input`"
-            :value="draft.scores[row.key]?.word ?? ''"
+            :model-value="draft.scores[row.key]?.word ?? ''"
+            :label="`Un mot sur « ${row.label} » (facultatif)`"
+            quiet
             :maxlength="OPINION_WORD_MAX"
-            class="min-h-11 rounded-lg border border-line bg-bg px-3 text-sm text-fg"
             placeholder="ex. chambre 2 un peu sombre"
             :data-testid="`word-${row.key}`"
-            @input="
-              state.setWord(row.key, ($event.target as HTMLInputElement).value)
+            @update:model-value="
+              value => state.setWord(row.key, String(value ?? ''))
             "
           />
         </div>
@@ -206,7 +203,7 @@
     >
       <div class="grid gap-2">
         <span id="global-rating-label" class="font-semibold">Note globale</span>
-        <span class="text-xs text-muted"
+        <span class="text-sm text-muted"
           >Ton ressenti d’ensemble, pas une moyenne{{
             compact
               ? `. Moyenne des critères : ${formatOpinionAverage(average.average)}.`
@@ -227,17 +224,17 @@
       </div>
       <div
         v-if="!compact"
-        class="grid gap-1 rounded-xl bg-bg px-3.5 py-3"
+        class="grid gap-1 rounded-2xl bg-bg px-3.5 py-3"
         data-testid="my-opinion-average"
         aria-live="polite"
       >
-        <span class="text-xs text-muted"
+        <span class="text-sm text-muted"
           >Moyenne de tes critères, à titre indicatif</span
         >
         <strong class="font-display text-2xl font-bold tabular-nums">{{
           formatOpinionAverage(average.average)
         }}</strong>
-        <span class="text-xs text-muted"
+        <span class="text-sm text-muted"
           >{{ average.count }} critère{{ average.count > 1 ? 's' : '' }} noté{{
             average.count > 1 ? 's' : ''
           }}
@@ -246,62 +243,48 @@
       </div>
     </div>
 
-    <button
+    <UiButton
       v-if="compact && !detailsOpen"
-      type="button"
-      class="inline-flex min-h-11 items-center justify-center rounded-lg border border-line bg-surface px-3 text-sm hover:bg-surface-2"
       :aria-expanded="false"
       data-testid="opinion-details-toggle"
       @click="detailsOpen = true"
     >
       Ajouter des mots et une phrase
-    </button>
-    <div v-if="showDetails" class="grid gap-1">
-      <label for="opinion-text" class="text-sm text-muted">En une phrase</label>
-      <textarea
-        id="opinion-text"
-        :value="draft.text"
-        rows="2"
-        maxlength="5000"
-        class="rounded-lg border border-line bg-bg px-3 py-2 text-sm text-fg"
-        placeholder="Ce qui vous plaît ou vous gêne"
-        @input="state.setText(($event.target as HTMLTextAreaElement).value)"
-      />
-    </div>
+    </UiButton>
+    <UiField
+      v-if="showDetails"
+      id="opinion-text"
+      :model-value="draft.text"
+      as="textarea"
+      label="En une phrase"
+      quiet
+      rows="2"
+      maxlength="5000"
+      placeholder="Ce qui te plaît ou te gêne"
+      @update:model-value="value => state.setText(String(value ?? ''))"
+    />
 
-    <p
-      v-if="error"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-    >
-      {{ error }}
-    </p>
+    <UiAlert v-if="error">{{ error }}</UiAlert>
     <div class="flex flex-wrap items-center gap-2.5">
-      <button
+      <UiButton
         type="submit"
-        :class="[
-          button,
-          'bg-accent font-semibold text-accent-fg disabled:opacity-60',
-          compact ? 'min-h-[52px] w-full rounded-xl' : '',
-        ]"
-        :disabled="saving"
+        variant="primary"
+        :block="compact"
+        :class="compact ? 'min-h-13' : ''"
+        :loading="saving"
+        loading-label="Enregistrement…"
         data-testid="opinion-save"
       >
-        {{ saving ? 'Enregistrement…' : 'Enregistrer mon avis' }}
-      </button>
-      <button
-        type="button"
-        :class="[
-          button,
-          'border border-line bg-surface hover:bg-surface-2',
-          compact ? 'w-full' : '',
-        ]"
+        Enregistrer mon avis
+      </UiButton>
+      <UiButton
+        :block="compact"
         data-testid="opinion-cancel"
         @click="emit('cancel')"
       >
         Annuler
-      </button>
-      <span class="text-xs text-muted" :class="compact ? 'text-center' : ''"
+      </UiButton>
+      <span class="text-sm text-muted" :class="compact ? 'text-center' : ''"
         >{{ otherText ? `${otherText} ` : '' }}Tes notes ne touchent pas au
         verdict.</span
       >

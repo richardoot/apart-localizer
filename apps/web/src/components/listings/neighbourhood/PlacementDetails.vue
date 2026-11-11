@@ -1,9 +1,11 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
+  import { computed } from 'vue'
   import type { ListingContext, ListingLocation } from '@apart/contracts'
   import { precisionBadge } from '@apart/domain'
   import { useContextMutations } from '@/composables/useListingContext'
-  import { ApiError } from '@/lib/api'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import { useAction } from '@/composables/useAction'
   import PrecisionBadge from '../PrecisionBadge.vue'
 
   /**
@@ -20,7 +22,7 @@
   const emit = defineEmits<{ precise: [] }>()
 
   const mutations = useContextMutations()
-  const failure = ref<string | null>(null)
+  const action = useAction('Le géocodage a échoué.')
 
   const placed = computed(() => ({
     precision: props.context.precision,
@@ -33,13 +35,9 @@
   const reasons = computed(() => props.context.placement?.reasons ?? [])
 
   async function regeocode(): Promise<void> {
-    failure.value = null
-    try {
-      await mutations.regeocode.mutateAsync(props.listingId)
-    } catch (err) {
-      failure.value =
-        err instanceof ApiError ? err.message : 'Le géocodage a échoué.'
-    }
+    await action.run(() => mutations.regeocode.mutateAsync(props.listingId), {
+      success: 'Géocodage relancé.',
+    })
   }
 </script>
 
@@ -57,7 +55,7 @@
     <p>{{ badge.title }}</p>
     <ul
       v-if="reasons.length"
-      class="grid gap-0.5 text-xs text-muted"
+      class="grid gap-0.5 text-sm text-muted"
       data-testid="placement-reasons"
     >
       <li v-for="reason in reasons" :key="reason">{{ reason }}</li>
@@ -66,31 +64,22 @@
       {{ context.approximation.note }}
     </p>
     <div class="flex flex-wrap gap-2">
-      <button
+      <UiButton
         v-if="badge.tone !== 'exact'"
-        type="button"
-        class="inline-flex min-h-11 items-center rounded-lg bg-accent px-3 text-sm font-semibold text-accent-fg sm:min-h-10"
+        variant="primary"
         data-action="precise-address"
         @click="emit('precise')"
       >
         Préciser l’adresse
-      </button>
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm hover:bg-surface-2 disabled:opacity-60 sm:min-h-10"
-        :disabled="mutations.regeocode.isPending.value"
+      </UiButton>
+      <UiButton
+        :loading="mutations.regeocode.isPending.value"
         data-action="regeocode"
         @click="regeocode"
       >
         Relancer le géocodage
-      </button>
+      </UiButton>
     </div>
-    <p
-      v-if="failure"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-    >
-      {{ failure }}
-    </p>
+    <UiAlert v-if="action.error.value">{{ action.error.value }}</UiAlert>
   </div>
 </template>

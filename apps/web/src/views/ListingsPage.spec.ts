@@ -18,6 +18,9 @@ const listState = vi.hoisted(() => ({
   listCalls: [] as unknown[],
   dismissed: [] as unknown[],
   decide: vi.fn(),
+  listError: null as Error | null,
+  overviewError: null as Error | null,
+  refetch: vi.fn(),
 }))
 
 vi.mock('@/composables/useDrafts', async () => {
@@ -37,21 +40,30 @@ vi.mock('@/composables/useListings', () => ({
   useListingList: (filters: unknown) => {
     listState.listCalls.push(filters)
     return {
-      data: ref({
-        items: listState.items,
-        total: listState.items.length,
-        ...(listState.fit ? { fit: listState.fit } : {}),
-      }),
+      data: ref(
+        listState.listError
+          ? undefined
+          : {
+              items: listState.items,
+              total: listState.items.length,
+              ...(listState.fit ? { fit: listState.fit } : {}),
+            }
+      ),
       isPending: ref(false),
       isFetching: ref(false),
-      error: ref(null),
+      isError: ref(listState.listError !== null),
+      error: ref(listState.listError),
+      refetch: listState.refetch,
     }
   },
 }))
 vi.mock('@/composables/useWorkflow', () => ({
   useWorkflowOverview: () => ({
-    data: ref(listState.overview),
-    isSuccess: ref(true),
+    data: ref(listState.overviewError ? undefined : listState.overview),
+    isSuccess: ref(listState.overviewError === null),
+    isError: ref(listState.overviewError !== null),
+    isFetching: ref(false),
+    refetch: listState.refetch,
   }),
 }))
 vi.mock('@/composables/useSearchCriteria', () => ({
@@ -71,6 +83,7 @@ import { NO_CRITERIA_FIT } from '@apart/contracts'
 import { fakeEvaluated } from '@/test/fixtures'
 import { fakeDraft } from '@/test/exploration-fixtures'
 import { useFiltersStore } from '@/stores/filters'
+import { useFeedbackStore } from '@/stores/feedback'
 
 const ID = '11111111-1111-4111-8111-111111111111'
 
@@ -157,6 +170,9 @@ describe('ListingsPage : onglet de la fiche dans l’URL', () => {
     listState.listCalls = []
     listState.dismissed = []
     listState.decide.mockReset()
+    listState.listError = null
+    listState.overviewError = null
+    listState.refetch.mockReset()
   })
 
   it('lot 21 : un brouillon écarté se retrouve aux archives et se repêche', async () => {
@@ -179,9 +195,45 @@ describe('ListingsPage : onglet de la fiche dans l’URL', () => {
       id: 'dddddddd-dddd-4ddd-8ddd-dddddddddd01',
       decision: { status: 'pending' },
     })
-    expect(wrapper.get('[data-testid="page-message"]').text()).toContain(
-      'revient À valider'
+    // Lot 22 : le retour part dans la zone commune, avec « Annuler » qui le
+    // remet aux archives comme il était (même raison).
+    const feedback = useFeedbackStore()
+    const message = feedback.messages.at(-1)
+    expect(message?.text).toContain('revient À valider')
+    expect(message?.action?.label).toBe('Annuler')
+    await feedback.act(message?.id ?? 0)
+    expect(listState.decide).toHaveBeenLastCalledWith({
+      id: 'dddddddd-dddd-4ddd-8ddd-dddddddddd01',
+      decision: { status: 'dismissed', reason: 'Trop cher' },
+    })
+  })
+
+  it('lot 22 : une liste qui échoue dit l’erreur et « Réessayer » ; des compteurs illisibles aussi', async () => {
+    const { ApiError } = await import('@/lib/api')
+    listState.listError = new ApiError(500, 'Le serveur ne répond pas.')
+    listState.overviewError = new Error('réseau')
+    const { wrapper } = await mountAt('/annonces?etape=a-etudier')
+    expect(wrapper.get('[data-testid="overview-error"]').text()).toContain(
+      'compteurs des étapes'
     )
+    const alert = wrapper.get('[data-state="error"]')
+    expect(alert.text()).toContain('Le serveur ne répond pas.')
+    expect(wrapper.find('[data-testid="stage-empty"]').exists()).toBe(false)
+    await alert.get('[data-testid="retry"]').trigger('click')
+    expect(listState.refetch).toHaveBeenCalled()
+  })
+
+  it('lot 22 : une étape vide nomme les filtres actifs et propose de les effacer', async () => {
+    const { wrapper } = await mountAt(
+      '/annonces?etape=a-etudier&commune=Talence'
+    )
+    const store = useFiltersStore()
+    expect(store.activeCount).toBe(1)
+    expect(wrapper.get('[data-testid="stage-empty-filters"]').text()).toContain(
+      'Des filtres sont actifs (1)'
+    )
+    await wrapper.get('[data-testid="clear-filters"]').trigger('click')
+    expect(store.activeCount).toBe(0)
   })
 
   it('lot 21 : la barre d’étapes vit dans l’URL ; le filtre garde sa place', async () => {

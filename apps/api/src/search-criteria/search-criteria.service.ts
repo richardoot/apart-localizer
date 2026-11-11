@@ -238,7 +238,7 @@ export class SearchCriteriaService {
         : await this.resolvePerimeter(changes.perimeter)
     const conflict = (updatedAt: string): ConflictException =>
       new ConflictException(
-        `Le critère a changé depuis votre lecture (modifié le ${updatedAt}) : relisez-le avant de le modifier`
+        `Le critère a changé depuis ta lecture (modifié le ${updatedAt}) : relis-le avant de le modifier`
       )
     const row = await this.findRow(member, id)
     const before = toSearchCriteriaDto(row)
@@ -358,7 +358,7 @@ export class SearchCriteriaService {
       const check = await this.geo.checkPolygon(input.polygon)
       if (!check.valid) {
         throw new BadRequestException(
-          `Polygone invalide (${check.reason}) : redessinez-le sans que ses côtés se croisent.`
+          `Polygone invalide (${check.reason}) : redessine-le sans que ses côtés se croisent.`
         )
       }
       if (check.areaSquareMeters < POLYGON_MIN_M2) {
@@ -366,7 +366,7 @@ export class SearchCriteriaService {
       }
       if (check.areaSquareMeters > POLYGON_MAX_M2) {
         throw new BadRequestException(
-          'Polygone trop grand (plus de 1 000 km²) : restez sur la métropole.'
+          'Polygone trop grand (plus de 1 000 km²) : reste sur la métropole.'
         )
       }
       return input
@@ -379,7 +379,7 @@ export class SearchCriteriaService {
         .geocode(input.address.trim(), 'address')
         .catch((error: unknown) => {
           throw new ServiceUnavailableException(
-            `Géocodeur de la Géoplateforme indisponible (${error instanceof Error ? error.message : String(error)}) : réessayez, ou cliquez le point de départ sur la carte.`
+            `Géocodeur de la Géoplateforme indisponible (${error instanceof Error ? error.message : String(error)}) : réessaie, ou clique le point de départ sur la carte.`
           )
         })
       if (!located) {

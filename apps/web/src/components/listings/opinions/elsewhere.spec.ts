@@ -282,7 +282,7 @@ describe('« À faire » et « Pendant la visite »', () => {
       label: 'À revoir à la contre-visite : le calme',
       origin: 'opinion',
       details:
-        'Vos notes s’écartent de 2 points : Richard 4 (« fenêtres fermées, ça va »), Chloé 2 (« bus devant la chambre »).',
+        'Les notes s’écartent de 2 points : Richard 4 (« fenêtres fermées, ça va »), Chloé 2 (« bus devant la chambre »).',
     })
     const wrapper = mount(TodoItemRow, {
       props: {

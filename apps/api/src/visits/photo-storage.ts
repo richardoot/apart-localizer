@@ -38,7 +38,7 @@ export interface PhotoStorage {
 export class PhotoStorageUnavailableException extends ServiceUnavailableException {
   constructor(detail: string) {
     super(
-      `Stockage des photos indisponible (${detail}) : vérifiez que Supabase Storage est actif et que le bucket existe (docs/deploiement.md).`
+      `Stockage des photos indisponible (${detail}) : vérifie que Supabase Storage est actif et que le bucket existe (docs/deploiement.md).`
     )
   }
 }

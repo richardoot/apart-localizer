@@ -4,13 +4,15 @@
   import type { Assumptions, TaxRegime } from '@apart/contracts'
   import { projection, regimesFor, wealthSeries } from '@apart/domain'
   import type { StudyInput } from '@apart/domain'
-  import FormField from '@/components/ui/FormField.vue'
+  import UiField from '@/components/ui/UiField.vue'
   import StatTile from '@/components/ui/StatTile.vue'
   import {
     formatDate,
     formatEuros,
     formatEurosPerMonth,
     formatPercent,
+    numberInputError,
+    parseNumberInput,
   } from '@/lib/format'
   import ProjectionChart from './ProjectionChart.vue'
 
@@ -33,8 +35,27 @@
   /** TMI de l'aperçu, en pourcentage ; vide = celle des hypothèses. */
   const tmi = ref<string>('')
 
+  /** Lot 22 : un horizon illisible est refusé au champ, pas compris de travers. */
+  const horizonError = computed(() => numberInputError(horizon.value))
+  const horizonYears = computed(() =>
+    horizonError.value ? null : parseNumberInput(horizon.value)
+  )
   const regimes = computed(() => regimesFor(props.input.leaseType))
-  const TMI_CHOICES = ['0', '11', '30', '41', '45']
+  const REGIME_OPTIONS = computed(() => [
+    { value: '', label: 'Selon les hypothèses' },
+    ...regimes.value.map(r => ({ value: r, label: TAX_REGIME_LABELS[r] })),
+  ])
+  const TMI_OPTIONS = computed(() => [
+    {
+      value: '',
+      label: `Hypothèses (${
+        props.assumptions.marginalTaxRate === null
+          ? 'non renseignée'
+          : formatPercent(props.assumptions.marginalTaxRate)
+      })`,
+    },
+    ...['0', '11', '30', '41', '45'].map(t => ({ value: t, label: `${t} %` })),
+  ])
 
   const report = computed(() =>
     projection(
@@ -44,7 +65,7 @@
         : { ...props.assumptions, marginalTaxRate: Number(tmi.value) / 100 },
       {
         at: new Date(),
-        horizonYears: horizon.value === '' ? undefined : Number(horizon.value),
+        horizonYears: horizonYears.value ?? undefined,
         regime: regime.value === '' ? undefined : regime.value,
         listingId: props.listingId,
         title: props.title,
@@ -55,49 +76,35 @@
   const pct = (v: number | null): string =>
     v === null ? '—' : formatPercent(v)
   const eur = (v: number | null): string => (v === null ? '—' : formatEuros(v))
-
-  const inputClass =
-    'rounded-lg border border-line bg-bg px-2 py-1 text-sm w-full'
 </script>
 
 <template>
   <div class="grid gap-3 text-sm" data-testid="projection">
     <div class="grid gap-2 sm:grid-cols-3">
-      <FormField label="Horizon (ans)" for-id="pj-horizon">
-        <input
-          id="pj-horizon"
-          v-model="horizon"
-          :class="inputClass"
-          inputmode="numeric"
-          :placeholder="String(assumptions.horizonYears)"
-        />
-      </FormField>
-      <FormField label="Régime fiscal" for-id="pj-regime">
-        <select id="pj-regime" v-model="regime" :class="inputClass">
-          <option value="">Selon les hypothèses</option>
-          <option v-for="r in regimes" :key="r" :value="r">
-            {{ TAX_REGIME_LABELS[r] }}
-          </option>
-        </select>
-      </FormField>
-      <FormField
+      <UiField
+        id="pj-horizon"
+        v-model="horizon"
+        label="Horizon"
+        unit="ans"
+        inputmode="numeric"
+        :placeholder="String(assumptions.horizonYears)"
+        :error="horizonError"
+      />
+      <UiField
+        id="pj-regime"
+        v-model="regime"
+        as="select"
+        label="Régime fiscal"
+        :options="REGIME_OPTIONS"
+      />
+      <UiField
+        id="pj-tmi"
+        v-model="tmi"
+        as="select"
         label="TMI de l’aperçu"
-        for-id="pj-tmi"
         hint="Ne modifie pas les hypothèses"
-      >
-        <select id="pj-tmi" v-model="tmi" :class="inputClass">
-          <option value="">
-            Hypothèses ({{
-              assumptions.marginalTaxRate === null
-                ? 'non renseignée'
-                : formatPercent(assumptions.marginalTaxRate)
-            }})
-          </option>
-          <option v-for="t in TMI_CHOICES" :key="t" :value="t">
-            {{ t }} %
-          </option>
-        </select>
-      </FormField>
+        :options="TMI_OPTIONS"
+      />
     </div>
 
     <div class="grid gap-px overflow-hidden rounded-lg bg-line sm:grid-cols-4">

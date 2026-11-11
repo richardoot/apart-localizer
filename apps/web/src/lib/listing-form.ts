@@ -15,7 +15,7 @@ import type {
   TriState,
 } from '@apart/contracts'
 import { z } from 'zod'
-import { parseNumberInput } from './format'
+import { numberInputError, parseNumberInput } from './format'
 
 /**
  * Le modèle du formulaire d'annonce : des chaînes pour les champs saisis
@@ -389,13 +389,53 @@ const FIELD_MESSAGES: Record<string, string> = {
   dpeDate: 'La date du DPE doit être au format AAAA-MM-JJ.',
 }
 
+/**
+ * Lot 22 : les nombres illisibles du formulaire, par clé d'erreur (celle que
+ * le champ affiche). Un nombre illisible n'est jamais envoyé vide.
+ */
+export function unreadableNumbers(form: ListingForm): Record<string, string> {
+  const errors: Record<string, string> = {}
+  const check = (key: string, raw: string) => {
+    const message = numberInputError(raw)
+    if (message) errors[key] ??= message
+  }
+  for (const key of [
+    'price',
+    'feesAmount',
+    'surface',
+    'rooms',
+    'bedrooms',
+    'constructionYear',
+    'annualCharges',
+    'nonRecoverableChargesMonthly',
+    'propertyTax',
+    'furnitureValue',
+    'lotsCount',
+  ] as const) {
+    check(key, form[key])
+  }
+  check('location.point', form.longitude)
+  check('location.point', form.latitude)
+  check('renovation.durationMonths', form.renovation.durationMonths)
+  form.renovation.items.forEach((item, index) =>
+    check(`renovation.items.${index}.amount`, item.amount)
+  )
+  check('rentalPlan.referenceRentPerM2', form.rentalPlan.referenceRentPerM2)
+  check('rentalPlan.targetRent', form.rentalPlan.targetRent)
+  check('rentalPlan.marketRent', form.rentalPlan.marketRent)
+  return errors
+}
+
 /** Valide le formulaire par le schéma du contrat et rend des messages lisibles. */
 export function validateForm(form: ListingForm): FormValidation {
+  const unreadable = unreadableNumbers(form)
   const raw = formToRawInput(form)
   const result = ListingInputSchema.safeParse(raw)
-  if (result.success) return { input: result.data, errors: {} }
-  const errors: Record<string, string> = {}
-  for (const issue of result.error.issues) {
+  if (result.success && Object.keys(unreadable).length === 0) {
+    return { input: result.data, errors: {} }
+  }
+  const errors: Record<string, string> = { ...unreadable }
+  for (const issue of result.success ? [] : result.error.issues) {
     const path = issue.path.join('.')
     const key = path.startsWith('location.point') ? 'location.point' : path
     errors[key] ??= FIELD_MESSAGES[key] ?? `${path} : ${issue.message}`

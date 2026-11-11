@@ -2,6 +2,7 @@
   import { computed } from 'vue'
   import type {
     Assumptions,
+    DiscountClass,
     NegotiationBrief,
     NotaryFeesBreakdown,
     TargetPrice,
@@ -17,7 +18,6 @@
     formatSignedEurosPerMonth,
   } from '@/lib/format'
   import {
-    DISCOUNT_CLASS_CLASSES,
     DISCOUNT_CLASS_LABELS,
     TARGET_CRITERION_LABELS,
     VERDICT_FAILURE_LABELS,
@@ -26,6 +26,9 @@
   import CostBasisBadge from './CostBasisBadge.vue'
   import TargetCriteriaTable from './TargetCriteriaTable.vue'
   import VerdictPill from './VerdictPill.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import { cardClasses } from '@/lib/ui'
+  import type { Tone } from '@/lib/ui'
 
   /**
    * Lot 19 (ADR 0029) : le « Prix cible » de l'onglet Négocier. Le prix
@@ -58,11 +61,18 @@
     priceRangeGauge(props.price, target.value, offer.value)
   )
   const atTarget = computed(() => props.targetPrice?.atTarget ?? null)
+  const DISCOUNT_TONES: Record<DiscountClass, Tone> = {
+    in_target: 'good',
+    negotiable: 'good',
+    tight: 'warn',
+    out_of_reach: 'bad',
+  }
 </script>
 
 <template>
   <section
-    class="grid gap-3.5 rounded-2xl border border-line bg-surface p-4 text-sm sm:px-5"
+    class="grid gap-3.5 text-sm"
+    :class="cardClasses()"
     aria-labelledby="target-price-title"
     data-testid="target-price-section"
   >
@@ -82,8 +92,8 @@
     </header>
 
     <p v-if="target === null || !targetPrice" class="text-muted">
-      Prix cible non calculable : renseignez le loyer visé (phase 2, onglet
-      Budget) et vérifiez les critères retenus dans les hypothèses.
+      Prix cible non calculable : renseigne le loyer visé (phase 2, onglet
+      Budget) et vérifie les critères retenus dans les hypothèses.
     </p>
     <template v-else>
       <div class="flex flex-wrap items-baseline gap-x-6 gap-y-1">
@@ -110,17 +120,16 @@
 
       <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <CostBasisBadge basis="price" />
-        <span
+        <UiBadge
           v-if="discount !== null && targetPrice.discountClass"
-          class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
-          :class="DISCOUNT_CLASS_CLASSES[targetPrice.discountClass]"
+          :tone="DISCOUNT_TONES[targetPrice.discountClass]"
           :data-discount-class="targetPrice.discountClass"
           data-testid="discount-class"
         >
           {{ discount > 0 ? 'Décote nécessaire' : 'Marge' }}
           {{ formatPercent(Math.abs(discount)) }} ·
           {{ DISCOUNT_CLASS_LABELS[targetPrice.discountClass] }}
-        </span>
+        </UiBadge>
         <DefinitionButton term="discount" />
         <span
           v-if="targetPrice.bindingCriterion"

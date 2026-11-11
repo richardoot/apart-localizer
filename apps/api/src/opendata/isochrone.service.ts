@@ -71,7 +71,7 @@ export class IsochroneService {
       const message = error instanceof Error ? error.message : String(error)
       this.logger.warn(`Isochrone impossible : ${message}`)
       throw new ServiceUnavailableException(
-        `Service d'isochrones de la Géoplateforme indisponible (${message}) : réessayez, ou dessinez le périmètre.`
+        `Service d'isochrones de la Géoplateforme indisponible (${message}) : réessaie, ou dessine le périmètre.`
       )
     }
   }

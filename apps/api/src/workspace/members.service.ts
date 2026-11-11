@@ -432,7 +432,7 @@ export class MembersService {
     const joined = await this.prisma.$transaction(async tx => {
       const invitation = await this.findReceived(tx, invitationId, email, now)
       if (invitation.workspaceId === member.workspaceId) {
-        throw new ConflictException('Vous êtes déjà membre de cet espace.')
+        throw new ConflictException('Tu es déjà membre de cet espace.')
       }
       await lockWorkspaces(tx, member.workspaceId, invitation.workspaceId)
       const current = await tx.member.findUniqueOrThrow({
@@ -440,7 +440,7 @@ export class MembersService {
       })
       if (current.authUserId !== identity.id || current.status !== 'active') {
         throw new ConflictException(
-          'Votre espace vient de changer : rechargez la page.'
+          'Ton espace vient de changer : recharge la page.'
         )
       }
       const [oldMembers, oldWorkspace] = await Promise.all([
@@ -481,7 +481,7 @@ export class MembersService {
       })
       if (count === 0) {
         throw new ConflictException(
-          'Cette invitation vient de changer : rechargez la page.'
+          'Cette invitation vient de changer : recharge la page.'
         )
       }
       // Les appareils abonnés au push suivent la personne.
@@ -542,7 +542,7 @@ export class MembersService {
   private verifiedEmail(identity: AuthIdentity): string {
     if (!identity.email || !identity.emailVerified) {
       throw new ForbiddenException(
-        "Votre adresse e-mail n'est pas vérifiée par votre fournisseur de connexion : impossible de répondre à une invitation."
+        "Ton adresse e-mail n'est pas vérifiée par ton fournisseur de connexion : impossible de répondre à une invitation."
       )
     }
     return identity.email

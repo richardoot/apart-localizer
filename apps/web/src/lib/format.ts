@@ -146,6 +146,36 @@ export function parseNumberInput(
   return Number.isFinite(value) ? value : null
 }
 
+/**
+ * Lot 22 : vrai si la saisie n'est ni vide ni un nombre lisible (« 45 m² »,
+ * « 250k », « environ 300 ») : le formulaire la refuse avec un message au
+ * champ, il ne l'enregistre jamais vide en silence.
+ */
+export function isUnreadableNumber(
+  raw: string | number | null | undefined
+): boolean {
+  if (raw === null || raw === undefined) return false
+  if (typeof raw === 'number') return !Number.isFinite(raw)
+  if (raw.trim() === '') return false
+  return parseNumberInput(raw) === null
+}
+
+/** Le message au champ d'un nombre illisible, avec ce qui a été tapé. */
+export function unreadableNumberMessage(raw: string | number): string {
+  const typed = String(raw).trim()
+  const shown = typed.length > 24 ? `${typed.slice(0, 24)}…` : typed
+  return `« ${shown} » n’est pas un nombre : écris-le en chiffres, sans unité (ex. 45 ou 45,5).`
+}
+
+/** Le message d'erreur d'un nombre saisi, ou null s'il est vide ou lisible. */
+export function numberInputError(
+  raw: string | number | null | undefined
+): string | null {
+  return raw !== null && raw !== undefined && isUnreadableNumber(raw)
+    ? unreadableNumberMessage(raw)
+    : null
+}
+
 /** Pourcentage saisi (« 3,65 ») → fraction (0,0365), ou null. */
 export function percentToFraction(
   raw: string | number | null | undefined
@@ -176,4 +206,26 @@ export function fractionToPercentInput(
 ): string {
   if (fraction == null || !Number.isFinite(fraction)) return ''
   return String(Math.round(fraction * 100 * 1000) / 1000)
+}
+
+/**
+ * Lot 22 : un nombre et son nom accordé (« 1 annonce », « 3 annonces »,
+ * « 0 annonce »), jamais « annonce(s) ». Le pluriel par défaut ajoute un
+ * « s » ; `pluralForm` pour les autres (« travaux », « prix »).
+ */
+export function plural(
+  count: number,
+  singular: string,
+  pluralForm = `${singular}s`
+): string {
+  return `${count.toLocaleString('fr-FR')} ${Math.abs(count) >= 2 ? pluralForm : singular}`
+}
+
+/** Le seul mot accordé, sans le nombre (« annonces » si plus d'une). */
+export function pluralWord(
+  count: number,
+  singular: string,
+  pluralForm = `${singular}s`
+): string {
+  return Math.abs(count) >= 2 ? pluralForm : singular
 }

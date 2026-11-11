@@ -110,7 +110,7 @@ const withoutFinalDot = (text: string): string => text.replace(/\.\s*$/, '')
  * important au moins important, chacun avec l'onglet qui le détaille.
  * Lot 20 : les avis viennent juste après ce qui tranche (le verdict d'un
  * côté, les contrôles de louabilité bloquants de l'autre) et avant le reste :
- * ce que vous en pensez tous les deux compte plus que les détails qu'on
+ * ce que les membres en pensent compte plus que les détails qu'on
  * retrouve dans les onglets.
  */
 export function listingHighlights(input: HighlightsInput): ListingHighlights {

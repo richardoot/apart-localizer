@@ -71,7 +71,7 @@ export class DpeService {
           total: 0,
           searchedAt,
           message:
-            'Recherche impossible : il faut une adresse exacte (identifiant BAN), ou le code INSEE de la commune et la surface (relancez le géocodage).',
+            'Recherche impossible : il faut une adresse exacte (identifiant BAN), ou le code INSEE de la commune et la surface (relance le géocodage).',
         },
         apply: null,
       }
@@ -161,7 +161,7 @@ function messageFor(
         ? "Un DPE trouvé à l'adresse, à confirmer : surface, étage ou classe ne correspondent pas tout à fait."
         : 'Un DPE trouvé dans la commune pour cette surface, à une autre adresse peut-être : à confirmer.'
     case 'multiple':
-      return `${total} DPE trouvés${byAddress ? " à l'adresse" : ' dans la commune pour cette surface'} : choisissez celui du logement.`
+      return `${total} DPE trouvés${byAddress ? " à l'adresse" : ' dans la commune pour cette surface'} : choisis celui du logement.`
     default:
       return byAddress
         ? "Aucun DPE de logement existant à cette adresse à l'ADEME."

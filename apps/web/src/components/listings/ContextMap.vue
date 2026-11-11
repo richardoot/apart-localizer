@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
   import '@/lib/maplibre-worker'
   import * as maplibregl from 'maplibre-gl'
@@ -369,25 +370,19 @@
 <template>
   <div v-if="context.point" class="grid gap-2">
     <div
-      class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
+      class="flex flex-wrap items-center gap-x-4 gap-y-0 text-sm"
       role="group"
       aria-label="Couches de la carte du quartier"
     >
       <span class="text-muted">Couches :</span>
-      <label
+      <UiCheckbox
         v-for="layer in LAYER_LABELS"
         :key="layer.key"
-        class="flex min-h-8 items-center gap-1"
-      >
-        <input
-          type="checkbox"
-          class="accent-accent"
-          :checked="toggles[layer.key]"
-          :data-layer="layer.key"
-          @change="onToggle(layer.key, $event)"
-        />
-        {{ layer.label }}
-      </label>
+        :label="layer.label"
+        :model-value="toggles[layer.key]"
+        :data-layer="layer.key"
+        @change="onToggle(layer.key, $event)"
+      />
       <SurroundingsLegend :toggles="toggles" />
       <span
         v-if="retainedArea.features.length"

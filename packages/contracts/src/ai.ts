@@ -91,7 +91,7 @@ export const ExtractionRequestSchema = z
       (request.text !== null && request.text.trim().length > 0) ||
       request.images.length > 0,
     {
-      message: 'Donnez le texte de l’annonce ou au moins une capture',
+      message: 'Donne le texte de l’annonce ou au moins une capture',
       path: ['text'],
     }
   )

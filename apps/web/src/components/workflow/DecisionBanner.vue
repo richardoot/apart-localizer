@@ -3,6 +3,8 @@
   import type { DecisionProposal } from '@apart/contracts'
   import { counterChoice, decisionBannerText } from '@apart/domain'
   import { formatRelativeDays } from '@/lib/format'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
   import DiscardReasons from './DiscardReasons.vue'
 
   /**
@@ -14,6 +16,8 @@
   const props = defineProps<{
     decision: DecisionProposal
     busy?: boolean
+    /** Lot 22 : l'échec de la dernière réponse, dit dans le bandeau. */
+    error?: string | null
   }>()
   const emit = defineEmits<{
     withdraw: []
@@ -49,14 +53,11 @@
     asking.value = false
     emit('disagree', 'discard', reason)
   }
-
-  const outline =
-    'min-h-11 rounded-[10px] border bg-surface px-3 disabled:opacity-60'
 </script>
 
 <template>
   <section
-    class="mb-4 grid gap-2 rounded-xl px-3.5 py-3"
+    class="mb-4 grid gap-2 rounded-2xl px-4 py-3"
     :class="
       decision.state === 'to_settle'
         ? 'bg-ai-soft text-ai'
@@ -71,14 +72,15 @@
     <template v-if="decision.state === 'to_settle'">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <span class="min-w-0 flex-[1_1_20rem]"
-          ><strong>Vos choix diffèrent sur cette annonce.</strong> Elle reste où
-          elle est tant que vous n’avez pas tranché.</span
+          ><strong>Les choix diffèrent sur cette annonce.</strong> Elle reste où
+          elle est tant que ce n’est pas tranché.</span
         >
-        <RouterLink
+        <UiButton
           :to="{ name: 'settle' }"
-          class="inline-flex min-h-11 items-center rounded-[10px] border border-ai bg-surface px-3 font-semibold"
+          variant="outline"
+          class="border-ai text-ai"
           data-action="go-settle"
-          >À trancher ensemble</RouterLink
+          >À trancher ensemble</UiButton
         >
       </div>
     </template>
@@ -91,48 +93,37 @@
           {{ text.body }}
         </span>
         <span v-if="decision.viewer.isAuthor" class="flex flex-wrap gap-2">
-          <button
-            type="button"
-            :class="[outline, 'border-info']"
+          <UiButton
             :disabled="busy"
             data-action="withdraw"
             @click="emit('withdraw')"
           >
             Retirer ma proposition
-          </button>
-          <button
+          </UiButton>
+          <UiButton
             v-if="decision.viewer.canDecideNow"
-            type="button"
-            :class="[outline, 'border-info']"
             :disabled="busy"
             data-action="decide-now"
             @click="emit('decideNow')"
           >
             Décider sans attendre
-          </button>
+          </UiButton>
         </span>
         <span
           v-else-if="decision.viewer.canRespond && !asking"
           class="flex flex-wrap gap-2"
         >
-          <button
-            type="button"
-            :class="[outline, 'border-warn']"
-            :disabled="busy"
-            data-action="disagree"
-            @click="refuse"
-          >
+          <UiButton :disabled="busy" data-action="disagree" @click="refuse">
             Pas d’accord
-          </button>
-          <button
-            type="button"
-            class="min-h-11 rounded-[10px] bg-accent px-3 font-semibold text-accent-fg disabled:opacity-60"
+          </UiButton>
+          <UiButton
+            variant="primary"
             :disabled="busy"
             data-action="agree"
             @click="emit('agree')"
           >
             D’accord
-          </button>
+          </UiButton>
         </span>
       </div>
       <DiscardReasons
@@ -144,5 +135,6 @@
         @cancel="asking = false"
       />
     </template>
+    <UiAlert v-if="error" class="text-fg">{{ error }}</UiAlert>
   </section>
 </template>

@@ -16,13 +16,13 @@
 <template>
   <details
     v-if="facts.length || description"
-    class="rounded-xl border border-line bg-surface"
+    class="rounded-2xl border border-line bg-surface"
     data-testid="property-facts"
     :open="open"
     @toggle="open = ($event.target as HTMLDetailsElement).open"
   >
     <summary
-      class="flex min-h-11 cursor-pointer items-center px-3.5 text-[15px] font-semibold"
+      class="flex min-h-11 cursor-pointer items-center px-3.5 text-base font-semibold"
     >
       Les données du bien
     </summary>

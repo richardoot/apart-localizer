@@ -174,7 +174,7 @@ describe('Lot 21 : décisions au connecteur MCP (e2e)', () => {
     })
     expect(refused.isError).toBe(true)
     expect(text(refused)).toContain(
-      'Richard a déjà proposé « À visiter » pour cette annonce. Claude ne confirme jamais pour un autre membre : répondez dans l’application.'
+      'Richard a déjà proposé « À visiter » pour cette annonce. Claude ne confirme jamais pour un autre membre : réponds dans l’application.'
     )
     expect(await statusOf()).toBe('to_study')
     expect(await ctx.prisma.decisionResponse.count()).toBe(0)
@@ -203,7 +203,7 @@ describe('Lot 21 : décisions au connecteur MCP (e2e)', () => {
       reason: 'Quartier',
     })
     expect(refused.isError).toBe(true)
-    expect(text(refused)).toContain('tranchez-la dans l’application')
+    expect(text(refused)).toContain('tranche-la dans l’application')
     expect(await statusOf()).toBe('to_study')
   })
 

@@ -44,7 +44,11 @@ describe('formulaire de scénario', () => {
       price: 'abc',
     })
     expect(bad.overrides).toBeNull()
-    expect(bad.error).toMatch(/price/)
+    // Lot 22 : le nombre illisible est dit à son champ.
+    expect(bad.error).toBe(
+      'Un nombre est illisible : corrige le champ signalé.'
+    )
+    expect(bad.fieldErrors?.price).toContain('« abc » n’est pas un nombre')
     expect(
       scenarioOverridesFromForm({ ...emptyScenarioForm(), durationYears: '60' })
         .error

@@ -42,7 +42,7 @@
 <template>
   <span
     v-if="provenance"
-    class="inline-block rounded-full px-1.5 py-px text-[10px] font-semibold tracking-wide whitespace-nowrap uppercase"
+    class="inline-block rounded-full px-1.5 py-px text-xs font-semibold tracking-wide whitespace-nowrap uppercase"
     :class="classes"
     :title="title"
     :data-source="provenance.source"

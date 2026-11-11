@@ -1,20 +1,29 @@
 <script setup lang="ts">
   import { nextTick, ref, watch } from 'vue'
   import { useListingEditor } from '@/composables/useListingEditor'
+  import UiButton from '@/components/ui/UiButton.vue'
 
   /**
    * Lot 19 : quitter une section modifiée sans l'enregistrer (autre section,
    * autre onglet, fermeture de la fiche) demande confirmation, ici, dans la
    * fiche : jamais de `window.confirm`. Le focus vient sur le choix ; Échap
-   * garde les modifications.
+   * garde les modifications. Lot 22 : le bouton retour du navigateur ou du
+   * téléphone passe par la même question (garde du routeur) ; le bandeau
+   * est ramené à l'écran.
    */
   const editor = useListingEditor()
-  const stayButton = ref<HTMLButtonElement | null>(null)
+  const bar = ref<HTMLElement | null>(null)
 
   watch(
     () => editor.pending.value,
     value => {
-      if (value) void nextTick(() => stayButton.value?.focus())
+      if (!value) return
+      void nextTick(() => {
+        bar.value?.scrollIntoView?.({ block: 'nearest' })
+        bar.value
+          ?.querySelector<HTMLElement>('[data-testid="unsaved-stay"]')
+          ?.focus({ preventScroll: true })
+      })
     }
   )
 </script>
@@ -22,11 +31,12 @@
 <template>
   <div
     v-if="editor.pending.value"
+    ref="bar"
     role="alertdialog"
     aria-modal="false"
     aria-labelledby="unsaved-title"
     aria-describedby="unsaved-text"
-    class="sticky top-14 z-10 mb-4 grid gap-2 rounded-xl border border-warn bg-warn-soft px-4 py-3 text-sm text-fg shadow-panel sm:flex sm:items-center sm:justify-between"
+    class="sticky top-14 z-10 mb-4 grid gap-2 rounded-2xl border border-warn bg-warn-soft px-4 py-3 text-sm text-fg shadow-panel sm:flex sm:items-center sm:justify-between"
     data-testid="unsaved-changes"
     @keydown.escape.stop.prevent="editor.stay()"
   >
@@ -40,23 +50,16 @@
       >
     </div>
     <div class="flex flex-wrap gap-2">
-      <button
-        ref="stayButton"
-        type="button"
-        class="inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm hover:bg-surface-2 sm:min-h-10"
-        data-testid="unsaved-stay"
-        @click="editor.stay()"
-      >
+      <UiButton data-testid="unsaved-stay" @click="editor.stay()">
         Continuer la modification
-      </button>
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center rounded-lg bg-bad px-3 text-sm font-semibold text-surface sm:min-h-10"
+      </UiButton>
+      <UiButton
+        variant="danger"
         data-testid="unsaved-leave"
         @click="editor.confirmLeave()"
       >
         Abandonner les modifications
-      </button>
+      </UiButton>
     </div>
   </div>
 </template>

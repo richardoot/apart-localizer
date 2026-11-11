@@ -166,7 +166,7 @@ export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
     definition:
       'Phase 1 : le foyer habite le bien, de l’achat à la mise en location (coût d’occupation comparé au loyer actuel). Phase 2 : le bien est loué à partir de la date de mise en location des hypothèses, ou à défaut du 1er janvier de l’année de mise en location par défaut ; l’année de phase 2 fixée dans une annonce l’emporte.',
     short:
-      'Vous habitez d’abord le bien (phase 1), puis vous le louez à partir de la date de mise en location (phase 2).',
+      'Tu habites d’abord le bien (phase 1), puis tu le loues à partir de la date de mise en location (phase 2).',
   },
   {
     key: 'scenario',

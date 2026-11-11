@@ -64,10 +64,13 @@ describe('ListingsTable', () => {
       .find(b => b.text().startsWith('Prix'))
     await priceHeader?.trigger('click')
     expect(ids()).toEqual([dear.listing.id, cheap.listing.id])
-    expect(priceHeader?.text()).toContain('↓')
+    expect(priceHeader?.attributes('data-sort')).toBe('desc')
+    expect(priceHeader?.element.closest('th')?.getAttribute('aria-sort')).toBe(
+      'descending'
+    )
     await priceHeader?.trigger('click')
     expect(ids()).toEqual([cheap.listing.id, dear.listing.id])
-    expect(priceHeader?.text()).toContain('↑')
+    expect(priceHeader?.attributes('data-sort')).toBe('asc')
   })
 
   it('ouvre la fiche au clic ou à Entrée, et dit quand rien ne correspond', async () => {
@@ -110,7 +113,7 @@ describe('ListingsTable : prix cible, décote, classement et comparaison', () =>
     await boxes[0]?.setValue(true)
     expect(wrapper.emitted('open')).toBeUndefined()
     const bar = wrapper.get('[data-testid="compare-bar"]')
-    expect(bar.text()).toContain('1 annonce(s)')
+    expect(bar.text()).toContain('1 annonce sélectionnée')
     const compareButton = bar
       .findAll('button')
       .find(b => b.text().startsWith('Comparer'))
@@ -122,7 +125,7 @@ describe('ListingsTable : prix cible, décote, classement et comparaison', () =>
     ])
     await boxes[0]?.setValue(false)
     expect(wrapper.get('[data-testid="compare-bar"]').text()).toContain(
-      '1 annonce(s)'
+      '1 annonce sélectionnée'
     )
   })
 })

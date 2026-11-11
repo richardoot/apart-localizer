@@ -164,7 +164,7 @@ export class TargetPriceService {
     const missing = listingIds.filter(id => !rows.some(row => row.id === id))
     if (missing.length > 0) {
       throw new NotFoundException(
-        `Annonce(s) introuvable(s) : ${missing.join(', ')}`
+        `${missing.length > 1 ? 'Annonces introuvables' : 'Annonce introuvable'} : ${missing.join(', ')}`
       )
     }
     const [base, opinions] = await Promise.all([

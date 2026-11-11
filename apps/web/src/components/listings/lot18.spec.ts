@@ -35,6 +35,7 @@ vi.mock('@/lib/api', async () => {
   return { ...actual, api: apiMock }
 })
 
+import { useFeedbackStore } from '@/stores/feedback'
 import FiltersBar from './FiltersBar.vue'
 import ListingCards from './ListingCards.vue'
 import ListingLinksSection from './ListingLinksSection.vue'
@@ -193,7 +194,7 @@ describe('Lot 18 : « Où la trouver »', () => {
       origin: 'manual',
       expectedUpdatedAt: '2026-11-05T12:00:00.000Z',
     })
-    expect(wrapper.get('[data-testid="links-notice"]').text()).toBe(
+    expect(useFeedbackStore().messages.at(-1)?.text).toBe(
       'Lien Logic-Immo ajouté. Claude relèvera son prix à la prochaine tournée.'
     )
   })
@@ -280,7 +281,7 @@ describe('Lot 18 : « Où la trouver »', () => {
     await bi.get('[data-action="confirm-remove"]').trigger('click')
     await flushPromises()
     expect(apiMock.links.remove).toHaveBeenCalledWith(LISTING, BI.id)
-    expect(wrapper.get('[data-testid="links-notice"]').text()).toBe(
+    expect(useFeedbackStore().messages.at(-1)?.text).toBe(
       'Lien Bien’ici retiré.'
     )
   })

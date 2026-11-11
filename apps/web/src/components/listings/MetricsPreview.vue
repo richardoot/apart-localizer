@@ -20,7 +20,7 @@
     aria-label="Aperçu des indicateurs"
   >
     <p v-if="!evaluation" class="text-muted">
-      Saisissez un prix et un loyer visé pour voir les indicateurs.
+      Saisis un prix et un loyer visé pour voir les indicateurs.
     </p>
     <template v-else>
       <div class="mb-2 flex flex-wrap items-center gap-2">

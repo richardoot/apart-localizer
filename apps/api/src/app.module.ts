@@ -41,7 +41,7 @@ import { DecisionsModule } from './decisions/decisions.module'
     // limite ; un robot qui frappe /health ou /mcp, si.
     ThrottlerModule.forRoot({
       throttlers: [{ name: 'default', ...throttleOptions(process.env) }],
-      errorMessage: 'Trop de requêtes : réessayez dans une minute.',
+      errorMessage: 'Trop de requêtes : réessaie dans une minute.',
     }),
     PrismaModule,
     ActivityModule,

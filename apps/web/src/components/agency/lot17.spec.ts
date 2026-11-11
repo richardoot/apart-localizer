@@ -42,6 +42,7 @@ vi.mock('@/lib/api', async () => {
   return { ...actual, api: apiMock }
 })
 
+import { useFeedbackStore } from '@/stores/feedback'
 import ExchangesSection from './ExchangesSection.vue'
 import PendingMessages from './PendingMessages.vue'
 import TodoTab from '@/components/listings/tabs/TodoTab.vue'
@@ -241,7 +242,9 @@ describe('questions aux agences dans « À faire » (lots 17 et 19)', () => {
     await draft.get('[data-testid="draft-approve"]').trigger('click')
     await flushPromises()
     expect(apiMock.agency.approve).toHaveBeenCalledWith([DRAFT.id])
-    expect(wrapper.text()).toContain('Message validé : demandez à Claude')
+    expect(useFeedbackStore().messages.at(-1)?.text).toContain(
+      'Message validé : demande à Claude'
+    )
   })
 
   it('questions à poser, préparation, relance due, réponse appliquée et valeur proposée', async () => {
@@ -310,7 +313,7 @@ describe('questions aux agences dans « À faire » (lots 17 et 19)', () => {
     await wrapper.get('[data-testid="contact-edit"]').trigger('click')
     await wrapper.get('[data-testid="contact-save"]').trigger('click')
     expect(wrapper.get('[data-testid="contact-form"]').text()).toContain(
-      'Renseignez au moins un champ'
+      'Renseigne au moins un champ'
     )
     await wrapper
       .get('[data-testid="contact-agency"]')
@@ -522,15 +525,18 @@ describe('Suivi, onglet et Synthèse (lot 17)', () => {
     await flushPromises()
     const block = wrapper.get('[data-testid="pending-messages"]')
     expect(block.text()).toContain('Messages à valider')
-    expect(block.text()).toContain('1 validé(s), en attente d’envoi par Claude')
-    expect(block.text()).toContain('1 relance(s) due(s)')
+    expect(block.text()).toContain('1 validé, en attente d’envoi par Claude')
+    expect(block.text()).toContain('1 relance due')
+    expect(block.text()).toContain('onglet « À faire »')
     expect(block.findAll('[data-testid="draft-cancel"]')).toHaveLength(0)
     expect(block.text()).toContain('Voir le message')
     await block.findAll('[data-testid="draft-select"]')[1]?.setValue(false)
     await block.get('[data-testid="drafts-approve"]').trigger('click')
     await flushPromises()
     expect(apiMock.agency.approve).toHaveBeenCalledWith([DRAFT.id])
-    expect(block.text()).toContain('Message validé : Claude peut l’envoyer.')
+    expect(useFeedbackStore().messages.at(-1)?.text).toBe(
+      'Message validé : Claude peut l’envoyer.'
+    )
 
     apiMock.agency.pending.mockResolvedValue({
       toApprove: [],

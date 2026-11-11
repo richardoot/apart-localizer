@@ -405,7 +405,7 @@ describe('onglet Budget (lot 19)', () => {
     })
     await flushPromises()
     expect(wrapper.text()).toContain('Chargement des hypothèses')
-    expect(wrapper.text()).toContain('Saisissez un prix et un loyer visé')
+    expect(wrapper.text()).toContain('Saisis un prix et un loyer visé')
     expect(wrapper.find('[data-testid="block-cost"]').exists()).toBe(false)
   })
 })

@@ -8,11 +8,14 @@
   import type { AssumptionsFormModel } from '@/lib/assumptions-form'
   import { changedCountLabel } from '@/lib/assumptions-summary'
   import { formatCssPercent, formatRateCompact } from '@/lib/format'
-  import ChangeNote from './ChangeNote.vue'
-  import UnitField from './UnitField.vue'
+  import ChangeNote from '@/components/ui/ChangeNote.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import UiInput from '@/components/ui/UiInput.vue'
 
   /**
-   * « Qu'est-ce qu'une bonne affaire pour vous ? » (lot 13) : une ligne par
+   * « Qu'est-ce qu'une bonne affaire pour toi ? » (lot 13) : une ligne par
    * seuil, avec sa case « prix cible » sur la même ligne (la donnée
    * `targetCriteria` d'avant, mêmes règles : le net exige son seuil, sa case
    * reste grisée tant que le seuil est vide), puis la « Marge de
@@ -67,7 +70,7 @@
     {
       criterion: 'effort',
       label: 'Effort mensuel maximum',
-      hint: 'ce que vous ajoutez chaque mois au loyer perçu',
+      hint: 'ce que tu ajoutes chaque mois au loyer perçu',
       term: 'effort',
       threshold: {
         field: 'maxMonthlyEffort',
@@ -142,20 +145,12 @@
     if (!t) return ''
     return [
       `crit-${row.criterion}-hint`,
-      `${t.id}-unit`,
       errorOf(t.field) ? `${t.id}-error` : null,
       changeOf(t.field) ? `${t.id}-change` : null,
     ]
       .filter(Boolean)
       .join(' ')
   }
-
-  const inputBox = (key: string): string =>
-    changeOf(key)
-      ? 'border border-accent ring-1 ring-accent'
-      : errorOf(key)
-        ? 'border border-bad ring-1 ring-bad'
-        : 'border border-muted/70'
 </script>
 
 <template>
@@ -202,50 +197,35 @@
             row.hint
           }}</span>
         </div>
-        <div
+        <UiInput
           v-if="row.threshold"
-          class="flex h-12 min-w-0 flex-1 items-center rounded-lg bg-surface px-3 focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent sm:w-36 sm:flex-none lg:h-11"
-          :class="inputBox(row.threshold.field)"
-        >
-          <input
-            :id="row.threshold.id"
-            v-model="form[row.threshold.field]"
-            :inputmode="row.threshold.inputmode"
-            :placeholder="row.optional ? '—' : undefined"
-            :aria-describedby="thresholdDescription(row)"
-            :aria-invalid="errorOf(row.threshold.field) ? 'true' : undefined"
-            autocomplete="off"
-            class="h-full w-full min-w-0 flex-1 bg-transparent text-right text-base tabular-nums outline-none placeholder:text-muted"
-          />
-          <span
-            :id="`${row.threshold.id}-unit`"
-            class="ml-1.5 shrink-0 text-sm text-muted"
-            >{{ row.threshold.unit }}</span
-          >
-        </div>
-        <label
-          class="flex min-h-11 shrink-0 cursor-pointer items-center gap-2 text-sm"
+          :id="row.threshold.id"
+          v-model="form[row.threshold.field]"
+          :unit="row.threshold.unit"
+          :invalid="!!errorOf(row.threshold.field)"
+          :changed="!!changeOf(row.threshold.field)"
+          :described-by="thresholdDescription(row)"
+          :inputmode="row.threshold.inputmode"
+          :placeholder="row.optional ? '—' : undefined"
+          autocomplete="off"
+          class="min-w-0 flex-1 sm:w-36 sm:flex-none"
+        />
+        <UiCheckbox
+          :id="`h-crit-${row.criterion}`"
+          :model-value="checked(row.criterion)"
+          :disabled="disabled(row)"
+          :aria-labelledby="`crit-${row.criterion}-label h-crit-${row.criterion}-text`"
+          :aria-describedby="
+            disabled(row) ? `crit-${row.criterion}-hint` : undefined
+          "
+          class="shrink-0"
           :class="disabled(row) ? 'cursor-not-allowed text-muted' : ''"
+          @update:model-value="
+            value => setCriterion(row.criterion, value === true)
+          "
         >
-          <input
-            :id="`h-crit-${row.criterion}`"
-            type="checkbox"
-            class="size-5 accent-[var(--accent)]"
-            :checked="checked(row.criterion)"
-            :disabled="disabled(row)"
-            :aria-labelledby="`crit-${row.criterion}-label h-crit-${row.criterion}-text`"
-            :aria-describedby="
-              disabled(row) ? `crit-${row.criterion}-hint` : undefined
-            "
-            @change="
-              setCriterion(
-                row.criterion,
-                ($event.target as HTMLInputElement).checked
-              )
-            "
-          />
           <span :id="`h-crit-${row.criterion}-text`">prix cible</span>
-        </label>
+        </UiCheckbox>
         <div
           v-if="
             (row.threshold &&
@@ -258,7 +238,7 @@
           <p
             v-if="row.threshold && errorOf(row.threshold.field)"
             :id="`${row.threshold.id}-error`"
-            class="text-xs font-medium text-bad"
+            class="text-sm font-medium text-bad"
             data-testid="field-error"
           >
             {{ errorOf(row.threshold.field) }}
@@ -284,25 +264,23 @@
     </p>
     <p v-if="marketRetained" class="text-xs text-muted">
       Le critère « Marché (DVF) » est aussi retenu pour le prix cible ; il se
-      règle par le connecteur Claude (MCP) et reste tel quel ici.
+      règle en le demandant à Claude et reste tel quel ici.
     </p>
 
     <div class="grid gap-3">
       <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <button
-          type="button"
-          class="inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-left font-semibold text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+        <UiButton
+          variant="ghost"
+          class="px-1 text-left font-semibold text-accent"
+          :icon="openPanels.negotiation ? 'chevron-down' : 'chevron-right'"
           :aria-expanded="openPanels.negotiation"
           aria-controls="negotiation-panel"
           data-testid="toggle-negotiation"
           @click="openPanels.negotiation = !openPanels.negotiation"
         >
-          <span aria-hidden="true">{{
-            openPanels.negotiation ? '▾' : '▸'
-          }}</span>
           Marge de négociation
           <span class="font-normal text-muted">· {{ negotiationSummary }}</span>
-        </button>
+        </UiButton>
         <DefinitionButton term="discount" />
         <span
           v-if="negotiationChanged && !openPanels.negotiation"
@@ -350,7 +328,7 @@
           </div>
         </div>
         <div class="grid gap-3.5 sm:grid-cols-2">
-          <UnitField
+          <UiField
             id="h-negotiable"
             v-model="form.negotiableDiscountPercent"
             label="Négociable jusqu'à"
@@ -359,7 +337,7 @@
             :change="changeOf('negotiableDiscountPercent')"
             :error="errorOf('negotiableDiscountPercent')"
           />
-          <UnitField
+          <UiField
             id="h-tight"
             v-model="form.tightDiscountPercent"
             label="Tendue jusqu'à"

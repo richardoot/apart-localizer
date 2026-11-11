@@ -54,6 +54,7 @@
     data-testid="base-map-switcher"
     @keydown="onKey"
   >
+    <!-- Lot 22 : contrôle spécialisé posé sur la carte (`role="radio"`, flèches), pas un bouton d'action. -->
     <button
       v-for="(choice, i) in BASE_MAPS"
       :key="choice.id"
@@ -68,7 +69,7 @@
       :tabindex="base === choice.id ? 0 : -1"
       :title="choice.description"
       :data-base-map="choice.id"
-      class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-2.5 text-xs whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent sm:min-h-8 sm:min-w-0"
+      class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-2.5 text-sm whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent sm:min-h-8 sm:min-w-0 sm:pointer-coarse:min-h-11"
       :class="
         base === choice.id
           ? 'bg-accent font-semibold text-accent-fg'

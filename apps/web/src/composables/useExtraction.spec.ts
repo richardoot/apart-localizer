@@ -73,7 +73,7 @@ describe('useExtraction', () => {
     expect(extraction.error.value).toBe('Refusé')
     apiMock.listings.extract.mockRejectedValue(new Error('boom'))
     await extraction.analyze()
-    expect(extraction.error.value).toBe("L'analyse a échoué.")
+    expect(extraction.error.value).toBe('L’analyse a échoué.')
     extraction.reset()
     expect(extraction.error.value).toBeNull()
   })

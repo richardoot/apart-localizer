@@ -45,6 +45,7 @@ import {
   formatSurface,
 } from './format'
 import type { ListingTab } from './listing-tabs'
+import type { Tone } from './ui'
 import { commonScoreText, disagreementsText } from './opinions'
 
 /**
@@ -62,7 +63,7 @@ export interface StageRowView {
   stats: Array<{ label: string; value: string }>
   rowKind: StageRowKind
   pill: string
-  pillClass: string
+  pillTone: Tone
   detail: string
   action: StageRowAction
   decision: DecisionProposal | null
@@ -71,29 +72,29 @@ export interface StageRowView {
   archivedAt: string | null
 }
 
-/** La teinte d'une pastille d'état, en jetons du thème (clair et sombre, 4,5:1). */
-export function rowPillClass(kind: StageRowKind): string {
+/** La teinte d'une pastille d'état (`UiBadge`), en jetons du thème (clair et sombre, 4,5:1). */
+export function rowPillTone(kind: StageRowKind): Tone {
   switch (kind) {
     case 'waiting':
     case 'ready':
     case 'offer_pending':
-      return 'bg-info-soft text-info'
+      return 'info'
     case 'to_confirm':
     case 'no_date':
     case 'to_rate':
-      return 'bg-warn-soft text-warn'
+      return 'warn'
     case 'to_settle':
     case 'to_discuss':
     case 'offer_counter':
-      return 'bg-ai-soft text-ai'
+      return 'ai'
     case 'visit_planned':
     case 'opinions_complete':
     case 'offer_accepted':
-      return 'bg-accent-soft text-accent'
+      return 'accent'
     case 'archived_refused':
-      return 'bg-bad-soft text-bad'
+      return 'bad'
     default:
-      return 'bg-surface-2 text-fg'
+      return 'neutral'
   }
 }
 
@@ -329,7 +330,7 @@ export function listingRow(
     stats: stageStats(stage, item, context.members, context.meId),
     rowKind,
     pill: stageRowPill(rowKind, item.decision),
-    pillClass: rowPillClass(rowKind),
+    pillTone: rowPillTone(rowKind),
     detail: listingDetail(
       stage,
       item,
@@ -388,7 +389,7 @@ export function draftRow(
     ],
     rowKind,
     pill: stageRowPill(rowKind, draft.decision),
-    pillClass: rowPillClass(rowKind),
+    pillTone: rowPillTone(rowKind),
     detail: draft.decision
       ? decisionDetail(draft.decision, context.meId)
       : duplicate
@@ -653,7 +654,7 @@ export function dismissedDraftRow(
     ],
     rowKind: 'archived_discarded',
     pill: 'Écartée',
-    pillClass: rowPillClass('archived_discarded'),
+    pillTone: rowPillTone('archived_discarded'),
     detail: draft.dismissReason ?? 'Écartée à l’étape À valider',
     action: { kind: 'rescue', label: 'Repêcher' },
     decision: null,
@@ -725,9 +726,9 @@ export interface TriageCardView {
   source: string
   url: string | null
   verdict: string | null
-  verdictClass: string
+  verdictTone: Tone
   fit: string | null
-  fitClass: string
+  fitTone: Tone
   dpe: string
   figures: Array<{ label: string; value: string; note: string }>
   whyTitle: string
@@ -812,16 +813,16 @@ export function propertyFacts(
   )
 }
 
-const VERDICT_CLASSES: Record<string, string> = {
-  target: 'bg-accent-soft text-accent',
-  to_dig: 'bg-warn-soft text-warn',
-  off_target: 'bg-bad-soft text-bad',
+const VERDICT_TONES: Record<string, Tone> = {
+  target: 'accent',
+  to_dig: 'warn',
+  off_target: 'bad',
 }
-const FIT_CLASSES: Record<string, string> = {
-  in: 'bg-accent-soft text-accent',
-  margin: 'bg-warn-soft text-warn',
-  to_confirm: 'bg-info-soft text-info',
-  out: 'bg-surface-2 text-fg',
+const FIT_TONES: Record<string, Tone> = {
+  in: 'accent',
+  margin: 'warn',
+  to_confirm: 'info',
+  out: 'neutral',
 }
 
 function figuresOf(
@@ -905,13 +906,13 @@ export function draftTriageCard(draft: ListingDraft): TriageCardView {
       : evaluation
         ? VERDICT_LABELS[evaluation.metrics.verdict]
         : null,
-    verdictClass: !hasRent
-      ? 'bg-info-soft text-info'
+    verdictTone: !hasRent
+      ? 'info'
       : evaluation
-        ? (VERDICT_CLASSES[evaluation.metrics.verdict] ?? '')
-        : '',
+        ? (VERDICT_TONES[evaluation.metrics.verdict] ?? 'neutral')
+        : 'neutral',
     fit: fitLevel ? CRITERIA_FIT_LEVEL_LABELS[fitLevel] : null,
-    fitClass: fitLevel ? (FIT_CLASSES[fitLevel] ?? '') : '',
+    fitTone: fitLevel ? (FIT_TONES[fitLevel] ?? 'neutral') : 'neutral',
     dpe: l.dpeClass ? `DPE ${l.dpeClass}` : 'DPE inconnu',
     facts: propertyFacts(l),
     description: l.description,
@@ -961,9 +962,9 @@ export function listingTriageCard(item: EvaluatedListing): TriageCardView {
     source: l.sourceLabel ?? l.source,
     url: l.url,
     verdict: VERDICT_LABELS[item.evaluation.metrics.verdict],
-    verdictClass: VERDICT_CLASSES[item.evaluation.metrics.verdict] ?? '',
+    verdictTone: VERDICT_TONES[item.evaluation.metrics.verdict] ?? 'neutral',
     fit: fitLevel ? CRITERIA_FIT_LEVEL_LABELS[fitLevel] : null,
-    fitClass: fitLevel ? (FIT_CLASSES[fitLevel] ?? '') : '',
+    fitTone: fitLevel ? (FIT_TONES[fitLevel] ?? 'neutral') : 'neutral',
     dpe: l.dpeClass ? `DPE ${l.dpeClass}` : 'DPE inconnu',
     facts: propertyFacts(l),
     description: l.description,

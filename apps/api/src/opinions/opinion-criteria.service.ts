@@ -150,7 +150,7 @@ export class OpinionCriteriaService {
         rows.filter(r => !r.hidden).length <= 1
       ) {
         throw new ConflictException(
-          'Gardez au moins un critère affiché : les avis en ont besoin.'
+          'Garde au moins un critère affiché : les avis en ont besoin.'
         )
       }
       const changed = Object.fromEntries(

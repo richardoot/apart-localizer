@@ -136,7 +136,7 @@ export function checkedLinkOf(
       return primary
     }
     throw new BadRequestException(
-      'Le lien consulté (checkedUrl) n’est aucun des liens de cette annonce : ajoutez-le d’abord (add_listing_link, ou « Ajouter un lien » dans la fiche), ou passez linkId'
+      'Le lien consulté (checkedUrl) n’est aucun des liens de cette annonce : ajoute-le d’abord (add_listing_link, ou « Ajouter un lien » dans la fiche), ou passe linkId'
     )
   }
   return primary

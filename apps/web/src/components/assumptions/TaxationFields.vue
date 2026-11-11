@@ -8,8 +8,8 @@
   import { useAssumptionsDraftContext } from '@/composables/useAssumptionsDraft'
   import { formatEuros, formatRateCompact } from '@/lib/format'
   import { FURNISHED_RENTAL_KIND_LABELS, TAX_REGIME_LABELS } from '@/lib/labels'
-  import SelectField from './SelectField.vue'
-  import UnitField from './UnitField.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiField from '@/components/ui/UiField.vue'
 
   /**
    * « Fiscalité et revente » (lot 13). Sur ordinateur, repliée par défaut :
@@ -45,12 +45,10 @@
     aria-label="Résumé de la fiscalité et de la revente"
     data-testid="taxation-pills"
   >
-    <li
-      v-for="pill in pills"
-      :key="pill"
-      class="rounded-full bg-surface-2 px-2.5 py-1"
-    >
-      {{ pill }}
+    <li v-for="pill in pills" :key="pill">
+      <UiBadge class="px-2.5 py-1 text-sm font-normal text-fg">{{
+        pill
+      }}</UiBadge>
     </li>
   </ul>
   <div
@@ -63,27 +61,30 @@
     <div
       class="grid gap-3.5 sm:grid-cols-[repeat(auto-fit,minmax(12.5rem,1fr))]"
     >
-      <SelectField
+      <UiField
         id="h-tmi"
         v-model="form.marginalTaxPercent"
+        as="select"
         label="Tranche marginale du foyer"
         :options="TMI_OPTIONS"
         hint="sans elle, l'impôt n'est pas estimé"
         term="marginal_tax_rate"
         :change="changeOf('marginalTaxPercent')"
       />
-      <SelectField
+      <UiField
         id="h-regime"
         v-model="form.taxRegime"
+        as="select"
         label="Régime fiscal visé"
         :options="REGIME_OPTIONS"
         hint="le réel s'impose si le plafond du micro est dépassé"
         term="tax_regimes"
         :change="changeOf('taxRegime')"
       />
-      <SelectField
+      <UiField
         id="h-furnished-kind"
         v-model="form.furnishedRentalKind"
+        as="select"
         label="Location meublée"
         :options="FURNISHED_OPTIONS"
         hint="pour l'abattement et le plafond du micro-BIC"
@@ -94,7 +95,7 @@
     <div
       class="grid gap-3.5 sm:grid-cols-[repeat(auto-fit,minmax(12.5rem,1fr))]"
     >
-      <UnitField
+      <UiField
         id="h-horizon"
         v-model="form.horizonYears"
         label="Revente dans"
@@ -104,7 +105,7 @@
         :change="changeOf('horizonYears')"
         :error="errorOf('horizonYears')"
       />
-      <UnitField
+      <UiField
         id="h-appreciation"
         v-model="form.appreciationPercent"
         label="Valeur du bien"
@@ -114,7 +115,7 @@
         :change="changeOf('appreciationPercent')"
         :error="errorOf('appreciationPercent')"
       />
-      <UnitField
+      <UiField
         id="h-irl"
         v-model="form.rentIndexationPercent"
         label="Hausse des loyers et charges"
@@ -125,7 +126,7 @@
         :change="changeOf('rentIndexationPercent')"
         :error="errorOf('rentIndexationPercent')"
       />
-      <UnitField
+      <UiField
         id="h-resale"
         v-model="form.resaleCostsPercent"
         label="Frais de revente"
@@ -135,7 +136,7 @@
         :change="changeOf('resaleCostsPercent')"
         :error="errorOf('resaleCostsPercent')"
       />
-      <UnitField
+      <UiField
         id="h-discount"
         v-model="form.discountPercent"
         label="Taux d'actualisation (VAN)"
@@ -156,8 +157,8 @@
       meublé ; micro-foncier jusqu'à
       {{ formatEuros(tax.microFoncier.receiptsCeiling) }}, micro-BIC longue
       durée jusqu'à {{ formatEuros(tax.microBic.longTerm.receiptsCeiling) }}).
-      Estimation, pas un conseil fiscal ; détail et sources dans le modèle de
-      calcul, modifiables par l'API et le MCP (set_assumptions).
+      Estimation, pas un conseil fiscal. Ces paramètres sont datés et sourcés ;
+      Claude peut les mettre à jour à ta demande.
     </p>
   </div>
 </template>

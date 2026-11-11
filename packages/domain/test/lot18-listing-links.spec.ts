@@ -509,7 +509,7 @@ describe('linkCheckDiff : la vérification d’un lien', () => {
       ['priceGap', 'noted'],
     ])
     expect(n(d.changes[0]?.text)).toBe(
-      'Prix le plus bas en ligne 209 000 € (SeLoger) : prix de la fiche saisi à la main (200 000 €) gardé, à appliquer si vous le souhaitez'
+      'Prix le plus bas en ligne 209 000 € (SeLoger) : prix de la fiche saisi à la main (200 000 €) gardé, à appliquer si tu le souhaites'
     )
   })
 

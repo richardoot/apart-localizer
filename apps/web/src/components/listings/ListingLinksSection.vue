@@ -18,9 +18,18 @@
     referenceKey,
     shortDay,
   } from '@apart/domain'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCard from '@/components/ui/UiCard.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import UiConfirm from '@/components/ui/UiConfirm.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import UiInput from '@/components/ui/UiInput.vue'
   import { useListingLinks } from '@/composables/useListingLinks'
-  import { ApiError } from '@/lib/api'
-  import { formatEuros, parseNumberInput } from '@/lib/format'
+  import { errorMessage, isConflict } from '@/lib/errors'
+  import { formatEuros, numberInputError, parseNumberInput } from '@/lib/format'
+  import { useFeedbackStore } from '@/stores/feedback'
   import { conflictListingOf, conflictText } from '@/lib/listing-links'
   import type { ConflictListing } from '@/lib/listing-links'
 
@@ -35,7 +44,9 @@
    * (rien n'est téléchargé) ; une URL déjà sur une autre fiche est refusée,
    * avec le nom de cette annonce. Un lien se relève à la main (plus en
    * ligne, prix) ou se retire, jamais le dernier. Sous 640 px, les liens
-   * s'empilent en cartes. Textes et règles : `domain`.
+   * s'empilent en cartes. Textes et règles : `domain`. Lot 22 : l'erreur
+   * dans la section, la réussite dans la zone de messages (« Annuler » pour
+   * « plus en ligne ») ; un prix illisible est refusé au champ.
    */
   const props = defineProps<{
     item: EvaluatedListing
@@ -45,6 +56,7 @@
 
   const listingId = computed(() => props.item.listing.id)
   const links = useListingLinks(listingId)
+  const feedback = useFeedbackStore()
 
   const ordered = computed(() => orderLinks(props.item.links))
   const countText = computed(() => linkCountText(props.item.links))
@@ -81,31 +93,26 @@
   const draftPrice = ref('')
   const draftOnline = ref(false)
   const unknownPortal = ref<Extract<ListingPortal, 'agence' | 'autre'>>('autre')
-  const notice = ref<string | null>(null)
   const failure = ref<string | null>(null)
   const conflict = ref<ConflictListing | null>(null)
+  const draftPriceError = ref<string | null>(null)
 
   const recognized = computed(() =>
     draftUrl.value.trim() ? linkPortalFromUrl(draftUrl.value.trim()) : null
   )
   const hint = computed(() => {
     if (!draftUrl.value.trim()) {
-      return 'Collez le lien de la même annonce sur un autre portail. Rien n’est téléchargé : Claude lira la page à la prochaine tournée.'
+      return 'Colle le lien de la même annonce sur un autre portail. Rien n’est téléchargé : Claude lira la page à la prochaine tournée.'
     }
     return recognized.value
-      ? `Portail reconnu : ${LISTING_PORTAL_LABELS[recognized.value]}. Si ce lien est déjà sur une autre fiche, l’appli vous le dira avant de l’ajouter.`
-      : 'Portail non reconnu : dites s’il s’agit du site de l’agence ou d’un autre site.'
+      ? `Portail reconnu : ${LISTING_PORTAL_LABELS[recognized.value]}. Si ce lien est déjà sur une autre fiche, l’appli te le dira avant de l’ajouter.`
+      : 'Portail non reconnu : dis s’il s’agit du site de l’agence ou d’un autre site.'
   })
 
   function report(error: unknown): void {
-    const message =
-      error instanceof ApiError ? error.message : 'L’enregistrement a échoué.'
-    conflict.value =
-      error instanceof ApiError && error.status === 409
-        ? conflictListingOf(message)
-        : null
+    const message = errorMessage(error, 'L’enregistrement a échoué.')
+    conflict.value = isConflict(error) ? conflictListingOf(message) : null
     failure.value = conflictText(message)
-    notice.value = null
   }
 
   async function addLink(): Promise<void> {
@@ -113,6 +120,11 @@
     if (!url) return
     failure.value = null
     conflict.value = null
+    draftPriceError.value = numberInputError(draftPrice.value)
+    if (draftPriceError.value) {
+      document.getElementById('new-link-price')?.focus()
+      return
+    }
     const price = parseNumberInput(draftPrice.value)
     try {
       const result = await links.add.mutateAsync({
@@ -123,10 +135,11 @@
         ...(draftOnline.value ? { online: true } : {}),
         expectedUpdatedAt: props.item.listing.updatedAt,
       })
-      notice.value =
+      feedback.success(
         price === null && !draftOnline.value
           ? `${result.summary}. Claude relèvera son prix à la prochaine tournée.`
           : `${result.summary}.`
+      )
       draftUrl.value = ''
       draftPrice.value = ''
       draftOnline.value = false
@@ -140,21 +153,23 @@
 
   const editingPrice = ref<string | null>(null)
   const priceInput = ref('')
-  const confirmingRemove = ref<string | null>(null)
+  const priceError = ref<string | null>(null)
 
   function startPrice(link: ListingLink): void {
     editingPrice.value = link.id
+    priceError.value = null
     priceInput.value = link.price === null ? '' : String(link.price)
   }
 
   async function run(
-    action: () => Promise<{ summary: string }>
+    action: () => Promise<{ summary: string }>,
+    undo?: () => unknown
   ): Promise<void> {
     failure.value = null
     conflict.value = null
     try {
       const result = await action()
-      notice.value = `${result.summary}.`
+      feedback.success(`${result.summary}.`, undo ? { undo } : {})
     } catch (error) {
       report(error)
     }
@@ -163,9 +178,12 @@
   const savePrice = (link: ListingLink) => {
     const price = parseNumberInput(priceInput.value)
     if (price === null || price <= 0) {
-      failure.value = 'Saisissez le prix affiché sur ce portail, en euros.'
+      priceError.value =
+        numberInputError(priceInput.value) ??
+        'Écris le prix affiché sur ce portail, en euros.'
       return Promise.resolve()
     }
+    priceError.value = null
     return run(async () => {
       const result = await links.update.mutateAsync({
         linkId: link.id,
@@ -176,20 +194,24 @@
     })
   }
 
+  const updateOnline = (link: ListingLink, online: boolean) =>
+    links.update.mutateAsync({
+      linkId: link.id,
+      patch: { online, expectedUpdatedAt: props.item.listing.updatedAt },
+    })
+  /** « Plus en ligne » ou « De nouveau en ligne » ; « Annuler » remet l'état d'avant. */
   const setOnline = (link: ListingLink, online: boolean) =>
-    run(() =>
-      links.update.mutateAsync({
-        linkId: link.id,
-        patch: { online, expectedUpdatedAt: props.item.listing.updatedAt },
-      })
+    run(
+      () => updateOnline(link, online),
+      () =>
+        links.update.mutateAsync({
+          linkId: link.id,
+          patch: { online: !online },
+        })
     )
 
   const removeLink = (link: ListingLink) =>
-    run(async () => {
-      const result = await links.remove.mutateAsync(link.id)
-      confirmingRemove.value = null
-      return result
-    })
+    run(() => links.remove.mutateAsync(link.id))
 
   async function takePrice(): Promise<void> {
     if (!proposal.value) return
@@ -200,7 +222,9 @@
         expectedPrice: proposal.value.from,
         source: 'listing',
       })
-      notice.value = 'Prix de la fiche aligné sur le plus bas affiché en ligne.'
+      feedback.success(
+        'Prix de la fiche aligné sur le plus bas affiché en ligne.'
+      )
     } catch (error) {
       report(error)
     }
@@ -213,22 +237,19 @@
       links.remove.isPending.value ||
       links.takePrice.isPending.value
   )
-
-  const smallButton =
-    'inline-flex min-h-11 items-center rounded-lg border border-line px-2.5 text-xs hover:bg-surface-2 disabled:opacity-60 sm:min-h-8'
 </script>
 
 <template>
-  <section
-    class="@container grid gap-3 rounded-2xl border border-line bg-surface p-4"
+  <UiCard
+    class="@container grid gap-3"
     aria-labelledby="links-title"
     data-testid="listing-links"
   >
     <div class="flex flex-wrap items-baseline justify-between gap-2">
-      <h3 id="links-title" class="font-display text-base font-semibold">
+      <h3 id="links-title" class="font-display text-base font-bold">
         Où la trouver
       </h3>
-      <span class="text-xs text-muted" data-testid="links-count">{{
+      <span class="text-sm text-muted" data-testid="links-count">{{
         countText
       }}</span>
     </div>
@@ -238,7 +259,7 @@
       class="text-sm text-muted"
       data-testid="links-empty"
     >
-      Aucun lien pour l’instant : ajoutez celui de la page de l’annonce.
+      Aucun lien pour l’instant : ajoute celui de la page de l’annonce.
     </p>
     <div v-else class="grid gap-2 @xl:gap-0">
       <div
@@ -263,56 +284,63 @@
               <strong class="font-semibold">{{
                 LISTING_PORTAL_LABELS[link.portal]
               }}</strong>
-              <span
-                v-if="link.primary && ordered.length > 1"
-                class="rounded-full bg-surface-2 px-1.5 text-[11px] text-muted"
-                >lien principal</span
+              <UiBadge v-if="link.primary && ordered.length > 1"
+                >lien principal</UiBadge
               >
             </span>
-            <span class="text-xs break-words text-muted">{{
+            <span class="text-sm break-words text-muted">{{
               subLabel(link)
             }}</span>
           </div>
           <div class="grid gap-0.5 tabular-nums">
             <template v-if="editingPrice === link.id">
               <form
-                class="flex flex-wrap items-center gap-1.5"
+                class="grid gap-1.5"
                 data-testid="link-price-form"
+                novalidate
                 @submit.prevent="savePrice(link)"
               >
-                <label class="sr-only" :for="`link-price-${link.id}`"
-                  >Prix affiché sur
-                  {{ LISTING_PORTAL_LABELS[link.portal] }} (€)</label
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <label class="sr-only" :for="`link-price-${link.id}`"
+                    >Prix affiché sur
+                    {{ LISTING_PORTAL_LABELS[link.portal] }}</label
+                  >
+                  <UiInput
+                    :id="`link-price-${link.id}`"
+                    v-model="priceInput"
+                    class="w-36"
+                    inputmode="numeric"
+                    unit="€"
+                    :invalid="!!priceError"
+                    :described-by="
+                      priceError ? `link-price-${link.id}-error` : undefined
+                    "
+                    data-testid="link-price-input"
+                  />
+                  <UiButton type="submit" size="sm" :disabled="busy">
+                    Enregistrer
+                  </UiButton>
+                  <UiButton size="sm" @click="editingPrice = null">
+                    Annuler
+                  </UiButton>
+                </div>
+                <p
+                  v-if="priceError"
+                  :id="`link-price-${link.id}-error`"
+                  class="text-sm font-medium text-bad"
+                  data-testid="field-error"
                 >
-                <input
-                  :id="`link-price-${link.id}`"
-                  v-model="priceInput"
-                  inputmode="numeric"
-                  class="min-h-11 w-32 rounded-lg border border-line bg-bg px-2 text-sm sm:min-h-8"
-                  data-testid="link-price-input"
-                />
-                <button type="submit" :class="smallButton" :disabled="busy">
-                  Enregistrer
-                </button>
-                <button
-                  type="button"
-                  :class="smallButton"
-                  @click="editingPrice = null"
-                >
-                  Annuler
-                </button>
+                  {{ priceError }}
+                </p>
               </form>
             </template>
             <template v-else>
               <span class="font-medium" data-testid="link-price">{{
                 link.price === null ? 'prix à relever' : formatEuros(link.price)
               }}</span>
-              <span
-                v-if="gapOf(link)"
-                class="w-fit rounded-md bg-warn-soft px-1.5 text-xs font-medium text-warn"
-                data-testid="link-gap"
-                >{{ gapOf(link) }}</span
-              >
+              <UiBadge v-if="gapOf(link)" tone="warn" data-testid="link-gap">{{
+                gapOf(link)
+              }}</UiBadge>
             </template>
           </div>
           <div class="grid gap-0.5 text-sm">
@@ -329,66 +357,48 @@
             class="flex flex-wrap items-start gap-1.5 @xl:justify-end"
             data-testid="link-actions"
           >
-            <a
+            <UiButton
               :href="link.url"
+              size="sm"
               target="_blank"
               rel="noopener noreferrer"
-              :class="smallButton"
+              icon-right="external"
               class="font-medium text-accent"
-              >Ouvrir</a
+              >Ouvrir</UiButton
             >
-            <button
-              type="button"
-              :class="smallButton"
+            <UiButton
+              size="sm"
               :disabled="busy"
               data-action="toggle-online"
               @click="setOnline(link, !link.online)"
             >
               {{ link.online ? 'Plus en ligne' : 'De nouveau en ligne' }}
-            </button>
-            <button
+            </UiButton>
+            <UiButton
               v-if="editingPrice !== link.id"
-              type="button"
-              :class="smallButton"
+              size="sm"
               :disabled="busy"
               data-action="edit-price"
               @click="startPrice(link)"
             >
               Prix
-            </button>
-            <template v-if="confirmingRemove === link.id">
-              <button
-                type="button"
-                class="inline-flex min-h-11 items-center rounded-lg border border-bad px-2.5 text-xs font-medium text-bad disabled:opacity-60 sm:min-h-8"
-                :disabled="busy"
-                data-action="confirm-remove"
-                @click="removeLink(link)"
-              >
-                Retirer ce lien
-              </button>
-              <button
-                type="button"
-                :class="smallButton"
-                @click="confirmingRemove = null"
-              >
-                Garder
-              </button>
-            </template>
-            <button
-              v-else
-              type="button"
-              :class="smallButton"
+            </UiButton>
+            <UiConfirm
+              label="Retirer"
+              question="Retirer ce lien ?"
+              confirm-label="Retirer ce lien"
+              cancel-label="Garder"
               :disabled="busy || lastLink"
+              :busy="links.remove.isPending.value"
               :title="
                 lastLink
-                  ? 'Le dernier lien d’une annonce ne se retire pas : remplacez-le par la saisie de la fiche, ou passez l’annonce en « Vendu ou retiré ».'
+                  ? 'Le dernier lien d’une annonce ne se retire pas : remplace-le par la saisie de la fiche, ou passe l’annonce en « Vendu ou retiré ».'
                   : 'Retirer ce lien de la fiche'
               "
+              :confirm-attrs="{ 'data-action': 'confirm-remove' }"
               data-action="remove"
-              @click="confirmingRemove = link.id"
-            >
-              Retirer
-            </button>
+              @confirm="removeLink(link)"
+            />
           </div>
         </li>
       </ul>
@@ -407,15 +417,15 @@
       data-testid="price-proposal"
     >
       <span class="min-w-0 flex-[1_1_18rem]">{{ proposal.text }}</span>
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center rounded-lg bg-accent px-3 text-sm font-medium text-accent-fg disabled:opacity-60 sm:min-h-9"
+      <UiButton
+        variant="primary"
+        size="sm"
         :disabled="busy"
         data-action="take-price"
         @click="takePrice"
       >
         Prendre ce prix
-      </button>
+      </UiButton>
     </div>
     <p v-else-if="ordered.length > 1" class="text-xs text-muted">
       Le prix de la fiche est le plus bas affiché en ligne. Un écart entre
@@ -423,12 +433,7 @@
       baisse pas encore reportée : il est noté dans l’Historique.
     </p>
 
-    <p
-      v-if="failure"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-      data-testid="links-failure"
-    >
+    <UiAlert v-if="failure" data-testid="links-failure">
       {{ failure }}
       <RouterLink
         v-if="conflict"
@@ -437,105 +442,95 @@
         data-testid="links-conflict"
         >Ouvrir « {{ conflict.title }} »</RouterLink
       >
-    </p>
-    <p
-      v-else-if="notice"
-      class="text-sm text-good"
-      aria-live="polite"
-      data-testid="links-notice"
-    >
-      {{ notice }}
-    </p>
+    </UiAlert>
 
-    <button
-      type="button"
-      class="inline-flex min-h-11 w-fit items-center rounded-lg border border-accent px-3 text-sm font-semibold text-accent hover:bg-accent-soft @xl:hidden sm:min-h-10"
+    <UiButton
+      variant="outline"
+      class="w-fit @xl:hidden"
       :aria-expanded="formOpen"
       aria-controls="new-link-form"
       data-action="open-add-link"
       @click="formOpen = !formOpen"
     >
       Ajouter un lien
-    </button>
+    </UiButton>
     <form
       id="new-link-form"
       class="gap-2 border-t border-line pt-3"
       :class="formOpen ? 'grid' : 'hidden @xl:grid'"
       data-testid="add-link-form"
+      novalidate
       @submit.prevent="addLink"
     >
-      <label for="new-link" class="text-sm font-medium">Ajouter un lien</label>
+      <label for="new-link" class="text-sm font-semibold"
+        >Ajouter un lien</label
+      >
       <div class="flex flex-wrap gap-2">
-        <input
+        <UiInput
           id="new-link"
           v-model="draftUrl"
+          class="min-w-0 flex-[1_1_16rem]"
           type="url"
-          required
+          inputmode="url"
           maxlength="2000"
           placeholder="https://www.bienici.com/annonce/…"
-          class="min-h-11 min-w-0 flex-[1_1_16rem] rounded-lg border border-line bg-bg px-3 text-sm sm:min-h-9"
+          described-by="new-link-hint"
           data-testid="new-link-url"
         />
-        <button
+        <UiButton
           type="submit"
-          class="inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-medium text-accent-fg disabled:opacity-60 sm:min-h-9"
+          variant="primary"
           :disabled="busy || !draftUrl.trim()"
           data-action="add-link"
         >
           Ajouter
-        </button>
+        </UiButton>
       </div>
-      <span class="text-xs text-muted" data-testid="new-link-hint">{{
-        hint
-      }}</span>
+      <span
+        id="new-link-hint"
+        class="text-xs text-muted"
+        data-testid="new-link-hint"
+        >{{ hint }}</span
+      >
       <fieldset
         v-if="draftUrl.trim() && !recognized"
-        class="flex flex-wrap gap-3 text-sm"
+        class="flex flex-wrap gap-x-4 text-sm"
       >
         <legend class="sr-only">Quel site ?</legend>
-        <label class="inline-flex min-h-9 items-center gap-1.5">
-          <input
-            v-model="unknownPortal"
-            type="radio"
-            value="agence"
-            class="accent-accent"
-          />
-          Site de l’agence
-        </label>
-        <label class="inline-flex min-h-9 items-center gap-1.5">
-          <input
-            v-model="unknownPortal"
-            type="radio"
-            value="autre"
-            class="accent-accent"
-          />
-          Autre site
-        </label>
+        <UiCheckbox
+          v-model="unknownPortal"
+          type="radio"
+          value="agence"
+          label="Site de l’agence"
+        />
+        <UiCheckbox
+          v-model="unknownPortal"
+          type="radio"
+          value="autre"
+          label="Autre site"
+        />
       </fieldset>
       <div
         v-if="draftUrl.trim()"
-        class="flex flex-wrap items-center gap-x-4 gap-y-2"
+        class="flex flex-wrap items-end gap-x-4 gap-y-2"
       >
-        <label class="inline-flex items-center gap-2 text-sm">
-          Prix affiché (facultatif)
-          <input
-            v-model="draftPrice"
-            inputmode="numeric"
-            class="min-h-11 w-32 rounded-lg border border-line bg-bg px-2 text-sm sm:min-h-8"
-            data-testid="new-link-price"
-          />
-          €
-        </label>
-        <label class="inline-flex min-h-9 items-center gap-2 text-sm">
-          <input
-            v-model="draftOnline"
-            type="checkbox"
-            class="accent-accent"
-            data-testid="new-link-online"
-          />
-          Je viens de la voir en ligne
-        </label>
+        <UiField
+          id="new-link-price"
+          v-model="draftPrice"
+          class="w-56"
+          label="Prix affiché (facultatif)"
+          quiet
+          unit="€"
+          inputmode="numeric"
+          :error="draftPriceError"
+          data-testid="new-link-price"
+        />
+        <UiCheckbox
+          v-model="draftOnline"
+          label="Je viens de la voir en ligne"
+          data-testid="new-link-online"
+        />
       </div>
     </form>
-  </section>
+  </UiCard>
 </template>

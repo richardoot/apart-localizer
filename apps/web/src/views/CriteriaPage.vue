@@ -8,12 +8,20 @@
   import SidePanel from '@/components/ui/SidePanel.vue'
   import CriteriaEditor from '@/components/criteria/CriteriaEditor.vue'
   import FitBadge from '@/components/listings/FitBadge.vue'
+  import QueryState from '@/components/ui/QueryState.vue'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import UiConfirm from '@/components/ui/UiConfirm.vue'
+  import { useAction } from '@/composables/useAction'
+  import { useLeaveGuard } from '@/composables/useLeaveGuard'
   import {
     useCriteriaMutations,
     useSearchCriteriaList,
   } from '@/composables/useSearchCriteria'
-  import { ApiError } from '@/lib/api'
-  import { formatEuros } from '@/lib/format'
+  import { formatEuros, plural } from '@/lib/format'
+  import { cardClasses } from '@/lib/ui'
   import { VERDICT_LABELS } from '@/lib/labels'
   import { describePerimeter } from '@/lib/perimeter'
 
@@ -24,14 +32,28 @@
    * création, modification, archivage, suppression ; « Voir les annonces »
    * ouvre la liste filtrée par le critère ; lot 16 : « Ce que Claude
    * cherche » ouvre le brief de l'exploration des portails.
+   *
+   * Lot 22 : la suppression se confirme sur place (plus de
+   * `window.confirm`) ; fermer le panneau d'un critère modifié ou dessiné,
+   * ou revenir en arrière, passe par la garde des modifications.
    */
   const showArchived = ref(false)
-  const { data, isPending, error } = useSearchCriteriaList(showArchived)
+  const list = useSearchCriteriaList(showArchived)
+  const { data } = list
   const mutations = useCriteriaMutations()
   const editing = ref<SearchCriteriaSummary | null>(null)
   const creating = ref(false)
-  const failure = ref<string | null>(null)
   const criteria = computed(() => data.value ?? [])
+  /** L'action de chaque carte (archiver, supprimer) : l'erreur dans sa carte. */
+  const actionOf = new Map<string, ReturnType<typeof useAction>>()
+  const action = (id: string) => {
+    let found = actionOf.get(id)
+    if (!found) {
+      found = useAction()
+      actionOf.set(id, found)
+    }
+    return found
+  }
 
   const LEVELS: readonly CriteriaFitLevel[] = [
     'in',
@@ -68,36 +90,47 @@
       .join(' · ')
   }
 
-  async function run(action: Promise<unknown>): Promise<void> {
-    failure.value = null
-    try {
-      await action
-    } catch (err) {
-      failure.value = err instanceof ApiError ? err.message : 'Échec.'
-    }
-  }
-
   function archive(c: SearchCriteriaSummary): void {
-    void run(
-      mutations.update.mutateAsync({
-        id: c.id,
-        patch: { active: !c.active, expectedUpdatedAt: c.updatedAt },
-      })
+    void action(c.id).run(
+      () =>
+        mutations.update.mutateAsync({
+          id: c.id,
+          patch: { active: !c.active, expectedUpdatedAt: c.updatedAt },
+        }),
+      {
+        success: c.active
+          ? `Critère « ${c.name} » archivé.`
+          : `Critère « ${c.name} » réactivé.`,
+        fallback: c.active
+          ? 'L’archivage a échoué.'
+          : 'La réactivation a échoué.',
+      }
     )
   }
 
   function remove(c: SearchCriteriaSummary): void {
-    if (
-      !window.confirm(`Supprimer définitivement le critère « ${c.name} » ?`)
-    ) {
-      return
-    }
-    void run(mutations.remove.mutateAsync(c.id))
+    void action(c.id).run(() => mutations.remove.mutateAsync(c.id), {
+      success: `Critère « ${c.name} » supprimé.`,
+      fallback: 'La suppression a échoué.',
+    })
   }
 
-  function close(): void {
+  // Le panneau du critère : sa fermeture passe par la garde.
+  const editor = ref<{ isDirty: () => boolean } | null>(null)
+  function closeNow(): void {
     editing.value = null
     creating.value = false
+  }
+  const { guard } = useLeaveGuard({
+    title: () =>
+      editing.value ? `Critère « ${editing.value.name} »` : 'Nouveau critère',
+    isDirty: () =>
+      (creating.value || editing.value !== null) &&
+      (editor.value?.isDirty() ?? false),
+    discard: closeNow,
+  })
+  function close(): void {
+    guard(closeNow)
   }
 </script>
 
@@ -108,134 +141,115 @@
         <h1 class="font-display text-2xl font-bold">Critères de recherche</h1>
         <p class="text-sm text-muted">
           Partagés dans l'espace ; une annonce qui entre dans un critère est
-          signalée à sa création, y compris par le MCP.
+          signalée à sa création, y compris quand Claude l’ajoute.
         </p>
       </div>
       <div class="flex items-center gap-3">
-        <label class="flex items-center gap-2 text-sm">
-          <input v-model="showArchived" type="checkbox" class="accent-accent" />
-          Archivés
-        </label>
-        <button
-          type="button"
-          class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg"
-          @click="creating = true"
-        >
-          + Nouveau critère
-        </button>
+        <UiCheckbox v-model="showArchived" label="Archivés" />
+        <UiButton variant="primary" icon="plus" @click="creating = true">
+          Nouveau critère
+        </UiButton>
       </div>
     </header>
 
-    <p
-      v-if="failure"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
+    <QueryState
+      :query="list"
+      :empty="criteria.length === 0"
+      empty-title="Aucun critère."
+      empty-text="Crée-en un pour suivre un quartier, un trajet à pied ou un budget."
+      skeleton="cards"
+      :skeleton-count="2"
+      loading-label="des critères"
     >
-      {{ failure }}
-    </p>
-    <p
-      v-if="error"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-    >
-      {{ error.message }}
-    </p>
-    <p v-else-if="isPending" class="text-sm text-muted">
-      Chargement des critères…
-    </p>
-    <p v-else-if="criteria.length === 0" class="text-sm text-muted">
-      Aucun critère : créez-en un pour suivre un quartier, un trajet à pied ou
-      un budget.
-    </p>
-
-    <ul class="grid gap-3">
-      <li
-        v-for="c in criteria"
-        :key="c.id"
-        class="grid gap-2 rounded-xl border border-line bg-surface p-4"
-        :class="{ 'opacity-60': !c.active }"
-        :data-criteria="c.id"
-      >
-        <div class="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 class="font-display text-lg font-semibold">
-            {{ c.name }}
-            <span v-if="!c.active" class="text-xs font-normal text-muted"
-              >(archivé)</span
-            >
-          </h2>
-          <p class="text-sm">
-            <strong data-testid="count">{{ c.listingCount }}</strong> annonce(s)
-            gardée(s)
-            <span
-              v-if="c.newCount"
-              class="ml-1 rounded-full bg-accent-soft px-2 text-xs"
-              >{{ c.newCount }} nouvelle(s)</span
-            >
-            <span v-if="c.approximateCount" class="ml-1 text-xs text-muted"
-              >dont {{ c.approximateCount }} à confirmer faute d’adresse</span
-            >
-          </p>
-        </div>
-        <div
-          class="flex flex-wrap items-center gap-1.5"
-          role="group"
-          :aria-label="`Annonces par niveau d’adéquation au critère « ${c.name} »`"
-          data-testid="fit-counts"
+      <ul class="grid gap-3">
+        <li
+          v-for="c in criteria"
+          :key="c.id"
+          class="grid gap-2"
+          :class="cardClasses(c.active ? 'default' : 'muted')"
+          :data-criteria="c.id"
         >
-          <FitBadge
-            v-for="level in LEVELS"
-            :key="level"
-            :level="level"
-            :count="c.fitCounts[level]"
-          />
-        </div>
-        <p class="text-xs text-muted" data-testid="tolerance-summary">
-          {{ margins(c) }}
-        </p>
-        <p class="text-sm text-muted">
-          {{ describePerimeter(c.perimeter)
-          }}<template v-if="summary(c)"> · {{ summary(c) }}</template>
-        </p>
-        <div class="flex flex-wrap gap-2 text-sm">
-          <RouterLink
-            :to="{ name: 'listings', query: { criteriaId: c.id } }"
-            class="rounded-lg border border-accent px-3 py-1"
+          <div class="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 class="font-display text-lg font-bold">
+              {{ c.name }}
+              <UiBadge v-if="!c.active" class="ml-1 align-middle"
+                >archivé</UiBadge
+              >
+            </h2>
+            <p class="text-sm">
+              <strong data-testid="count">{{ c.listingCount }}</strong>
+              {{ c.listingCount >= 2 ? 'annonces gardées' : 'annonce gardée' }}
+              <UiBadge v-if="c.newCount" tone="accent" class="ml-1">{{
+                plural(c.newCount, 'nouvelle')
+              }}</UiBadge>
+              <span v-if="c.approximateCount" class="ml-1 text-xs text-muted"
+                >dont {{ c.approximateCount }} à confirmer faute d’adresse</span
+              >
+            </p>
+          </div>
+          <div
+            class="flex flex-wrap items-center gap-1.5"
+            role="group"
+            :aria-label="`Annonces par niveau d’adéquation au critère « ${c.name} »`"
+            data-testid="fit-counts"
           >
-            Voir les annonces
-          </RouterLink>
-          <RouterLink
-            :to="{ name: 'criteria-brief', params: { id: c.id } }"
-            class="rounded-lg border border-line px-3 py-1"
-            data-action="brief"
-          >
-            Ce que Claude cherche
-          </RouterLink>
-          <button
-            type="button"
-            class="rounded-lg border border-line px-3 py-1"
-            @click="editing = c"
-          >
-            Modifier
-          </button>
-          <button
-            type="button"
-            class="rounded-lg border border-line px-3 py-1"
-            data-action="archive"
-            @click="archive(c)"
-          >
-            {{ c.active ? 'Archiver' : 'Réactiver' }}
-          </button>
-          <button
-            type="button"
-            class="rounded-lg border border-line px-3 py-1 text-bad"
-            data-action="delete"
-            @click="remove(c)"
-          >
-            Supprimer
-          </button>
-        </div>
-      </li>
-    </ul>
+            <FitBadge
+              v-for="level in LEVELS"
+              :key="level"
+              :level="level"
+              :count="c.fitCounts[level]"
+            />
+          </div>
+          <p class="text-sm text-muted" data-testid="tolerance-summary">
+            {{ margins(c) }}
+          </p>
+          <p class="text-sm text-muted">
+            {{ describePerimeter(c.perimeter)
+            }}<template v-if="summary(c)"> · {{ summary(c) }}</template>
+          </p>
+          <div class="flex flex-wrap gap-2 text-sm">
+            <UiButton
+              :to="{ name: 'listings', query: { criteriaId: c.id } }"
+              variant="outline"
+              size="sm"
+            >
+              Voir les annonces
+            </UiButton>
+            <UiButton
+              :to="{ name: 'criteria-brief', params: { id: c.id } }"
+              size="sm"
+              data-action="brief"
+            >
+              Ce que Claude cherche
+            </UiButton>
+            <UiButton size="sm" icon="edit" @click="editing = c">
+              Modifier
+            </UiButton>
+            <UiButton
+              size="sm"
+              :loading="action(c.id).pending.value"
+              data-action="archive"
+              @click="archive(c)"
+            >
+              {{ c.active ? 'Archiver' : 'Réactiver' }}
+            </UiButton>
+            <UiConfirm
+              label="Supprimer"
+              icon="trash"
+              :question="`Supprimer définitivement le critère « ${c.name} » ?`"
+              confirm-label="Supprimer"
+              :busy="action(c.id).pending.value"
+              data-action="delete"
+              :confirm-attrs="{ 'data-action': 'confirm-delete' }"
+              @confirm="remove(c)"
+            />
+          </div>
+          <UiAlert v-if="action(c.id).error.value">
+            {{ action(c.id).error.value }}
+          </UiAlert>
+        </li>
+      </ul>
+    </QueryState>
 
     <SidePanel
       v-if="creating || editing"
@@ -243,9 +257,10 @@
       @close="close"
     >
       <CriteriaEditor
+        ref="editor"
         :key="editing?.id ?? 'new'"
         :criteria="editing"
-        @saved="close"
+        @saved="closeNow"
       />
     </SidePanel>
   </section>

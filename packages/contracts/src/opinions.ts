@@ -198,7 +198,7 @@ export type OpinionSettingsUpdate = z.infer<typeof OpinionSettingsUpdateSchema>
 const criterionLabel = z
   .string()
   .trim()
-  .min(1, 'Donnez un nom au critère')
+  .min(1, 'Donne un nom au critère')
   .max(OPINION_CRITERION_LABEL_MAX)
   .describe('Libellé du critère')
 const criterionHint = z

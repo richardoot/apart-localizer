@@ -518,7 +518,7 @@ describe('Lot 17 : questions aux agences (e2e)', () => {
       .set(ctx.auth(richard))
       .send({ ...answer, expectedUpdatedAt: '2026-01-01T00:00:00.000Z' })
       .expect(409)
-    expect(stale.body.message).toContain('a changé depuis votre lecture')
+    expect(stale.body.message).toContain('a changé depuis ta lecture')
     await api()
       .post(`/agency-requests/${requestId}/answer`)
       .set(ctx.auth(richard))

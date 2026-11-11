@@ -9,7 +9,7 @@
 <template>
   <section class="grid gap-2" aria-label="Compatibilité location (phase 2)">
     <header class="flex items-center justify-between gap-2">
-      <h3 class="font-display text-base font-semibold">
+      <h3 class="font-display text-base font-bold">
         Compatibilité location en {{ rental.year }}
       </h3>
       <RentalPill :verdict="rental.verdict" />

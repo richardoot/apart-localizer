@@ -737,7 +737,7 @@ export function linkCheckDiff(input: LinkCheckInput): LinkCheckDiff {
         fichePrice.from,
         fichePrice.to,
         'proposed',
-        `Prix le plus bas en ligne ${formatEuros(fichePrice.to)}${fichePrice.portal ? ` (${LISTING_PORTAL_LABELS[fichePrice.portal]})` : ''} : prix de la fiche saisi à la main (${formatEuros(fichePrice.from)}) gardé, à appliquer si vous le souhaitez`
+        `Prix le plus bas en ligne ${formatEuros(fichePrice.to)}${fichePrice.portal ? ` (${LISTING_PORTAL_LABELS[fichePrice.portal]})` : ''} : prix de la fiche saisi à la main (${formatEuros(fichePrice.from)}) gardé, à appliquer si tu le souhaites`
       )
     )
   }

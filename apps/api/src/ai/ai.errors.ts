@@ -8,7 +8,7 @@ import {
 export class AiNotConfiguredException extends ServiceUnavailableException {
   constructor() {
     super(
-      "IA non configurée : renseignez ANTHROPIC_API_KEY côté serveur pour activer l'extraction."
+      "IA non configurée : renseigne ANTHROPIC_API_KEY côté serveur pour activer l'extraction."
     )
   }
 }
@@ -24,7 +24,7 @@ export class AiUnavailableException extends ServiceUnavailableException {
 export class AiRefusedException extends UnprocessableEntityException {
   constructor(category: string | null) {
     super(
-      `L'IA a refusé d'analyser ce contenu${category ? ` (catégorie ${category})` : ''} ; vérifiez le texte collé.`
+      `L'IA a refusé d'analyser ce contenu${category ? ` (catégorie ${category})` : ''} ; vérifie le texte collé.`
     )
   }
 }

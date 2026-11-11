@@ -47,7 +47,7 @@ describe('HistorySection', () => {
     const form = wrapper.get('form[aria-label="Nouveau prix constaté"]')
     await form.get('input').setValue('200000')
     await form.trigger('submit')
-    expect(form.get('[role="alert"]').text()).toContain('déjà')
+    expect(form.get('[data-testid="field-error"]').text()).toContain('déjà')
     await form.get('input').setValue('185 000')
     await form.trigger('submit')
     expect(wrapper.emitted('record')).toEqual([[185_000]])
@@ -67,7 +67,19 @@ describe('HistorySection', () => {
     expect(form.find('[data-testid="offer-outcome"]').exists()).toBe(false)
     await form.get('input[aria-label="Montant de l\'offre"]').setValue('')
     await form.trigger('submit')
-    expect(form.get('[role="alert"]').text()).toContain('montant')
+    expect(form.get('[data-testid="field-error"]').text()).toContain('montant')
+    // Lot 22 : un montant illisible est refusé au champ, jamais envoyé.
+    await form.get('input[aria-label="Montant de l\'offre"]').setValue('150k')
+    await form.trigger('submit')
+    expect(form.get('[data-testid="field-error"]').text()).toContain(
+      '« 150k » n’est pas un nombre'
+    )
+    expect(
+      form
+        .get('input[aria-label="Montant de l\'offre"]')
+        .attributes('aria-invalid')
+    ).toBe('true')
+    expect(wrapper.emitted('addOffer')).toBeUndefined()
     await form
       .get('input[aria-label="Montant de l\'offre"]')
       .setValue('150 000')

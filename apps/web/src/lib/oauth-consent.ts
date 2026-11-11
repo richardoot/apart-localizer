@@ -4,12 +4,12 @@
  * reste affichée, nommée telle quelle.
  */
 const SCOPE_SENTENCES: Record<string, string> = {
-  openid: 'Vous identifier auprès de cette application',
-  email: 'Connaître votre adresse e-mail',
-  profile: 'Connaître votre nom et votre photo de profil',
-  phone: 'Connaître votre numéro de téléphone',
-  offline_access: 'Rester connectée sans vous redemander votre accord',
-  'listings:read': 'Lire les annonces, avis, tâches et offres de votre espace',
+  openid: 'T’identifier auprès de cette application',
+  email: 'Connaître ton adresse e-mail',
+  profile: 'Connaître ton nom et ta photo de profil',
+  phone: 'Connaître ton numéro de téléphone',
+  offline_access: 'Rester connectée sans te redemander ton accord',
+  'listings:read': 'Lire les annonces, avis, tâches et offres de ton espace',
   'listings:write':
     'Ajouter et modifier des annonces, avis, tâches et offres (jamais de suppression)',
 }

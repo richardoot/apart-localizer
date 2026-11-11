@@ -564,7 +564,7 @@ describe('les phrases', () => {
         choiceLabel: 'À visiter',
         toSettle: true,
       })
-    ).toContain('tranchez-la dans l’application')
+    ).toContain('tranche-la dans l’application')
     expect(mcpDecisionLine(view())).toBe(
       'proposition en cours : Richard propose À visiter, en attente de Chloé ; le statut ne bouge pas d’ici là'
     )

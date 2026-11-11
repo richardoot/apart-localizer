@@ -13,6 +13,7 @@
     formatEurosPerM2,
     formatSurface,
   } from '@/lib/format'
+  import UiButton from '@/components/ui/UiButton.vue'
   import CheckFreshnessBadge from './CheckFreshnessBadge.vue'
   import DpeBadge from './DpeBadge.vue'
   import FitBadge from './FitBadge.vue'
@@ -35,6 +36,8 @@
     /** L'évaluation affichée (serveur, ou aperçu pendant une modification). */
     evaluation: ListingEvaluation | null
     busy?: boolean
+    /** Lot 22 : le refus du dernier changement de statut. */
+    statusError?: string | null
   }>()
   const emit = defineEmits<{
     back: []
@@ -69,17 +72,20 @@
   >
     <div class="grid gap-2">
       <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-        <button
-          type="button"
-          class="-ml-1 inline-flex min-h-11 items-center gap-1 rounded-lg px-1 text-sm text-accent hover:text-fg focus-visible:outline-2 focus-visible:outline-accent sm:min-h-9"
+        <UiButton
+          variant="ghost"
+          size="sm"
+          icon="arrow-left"
+          class="-ml-2 text-accent"
           data-testid="listing-back"
           @click="emit('back')"
         >
-          <span aria-hidden="true">←</span> Annonces
-        </button>
+          Annonces
+        </UiButton>
         <StatusChanger
           :status="listing.status"
           :busy="busy"
+          :error="statusError ?? null"
           @change="change => emit('status', change)"
         />
       </div>
@@ -87,7 +93,7 @@
       <div class="grid gap-1.5">
         <DialogTitle
           as="h1"
-          class="font-display text-[21px] leading-tight font-bold break-words sm:text-[26px]"
+          class="font-display text-2xl leading-tight font-bold break-words sm:text-[26px]"
         >
           {{ listing.title }}
         </DialogTitle>
@@ -142,7 +148,7 @@
         </div>
         <p
           v-if="listing.status === 'discarded' && listing.discardReason"
-          class="text-xs text-muted"
+          class="text-sm text-muted"
           data-testid="discard-reason"
         >
           Écartée : {{ listing.discardReason }}

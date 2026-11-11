@@ -22,16 +22,26 @@ export function changedKeysOf(path: string): string[] {
 export interface FieldMeta {
   provenance: Provenance | null
   changed: boolean
+  /** Lot 22 : l'erreur de la dernière tentative d'enregistrement, au champ. */
+  error: string | null
 }
 
-/** La provenance et l'état « modifié » d'un champ (chemin du formulaire). */
+/** Lot 22 : la clé d'erreur de validation d'un champ du formulaire. */
+export function errorKeyOf(path: string): string {
+  if (path === 'longitude' || path === 'latitude') return 'location.point'
+  return path
+}
+
+/** La provenance, l'état « modifié » et l'erreur d'un champ (chemin du formulaire). */
 export function fieldMeta(
   fieldSources: FieldProvenanceMap | null | undefined,
   changedFields: readonly string[],
-  path: string
+  path: string,
+  errors: Readonly<Record<string, string>> = {}
 ): FieldMeta {
   const key = path === 'floorLabel' ? 'floor' : path
   return {
+    error: errors[errorKeyOf(path)] ?? null,
     provenance:
       provenanceOf(fieldSources, key) ??
       (path === 'floorLabel' ? provenanceOf(fieldSources, 'floorLabel') : null),

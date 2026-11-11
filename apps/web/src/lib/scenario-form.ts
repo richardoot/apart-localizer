@@ -2,9 +2,25 @@ import { ScenarioOverridesSchema } from '@apart/contracts'
 import type { LeaseType, ScenarioOverrides, TaxRegime } from '@apart/contracts'
 import {
   fractionToPercentInput,
+  numberInputError,
   parseNumberInput,
   percentToFraction,
 } from './format'
+
+/** Les champs numériques du formulaire de scénario. */
+const NUMBER_FIELDS = [
+  'price',
+  'targetRent',
+  'renovationTotal',
+  'interestRatePercent',
+  'downPayment',
+  'durationYears',
+  'vacancyMonths',
+  'marginalTaxPercent',
+  'horizonYears',
+  'appreciationPercent',
+] as const
+export type ScenarioNumberField = (typeof NUMBER_FIELDS)[number]
 
 /**
  * Le formulaire d'un scénario « et si » : des champs texte, vides tant que
@@ -45,11 +61,28 @@ export function emptyScenarioForm(): ScenarioForm {
   }
 }
 
-/** Les surcharges du formulaire (champs remplis seulement), validées par le contrat ; null si invalides. */
+/**
+ * Les surcharges du formulaire (champs remplis seulement), validées par le
+ * contrat ; null si invalides. Lot 22 : un nombre illisible est dit à son
+ * champ (`fieldErrors`), jamais lu comme vide.
+ */
 export function scenarioOverridesFromForm(form: ScenarioForm): {
   overrides: ScenarioOverrides | null
   error: string | null
+  fieldErrors?: Partial<Record<ScenarioNumberField, string>>
 } {
+  const fieldErrors: Partial<Record<ScenarioNumberField, string>> = {}
+  for (const field of NUMBER_FIELDS) {
+    const message = numberInputError(form[field])
+    if (message) fieldErrors[field] = message
+  }
+  if (Object.keys(fieldErrors).length > 0) {
+    return {
+      overrides: null,
+      error: 'Un nombre est illisible : corrige le champ signalé.',
+      fieldErrors,
+    }
+  }
   const num = (raw: string): number | undefined =>
     raw.trim() === '' ? undefined : (parseNumberInput(raw) ?? Number.NaN)
   const pct = (raw: string): number | undefined =>

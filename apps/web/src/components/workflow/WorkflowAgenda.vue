@@ -41,10 +41,10 @@
   <section
     v-if="items.length"
     aria-labelledby="agenda-title"
-    class="flex flex-col rounded-[14px] border border-line bg-surface px-3.5 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2 sm:px-4 sm:py-3"
+    class="flex flex-col rounded-2xl border border-line bg-surface px-3.5 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2 sm:px-4 sm:py-3"
     data-testid="workflow-agenda"
   >
-    <h2 id="agenda-title" class="my-1.5 mr-2 text-[15px] font-semibold sm:my-0">
+    <h2 id="agenda-title" class="my-1.5 mr-2 text-base font-semibold sm:my-0">
       Ce qui t’attend
     </h2>
     <template v-for="item in items" :key="item.key">
@@ -55,7 +55,7 @@
         :data-agenda="item.key"
       >
         <span class="inline-flex items-center gap-2">
-          <strong class="font-display text-[19px] font-bold">{{
+          <strong class="font-display text-xl font-bold">{{
             item.count
           }}</strong>
           {{ item.label }}
@@ -64,6 +64,7 @@
           item.key === 'to_sort' ? 'Commencer' : 'Voir'
         }}</span>
       </RouterLink>
+      <!-- Lot 22 : contrôle spécialisé (ligne de « Ce qui t'attend », même habit que le lien voisin). -->
       <button
         v-else
         type="button"
@@ -72,7 +73,7 @@
         @click="item.stage && emit('stage', item.stage)"
       >
         <span class="inline-flex items-center gap-2">
-          <strong class="font-display text-[19px] font-bold">{{
+          <strong class="font-display text-xl font-bold">{{
             item.count
           }}</strong>
           {{ item.label }}

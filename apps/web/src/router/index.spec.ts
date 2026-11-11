@@ -26,7 +26,7 @@ describe('router guard', () => {
     authState.isAuthenticated = true
     await router.push('/')
     expect(router.currentRoute.value.name).toBe('home')
-    expect(document.title).toBe('Synthèse — apart-localizer')
+    expect(document.title).toBe('Accueil — apart-localizer')
   })
 
   it('sends a signed-in user away from the login page', async () => {

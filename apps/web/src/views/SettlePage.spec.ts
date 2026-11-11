@@ -9,7 +9,12 @@ import { flushPromises, mount } from '@vue/test-utils'
 import type { DecisionCard, DecisionProposal } from '@apart/contracts'
 import { fakeEvaluated } from '@/test/fixtures'
 
-const state = vi.hoisted(() => ({ cards: [] as unknown[], pending: false }))
+const state = vi.hoisted(() => ({
+  cards: [] as unknown[],
+  pending: false,
+  error: null as Error | null,
+  refetch: vi.fn(),
+}))
 const actions = vi.hoisted(() => ({
   resolve: vi.fn(),
   undo: vi.fn(),
@@ -18,8 +23,11 @@ const actions = vi.hoisted(() => ({
 
 vi.mock('@/composables/useWorkflow', () => ({
   useDecisionCards: () => ({
-    data: ref(state.cards),
+    data: ref(state.error ? undefined : state.cards),
     isPending: ref(state.pending),
+    isError: ref(state.error !== null),
+    error: ref(state.error),
+    refetch: state.refetch,
   }),
   useDecisionActions: () => ({
     resolve: { mutateAsync: actions.resolve },
@@ -114,7 +122,7 @@ describe('À trancher ensemble', () => {
     expect(sides[1]?.text()).toContain('À visiter')
     expect(sides[1]?.text()).toContain('« J’aimerais voir le quartier. »')
     expect(wrapper.get('[data-testid="settle-count"]').text()).toContain(
-      '1 annonce où vos choix diffèrent.'
+      '1 annonce où les choix diffèrent.'
     )
   })
 
@@ -149,7 +157,7 @@ describe('À trancher ensemble', () => {
     await wrapper.get('[data-action="later"]').trigger('click')
     expect(actions.resolve).not.toHaveBeenCalled()
     expect(wrapper.get('[data-testid="settle-result"]').text()).toContain(
-      'Elle reste ici, vous en reparlerez.'
+      'Elle reste ici, pour en reparler plus tard.'
     )
     await wrapper.get('[data-action="reopen"]').trigger('click')
     expect(actions.undo).not.toHaveBeenCalled()
@@ -178,6 +186,20 @@ describe('À trancher ensemble', () => {
     await wrapper.get('[data-settle-choice="discard"]').trigger('click')
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toBe('Déjà tranché')
+  })
+
+  it('lot 22 : une lecture échouée dit l’erreur et « Réessayer », pas « Rien à trancher »', async () => {
+    const { ApiError } = await import('@/lib/api')
+    state.cards = []
+    state.error = new ApiError(503, 'Le serveur ne répond pas.')
+    const wrapper = mount(SettlePage, { global: { stubs } })
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      'Le serveur ne répond pas.'
+    )
+    expect(wrapper.find('[data-testid="settle-empty"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="retry"]').trigger('click')
+    expect(state.refetch).toHaveBeenCalled()
+    state.error = null
   })
 
   it('rien à trancher', () => {

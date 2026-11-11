@@ -109,7 +109,7 @@ export function keyFigures(input: {
  */
 export function fitLine(fit: ListingCriteriaFit): string {
   if (fit.activeCriteria === 0) {
-    return 'Aucun critère actif : créez-en un pour la comparer à ce que vous cherchez.'
+    return 'Aucun critère actif : crées-en un pour la comparer à ce que tu cherches.'
   }
   const name = fit.name ? `« ${fit.name} »` : 'Le meilleur critère'
   if (fit.level === 'in') {

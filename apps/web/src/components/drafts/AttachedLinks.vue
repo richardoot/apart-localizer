@@ -7,10 +7,14 @@
   import type { ListingDraft } from '@apart/contracts'
   import { comparedPriceText, shortDay } from '@apart/domain'
   import { useAttachedDrafts } from '@/composables/useDrafts'
-  import { ApiError } from '@/lib/api'
+  import { errorMessage } from '@/lib/errors'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiConfirm from '@/components/ui/UiConfirm.vue'
+  import { cardClasses } from '@/lib/ui'
 
   /**
-   * Lot 18 : « Liens rattachés d'office », en tête de l'onglet « À valider ».
+   * Lot 18 : « Liens rattachés d'office », en tête de l'étape « À valider ».
    * Une annonce trouvée par Claude (ou reçue par e-mail) avec la même agence
    * et la même référence qu'une annonce suivie est la même, publiée sur un
    * autre portail : son lien a rejoint la fiche, rien d'autre ne change ; un
@@ -21,7 +25,6 @@
   const attached = useAttachedDrafts()
   /** Les détachements de la session, gardés à leur place. */
   const detached = ref(new Map<string, ListingDraft>())
-  const confirming = ref<string | null>(null)
   const errors = ref<Record<string, string>>({})
 
   const rows = computed(() => {
@@ -52,14 +55,10 @@
       const next = new Map(detached.value)
       next.set(draft.id, draft)
       detached.value = next
-      confirming.value = null
     } catch (error) {
       errors.value = {
         ...errors.value,
-        [draft.id]:
-          error instanceof ApiError
-            ? error.message
-            : 'Le détachement a échoué.',
+        [draft.id]: errorMessage(error, 'Le détachement a échoué.'),
       }
     }
   }
@@ -69,21 +68,22 @@
   <section
     v-if="rows.length"
     aria-labelledby="attached-title"
-    class="grid gap-2.5 rounded-2xl border border-line bg-surface p-4 sm:px-5"
+    class="grid gap-2.5"
+    :class="cardClasses()"
     data-testid="attached-links"
   >
     <div class="flex flex-wrap items-baseline justify-between gap-2">
-      <h2 id="attached-title" class="text-[15px] font-semibold">
+      <h2 id="attached-title" class="text-base font-semibold">
         Liens rattachés d’office : même agence, même référence
       </h2>
       <span class="text-xs text-muted"
         >ces {{ AUTO_ATTACH_REVIEW_DAYS }} derniers jours</span
       >
     </div>
-    <p class="max-w-3xl text-[13px] leading-normal text-muted">
-      Ces annonces sont les vôtres, publiées sur un autre portail. Le lien
-      rejoint la fiche, rien d’autre ne change ; un écart de prix est noté dans
-      l’Historique.
+    <p class="max-w-3xl text-sm leading-normal text-muted">
+      Ces annonces sont celles que tu suis déjà, publiées sur un autre portail.
+      Le lien rejoint la fiche, rien d’autre ne change ; un écart de prix est
+      noté dans l’Historique.
     </p>
     <ul class="grid gap-2">
       <li
@@ -94,14 +94,11 @@
         :data-draft="draft.id"
         :data-detached="detached.has(draft.id)"
       >
-        <span
-          class="rounded-md border border-accent/50 bg-accent-soft px-1.5 py-px text-xs font-medium text-accent"
-          >{{
-            draft.attachment
-              ? LISTING_PORTAL_LABELS[draft.attachment.portal]
-              : 'Lien'
-          }}</span
-        >
+        <UiBadge tone="accent">{{
+          draft.attachment
+            ? LISTING_PORTAL_LABELS[draft.attachment.portal]
+            : 'Lien'
+        }}</UiBadge>
         <span class="min-w-0 flex-[1_1_18rem] text-sm leading-normal">
           Ajouté à
           <RouterLink
@@ -148,42 +145,20 @@
           data-testid="attached-detached"
           >Détachée : elle passe dans les annonces à valider.</span
         >
-        <template v-else-if="confirming === draft.id">
-          <span class="text-sm">Retirer ce lien de la fiche ?</span>
-          <button
-            type="button"
-            class="min-h-10 rounded-lg border border-bad bg-surface px-3 text-sm font-semibold text-bad disabled:opacity-60"
-            :disabled="attached.detach.isPending.value"
-            data-action="confirm-detach"
-            @click="detach(draft)"
-          >
-            Oui, la détacher
-          </button>
-          <button
-            type="button"
-            class="min-h-10 rounded-lg border border-line bg-surface px-3 text-sm"
-            @click="confirming = null"
-          >
-            Annuler
-          </button>
-        </template>
-        <button
+        <UiConfirm
           v-else
-          type="button"
-          class="min-h-10 rounded-lg border border-line bg-surface px-3 text-sm disabled:opacity-60"
-          :disabled="attached.detach.isPending.value"
+          label="Ce n’est pas la même"
+          variant="secondary"
+          question="Retirer ce lien de la fiche ?"
+          confirm-label="Oui, la détacher"
+          :busy="attached.detach.isPending.value"
+          :confirm-attrs="{ 'data-action': 'confirm-detach' }"
           data-action="detach"
-          @click="confirming = draft.id"
-        >
-          Ce n’est pas la même
-        </button>
-        <p
-          v-if="errors[draft.id]"
-          role="alert"
-          class="basis-full text-sm text-bad"
-        >
+          @confirm="detach(draft)"
+        />
+        <UiAlert v-if="errors[draft.id]" class="basis-full">
           {{ errors[draft.id] }}
-        </p>
+        </UiAlert>
       </li>
     </ul>
   </section>

@@ -1,6 +1,7 @@
 import type { Task } from '@apart/contracts'
 import { isAskableTask } from '@apart/domain'
 import type { TodoFilter, TodoGroup, TodoItem } from '@apart/domain'
+import type { Tone } from './ui'
 
 /**
  * Lot 19 (ADR 0029) : l'onglet « À faire » de la fiche, côté interface. La
@@ -27,10 +28,11 @@ export const TODO_GROUP_LABELS: Record<TodoGroup, string> = {
 }
 
 /** Les teintes des pastilles, en jetons du thème (clair et sombre). */
-export const TODO_GROUP_CLASSES: Record<TodoGroup, string> = {
-  us: 'bg-surface-2 text-fg',
-  agency: 'bg-warn-soft text-warn',
-  visit: 'bg-info-soft text-info',
+/** Lot 22 : le ton de la pastille de chaque groupe (`UiBadge`). */
+export const TODO_GROUP_TONES: Record<TodoGroup, Tone> = {
+  us: 'neutral',
+  agency: 'warn',
+  visit: 'info',
 }
 
 const ASK = /^demander\b/i

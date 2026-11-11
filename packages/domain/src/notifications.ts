@@ -12,7 +12,7 @@ import {
   decisionNotificationType,
   decisionRecipients,
 } from './decision-activity.js'
-import { formatEuros } from './format.js'
+import { formatEuros, plural, pluralWord } from './format.js'
 import { opinionNotificationText } from './opinion-activity.js'
 import { fitChangeFromListing } from './whats-new.js'
 
@@ -255,7 +255,7 @@ export function notificationsForActivity(
       break
     }
     case 'task_assigned':
-      heading = `Tâche pour vous : ${str(event.after, 'label') ?? str(event.before, 'label') ?? 'nouvelle tâche'}`
+      heading = `Tâche pour toi : ${str(event.after, 'label') ?? str(event.before, 'label') ?? 'nouvelle tâche'}`
       body = `Assignée par ${who}, annonce « ${title} ».`
       break
     case 'criteria_matched': {
@@ -265,7 +265,7 @@ export function notificationsForActivity(
             .map(c => str(c, 'name'))
             .filter((n): n is string => Boolean(n))
         : []
-      heading = `Dans votre critère : ${title}`
+      heading = `Dans ton critère : ${title}`
       body = `L'annonce entre dans ${list.map(n => `« ${n} »`).join(', ') || 'un critère'}.`
       break
     }
@@ -281,12 +281,12 @@ export function notificationsForActivity(
         const count = Number(field(event.after, 'draftsCreated') ?? 0)
         const summary = str(event.after, 'summary')
         heading = `Claude a trouvé ${count} annonce${count > 1 ? 's' : ''} à valider`
-        body = `${who} a exploré les portails${summary ? ` (${summary})` : ''}. Rien n’est ajouté à la liste sans votre choix.`
+        body = `${who} a exploré les portails${summary ? ` (${summary})` : ''}. Rien n’est ajouté à la liste sans ton choix.`
         break
       }
       const count = Number(field(event.after, 'created') ?? 0)
       const subject = str(event.after, 'subject')
-      heading = `${count} annonce(s) reçue(s) par e-mail`
+      heading = `${plural(count, 'annonce')} ${pluralWord(count, 'reçue')} par e-mail`
       body = `À valider${subject ? ` : « ${subject.slice(0, 120)} »` : ''}.`
       break
     }

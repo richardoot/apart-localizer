@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useFeedbackStore } from '@/stores/feedback'
 import { flushPromises, mount } from '@vue/test-utils'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import type {
@@ -103,6 +104,11 @@ function result(
   }
 }
 
+/** Lot 22 : les réussites partent dans la zone de messages commune. */
+function feedbackTexts(): string[] {
+  return useFeedbackStore().messages.map(message => message.text)
+}
+
 async function mountPage() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -137,7 +143,7 @@ describe('Décider à plusieurs (lot 21)', () => {
     expect(apiMock.decisions.updateSettings).toHaveBeenCalledWith({
       decideTogether: false,
     })
-    expect(wrapper.text()).toContain('« Décider à plusieurs » est désactivé.')
+    expect(feedbackTexts()).toContain('« Décider à plusieurs » est désactivé.')
   })
 
   it('un membre le lit, sans pouvoir le changer', async () => {
@@ -156,7 +162,7 @@ describe('WorkspacePage (propriétaire)', () => {
     const wrapper = await mountPage()
     const members = wrapper.find('[data-testid="members"]')
     expect(members.findAll('li')).toHaveLength(2)
-    expect(members.text()).toContain('Richard (vous)')
+    expect(members.text()).toContain('Richard (toi)')
     expect(members.text()).toContain('pas encore connecté')
     expect(wrapper.find('[data-testid="former-members"]').text()).toContain(
       'Paul'
@@ -190,7 +196,7 @@ describe('WorkspacePage (propriétaire)', () => {
       displayName: 'Max',
     })
     const sent = wrapper.find('[data-testid="invite-result"]')
-    expect(sent.text()).toContain('Transmettez ce lien à Max')
+    expect(sent.text()).toContain('Transmets ce lien à Max')
     expect(
       (wrapper.find('[data-testid="invite-link"]').element as HTMLInputElement)
         .value
@@ -263,7 +269,12 @@ describe('WorkspacePage (propriétaire)', () => {
     apiMock.members.remove.mockResolvedValue({ ...CHLOE, status: 'removed' })
     const wrapper = await mountPage()
 
+    // Lot 22 : annuler une invitation se confirme sur place.
     await wrapper.find(`[data-cancel="${PENDING.email}"]`).trigger('click')
+    expect(apiMock.members.cancel).not.toHaveBeenCalled()
+    await wrapper
+      .find(`[data-confirm-cancel="${PENDING.email}"]`)
+      .trigger('click')
     await flushPromises()
     expect(apiMock.members.cancel).toHaveBeenCalledWith(PENDING.id)
 
@@ -292,7 +303,9 @@ describe('WorkspacePage (propriétaire)', () => {
     await wrapper.find('[data-testid="confirm-remove"]').trigger('click')
     await flushPromises()
     expect(apiMock.members.remove).toHaveBeenCalledWith(CHLOE.id)
-    expect(wrapper.text()).toContain('son historique reste à son nom')
+    expect(feedbackTexts().join(' ')).toContain(
+      'son historique reste à son nom'
+    )
   })
 
   it("renomme l'espace et affiche le refus du dernier propriétaire", async () => {
@@ -309,10 +322,10 @@ describe('WorkspacePage (propriétaire)', () => {
     expect(apiMock.members.rename).toHaveBeenCalledWith({
       name: 'Notre appart',
     })
-    expect(wrapper.text()).toContain('Espace renommé.')
+    expect(feedbackTexts()).toContain('Espace renommé.')
     // Seul propriétaire : pas de bouton pour partir.
     expect(wrapper.find('[data-testid="leave"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('Vous êtes le dernier propriétaire')
+    expect(wrapper.text()).toContain('Tu es le dernier propriétaire')
   })
 })
 
@@ -347,8 +360,8 @@ describe('WorkspacePage (membre)', () => {
     )
     expect(routerPush).not.toHaveBeenCalled()
 
+    // La confirmation reste ouverte après un refus : on peut réessayer.
     apiMock.members.leave.mockResolvedValueOnce(undefined)
-    await wrapper.find('[data-testid="leave"]').trigger('click')
     await wrapper.find('[data-testid="confirm-leave"]').trigger('click')
     await flushPromises()
     expect(apiMock.members.leave).toHaveBeenCalledTimes(2)

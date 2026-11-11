@@ -524,7 +524,7 @@ describe('les notifications', () => {
     )
     expect(text('decision.disagreed', {})).toEqual({
       title: 'Chloé n’est pas d’accord : [Exemple] T3',
-      body: 'Vos choix diffèrent : à trancher ensemble.',
+      body: 'Les choix diffèrent : à trancher ensemble.',
       url: SETTLE_URL,
     })
     expect(text('decision.withdrawn', { choiceLabel: 'À visiter' }).title).toBe(

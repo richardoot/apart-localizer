@@ -55,12 +55,12 @@ export const WORKFLOW_STAGE_QUESTIONS: Record<WorkflowStage, string> = {
 
 export const WORKFLOW_STAGE_INTROS: Record<WorkflowStage, string> = {
   'a-valider':
-    'Les brouillons de Claude et des alertes. Une annonce n’entre dans le suivi que si vous êtes d’accord.',
+    'Les brouillons de Claude et des alertes. Une annonce n’entre dans le suivi que si tout le monde est d’accord.',
   'a-etudier':
-    'Vous regardez les chiffres et la fiche, puis vous décidez : on visite ou on écarte.',
+    'On regarde les chiffres et la fiche, puis on décide : on visite ou on écarte.',
   'a-visiter': 'Les annonces sans date d’abord, puis les visites dans l’ordre.',
   visitees:
-    'Vos avis côte à côte, pour décider : offre, contre-visite ou on écarte.',
+    'Les avis de chacun côte à côte, pour décider : offre, contre-visite ou on écarte.',
   offres: 'Les offres en cours et leurs réponses.',
   archives: 'Rien n’est perdu : une annonce écartée se repêche à tout moment.',
 }

@@ -3,10 +3,10 @@
   import DefinitionButton from '@/components/ui/DefinitionButton.vue'
   import { useAssumptionsDraftContext } from '@/composables/useAssumptionsDraft'
   import { formatEuros, formatEurosPerMonth } from '@/lib/format'
-  import UnitField from './UnitField.vue'
+  import UiField from '@/components/ui/UiField.vue'
 
   /**
-   * « Comment financez-vous l'achat ? » (lot 13) : apport, taux, durée,
+   * « Comment finances-tu l'achat ? » (lot 13) : apport, taux, durée,
    * assurance, et le repère « Pour 100 000 € empruntés », recalculé en
    * direct par `@apart/domain` (`referenceMonthlyPayment`).
    */
@@ -18,7 +18,7 @@
     <div
       class="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] sm:gap-3.5"
     >
-      <UnitField
+      <UiField
         id="h-down"
         v-model="form.downPayment"
         class="col-span-2 sm:col-span-1"
@@ -28,7 +28,7 @@
         :change="changeOf('downPayment')"
         :error="errorOf('downPayment')"
       />
-      <UnitField
+      <UiField
         id="h-rate"
         v-model="form.interestRatePercent"
         label="Taux du crédit"
@@ -38,7 +38,7 @@
         :change="changeOf('interestRatePercent')"
         :error="errorOf('interestRatePercent')"
       />
-      <UnitField
+      <UiField
         id="h-years"
         v-model="form.durationYears"
         label="Durée"
@@ -47,7 +47,7 @@
         :change="changeOf('durationYears')"
         :error="errorOf('durationYears')"
       />
-      <UnitField
+      <UiField
         id="h-insurance"
         v-model="form.insuranceRatePercent"
         class="col-span-2 sm:col-span-1"

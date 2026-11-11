@@ -1,13 +1,17 @@
 <script setup lang="ts">
+  import UiBadge from '@/components/ui/UiBadge.vue'
+
   defineProps<{ isNew: boolean }>()
 </script>
 
 <template>
-  <span
+  <UiBadge
     v-if="isNew"
-    class="inline-block rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold tracking-wide text-accent-fg uppercase"
-    title="Vous n'avez pas encore ouvert cette annonce"
+    tone="accent"
+    variant="solid"
+    class="tracking-wide uppercase"
+    title="Tu n’as pas encore ouvert cette annonce"
   >
     nouvelle
-  </span>
+  </UiBadge>
 </template>

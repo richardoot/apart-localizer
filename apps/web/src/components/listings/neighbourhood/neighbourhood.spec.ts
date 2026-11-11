@@ -17,6 +17,7 @@ import {
   fakeSurroundings,
 } from '@/test/criteria-fixtures'
 import { fakeEvaluated } from '@/test/fixtures'
+import { ApiError } from '@/lib/api'
 import { mapLibreMock } from '@/test/setup'
 
 const apiMock = vi.hoisted(() => ({
@@ -419,12 +420,15 @@ describe('onglet Quartier (lot 19)', () => {
     expect(wrapper.emitted('go')).toEqual([['negocier']])
   })
 
-  it('dit l’erreur du contexte', async () => {
+  it('dit l’erreur du contexte et propose « Réessayer » (lot 22)', async () => {
     apiMock.listings.context.mockRejectedValue(
-      new Error('Contexte indisponible')
+      new ApiError(503, 'Contexte indisponible')
     )
     const wrapper = mountTab()
     await flushPromises()
-    expect(wrapper.get('[role="alert"]').text()).toBe('Contexte indisponible')
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      'Contexte indisponible'
+    )
+    expect(wrapper.find('[data-testid="retry"]').exists()).toBe(true)
   })
 })

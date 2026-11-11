@@ -4,12 +4,16 @@
     LISTING_CHECK_OUTCOME_LABELS,
   } from '@apart/contracts'
   import type { ListingCheckOutcome } from '@apart/contracts'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiIcon from '@/components/ui/UiIcon.vue'
   import { LISTING_STATUS_LABELS } from '@/lib/labels'
   import {
-    TIMELINE_KIND_CLASSES,
     TIMELINE_KIND_LABELS,
+    TIMELINE_KIND_TONES,
     timelineDay,
   } from '@/lib/listing-timeline'
+  import type { BadgeVariant, Tone } from '@/lib/ui'
   import type { TimelineEntry } from '@/lib/listing-timeline'
 
   /**
@@ -22,13 +26,16 @@
    */
   defineProps<{ entry: TimelineEntry; first?: boolean }>()
 
-  const OUTCOME_TONES: Record<ListingCheckOutcome, string> = {
-    unchanged: 'bg-good-soft text-good',
-    changed: 'bg-accent-soft text-accent',
-    offline: 'bg-bad-soft text-bad',
-    republished: 'bg-warn-soft text-warn',
-    inaccessible: 'border border-dashed border-muted text-muted',
-    link_added: 'border border-accent text-accent',
+  const OUTCOME_TONES: Record<
+    ListingCheckOutcome,
+    { tone: Tone; variant: BadgeVariant }
+  > = {
+    unchanged: { tone: 'good', variant: 'soft' },
+    changed: { tone: 'accent', variant: 'soft' },
+    offline: { tone: 'bad', variant: 'soft' },
+    republished: { tone: 'warn', variant: 'soft' },
+    inaccessible: { tone: 'neutral', variant: 'outline' },
+    link_added: { tone: 'accent', variant: 'outline' },
   }
   const DISPOSITION_TONES: Record<string, string> = {
     applied: 'text-good',
@@ -53,11 +60,10 @@
     >
     <!-- Colonne de largeur fixe : les textes s'alignent quelle que soit la sorte. -->
     <span class="w-24 flex-none self-start">
-      <span
-        class="inline-block rounded-md px-2 py-0.5 text-xs font-semibold"
-        :class="TIMELINE_KIND_CLASSES[entry.kind]"
+      <UiBadge
+        :tone="TIMELINE_KIND_TONES[entry.kind]"
         data-testid="timeline-kind"
-        >{{ TIMELINE_KIND_LABELS[entry.kind] }}</span
+        >{{ TIMELINE_KIND_LABELS[entry.kind] }}</UiBadge
       >
     </span>
     <div class="grid min-w-0 flex-[1_1_20rem] gap-1 text-sm leading-relaxed">
@@ -65,11 +71,12 @@
         entry.text
       }}</span>
       <span v-if="entry.who" class="text-xs text-muted">
-        <span
+        <UiBadge
           v-if="entry.source === 'check'"
-          class="mr-1.5 inline-block rounded-full px-2 py-px font-medium"
-          :class="OUTCOME_TONES[entry.check.outcome]"
-          >{{ LISTING_CHECK_OUTCOME_LABELS[entry.check.outcome] }}</span
+          class="mr-1.5"
+          :tone="OUTCOME_TONES[entry.check.outcome].tone"
+          :variant="OUTCOME_TONES[entry.check.outcome].variant"
+          >{{ LISTING_CHECK_OUTCOME_LABELS[entry.check.outcome] }}</UiBadge
         >{{ entry.who }}</span
       >
 
@@ -83,7 +90,9 @@
             <span class="text-muted line-through">{{
               change.before ?? '—'
             }}</span>
-            → <span>{{ change.after ?? '—' }}</span>
+            <UiIcon name="arrow-right" class="mx-0.5 inline align-[-0.125em]" />
+            <span class="sr-only">devient</span>
+            <span>{{ change.after ?? '—' }}</span>
           </dd>
         </template>
       </dl>
@@ -97,7 +106,7 @@
           >
             <span class="break-words">{{ change.text }}</span>
             <span
-              class="text-[11px] font-medium tracking-wide uppercase"
+              class="text-xs font-medium tracking-wide uppercase"
               :class="DISPOSITION_TONES[change.disposition]"
               >{{ LISTING_CHECK_DISPOSITION_LABELS[change.disposition] }}</span
             >
@@ -105,7 +114,7 @@
         </ul>
         <p
           v-else-if="entry.check.changes.length === 1"
-          class="text-[11px] font-medium tracking-wide uppercase"
+          class="text-xs font-medium tracking-wide uppercase"
           :class="DISPOSITION_TONES[entry.check.changes[0]!.disposition]"
         >
           {{
@@ -137,7 +146,7 @@
         </p>
         <details v-if="entry.check.evidence" class="text-xs">
           <summary
-            class="inline-flex min-h-9 cursor-pointer items-center text-accent"
+            class="inline-flex min-h-11 cursor-pointer items-center text-accent sm:min-h-8"
           >
             Extrait de la page
           </summary>
@@ -147,13 +156,16 @@
             {{ entry.check.evidence }}
           </blockquote>
         </details>
-        <a
+        <UiButton
           v-if="entry.check.checkedUrl"
           :href="entry.check.checkedUrl"
+          variant="link"
+          size="inline"
           target="_blank"
           rel="noopener noreferrer"
-          class="w-fit text-xs break-all text-muted underline hover:text-fg"
-          >page consultée</a
+          icon-right="external"
+          class="w-fit text-xs break-all"
+          >page consultée</UiButton
         >
       </template>
 

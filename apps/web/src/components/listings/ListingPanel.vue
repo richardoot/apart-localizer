@@ -14,7 +14,12 @@
     todoPendingCount,
     waitingNames,
   } from '@apart/domain'
+  import QueryState from '@/components/ui/QueryState.vue'
   import SidePanel from '@/components/ui/SidePanel.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import { useLeaveGuard } from '@/composables/useLeaveGuard'
+  import { useFeedbackStore } from '@/stores/feedback'
+  import { errorMessage } from '@/lib/errors'
   import {
     createListingEditor,
     provideListingEditor,
@@ -28,7 +33,7 @@
   import { useAssumptions, useWorkspace } from '@/composables/useWorkspace'
   import { useListingExchanges } from '@/composables/useAgencyRequests'
   import { useVisits } from '@/composables/useVisits'
-  import { ApiError, api } from '@/lib/api'
+  import { api } from '@/lib/api'
   import { criteriaChangesMessage } from '@/lib/criteria'
   import { parseNumberInput } from '@/lib/format'
   import { ADDRESS_FIELD_ID } from '@/lib/listing-sections'
@@ -68,13 +73,21 @@
   const tab = defineModel<ListingTab>('tab', { default: DEFAULT_LISTING_TAB })
 
   const id = computed(() => props.id)
-  const { data: item, isPending, error } = useListing(id)
+  const listingQuery = useListing(id)
+  const { data: item } = listingQuery
   const { values: assumptions } = useAssumptions()
   const { me, members } = useWorkspace()
   const mutations = useListingMutations()
 
-  const message = ref<string | null>(props.notice ?? null)
-  const failure = ref<string | null>(null)
+  // Lot 22 : les réussites vont à la zone de messages ; chaque échec se dit
+  // à côté du contrôle cliqué (en-tête, bandeau de décision, Budget,
+  // Négocier), plus en haut de la fiche.
+  const feedback = useFeedbackStore()
+  if (props.notice) feedback.success(props.notice)
+  const statusError = ref<string | null>(null)
+  const decisionError = ref<string | null>(null)
+  const budgetError = ref<string | null>(null)
+  const negotiateError = ref<string | null>(null)
   const seenFor = ref<string | null>(null)
 
   // « Ce qui a changé » depuis la dernière ouverture : lu avant de marquer la
@@ -105,11 +118,6 @@
     { immediate: true }
   )
 
-  function report(err: unknown): void {
-    failure.value =
-      err instanceof ApiError ? err.message : "L'enregistrement a échoué."
-  }
-
   // Lot 19 : l'édition section par section, sur un brouillon de la fiche ;
   // l'aperçu en direct en est calculé (aucun appel réseau).
   const editor = createListingEditor({
@@ -132,24 +140,21 @@
             : null
         })
       ),
+    // Le refus du serveur se dit dans la section (`errors._submit`).
     submit: async (section, patch) => {
       if (!item.value) throw new Error('Annonce absente')
-      failure.value = null
-      try {
-        const saved = await mutations.update.mutateAsync({
-          id: item.value.listing.id,
-          patch: { ...patch, expectedUpdatedAt: item.value.listing.updatedAt },
-        })
-        message.value = [
+      const saved = await mutations.update.mutateAsync({
+        id: item.value.listing.id,
+        patch: { ...patch, expectedUpdatedAt: item.value.listing.updatedAt },
+      })
+      feedback.success(
+        [
           `« ${editor.titleOf(section)} » enregistré.`,
           criteriaChangesMessage(saved.criteriaChanges),
         ]
           .filter(Boolean)
           .join(' ')
-      } catch (err) {
-        report(err)
-        throw err
-      }
+      )
     },
     focus: fieldId => {
       void nextTick(() => {
@@ -160,6 +165,25 @@
     },
   })
   provideListingEditor(editor)
+
+  // Lot 22 : le bouton retour du navigateur ou du téléphone, ou un lien,
+  // sur une section modifiée : la même question que dans la fiche (le
+  // bandeau « Modifications non enregistrées »), puis la navigation.
+  useLeaveGuard({
+    title: () => editor.titleOf(editor.editing.value ?? 'listing'),
+    isDirty: () => editor.dirty.value,
+    discard: () => editor.cancel(),
+    prompt: proceed => {
+      const section = editor.editing.value
+      if (section === null) {
+        proceed()
+        return
+      }
+      editor.pending.value = { section, run: proceed }
+    },
+    leaves: (to, from) =>
+      to.path !== from.path || to.query.onglet !== from.query.onglet,
+  })
 
   // Lot 20 : « Mon avis » passe par la même garde, sans aperçu en direct.
   const live = computed(
@@ -265,12 +289,12 @@
       mutations.recordPriceChange.isPending.value
   )
 
-  async function changeStatus(change: {
-    status: ListingStatus
-    reason: string | null
-  }): Promise<void> {
+  async function changeStatus(
+    change: { status: ListingStatus; reason: string | null },
+    from: 'header' | 'tab' = 'tab'
+  ): Promise<void> {
     if (!item.value) return
-    failure.value = null
+    statusError.value = null
     try {
       const saved = await mutations.setStatus.mutateAsync({
         id: item.value.listing.id,
@@ -279,22 +303,25 @@
       if (change.status === suggestedStatus.value) suggestedStatus.value = null
       // Lot 21 : une décision à deux devient une proposition.
       if (saved.decision && saved.listing.status !== change.status) {
-        message.value = proposedMessage(waitingNames(saved.decision))
+        feedback.success(proposedMessage(waitingNames(saved.decision)))
       }
     } catch (err) {
-      report(err)
+      const text = errorMessage(err, 'Le changement de statut a échoué.')
+      // Depuis l'en-tête, sous le menu ; depuis un onglet, dans la zone.
+      if (from === 'header') statusError.value = text
+      else feedback.error(text)
     }
   }
 
   // Lot 21 : répondre, retirer, décider sans attendre depuis la fiche.
   const decisions = useDecisionActions()
   async function act(promise: Promise<DecisionResult>): Promise<void> {
-    failure.value = null
+    decisionError.value = null
     try {
       const result = await promise
-      message.value = result.message
+      feedback.success(result.message)
     } catch (err) {
-      report(err)
+      decisionError.value = errorMessage(err)
     }
   }
   function withdrawDecision(): void {
@@ -341,52 +368,42 @@
       decisions.respond.isPending.value
   )
 
-  const run = async (
-    action: Promise<unknown>,
-    done?: string
-  ): Promise<void> => {
-    failure.value = null
-    try {
-      await action
-      if (done) message.value = done
-    } catch (err) {
-      report(err)
-    }
-  }
-
   /** « Retenir » le loyer de marché estimé par les comparables dans la phase 2. */
   async function retainMarketRent(rent: number): Promise<void> {
     if (!item.value) return
+    budgetError.value = null
     const plan = item.value.listing.rentalPlan
     if (!plan) {
-      failure.value =
-        'Renseignez d’abord le loyer visé de la phase 2 pour y retenir un loyer de marché.'
+      budgetError.value =
+        'Renseigne d’abord le loyer visé de la phase 2 pour y retenir un loyer de marché.'
       return
     }
-    await run(
-      mutations.update.mutateAsync({
+    try {
+      await mutations.update.mutateAsync({
         id: item.value.listing.id,
         patch: {
           rentalPlan: { ...plan, marketRent: rent },
           expectedUpdatedAt: item.value.listing.updatedAt,
         },
-      }),
-      'Loyer de marché retenu dans la phase 2.'
-    )
+      })
+      feedback.success('Loyer de marché retenu dans la phase 2.')
+    } catch (err) {
+      budgetError.value = errorMessage(err, 'L’enregistrement a échoué.')
+    }
   }
 
   async function addOffer(input: OfferInputRaw): Promise<void> {
     if (!item.value) return
-    failure.value = null
+    negotiateError.value = null
     try {
       const result = await mutations.addOffer.mutateAsync({
         id: item.value.listing.id,
         input,
       })
       suggestedStatus.value = result.suggestedStatus
-      message.value = 'Offre enregistrée.'
+      feedback.success('Offre enregistrée.')
     } catch (err) {
-      report(err)
+      negotiateError.value = errorMessage(err, 'L’enregistrement a échoué.')
     }
   }
 
@@ -395,33 +412,57 @@
     update: OfferUpdate
   ): Promise<void> {
     if (!item.value) return
-    failure.value = null
+    negotiateError.value = null
+    const listingId = item.value.listing.id
+    // Lot 22 : « Annuler » remet la réponse d'avant, par le même appel.
+    const before = item.value.offers.find(offer => offer.id === offerId)
+    const restore: OfferUpdate | null =
+      before && update.response !== undefined
+        ? { response: before.response, counterAmount: before.counterAmount }
+        : null
     try {
       const result = await mutations.updateOffer.mutateAsync({
-        id: item.value.listing.id,
+        id: listingId,
         offerId,
         update,
       })
       suggestedStatus.value = result.suggestedStatus
-      message.value = 'Réponse enregistrée.'
+      feedback.success(
+        'Réponse enregistrée.',
+        restore
+          ? {
+              undo: async () => {
+                const undone = await mutations.updateOffer.mutateAsync({
+                  id: listingId,
+                  offerId,
+                  update: restore,
+                })
+                suggestedStatus.value = undone.suggestedStatus
+              },
+            }
+          : {}
+      )
     } catch (err) {
-      report(err)
+      negotiateError.value = errorMessage(err, 'L’enregistrement a échoué.')
     }
   }
 
-  function recordPrice(newPrice: number): void {
+  async function recordPrice(newPrice: number): Promise<void> {
     if (!item.value) return
-    void run(
-      mutations.recordPriceChange.mutateAsync({
+    negotiateError.value = null
+    try {
+      await mutations.recordPriceChange.mutateAsync({
         id: item.value.listing.id,
         input: {
           newPrice,
           expectedPrice: item.value.listing.price,
           source: 'listing',
         },
-      }),
-      'Nouveau prix enregistré.'
-    )
+      })
+      feedback.success('Nouveau prix enregistré.')
+    } catch (err) {
+      negotiateError.value = errorMessage(err, 'L’enregistrement a échoué.')
+    }
   }
 
   /**
@@ -432,12 +473,11 @@
   const opinionActions: OpinionActions = {
     save: async input => {
       if (!item.value) return
-      failure.value = null
       await mutations.upsertOpinion.mutateAsync({
         id: item.value.listing.id,
         input,
       })
-      message.value = 'Avis enregistré.'
+      feedback.success('Avis enregistré.')
     },
     reveal: async () => {
       if (!item.value) return
@@ -451,7 +491,7 @@
         details: task.details,
         origin: 'opinion',
       })
-      message.value = `Tâche ajoutée dans À faire : « ${task.label} ».`
+      feedback.success(`Tâche ajoutée dans À faire : « ${task.label} ».`)
     },
   }
 </script>
@@ -469,23 +509,18 @@
           :item="item"
           :evaluation="shownEvaluation"
           :busy="busy"
+          :status-error="statusError"
           @back="requestClose"
-          @status="changeStatus"
+          @status="change => changeStatus(change, 'header')"
         />
         <header
           v-else
           class="flex items-center justify-between gap-3 bg-surface px-4 py-3 sm:px-5"
         >
           <DialogTitle as="h1" class="font-display text-lg font-bold">
-            {{ isPending ? 'Chargement de l’annonce…' : 'Annonce' }}
+            Annonce
           </DialogTitle>
-          <button
-            type="button"
-            class="inline-flex min-h-11 items-center rounded-lg border border-line px-3 text-sm text-muted hover:bg-surface-2"
-            @click="emit('close')"
-          >
-            Fermer
-          </button>
+          <UiButton icon="close" @click="emit('close')">Fermer</UiButton>
         </header>
         <div
           v-if="item"
@@ -497,127 +532,115 @@
       </div>
     </template>
 
-    <p v-if="isPending" class="text-sm text-muted">Chargement de l'annonce…</p>
-    <p
-      v-else-if="error"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
+    <QueryState
+      :query="listingQuery"
+      skeleton="cards"
+      :skeleton-count="2"
+      loading-label="l’annonce"
+      error-fallback="La lecture de l’annonce a échoué."
     >
-      {{ error.message }}
-    </p>
-    <template v-else-if="item">
-      <UnsavedChangesBar />
-      <p
-        v-if="failure"
-        role="alert"
-        class="mb-4 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-      >
-        {{ failure }}
-      </p>
-      <p
-        v-else-if="message"
-        class="mb-4 text-sm text-good"
-        aria-live="polite"
-        data-testid="panel-message"
-      >
-        {{ message }}
-      </p>
+      <template v-if="item">
+        <UnsavedChangesBar />
 
-      <DecisionBanner
-        v-if="item.decision"
-        :decision="item.decision"
-        :busy="decisionBusy"
-        @withdraw="withdrawDecision"
-        @decide-now="decideNow"
-        @agree="agreeDecision"
-        @disagree="disagreeDecision"
-      />
-
-      <div
-        :id="`listing-panel-${tab}`"
-        role="tabpanel"
-        :aria-labelledby="`listing-tab-${tab}`"
-        tabindex="0"
-        class="grid scroll-mt-14 gap-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
-        :data-panel="tab"
-      >
-        <p class="text-sm text-muted" data-testid="tab-question">
-          {{ listingTabQuestion(tab) }}
-        </p>
-
-        <ListingSynthesis
-          v-if="tab === 'synthese'"
-          :item="item"
-          :evaluation="shownEvaluation"
-          :target-price="shownTargetPrice"
-          :negotiation="shownNegotiation"
-          :assumptions="shownAssumptions"
-          :live="live"
-          :changes="changes"
-          :requests="agencyRequests"
-          :visits="visitList"
-          :members="members"
-          :me-id="me?.id ?? null"
-          :saving-opinion="mutations.upsertOpinion.isPending.value"
-          :opinion-actions="opinionActions"
-          @go="go"
-          @precise="preciseAddress"
+        <DecisionBanner
+          v-if="item.decision"
+          :decision="item.decision"
+          :busy="decisionBusy"
+          :error="decisionError"
+          @withdraw="withdrawDecision"
+          @decide-now="decideNow"
+          @agree="agreeDecision"
+          @disagree="disagreeDecision"
         />
 
-        <PropertyTab v-else-if="tab === 'bien'" :item="item" @go="go" />
+        <div
+          :id="`listing-panel-${tab}`"
+          role="tabpanel"
+          :aria-labelledby="`listing-tab-${tab}`"
+          tabindex="0"
+          class="grid scroll-mt-14 gap-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+          :data-panel="tab"
+        >
+          <p class="text-sm text-muted" data-testid="tab-question">
+            {{ listingTabQuestion(tab) }}
+          </p>
 
-        <BudgetTab
-          v-else-if="tab === 'budget'"
-          :item="item"
-          :evaluation="shownEvaluation"
-          :target-price="shownTargetPrice"
-          :assumptions="shownAssumptions"
-          :live="live"
-          :busy="busy"
-          @go="go"
-          @retain-market-rent="retainMarketRent"
-        />
+          <ListingSynthesis
+            v-if="tab === 'synthese'"
+            :item="item"
+            :evaluation="shownEvaluation"
+            :target-price="shownTargetPrice"
+            :negotiation="shownNegotiation"
+            :assumptions="shownAssumptions"
+            :live="live"
+            :changes="changes"
+            :requests="agencyRequests"
+            :visits="visitList"
+            :members="members"
+            :me-id="me?.id ?? null"
+            :saving-opinion="mutations.upsertOpinion.isPending.value"
+            :opinion-actions="opinionActions"
+            @go="go"
+            @precise="preciseAddress"
+          />
 
-        <NegotiateTab
-          v-else-if="tab === 'negocier'"
-          :item="item"
-          :evaluation="shownEvaluation"
-          :target-price="shownTargetPrice"
-          :negotiation="shownNegotiation"
-          :rank="live ? null : (targetReport?.rank ?? null)"
-          :assumptions="shownAssumptions"
-          :live="live"
-          :busy="busy"
-          :suggested-status="suggestedStatus"
-          @go="go"
-          @record-price="recordPrice"
-          @add-offer="addOffer"
-          @update-offer="updateOffer"
-          @set-status="status => changeStatus({ status, reason: null })"
-        />
+          <PropertyTab v-else-if="tab === 'bien'" :item="item" @go="go" />
 
-        <NeighbourhoodTab
-          v-else-if="tab === 'quartier'"
-          :item="item"
-          @precise="preciseAddress"
-          @go="go"
-        />
+          <BudgetTab
+            v-else-if="tab === 'budget'"
+            :item="item"
+            :evaluation="shownEvaluation"
+            :target-price="shownTargetPrice"
+            :assumptions="shownAssumptions"
+            :live="live"
+            :busy="busy"
+            :error="budgetError"
+            @go="go"
+            @retain-market-rent="retainMarketRent"
+          />
 
-        <TodoTab
-          v-else-if="tab === 'a-faire'"
-          :item="item"
-          :members="members"
-          :me-id="me?.id ?? null"
-          @set-status="status => changeStatus({ status, reason: null })"
-        />
+          <NegotiateTab
+            v-else-if="tab === 'negocier'"
+            :item="item"
+            :evaluation="shownEvaluation"
+            :target-price="shownTargetPrice"
+            :negotiation="shownNegotiation"
+            :rank="live ? null : (targetReport?.rank ?? null)"
+            :assumptions="shownAssumptions"
+            :live="live"
+            :busy="busy"
+            :suggested-status="suggestedStatus"
+            :error="negotiateError"
+            @go="go"
+            @record-price="recordPrice"
+            @add-offer="addOffer"
+            @update-offer="updateOffer"
+            @set-status="status => changeStatus({ status, reason: null })"
+          />
 
-        <HistoryTab
-          v-else
-          :item="item"
-          :members="members"
-          @set-status="status => changeStatus({ status, reason: null })"
-        />
-      </div>
-    </template>
+          <NeighbourhoodTab
+            v-else-if="tab === 'quartier'"
+            :item="item"
+            @precise="preciseAddress"
+            @go="go"
+          />
+
+          <TodoTab
+            v-else-if="tab === 'a-faire'"
+            :item="item"
+            :members="members"
+            :me-id="me?.id ?? null"
+            @set-status="status => changeStatus({ status, reason: null })"
+          />
+
+          <HistoryTab
+            v-else
+            :item="item"
+            :members="members"
+            @set-status="status => changeStatus({ status, reason: null })"
+          />
+        </div>
+      </template>
+    </QueryState>
   </SidePanel>
 </template>

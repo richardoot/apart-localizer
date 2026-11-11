@@ -106,7 +106,7 @@ describe('EditableSection', () => {
     await wrapper.get('form').trigger('submit')
     await nextTick()
     expect(wrapper.get('[role="alert"]').text()).toContain(
-      'Une autre partie de la fiche est invalide'
+      'La section « L’annonce et son adresse » a une erreur (Le titre est obligatoire.)'
     )
   })
 })

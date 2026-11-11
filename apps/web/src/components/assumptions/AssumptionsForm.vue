@@ -6,7 +6,9 @@
     provideAssumptionsDraft,
     useAssumptionsDraft,
   } from '@/composables/useAssumptionsDraft'
+  import { useLeaveGuard } from '@/composables/useLeaveGuard'
   import { DESKTOP_QUERY, useMediaQuery } from '@/composables/useMediaQuery'
+  import UiButton from '@/components/ui/UiButton.vue'
   import { ASSUMPTIONS_SECTIONS, fieldLabel } from '@/lib/assumptions-form'
   import type { SectionId } from '@/lib/assumptions-form'
   import AssumptionsNav from './AssumptionsNav.vue'
@@ -126,6 +128,15 @@
     emit('discard')
   }
 
+  // Lot 22 : quitter la page (lien, retour arrière, mise à jour de
+  // l'application) avec des modifications non enregistrées demande
+  // confirmation.
+  useLeaveGuard({
+    title: () => 'Hypothèses',
+    isDirty: () => changes.value.length > 0,
+    discard: cancel,
+  })
+
   function go(id: string): void {
     const target = document.getElementById(id)
     if (!target) return
@@ -139,9 +150,6 @@
     document.getElementById(`${id}-title`)?.focus({ preventScroll: true })
     active.value = id
   }
-
-  const toolButton =
-    'min-h-11 shrink-0 rounded-lg border border-muted/70 bg-surface px-3.5 text-sm font-medium hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
 </script>
 
 <template>
@@ -200,16 +208,15 @@
           :desktop="desktop"
         >
           <template #actions>
-            <button
-              type="button"
-              :class="toolButton"
+            <UiButton
+              class="shrink-0"
               :aria-expanded="openPanels.taxation"
               aria-controls="taxation-panel"
               data-testid="toggle-taxation"
               @click="openPanels.taxation = !openPanels.taxation"
             >
               {{ openPanels.taxation ? 'Replier' : 'Modifier' }}
-            </button>
+            </UiButton>
           </template>
           <TaxationFields />
         </AssumptionsSection>

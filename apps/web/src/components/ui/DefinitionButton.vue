@@ -13,7 +13,8 @@
    * Le bouton « ? » d'un indicateur (lot 9) : sa définition en une phrase,
    * tirée du glossaire partagé avec le MCP (`apart://glossaire`). Un vrai
    * bouton (`aria-expanded`), fermé par Échap ou un clic ailleurs ; aucun
-   * `title`, illisible au toucher.
+   * `title`, illisible au toucher. Lot 22 : la pastille reste petite, la
+   * zone de toucher fait 44 px (pseudo-élément), sauf à la souris.
    */
   const props = defineProps<{ term: string }>()
   const entry = computed(() => glossaryEntry(props.term) ?? null)
@@ -23,7 +24,7 @@
 <template>
   <PopoverRoot v-if="entry" v-model:open="open">
     <PopoverTrigger
-      class="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-line bg-surface align-middle text-xs leading-none font-semibold text-muted hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+      class="relative inline-flex size-6 shrink-0 items-center after:absolute after:-inset-2.5 after:content-[''] pointer-fine:after:inset-0 justify-center rounded-full border border-line bg-surface align-middle text-xs leading-none font-semibold text-muted hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
       :aria-label="`Définition : ${entry.term}`"
       :data-term="term"
     >

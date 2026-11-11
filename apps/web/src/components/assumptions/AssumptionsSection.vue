@@ -1,4 +1,6 @@
 <script setup lang="ts">
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiIcon from '@/components/ui/UiIcon.vue'
   import type { SectionSpec } from '@/lib/assumptions-form'
   import { changedCountLabel } from '@/lib/assumptions-summary'
 
@@ -47,9 +49,10 @@
     </template>
     <template v-else>
       <h2>
-        <button
-          type="button"
-          class="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl px-4 py-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        <UiButton
+          variant="ghost"
+          block
+          class="min-h-14! justify-between! gap-3 rounded-2xl! px-4 py-2.5 text-left text-fg"
           :aria-expanded="open"
           :aria-controls="panelId"
           :data-testid="`toggle-${section.id}`"
@@ -66,10 +69,11 @@
               ></span
             >
           </span>
-          <span aria-hidden="true" class="text-muted">{{
-            open ? '▾' : '▸'
-          }}</span>
-        </button>
+          <UiIcon
+            :name="open ? 'chevron-down' : 'chevron-right'"
+            class="size-5 text-muted"
+          />
+        </UiButton>
       </h2>
       <div v-if="open" :id="panelId" class="grid gap-3 px-4 pt-1 pb-4">
         <p class="text-xs text-muted">{{ section.purpose }}</p>

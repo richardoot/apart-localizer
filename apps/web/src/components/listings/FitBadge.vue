@@ -4,6 +4,8 @@
     CRITERIA_FIT_LEVEL_LABELS,
   } from '@apart/contracts'
   import type { CriteriaFitLevel } from '@apart/contracts'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import type { BadgeVariant, Tone } from '@/lib/ui'
 
   /**
    * La pastille d'adéquation aux critères (lot 14), lisible sans la couleur :
@@ -18,39 +20,37 @@
     }
   )
 
-  const TONES: Record<CriteriaFitLevel, string> = {
-    in: 'bg-accent text-accent-fg',
-    to_confirm:
-      'border-[1.5px] border-dashed border-accent bg-surface text-accent',
-    margin: 'bg-warn-soft text-warn',
-    out: 'bg-muted text-surface',
+  /** Lot 22 : la pastille commune, la coche du jeu d'icônes. */
+  const TONES: Record<
+    CriteriaFitLevel,
+    { tone: Tone; variant: BadgeVariant; extra: string }
+  > = {
+    in: { tone: 'accent', variant: 'solid', extra: '' },
+    to_confirm: {
+      tone: 'accent',
+      variant: 'outline',
+      extra: 'border-[1.5px] border-dashed bg-surface',
+    },
+    margin: { tone: 'warn', variant: 'soft', extra: '' },
+    out: { tone: 'neutral', variant: 'solid', extra: '' },
   }
 </script>
 
 <template>
-  <span
-    class="inline-flex w-fit items-center gap-1.5 justify-self-start rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap"
-    :class="TONES[level]"
+  <UiBadge
+    :tone="TONES[level].tone"
+    :variant="TONES[level].variant"
+    :icon="level === 'in' ? 'check' : undefined"
+    class="w-fit justify-self-start px-2.5"
+    :class="TONES[level].extra"
     :title="CRITERIA_FIT_LEVEL_DESCRIPTIONS[level]"
     :data-fit="level"
     data-testid="fit-badge"
   >
-    <svg
-      v-if="level === 'in'"
-      aria-hidden="true"
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-    >
-      <path d="M2 6.5l2.5 2.5L10 3.5" />
-    </svg>
     <span class="tabular-nums">{{
       count === null
         ? CRITERIA_FIT_LEVEL_LABELS[level]
         : `${CRITERIA_FIT_LEVEL_LABELS[level]} · ${count}`
     }}</span>
-  </span>
+  </UiBadge>
 </template>

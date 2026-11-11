@@ -267,7 +267,7 @@ export class ListingEnrichmentService {
           source: 'open_data',
           confidence: 1,
           recordedAt: computedAt,
-          evidence: `Arrêté du ${rent.decree?.decreeDate ?? '?'}, zone ${rent.zone?.zone ?? '?'}, ${rent.row.rooms === 4 ? '4 pièces et plus' : `${rent.row.rooms} pièce(s)`}, ${RENT_EPOCH_LABELS[rent.row.epoch].toLowerCase()}, ${rent.row.furnished ? 'meublé' : 'vide'} : loyer de référence majoré ${rent.row.upperRent} €/m²`,
+          evidence: `Arrêté du ${rent.decree?.decreeDate ?? '?'}, zone ${rent.zone?.zone ?? '?'}, ${rent.row.rooms === 4 ? '4 pièces et plus' : `${rent.row.rooms} pièce${rent.row.rooms > 1 ? 's' : ''}`}, ${RENT_EPOCH_LABELS[rent.row.epoch].toLowerCase()}, ${rent.row.furnished ? 'meublé' : 'vide'} : loyer de référence majoré ${rent.row.upperRent} €/m²`,
         }
         if (current !== rent.referenceRentPerM2) {
           data.rentalPlan = {
@@ -415,7 +415,7 @@ export class ListingEnrichmentService {
     const candidate = search?.candidates.find(c => c.number === number)
     if (!search || !candidate) {
       throw new NotFoundException(
-        `DPE n° ${number} absent de la dernière recherche : relancez la recherche du DPE.`
+        `DPE n° ${number} absent de la dernière recherche : relance la recherche du DPE.`
       )
     }
     const recordedAt = new Date().toISOString()

@@ -273,10 +273,10 @@ describe('critères de l’espace', () => {
     ).toMatch(/par défaut/)
     expect(
       removeCriterionRefusal({ origin: 'custom', label: 'Cuisine' }, 3)
-    ).toBe('« Cuisine » a déjà 3 notes : masquez-le pour les garder.')
+    ).toBe('« Cuisine » a déjà 3 notes : masque-le pour les garder.')
     expect(
       removeCriterionRefusal({ origin: 'custom', label: 'Cuisine' }, 1)
-    ).toBe('« Cuisine » a déjà 1 note : masquez-le pour les garder.')
+    ).toBe('« Cuisine » a déjà 1 note : masque-le pour les garder.')
     expect(
       removeCriterionRefusal({ origin: 'custom', label: 'Cuisine' }, 0)
     ).toBeNull()
@@ -611,7 +611,7 @@ describe('phrases et effets', () => {
       good: [
         {
           key: 'opinions_liked',
-          text: 'Vous aimez tous les deux : extérieur et vue (5 et 5), luminosité (5 et 4), agencement (4 et 4)',
+          text: 'Plaît à tous les deux : extérieur et vue (5 et 5), luminosité (5 et 4), agencement (4 et 4)',
           tab: 'synthese',
           section: 'opinions',
         },
@@ -619,7 +619,7 @@ describe('phrases et effets', () => {
       watch: [
         {
           key: 'opinions_disagreement',
-          text: 'Vous n’êtes pas d’accord sur le calme (Richard 4, Chloé 2) et « on s’y voit » (4 et 2)',
+          text: 'Désaccord sur le calme (Richard 4, Chloé 2) et « on s’y voit » (4 et 2)',
           tab: 'synthese',
           section: 'opinions',
         },
@@ -640,7 +640,7 @@ describe('phrases et effets', () => {
     const { watch } = opinionHighlights(s)
     expect(watch.map(w => w.text)).toEqual([
       'Noté rédhibitoire : le calme (Chloé) et l’immeuble (Richard et Chloé)',
-      'Vous n’êtes pas d’accord sur « on s’y voit » (Richard 4, Chloé 2)',
+      'Désaccord sur « on s’y voit » (Richard 4, Chloé 2)',
     ])
     const onlyDealbreaker = opinionHighlights(
       confront({
@@ -652,7 +652,7 @@ describe('phrases et effets', () => {
     ])
   })
 
-  it('seul, ou à trois : « Vous aimez », « Vous aimez tous »', () => {
+  it('seul, ou à trois : « Tu aimes », « Plaît à tous »', () => {
     const solo = confrontOpinions({
       criteria,
       members: [{ id: R, displayName: 'Richard' }],
@@ -662,7 +662,7 @@ describe('phrases et effets', () => {
       revealed: false,
       viewerRated: true,
     })
-    expect(opinionHighlights(solo).good[0]?.text).toBe('Vous aimez : calme (5)')
+    expect(opinionHighlights(solo).good[0]?.text).toBe('Tu aimes : calme (5)')
     const trio = confrontOpinions({
       criteria,
       members: [...members, { id: L, displayName: 'Léa' }],
@@ -677,7 +677,7 @@ describe('phrases et effets', () => {
       viewerRated: true,
     })
     expect(opinionHighlights(trio).good[0]?.text).toBe(
-      'Vous aimez tous : calme (5, 4 et 4)'
+      'Plaît à tous : calme (5, 4 et 4)'
     )
   })
 
@@ -731,7 +731,7 @@ describe('phrases et effets', () => {
   it('« À rediscuter » dans les prochaines étapes, après la visite planifiée', () => {
     const s = confront()
     expect(opinionNextStepText(s)).toBe(
-      'Le calme et « on s’y voit » : vos notes s’écartent de 2 points'
+      'Le calme et « on s’y voit » : les notes s’écartent de 2 points'
     )
     expect(opinionNextStepText(null)).toBeNull()
     expect(
@@ -748,7 +748,7 @@ describe('phrases et effets', () => {
       ],
     })
     expect(opinionNextStepText(wide)).toBe(
-      'La luminosité, l’agencement et 1 autre : vos notes s’écartent de 2 à 3 points'
+      'La luminosité, l’agencement et 1 autre : les notes s’écartent de 2 à 3 points'
     )
     const steps = nextSteps({
       tasks: [
@@ -782,7 +782,7 @@ describe('phrases et effets', () => {
     expect(counterVisitTask(s, 'quiet')).toEqual({
       label: 'À revoir à la contre-visite : le calme',
       details:
-        'Vos notes s’écartent de 2 points : Richard 4 (« fenêtres fermées, ça va »), Chloé 2 (« bus devant la chambre »).',
+        'Les notes s’écartent de 2 points : Richard 4 (« fenêtres fermées, ça va »), Chloé 2 (« bus devant la chambre »).',
     })
     expect(counterVisitTask(s, 'layout')).toBeNull()
     expect(counterVisitTask(s, 'inconnu')).toBeNull()
@@ -886,7 +886,7 @@ describe('cas limites', () => {
       ],
     })
     expect(opinionHighlights(tie).good[0]?.text).toBe(
-      'Vous aimez tous les deux : extérieur et vue (5 et 5), luminosité (4 et 4), agencement (4 et 4)'
+      'Plaît à tous les deux : extérieur et vue (5 et 5), luminosité (4 et 4), agencement (4 et 4)'
     )
     const five = confront({
       visible: [
@@ -908,10 +908,10 @@ describe('cas limites', () => {
     })
     expect(disagreementList(five)).toMatch(/ et 2 autres$/)
     expect(opinionNextStepText(five)).toBe(
-      'La luminosité, l’agencement et 3 autres : vos notes s’écartent de 3 points'
+      'La luminosité, l’agencement et 3 autres : les notes s’écartent de 3 points'
     )
     expect(counterVisitTask(confront(), 'feel')?.details).toBe(
-      'Vos notes s’écartent de 2 points : Richard 4, Chloé 2.'
+      'Les notes s’écartent de 2 points : Richard 4, Chloé 2.'
     )
   })
 

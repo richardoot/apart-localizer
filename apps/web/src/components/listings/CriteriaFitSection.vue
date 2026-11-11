@@ -12,6 +12,7 @@
     toleranceSummary,
   } from '@apart/domain'
   import DefinitionButton from '@/components/ui/DefinitionButton.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
   import { useSearchCriteriaList } from '@/composables/useSearchCriteria'
   import type { ListingTab } from '@/lib/listing-tabs'
   import FitBadge from './FitBadge.vue'
@@ -54,8 +55,6 @@
     margin: 'text-warn',
     out: 'text-muted',
   }
-  const linkClass =
-    'inline-flex min-h-11 items-center justify-self-start text-sm font-semibold text-accent underline-offset-2 hover:underline sm:min-h-9'
 </script>
 
 <template>
@@ -68,22 +67,21 @@
         {{ fitExplanation(fit) }}
         <DefinitionButton term="criteria_fit" />
       </span>
-      <button
+      <UiButton
         v-if="fit.locationPending"
-        type="button"
-        class="inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-accent-fg sm:min-h-10"
+        variant="primary"
         data-testid="fit-precise"
         @click="emit('precise')"
       >
         Préciser l’adresse
-      </button>
-      <RouterLink
+      </UiButton>
+      <UiButton
         v-else-if="fit.activeCriteria === 0"
+        variant="outline"
         :to="{ name: 'criteria' }"
-        class="inline-flex min-h-11 items-center rounded-lg border border-accent px-4 text-sm font-semibold text-accent sm:min-h-10"
       >
         Créer un critère
-      </RouterLink>
+      </UiButton>
     </div>
 
     <div
@@ -93,7 +91,7 @@
       <article
         v-for="entry in fit.criteria"
         :key="entry.criteriaId"
-        class="grid gap-2 rounded-xl border border-line px-4 py-3"
+        class="grid gap-2 rounded-2xl border border-line px-4 py-3"
         :data-criteria="entry.criteriaId"
       >
         <header class="flex flex-wrap items-center justify-between gap-2">
@@ -115,6 +113,7 @@
             :data-check="check.key"
             :data-level="check.level"
           >
+            <!-- Lot 22 : le niveau d'un filtre (cercle plein, pointillé), un dessin propre à l'adéquation. -->
             <svg
               role="img"
               :aria-label="CRITERIA_FIT_LEVEL_LABELS[check.level]"
@@ -171,23 +170,25 @@
     </div>
 
     <div class="flex flex-wrap gap-x-4">
-      <button
+      <UiButton
         v-if="hasPerimeter"
-        type="button"
-        :class="linkClass"
+        variant="link"
+        icon-right="arrow-right"
+        class="font-semibold"
         data-testid="fit-map"
         @click="emit('go', 'quartier')"
       >
-        Le périmètre et le quartier sur la carte →
-      </button>
-      <button
-        type="button"
-        :class="linkClass"
+        Le périmètre et le quartier sur la carte
+      </UiButton>
+      <UiButton
+        variant="link"
+        icon-right="arrow-right"
+        class="font-semibold"
         data-testid="fit-history-link"
         @click="emit('go', 'historique')"
       >
-        L’historique de l’adéquation →
-      </button>
+        L’historique de l’adéquation
+      </UiButton>
     </div>
   </div>
 </template>

@@ -6,7 +6,9 @@
     useReceivedInvitations,
     useWorkspace,
   } from '@/composables/useWorkspace'
-  import { ApiError } from '@/lib/api'
+  import { useAction } from '@/composables/useAction'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
   import { formatDate } from '@/lib/format'
 
   /**
@@ -18,33 +20,20 @@
   const { data, accept, decline } = useReceivedInvitations()
   const { data: current } = useWorkspace()
   const confirming = ref<string | null>(null)
-  const failure = ref<string | null>(null)
+  const action = useAction()
 
   async function join(invitation: ReceivedInvitation): Promise<void> {
-    failure.value = null
-    try {
-      await accept.mutateAsync(invitation.id)
-      confirming.value = null
-      await router.push('/espace')
-    } catch (error) {
-      confirming.value = null
-      failure.value =
-        error instanceof ApiError
-          ? error.message
-          : "Impossible de rejoindre cet espace pour l'instant."
-    }
+    const joined = await action.run(() => accept.mutateAsync(invitation.id), {
+      fallback: "Impossible de rejoindre cet espace pour l'instant.",
+    })
+    confirming.value = null
+    if (joined !== undefined) await router.push('/espace')
   }
 
-  async function refuse(invitation: ReceivedInvitation): Promise<void> {
-    failure.value = null
-    try {
-      await decline.mutateAsync(invitation.id)
-    } catch (error) {
-      failure.value =
-        error instanceof ApiError
-          ? error.message
-          : "Le refus n'a pas pu être enregistré."
-    }
+  function refuse(invitation: ReceivedInvitation): void {
+    void action.run(() => decline.mutateAsync(invitation.id), {
+      fallback: "Le refus n'a pas pu être enregistré.",
+    })
   }
 </script>
 
@@ -58,12 +47,12 @@
     <article
       v-for="invitation in data"
       :key="invitation.id"
-      class="grid gap-2 rounded-xl border border-accent bg-accent-soft/50 px-4 py-3 text-sm"
+      class="grid gap-2 rounded-2xl border border-accent bg-accent-soft/50 p-4 text-sm sm:px-5"
       :data-invitation="invitation.id"
     >
       <p>
         <strong>{{ invitation.invitedByName ?? 'Un propriétaire' }}</strong>
-        vous invite à rejoindre l'espace
+        t’invite à rejoindre l'espace
         <strong>« {{ invitation.workspace.name }} »</strong>
         (sous le nom {{ invitation.displayName }}), jusqu'au
         {{ formatDate(invitation.expiresAt) }}.
@@ -72,54 +61,44 @@
         v-if="confirming === invitation.id"
         class="flex flex-wrap items-center gap-2"
       >
-        <span class="text-xs">
-          Vous quitterez « {{ current?.workspace.name ?? 'votre espace' }} » :
-          ses annonces y restent, mais vous n'y aurez plus accès.
+        <span>
+          Tu quitteras « {{ current?.workspace.name ?? 'ton espace' }} » : ses
+          annonces y restent, mais tu n'y auras plus accès.
         </span>
-        <button
-          type="button"
-          class="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-accent-fg disabled:opacity-60"
-          :disabled="accept.isPending.value"
+        <UiButton
+          variant="primary"
+          size="sm"
+          :loading="accept.isPending.value"
           data-testid="confirm-join"
           @click="join(invitation)"
         >
           Confirmer
-        </button>
-        <button
-          type="button"
-          class="rounded-lg border border-line bg-surface px-3 py-1 text-xs"
-          @click="confirming = null"
-        >
+        </UiButton>
+        <UiButton size="sm" @click="confirming = null">
           Pas maintenant
-        </button>
+        </UiButton>
       </div>
       <div v-else class="flex flex-wrap gap-2">
-        <button
-          type="button"
-          class="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-accent-fg"
+        <UiButton
+          variant="primary"
+          size="sm"
           data-testid="join"
           @click="confirming = invitation.id"
         >
           Rejoindre
-        </button>
-        <button
-          type="button"
-          class="rounded-lg border border-line bg-surface px-3 py-1 text-xs disabled:opacity-60"
-          :disabled="decline.isPending.value"
+        </UiButton>
+        <UiButton
+          size="sm"
+          :loading="decline.isPending.value"
           data-testid="decline"
           @click="refuse(invitation)"
         >
           Refuser
-        </button>
+        </UiButton>
       </div>
     </article>
-    <p
-      v-if="failure"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-      role="alert"
-      data-testid="banner-error"
-    >
-      {{ failure }}
-    </p>
+    <UiAlert v-if="action.error.value" data-testid="banner-error">
+      {{ action.error.value }}
+    </UiAlert>
   </section>
 </template>

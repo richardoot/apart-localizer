@@ -6,7 +6,12 @@
   } from '@apart/contracts'
   import type { Listing } from '@apart/contracts'
   import { renovationTotal } from '@apart/domain'
-  import FormField from '@/components/ui/FormField.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import UiChip from '@/components/ui/UiChip.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import UiIcon from '@/components/ui/UiIcon.vue'
   import { useListingEditor } from '@/composables/useListingEditor'
   import { formatEuros, parseNumberInput } from '@/lib/format'
   import { RENOVATION_LEVEL_LABELS } from '@/lib/labels'
@@ -28,7 +33,6 @@
 
   const editor = useListingEditor()
   const form = computed(() => editor.draft.value)
-  const renovationLevels = RenovationLevelSchema.options
 
   const renovation = computed(() => props.listing.renovation)
   const total = computed(() => renovationTotal(renovation.value))
@@ -77,10 +81,15 @@
     )
   }
 
-  const inputClass =
-    'min-h-11 w-full rounded-lg border border-line bg-bg px-3 text-sm text-fg sm:min-h-10'
-  const chip =
-    'inline-flex min-h-11 items-center rounded-full border border-line bg-surface px-3 text-sm hover:bg-surface-2 sm:min-h-10'
+  const LEVEL_OPTIONS = [
+    { value: '', label: 'À préciser' },
+    ...RenovationLevelSchema.options.map(level => ({
+      value: level,
+      label: RENOVATION_LEVEL_LABELS[level],
+    })),
+  ]
+  const errorOf = (key: string): string | null =>
+    editor.errors.value[key] ?? null
 </script>
 
 <template>
@@ -99,20 +108,20 @@
       >
       <span v-if="facts.length" class="text-sm">{{ facts.join(' · ') }}</span>
       <AiMark :provenance="provenance" />
-      <span
+      <UiBadge
         v-if="changed"
-        class="rounded-md bg-accent px-1.5 text-[11px] leading-[18px] font-semibold text-accent-fg"
-        title="Modifié depuis votre dernière ouverture de la fiche"
-        >modifié</span
+        tone="accent"
+        variant="solid"
+        title="Modifié depuis ta dernière ouverture de la fiche"
+        >modifié</UiBadge
       >
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center text-sm text-accent underline-offset-2 hover:underline sm:min-h-9"
+      <UiButton
+        variant="link"
         data-testid="works-to-budget"
         @click="emit('go', 'budget')"
       >
         compté dans le coût tout compris
-      </button>
+      </UiButton>
     </div>
     <p v-if="!planned" class="text-sm text-muted" data-testid="works-none">
       Aucuns travaux prévus : le bien est considéré comme habitable en l’état.
@@ -151,46 +160,34 @@
       >
         {{ renovation.notes }}
       </p>
-      <p v-if="renovation && !renovation.active" class="text-xs text-warn">
+      <p v-if="renovation && !renovation.active" class="text-sm text-warn">
         Travaux décochés : les postes ne comptent pas dans le coût tout compris.
       </p>
     </template>
 
     <template #edit>
-      <label class="flex min-h-11 items-center gap-2 text-sm sm:min-h-9">
-        <input
-          v-model="form.renovation.active"
-          type="checkbox"
-          class="size-4 accent-accent"
-          data-testid="works-active"
-        />
-        Prévoir des travaux avant d’y habiter
-      </label>
+      <UiCheckbox
+        v-model="form.renovation.active"
+        label="Prévoir des travaux avant d’y habiter"
+        data-testid="works-active"
+      />
       <div class="grid gap-3 sm:grid-cols-2">
-        <FormField label="Ampleur" for-id="f-ren-level">
-          <select
-            id="f-ren-level"
-            v-model="form.renovation.level"
-            :class="inputClass"
-          >
-            <option value="">À préciser</option>
-            <option
-              v-for="level in renovationLevels"
-              :key="level"
-              :value="level"
-            >
-              {{ RENOVATION_LEVEL_LABELS[level] }}
-            </option>
-          </select>
-        </FormField>
-        <FormField label="Durée estimée (mois)" for-id="f-ren-duration">
-          <input
-            id="f-ren-duration"
-            v-model="form.renovation.durationMonths"
-            :class="inputClass"
-            inputmode="numeric"
-          />
-        </FormField>
+        <UiField
+          id="f-ren-level"
+          v-model="form.renovation.level"
+          as="select"
+          label="Ampleur"
+          :options="LEVEL_OPTIONS"
+          :error="errorOf('renovation.level')"
+        />
+        <UiField
+          id="f-ren-duration"
+          v-model="form.renovation.durationMonths"
+          label="Durée estimée"
+          unit="mois"
+          inputmode="numeric"
+          :error="errorOf('renovation.durationMonths')"
+        />
       </div>
 
       <ul class="grid gap-2" aria-label="Postes de travaux">
@@ -200,35 +197,36 @@
           class="grid gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-end"
           data-testid="works-item"
         >
-          <label class="grid gap-1 text-xs font-medium text-muted">
-            Poste
-            <input
-              v-model="item.label"
-              :class="inputClass"
-              :aria-label="`Poste ${index + 1}`"
-            />
-          </label>
-          <label class="grid gap-1 text-xs font-medium text-muted">
-            Montant (€)
-            <input
-              v-model="item.amount"
-              :class="inputClass"
-              inputmode="numeric"
-              aria-label="Montant du poste"
-            />
-          </label>
-          <button
-            type="button"
-            class="inline-flex min-h-11 items-center justify-center rounded-lg border border-line bg-surface px-3 text-sm hover:text-bad sm:min-h-10"
+          <UiField
+            :id="`f-ren-item-${item.key}`"
+            v-model="item.label"
+            label="Poste"
+            quiet
+            :aria-label="`Poste ${index + 1}`"
+            :error="errorOf(`renovation.items.${index}.label`)"
+          />
+          <UiField
+            :id="`f-ren-amount-${item.key}`"
+            v-model="item.amount"
+            label="Montant"
+            quiet
+            unit="€"
+            inputmode="numeric"
+            aria-label="Montant du poste"
+            :error="errorOf(`renovation.items.${index}.amount`)"
+          />
+          <UiButton
+            variant="danger-soft"
+            icon="trash"
             aria-label="Supprimer le poste"
             @click="removeItem(item.key)"
           >
             Supprimer le poste
-          </button>
+          </UiButton>
         </li>
       </ul>
       <p v-if="form.renovation.items.length === 0" class="text-sm text-muted">
-        Aucun poste : ajoutez-en un ci-dessous.
+        Aucun poste : ajoutes-en un ci-dessous.
       </p>
       <div
         class="flex flex-wrap items-center gap-1.5"
@@ -236,43 +234,33 @@
         aria-label="Postes fréquents"
       >
         <span class="text-sm text-muted">Ajouter :</span>
-        <button
+        <UiChip
           v-for="suggestion in SUGGESTED_RENOVATION_ITEMS"
           :key="suggestion"
-          type="button"
-          :class="chip"
+          :toggle="false"
           @click="addItem(suggestion)"
         >
-          {{ suggestion }}
-        </button>
-        <button
-          type="button"
-          :class="chip"
-          class="border-accent text-accent"
-          @click="addItem()"
-        >
-          Autre poste
-        </button>
+          <UiIcon name="plus" />{{ suggestion }}
+        </UiChip>
+        <UiChip :toggle="false" class="text-accent" @click="addItem()">
+          <UiIcon name="plus" />Autre poste
+        </UiChip>
       </div>
       <p class="text-sm tabular-nums">
         Total des travaux :
         <strong data-testid="renovation-total">{{
           formatEuros(draftTotal)
         }}</strong>
-        <span v-if="!form.renovation.active" class="text-xs text-muted">
+        <span v-if="!form.renovation.active" class="text-sm text-muted">
           (non compté tant que « Prévoir des travaux » n’est pas coché)</span
         >
       </p>
-      <FormField
+      <UiField
+        id="f-ren-notes"
+        v-model="form.renovation.notes"
         label="Notes travaux (devis, artisans, contraintes copro)"
-        for-id="f-ren-notes"
-      >
-        <input
-          id="f-ren-notes"
-          v-model="form.renovation.notes"
-          :class="inputClass"
-        />
-      </FormField>
+        :error="errorOf('renovation.notes')"
+      />
     </template>
   </EditableSection>
 </template>

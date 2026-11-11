@@ -10,7 +10,7 @@ import {
   RENT_MARKET_STALE_MONTHS,
 } from '@apart/contracts'
 import { monthsBetween } from './dates.js'
-import { formatEuros, formatPercent } from './format.js'
+import { formatEuros, formatPercent, plural, pluralWord } from './format.js'
 import { quantile } from './market.js'
 import { isoDay } from './rent-reference.js'
 
@@ -116,7 +116,7 @@ export function rentMarket(
   if (!enough) {
     level = 'unknown'
     messages.push(
-      `${included.length} comparable(s) ${subject.furnished ? 'meublé(s)' : 'vide(s)'} : il en faut au moins ${RENT_MARKET_MIN_COMPARABLES} pour une médiane fiable (10 idéalement).`
+      `${plural(included.length, 'comparable')} ${pluralWord(included.length, subject.furnished ? 'meublé' : 'vide')} : il en faut au moins ${RENT_MARKET_MIN_COMPARABLES} pour une médiane fiable (10 idéalement).`
     )
   }
   if (estimatedRent !== null) {
@@ -147,13 +147,13 @@ export function rentMarket(
   const stale = uses.filter(u => u.stale).length
   if (stale > 0) {
     messages.push(
-      `${stale} comparable(s) relevé(s) il y a plus de ${RENT_MARKET_STALE_MONTHS} mois : à actualiser.`
+      `${plural(stale, 'comparable')} ${pluralWord(stale, 'relevé')} il y a plus de ${RENT_MARKET_STALE_MONTHS} mois : à actualiser.`
     )
   }
   const excluded = uses.filter(u => !u.included).length
   if (excluded > 0) {
     messages.push(
-      `${excluded} comparable(s) écarté(s) (type de location ou saisie incomplète).`
+      `${plural(excluded, 'comparable')} ${pluralWord(excluded, 'écarté')} (type de location ou saisie incomplète).`
     )
   }
   return {

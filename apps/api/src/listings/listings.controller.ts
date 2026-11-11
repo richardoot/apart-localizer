@@ -345,7 +345,7 @@ export class ListingsController {
         Date.parse(current.listing.updatedAt)
     ) {
       throw new ConflictException(
-        `L'annonce a changé depuis votre lecture (modifiée le ${current.listing.updatedAt}) : relisez-la`
+        `L'annonce a changé depuis ta lecture (modifiée le ${current.listing.updatedAt}) : relis-la`
       )
     }
     await this.enrichment.verifyDpe(member, id, body.number, 'web')

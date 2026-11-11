@@ -46,7 +46,7 @@ describe('DuplicatesBanner', () => {
     expect(text).toContain('score 80 %')
     // Sans lien saisi, rien à ajouter à la fiche existante.
     expect(wrapper.find('[data-action="attach-link"]').exists()).toBe(false)
-    await buttonWith(wrapper, "ouvrir l'existante")?.trigger('click')
+    await buttonWith(wrapper, 'ouvrir l’existante')?.trigger('click')
     expect(wrapper.emitted('open')).toEqual([
       ['11111111-1111-4111-8111-111111111111'],
     ])

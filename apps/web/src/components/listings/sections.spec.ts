@@ -101,7 +101,13 @@ describe('StatusChanger', () => {
     await wrapper.get('select').setValue('discarded')
     expect(wrapper.emitted('change')).toHaveLength(1)
     await wrapper.get('form').trigger('submit')
-    expect(wrapper.get('[role="alert"]').text()).toContain('raison')
+    // Lot 22 : l'erreur est au champ, qui devient invalide.
+    expect(wrapper.get('[data-testid="field-error"]').text()).toContain(
+      'raison'
+    )
+    expect(wrapper.get('#discard-reason').attributes('aria-invalid')).toBe(
+      'true'
+    )
     await wrapper.get('#discard-reason').setValue('Trop cher')
     await wrapper.get('form').trigger('submit')
     expect(wrapper.emitted('change')?.[1]).toEqual([
@@ -134,6 +140,6 @@ describe('MetricsPreview', () => {
     expect(wrapper.text()).toContain('Hors cible')
     expect(
       mount(MetricsPreview, { props: { evaluation: null } }).text()
-    ).toContain('Saisissez un prix')
+    ).toContain('Saisis un prix')
   })
 })

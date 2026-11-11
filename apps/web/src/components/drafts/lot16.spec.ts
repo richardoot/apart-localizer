@@ -73,6 +73,7 @@ import {
   useFiltersStore,
 } from '@/stores/filters'
 import { ApiError } from '@/lib/api'
+import { useFeedbackStore } from '@/stores/feedback'
 
 const n = (value: string) =>
   value.replace(/[\u202f\u00a0]/g, ' ').replace(/\s+/g, ' ')
@@ -388,7 +389,7 @@ describe('DraftCard', () => {
     await wrapper.setProps({
       draft: fakeDraft({ status: 'accepted', listingId: LISTING_ID }),
     })
-    expect(wrapper.text()).toContain('Ajoutée à « Dans les critères ».')
+    expect(wrapper.text()).toContain('Ajoutée à l’étape « À étudier ».')
     await wrapper.setProps({
       draft: fakeDraft({
         status: 'accepted',
@@ -396,7 +397,7 @@ describe('DraftCard', () => {
         fit: null,
       }),
     })
-    expect(wrapper.text()).toContain('Ajoutée à la liste.')
+    expect(wrapper.text()).toContain('Ajoutée à l’étape « À étudier ».')
     await wrapper.setProps({
       draft: fakeDraft({ status: 'dismissed', dismissReason: 'trop cher' }),
     })
@@ -451,10 +452,10 @@ describe('DraftsTab', () => {
     const { wrapper, router } = await mountWith(DraftsTab)
     const banner = n(wrapper.get('[data-testid="exploration-banner"]').text())
     expect(banner).toContain('pour Richard')
-    expect(banner).toContain('1 critère(s) · Leboncoin · 4 annonces vues')
+    expect(banner).toContain('1 critère · Leboncoin · 4 annonces vues')
     expect(banner).toContain('Voir le compte rendu')
     expect(wrapper.get('[data-testid="waiting-duplicates"]').text()).toBe(
-      'Un doublon probable attend toujours votre choix.'
+      'Un doublon probable attend toujours ton choix.'
     )
     expect(wrapper.get('[data-testid="out-note"]').text()).toContain(
       'L’annonce vue hors critères'
@@ -532,8 +533,9 @@ describe('DraftsTab', () => {
     expect(apiMock.drafts.acceptInCriteria).toHaveBeenCalledWith({
       explorationId: EXPLORATION_ID,
     })
-    expect(wrapper.get('[data-testid="batch-message"]').text()).toBe(
-      '1 annonce(s) ajoutée(s) à la liste.'
+    // Lot 22 : la réussite part dans la zone de messages commune.
+    expect(useFeedbackStore().messages.map(m => m.text)).toContain(
+      '1 annonce ajoutée à la liste.'
     )
     await wrapper.get('[data-action="other"]').trigger('click')
     await flushPromises()
@@ -609,10 +611,10 @@ describe('CriteriaBriefPage', () => {
     const text = n(wrapper.text())
     expect(text).toContain('[Exemple] Caudéran et Le Bouscat, T3')
     expect(n(wrapper.get('[data-testid="brief-headline"]').text())).toBe(
-      'Polygone dessiné · ≤ 220 000 € · ≥ 60 m² · 3 pièces et plus · DPE ≤ D · 7 annonce(s) gardée(s)'
+      'Polygone dessiné · ≤ 220 000 € · ≥ 60 m² · 3 pièces et plus · DPE ≤ D · 7 annonces gardées'
     )
     expect(text).toContain('jusqu’à 231 000 € (220 000 € + 5 %)')
-    expect(text).toContain('29 annonce(s) suivie(s) et 4 écartée(s)')
+    expect(text).toContain('29 annonces suivies et 4 écartées')
     expect(
       wrapper.findAll('[data-testid="manual-filters"]').length
     ).toBeGreaterThan(0)
@@ -673,7 +675,7 @@ describe('CriteriaBriefPage', () => {
     await pap.trigger('change')
     await flushPromises()
     expect(apiMock.searchCriteria.update).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('Gardez au moins un portail coché.')
+    expect(wrapper.text()).toContain('Garde au moins un portail coché.')
     const lbc = wrapper.get('[data-portal="leboncoin"] input')
     ;(lbc.element as HTMLInputElement).checked = true
     await lbc.trigger('change')
@@ -695,7 +697,7 @@ describe('ExplorationPage', () => {
     expect(apiMock.explorations.get).toHaveBeenCalledWith(EXPLORATION_ID)
     expect(wrapper.text()).toContain('Exploration du 5 novembre, 18:40')
     expect(n(wrapper.get('[data-testid="exploration-subtitle"]').text())).toBe(
-      'Par Claude pour Richard · connecteur, navigateur de Richard · 1 critère(s) : « [Exemple] Caudéran et Le Bouscat, T3 » · durée 6 min'
+      'Par Claude pour Richard · connecteur, navigateur de Richard · 1 critère : « [Exemple] Caudéran et Le Bouscat, T3 » · durée 6 min'
     )
     expect(wrapper.get('[data-portal="logicimmo"]').classes()).toContain(
       'border-bad'

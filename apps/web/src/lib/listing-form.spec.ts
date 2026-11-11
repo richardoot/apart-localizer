@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  unreadableNumbers,
   emptyForm,
   formFromInput,
   formFromListing,
@@ -123,5 +124,22 @@ describe('fiche extraite par l’IA', () => {
     expect(merged.location?.inseeCode).toBe('33522')
     expect(merged.location?.point).toEqual(extracted.location.point)
     expect('fieldSources' in merged).toBe(false)
+  })
+})
+
+describe('lot 22 : un nombre illisible est refusé au champ', () => {
+  it('« 45 m² » dans la surface bloque l’enregistrement, avec son message', () => {
+    const form = formFromListing(fakeListing())
+    form.surface = '45 m²'
+    form.renovation.items = [{ key: 'k', label: 'Cuisine', amount: '8k' }]
+    form.rentalPlan.targetRent = 'beaucoup'
+    form.longitude = 'ouest'
+    const { input, errors } = validateForm(form)
+    expect(input).toBeNull()
+    expect(errors.surface).toContain('« 45 m² » n’est pas un nombre')
+    expect(errors['renovation.items.0.amount']).toContain('« 8k »')
+    expect(errors['rentalPlan.targetRent']).toContain('« beaucoup »')
+    expect(errors['location.point']).toContain('« ouest »')
+    expect(unreadableNumbers(formFromListing(fakeListing()))).toEqual({})
   })
 })

@@ -3,6 +3,7 @@
   import { sendVisitHeartbeat } from '@/composables/useWhatsNew'
   import { useAuthStore } from '@/stores/auth'
   import { useThemeStore } from '@/stores/theme'
+  import UiButton from '@/components/ui/UiButton.vue'
   import NotificationBell from './notifications/NotificationBell.vue'
   import ThemeToggle from './ThemeToggle.vue'
 
@@ -10,7 +11,7 @@
   const theme = useThemeStore()
 
   const links = [
-    { to: '/', label: 'Synthèse' },
+    { to: '/', label: 'Accueil' },
     { to: '/annonces', label: 'Annonces' },
     { to: '/criteres', label: 'Critères' },
     { to: '/hypotheses', label: 'Hypothèses' },
@@ -40,7 +41,10 @@
     class="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface px-4 py-2"
   >
     <div class="flex items-center gap-4">
-      <RouterLink to="/" class="font-display text-lg font-bold text-accent">
+      <RouterLink
+        to="/"
+        class="inline-flex min-h-11 items-center font-display text-lg font-bold text-accent"
+      >
         apart-localizer
       </RouterLink>
       <nav class="flex flex-wrap gap-1" aria-label="Navigation principale">
@@ -48,7 +52,7 @@
           v-for="link in links"
           :key="link.to"
           :to="link.to"
-          class="rounded-lg px-3 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-fg"
+          class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-muted hover:bg-surface-2 hover:text-fg sm:min-h-9 sm:pointer-coarse:min-h-11"
           active-class="bg-accent-soft text-fg"
         >
           {{ link.label }}
@@ -58,13 +62,14 @@
     <div class="flex items-center gap-2">
       <NotificationBell />
       <ThemeToggle :is-dark="theme.isDark" @toggle="theme.toggle()" />
-      <button
-        type="button"
-        class="rounded-lg border border-line px-3 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-fg"
+      <UiButton
+        variant="ghost"
+        size="sm"
+        class="border border-line"
         @click="signOut"
       >
         Se déconnecter
-      </button>
+      </UiButton>
     </div>
   </header>
 </template>

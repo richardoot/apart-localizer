@@ -199,7 +199,7 @@ export function invitationRefusal(input: {
   if (pending.length >= max) {
     return {
       code: 'conflict',
-      message: `Déjà ${max} invitations en attente : annulez-en une avant d'inviter.`,
+      message: `Déjà ${max} invitations en attente : annules-en une avant d'inviter.`,
     }
   }
   return null
@@ -245,7 +245,7 @@ export function cancelRefusal(
     return {
       code: 'conflict',
       message:
-        "Cette personne a déjà rejoint l'espace : retirez-la de la liste des membres.",
+        "Cette personne a déjà rejoint l'espace : retire-la de la liste des membres.",
     }
   }
   if (target.status === 'canceled') {
@@ -269,7 +269,7 @@ export function removalRefusal(
     return {
       code: 'conflict',
       message:
-        "Le dernier propriétaire ne peut pas être retiré : nommez d'abord un autre propriétaire.",
+        "Le dernier propriétaire ne peut pas être retiré : nomme d'abord un autre propriétaire.",
     }
   }
   return null
@@ -286,8 +286,8 @@ export function leaveRefusal(
     code: 'conflict',
     message:
       others.length > 0
-        ? "Vous êtes le dernier propriétaire de l'espace : nommez un autre propriétaire avant de partir."
-        : 'Vous êtes le seul membre de cet espace : le quitter ne servirait à rien (vous en recevriez un nouveau, vide).',
+        ? "Tu es le dernier propriétaire de l'espace : nomme un autre propriétaire avant de partir."
+        : 'Tu es le seul membre de cet espace : le quitter ne servirait à rien (tu en recevrais un nouveau, vide).',
   }
 }
 
@@ -344,7 +344,7 @@ export function departureFor(
     return {
       refusal: {
         code: 'conflict',
-        message: `Vous êtes le seul propriétaire de « ${workspaceName} », qui compte d'autres membres : nommez un autre propriétaire (page Espace) avant de rejoindre un autre espace.`,
+        message: `Tu es le seul propriétaire de « ${workspaceName} », qui compte d'autres membres : nomme un autre propriétaire (page Espace) avant de rejoindre un autre espace.`,
       },
       orphaned: false,
     }
@@ -377,17 +377,17 @@ export function invitationEmail(input: {
   // Le sujet tient sur une ligne, quoi que contiennent les noms.
   const line = (value: string) => value.replace(/\s+/g, ' ').trim()
   return {
-    subject: `${line(input.inviterName)} vous invite dans « ${line(input.workspaceName)} » (apart-localizer)`,
+    subject: `${line(input.inviterName)} t’invite dans « ${line(input.workspaceName)} » (apart-localizer)`,
     text: [
       `Bonjour ${input.inviteeName},`,
       '',
-      `${input.inviterName} vous invite à rejoindre l'espace « ${input.workspaceName} » sur apart-localizer, l'outil de suivi des annonces d'appartement.`,
+      `${input.inviterName} t’invite à rejoindre l'espace « ${input.workspaceName} » sur apart-localizer, l'outil de suivi des annonces d'appartement.`,
       '',
-      `Pour accepter, ouvrez ${input.link} et connectez-vous avec Google, avec l'adresse ${input.email}.`,
+      `Pour accepter, ouvre ${input.link} et connecte-toi avec Google, avec l'adresse ${input.email}.`,
       `L'invitation expire le ${expires}.`,
       '',
-      'Si vous avez déjà un espace dans l’application, un bandeau vous proposera de rejoindre celui-ci ou de refuser.',
-      'Si vous ne vous attendiez pas à ce message, ignorez-le : rien ne se passera.',
+      'Si tu as déjà un espace dans l’application, un bandeau te proposera de rejoindre celui-ci ou de refuser.',
+      'Si tu ne t’attendais pas à ce message, ignore-le : rien ne se passera.',
     ].join('\n'),
   }
 }

@@ -90,7 +90,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
     if (!data.session) {
       error.value =
-        'Compte créé, mais le serveur demande une confirmation par e-mail : consultez Mailpit (http://127.0.0.1:54324).'
+        'Compte créé, mais le serveur demande une confirmation par e-mail : consulte Mailpit (http://127.0.0.1:54324).'
       throw new Error(error.value)
     }
     session.value = data.session
@@ -128,7 +128,7 @@ export function passwordErrorMessage(message: string): string {
     return 'E-mail ou mot de passe incorrect.'
   }
   if (/already registered|already exists/i.test(message)) {
-    return 'Un compte existe déjà pour cet e-mail : connectez-vous.'
+    return 'Un compte existe déjà pour cet e-mail : connecte-toi.'
   }
   if (/password should be at least/i.test(message)) {
     return 'Mot de passe trop court (6 caractères au moins).'

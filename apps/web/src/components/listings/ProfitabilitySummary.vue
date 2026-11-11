@@ -98,7 +98,7 @@
         des deux est retenu.
       </p>
       <p v-if="metrics.targetRent === 0" class="text-xs text-muted">
-        Loyer visé non renseigné : renseignez la phase 2 pour juger la
+        Loyer visé non renseigné : renseigne la phase 2 pour juger la
         rentabilité.
       </p>
     </div>

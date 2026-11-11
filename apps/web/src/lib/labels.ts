@@ -13,6 +13,7 @@ import {
   TARGET_CRITERION_LABELS,
   VERDICT_LABELS,
 } from '@apart/contracts'
+import type { Tone } from './ui'
 import type {
   CheckLevel,
   DiscountClass,
@@ -126,6 +127,14 @@ export const DISCOUNT_CLASS_CLASSES: Record<DiscountClass, string> = {
   out_of_reach: 'bg-bad-soft text-bad',
 }
 
+/** Lot 22 : le ton (`UiBadge`) d'une classe de décote. */
+export const DISCOUNT_CLASS_TONES: Record<DiscountClass, Tone> = {
+  in_target: 'good',
+  negotiable: 'good',
+  tight: 'warn',
+  out_of_reach: 'bad',
+}
+
 /** Classes Tailwind de la réponse du vendeur à une offre. */
 export const OFFER_RESPONSE_CLASSES: Record<OfferResponse, string> = {
   pending: 'bg-surface-2 text-muted',
@@ -187,15 +196,18 @@ export const STATUS_CLASSES: Record<ListingStatus, string> = {
   sold_or_withdrawn: 'bg-surface-2 text-muted line-through',
 }
 
-/** Couleur de fond d'une classe DPE et encre lisible dessus. */
+/**
+ * Couleur de fond d'une classe DPE et encre lisible dessus (lot 22 :
+ * l'encre sombre de A à F, contraste d'au moins 4,5:1 ; le blanc sur G).
+ */
 export const DPE_CLASSES: Record<DpeClass, string> = {
-  A: 'bg-dpe-a text-white',
-  B: 'bg-dpe-b text-white',
+  A: 'bg-dpe-a text-[var(--dpe-ink-light)]',
+  B: 'bg-dpe-b text-[var(--dpe-ink-light)]',
   C: 'bg-dpe-c text-[var(--dpe-ink-light)]',
   D: 'bg-dpe-d text-[var(--dpe-ink-light)]',
   E: 'bg-dpe-e text-[var(--dpe-ink-light)]',
-  F: 'bg-dpe-f text-white',
-  G: 'bg-dpe-g text-white',
+  F: 'bg-dpe-f text-[var(--dpe-ink-light)]',
+  G: 'bg-dpe-g text-[var(--dpe-ink-dark)]',
 }
 
 export const SORT_LABELS: Record<ListingSort, string> = {

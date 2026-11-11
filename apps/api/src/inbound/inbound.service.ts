@@ -51,7 +51,7 @@ export function parserDraft(
   if (candidate.rooms !== null) fieldSources.rooms = provenance
   if (candidate.commune !== null) fieldSources.commune = provenance
   const warnings = [
-    'Lu par l’analyseur simple (IA non configurée ou indisponible) : vérifiez chaque champ.',
+    'Lu par l’analyseur simple (IA non configurée ou indisponible) : vérifie chaque champ.',
     ...(candidate.price === null ? ['Prix à compléter.'] : []),
   ]
   const input = ListingInputSchema.parse({

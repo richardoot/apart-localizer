@@ -31,11 +31,14 @@ vi.mock('@/lib/api', async () => {
   return { ...actual, api: apiMock }
 })
 
+import { useFeedbackStore } from '@/stores/feedback'
 import { useExchangeActions } from './useExchangeActions'
 import type { ExchangeActions } from './useExchangeActions'
 
 const LISTING = '11111111-1111-4111-8111-111111111111'
 const REQUEST = fakeAgencyRequest()
+/** Lot 22 : le dernier message de la zone commune. */
+const lastMessage = () => useFeedbackStore().messages.at(-1)?.text ?? null
 
 function setup(): ExchangeActions {
   let actions: ExchangeActions | null = null
@@ -90,18 +93,16 @@ describe('useExchangeActions (lot 19)', () => {
 
     expect(await a.prepare()).toBe(true)
     expect(apiMock.agency.draft).toHaveBeenLastCalledWith(LISTING, {})
-    expect(a.notice.value).toBe(
-      'Message préparé : relisez-le, puis validez-le.'
-    )
+    expect(lastMessage()).toBe('Message préparé : relis-le, puis valide-le.')
     await a.followUp(REQUEST.id)
     expect(apiMock.agency.draft).toHaveBeenLastCalledWith(LISTING, {
       followUpOf: REQUEST.id,
     })
     await a.approve([REQUEST.id])
     expect(apiMock.agency.approve).toHaveBeenCalledWith([REQUEST.id])
-    expect(a.notice.value).toContain('Message validé : demandez à Claude')
+    expect(lastMessage()).toContain('Message validé : demande à Claude')
     await a.approve(['a', 'b'])
-    expect(a.notice.value).toContain('2 messages validés')
+    expect(lastMessage()).toContain('2 messages validés')
     await a.save(REQUEST.id, { subject: 'Objet', body: 'Texte' })
     expect(apiMock.agency.update).toHaveBeenCalledWith(REQUEST.id, {
       subject: 'Objet',
@@ -118,7 +119,7 @@ describe('useExchangeActions (lot 19)', () => {
       keys: ['propertyTax'],
       expectedUpdatedAt: '2026-11-03T10:00:00.000Z',
     })
-    expect(a.notice.value).toBe('Valeur de l’annonceur appliquée à la fiche.')
+    expect(lastMessage()).toBe('Valeur de l’annonceur appliquée à la fiche.')
   })
 
   it('contact, effacement, signature ; l’erreur de l’API est rendue', async () => {
@@ -149,18 +150,19 @@ describe('useExchangeActions (lot 19)', () => {
       preferredChannel: null,
     }
     expect(await a.saveContact(input)).toBeNull()
-    expect(a.notice.value).toBe('Contact enregistré.')
+    expect(lastMessage()).toBe('Contact enregistré.')
     const error = await a.saveContact(input)
     expect(error).toBeInstanceOf(ApiError)
     expect(await a.clearContact()).toBe(true)
     expect(apiMock.agency.clearContact).toHaveBeenCalledWith(LISTING)
     await a.saveSignature('R. et C.')
     expect(apiMock.agency.updateSettings).toHaveBeenCalledWith('R. et C.')
+    const before = useFeedbackStore().messages.length
     expect(await a.approve([REQUEST.id])).toBe(false)
     expect(a.failure.value).toBe('Seul un message « à valider » se valide')
-    expect(a.notice.value).toBeNull()
+    expect(useFeedbackStore().messages.length).toBe(before)
     apiMock.agency.cancel.mockRejectedValue(new Error('réseau'))
     await a.cancel(REQUEST.id)
-    expect(a.failure.value).toBe("L'enregistrement a échoué.")
+    expect(a.failure.value).toBe('L’enregistrement a échoué.')
   })
 })

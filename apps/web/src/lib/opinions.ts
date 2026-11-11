@@ -140,7 +140,7 @@ export function maskedText(member: OpinionMemberSummary): string {
   return `${head}${head.endsWith('.') ? '' : '.'} Ses notes restent masquées tant que tu n’as pas donné les tiennes.`
 }
 
-/** « Ce que vous en dites » : les mots de chacun, et qui n'a pas encore noté. */
+/** « Ce qu’en dit chacun » : les mots de chacun, et qui n'a pas encore noté. */
 export function rowNotes(row: OpinionRow, summary: OpinionSummary): string {
   const name = (id: string): string =>
     summary.members.find(m => m.memberId === id)?.displayName ?? 'Un membre'

@@ -90,7 +90,9 @@ describe('édition par section (lot 19)', () => {
     expect(editor.errors.value.dpeDate).toMatch(/AAAA-MM-JJ/)
     expect(editor.errors.value._section).toBeUndefined()
     expect(await editor.save('notes')).toBe(false)
-    expect(editor.errors.value._section).toMatch(/autre partie de la fiche/)
+    expect(editor.errors.value._section).toMatch(
+      /La section « Énergie » a une erreur \(La date du DPE doit être au format AAAA-MM-JJ\.\)/
+    )
   })
 
   it('guard : exécute tout de suite sans modification, attend sinon ; la fiche relue recale le brouillon', () => {

@@ -14,6 +14,9 @@
   } from '@apart/domain'
   import type { StudyInput } from '@apart/domain'
   import ProjectionPanel from '@/components/study/ProjectionPanel.vue'
+  import UiChip from '@/components/ui/UiChip.vue'
+  import UiSkeleton from '@/components/ui/UiSkeleton.vue'
+  import { cardClasses } from '@/lib/ui'
   import ScenariosPanel from '@/components/study/ScenariosPanel.vue'
   import { useListingEditor } from '@/composables/useListingEditor'
   import { useScenarios, useStudyInput } from '@/composables/useStudy'
@@ -127,14 +130,12 @@
     }
     return parts.join(' ')
   })
-
-  const chip =
-    'inline-flex min-h-11 items-center rounded-full border-[1.5px] px-3.5 text-sm sm:min-h-10'
 </script>
 
 <template>
   <section
-    class="grid gap-3.5 rounded-2xl border border-line bg-surface p-4 sm:px-5"
+    class="grid gap-3.5"
+    :class="cardClasses()"
     aria-labelledby="yield-title"
     data-testid="yield-section"
   >
@@ -150,40 +151,29 @@
         class="flex flex-wrap gap-1.5"
         data-testid="scenario-picker"
       >
-        <button
-          type="button"
-          :class="[
-            chip,
-            chosen === 'base'
-              ? 'border-accent bg-accent font-semibold text-accent-fg'
-              : 'border-line bg-surface text-fg hover:bg-surface-2',
-          ]"
-          :aria-pressed="chosen === 'base'"
+        <UiChip
+          :selected="chosen === 'base'"
           data-scenario="base"
           @click="chosen = 'base'"
         >
           Base
-        </button>
-        <button
+        </UiChip>
+        <UiChip
           v-for="s in scenarios"
           :key="s.id"
-          type="button"
-          :class="[
-            chip,
-            chosen === s.id
-              ? 'border-accent bg-accent font-semibold text-accent-fg'
-              : 'border-line bg-surface text-fg hover:bg-surface-2',
-          ]"
-          :aria-pressed="chosen === s.id"
+          :selected="chosen === s.id"
           :data-scenario="s.id"
           @click="chosen = s.id"
         >
           {{ s.name }}
-        </button>
+        </UiChip>
       </div>
     </header>
 
-    <p v-if="!study" class="text-sm text-muted">Chargement des hypothèses…</p>
+    <div v-if="!study" role="status" aria-busy="true">
+      <span class="sr-only">Chargement des hypothèses…</span>
+      <UiSkeleton />
+    </div>
     <template v-else-if="metrics">
       <ProfitabilitySummary
         :metrics="metrics"

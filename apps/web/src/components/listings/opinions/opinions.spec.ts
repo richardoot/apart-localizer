@@ -133,7 +133,7 @@ describe('« Nos avis » confrontés (maquette « Synthèse »)', () => {
       'Richard',
       'Chloé',
       'Écart',
-      'Ce que vous en dites',
+      'Ce qu’en dit chacun',
     ])
     expect(detail.findAll('tbody tr')).toHaveLength(8)
     const quiet = detail.get('[data-row="quiet"]')
@@ -164,7 +164,7 @@ describe('« Nos avis » confrontés (maquette « Synthèse »)', () => {
     await buttons[0]?.trigger('click')
     const proposal = wrapper.get('[data-testid="counter-visit-proposal"]')
     expect(n(proposal.text())).toContain(
-      'Vos notes s’écartent de 2 points : Richard 4 (« fenêtres fermées, ça va »), Chloé 2 (« bus devant la chambre »).'
+      'Les notes s’écartent de 2 points : Richard 4 (« fenêtres fermées, ça va »), Chloé 2 (« bus devant la chambre »).'
     )
     expect(acts.addTask).not.toHaveBeenCalled()
     await proposal.get('[data-testid="counter-visit-confirm"]').trigger('click')
@@ -172,7 +172,7 @@ describe('« Nos avis » confrontés (maquette « Synthèse »)', () => {
     expect(acts.addTask).toHaveBeenCalledWith({
       label: 'À revoir à la contre-visite : le calme',
       details:
-        'Vos notes s’écartent de 2 points : Richard 4 (« fenêtres fermées, ça va »), Chloé 2 (« bus devant la chambre »).',
+        'Les notes s’écartent de 2 points : Richard 4 (« fenêtres fermées, ça va »), Chloé 2 (« bus devant la chambre »).',
     })
     expect(wrapper.get('[data-testid="counter-visit-added"]').text()).toBe(
       'Tâche ajoutée dans À faire : À revoir à la contre-visite : le calme'
@@ -263,14 +263,14 @@ describe('avis à l’aveugle (maquette « Avis à l’aveugle »)', () => {
     expect(wrapper.find('[data-testid="blind-why"]').exists()).toBe(false)
   })
 
-  it('après une visite faite avec moi : « Notez pendant que c’est frais »', () => {
+  it('après une visite faite avec moi : « Note pendant que c’est frais »', () => {
     const wrapper = mountSection(itemWith({ opinions: [] }), {
       visits: [doneVisit],
     })
     const mine = wrapper.get(`[data-member="${R}"]`)
     expect(n(mine.text())).toContain('Visite faite le 14 oct.')
     expect(mine.get('[data-testid="fresh-visit"]').text()).toContain(
-      'Notez pendant que c’est frais'
+      'Note pendant que c’est frais'
     )
     expect(wrapper.get(`[data-member="${C}"]`).text()).toContain(
       'Pas encore donné'
@@ -407,7 +407,7 @@ describe('« Mon avis », critère par critère (maquette « Donner son avis »)
       await wrapper.get('[data-testid="opinion-edit"]').trigger('click')
       const form = wrapper.get('[data-testid="my-opinion-form"]')
       expect(form.get('[data-testid="my-opinion-visit"]').text()).toContain(
-        'Notez pendant que c’est frais'
+        'Note pendant que c’est frais'
       )
       const quiet = form.get('[data-criterion="quiet"]')
       const group = quiet.get('[role="radiogroup"]')

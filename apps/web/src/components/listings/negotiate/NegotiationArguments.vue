@@ -3,6 +3,8 @@
   import type { NegotiationBrief, TargetPrice } from '@apart/contracts'
   import { formatDate } from '@/lib/format'
   import { negotiationBriefText } from '@/lib/negotiation-brief'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import { cardClasses } from '@/lib/ui'
 
   /**
    * Lot 19 : les « Arguments » de l'onglet Négocier : les leviers factuels
@@ -39,7 +41,8 @@
 
 <template>
   <section
-    class="grid content-start gap-2.5 rounded-2xl border border-line bg-surface p-4 sm:px-5"
+    class="grid content-start gap-2.5"
+    :class="cardClasses()"
     aria-labelledby="negotiation-arguments-title"
     data-testid="negotiation-arguments"
   >
@@ -65,7 +68,7 @@
     </p>
     <p
       v-if="negotiation?.republication"
-      class="text-xs text-muted"
+      class="text-sm text-muted"
       data-testid="negotiation-republication"
     >
       Annonce republiée : durée en ligne
@@ -79,17 +82,12 @@
         >, le {{ formatDate(negotiation.republication.firstSeenAt) }}</template
       >.
     </p>
-    <button
-      type="button"
-      class="inline-flex min-h-11 items-center justify-center rounded-lg border border-accent bg-surface px-4 text-sm font-semibold text-accent hover:bg-accent-soft"
-      data-testid="copy-brief"
-      @click="copy"
-    >
+    <UiButton variant="outline" data-testid="copy-brief" @click="copy">
       Copier le brief de négociation
-    </button>
+    </UiButton>
     <p
       v-if="copyState !== 'idle'"
-      class="text-xs"
+      class="text-sm"
       :class="copyState === 'copied' ? 'text-good' : 'text-bad'"
       :role="copyState === 'failed' ? 'alert' : undefined"
       aria-live="polite"
@@ -97,7 +95,7 @@
     >
       {{
         copyState === 'copied'
-          ? 'Copié : collez-le dans un message ou une note.'
+          ? 'Copié : colle-le dans un message ou une note.'
           : 'Copie impossible : le navigateur l’a refusée.'
       }}
     </p>

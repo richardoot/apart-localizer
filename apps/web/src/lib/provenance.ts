@@ -14,7 +14,7 @@ import type { ListingForm } from './listing-form'
 
 export const FIELD_SOURCE_LABELS: Record<FieldSource, string> = {
   listing: 'annonce',
-  user: 'vous',
+  user: 'saisi',
   ai: 'IA',
   open_data: 'open data',
   estimated: 'estimé',

@@ -21,7 +21,7 @@
       basis === 'price'
         ? 'border-accent text-accent'
         : 'border-fg bg-fg text-bg',
-      compact ? 'p-[3px] text-[10px]' : 'px-2 py-[3px] text-xs',
+      compact ? 'p-[3px] text-xs' : 'px-2 py-[3px] text-xs',
     ]"
     :data-basis="basis"
   >

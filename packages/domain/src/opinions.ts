@@ -158,7 +158,7 @@ export function addCriterionRefusal(
   label: string
 ): string | null {
   if (criteria.length >= OPINION_CRITERIA_MAX) {
-    return `${OPINION_CRITERIA_MAX} critères au plus, masqués compris : masquez-en un ou retirez un critère ajouté jamais noté.`
+    return `${OPINION_CRITERIA_MAX} critères au plus, masqués compris : masque-en un ou retire un critère ajouté jamais noté.`
   }
   return labelTakenRefusal(criteria, label)
 }
@@ -209,10 +209,10 @@ export function removeCriterionRefusal(
   scoreCount: number
 ): string | null {
   if (criterion.origin === 'default') {
-    return `« ${criterion.label} » est un critère par défaut : masquez-le plutôt.`
+    return `« ${criterion.label} » est un critère par défaut : masque-le plutôt.`
   }
   if (scoreCount > 0) {
-    return `« ${criterion.label} » a déjà ${scoreCount} note${scoreCount > 1 ? 's' : ''} : masquez-le pour les garder.`
+    return `« ${criterion.label} » a déjà ${scoreCount} note${scoreCount > 1 ? 's' : ''} : masque-le pour les garder.`
   }
   return null
 }
@@ -690,13 +690,13 @@ export interface OpinionHighlight {
   section: 'opinions'
 }
 
-/** « Vous aimez tous les deux », « Vous aimez tous », « Vous aimez ». */
+/** « Plaît à tous les deux », « Plaît à tous », « Tu aimes » (lot 22 : « tu »). */
 function youLike(count: number): string {
   return count === 1
-    ? 'Vous aimez'
+    ? 'Tu aimes'
     : count === 2
-      ? 'Vous aimez tous les deux'
-      : 'Vous aimez tous'
+      ? 'Plaît à tous les deux'
+      : 'Plaît à tous'
 }
 
 /**
@@ -767,7 +767,7 @@ export function opinionHighlights(summary: OpinionSummary | null | undefined): {
   if (disagreements.length > 0) {
     watch.push({
       key: 'opinions_disagreement',
-      text: `Vous n’êtes pas d’accord sur ${disagreementList(summary, disagreements)}`,
+      text: `Désaccord sur ${disagreementList(summary, disagreements)}`,
       ...at,
     })
   }
@@ -792,7 +792,7 @@ export function opinionNextStepText(
   const low = Math.min(...gaps)
   const high = Math.max(...gaps)
   const gapText = low === high ? `${low} points` : `${low} à ${high} points`
-  return `${capitalizeFirst(list)} : vos notes s’écartent de ${gapText}`
+  return `${capitalizeFirst(list)} : les notes s’écartent de ${gapText}`
 }
 
 /** Le texte du bouton de contre-visite (« À revoir à la contre-visite : le calme »). */
@@ -818,7 +818,7 @@ export function counterVisitTask(
       s =>
         `${nameOf(summary, s.memberId)} ${s.score}${s.word ? ` (« ${s.word} »)` : ''}`
     )
-  const details = `Vos notes s’écartent de ${row.gap} points : ${parts.join(', ')}.`
+  const details = `Les notes s’écartent de ${row.gap} points : ${parts.join(', ')}.`
   return {
     label: counterVisitLabel(row),
     details:

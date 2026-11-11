@@ -245,7 +245,9 @@ describe('VisitsSection', () => {
       '55555555-5555-4555-8555-555555555555',
       'p1'
     )
-    expect(document.body.textContent).toContain('1 photo(s) envoyée(s).')
+    // Lot 22 : la réussite dans la zone de messages, au pluriel accordé.
+    const { useFeedbackStore } = await import('@/stores/feedback')
+    expect(useFeedbackStore().messages.at(-1)?.text).toBe('1 photo envoyée.')
     vi.unstubAllGlobals()
     wrapper.unmount()
   })
@@ -467,7 +469,7 @@ describe('WhatsNewBanner et DraftsInbox', () => {
     expect(text).toContain('Leboncoin')
     expect(text).toContain('doublon probable')
     expect(text).not.toContain('T2 Bègles d4')
-    expect(text).toContain('Et 1 autre(s).')
+    expect(text).toContain('Et 1 autre.')
     expect(
       document.body.querySelector('[data-testid="drafts-open"]')
     ).not.toBeNull()
@@ -543,7 +545,7 @@ describe('pages Activité et Notifications', () => {
     const wrapper = withClient(ActivityPage)
     await flushPromises()
     expect(document.body.textContent).toContain('Claude pour Richard')
-    expect(document.body.textContent).toContain('À étudier → À visiter')
+    expect(document.body.textContent).toContain('À étudierdevientÀ visiter')
     const channel = document.body.querySelector(
       '[data-testid="filter-channel"]'
     ) as HTMLSelectElement
@@ -616,7 +618,7 @@ describe('pages Activité et Notifications', () => {
     await flushPromises()
     expect(
       document.body.querySelector('[data-testid="push"]')?.textContent
-    ).toContain('pas de clés VAPID')
+    ).toContain('ne sont pas encore activées')
     expect(
       document.body.querySelector('[data-testid="inbound"]')?.textContent
     ).toContain(`/inbound/email/${RICHARD.workspaceId}`)

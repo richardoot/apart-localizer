@@ -235,7 +235,7 @@ describe('Invitations, rôles et retrait (e2e)', () => {
       expect(ctx.email.sent[0]).toMatchObject({
         to: lea.email,
         subject:
-          'Richard vous invite dans « Appartement Bordeaux » (apart-localizer)',
+          'Richard t’invite dans « Appartement Bordeaux » (apart-localizer)',
       })
       expect(ctx.email.sent[0]?.text).toContain('http://localhost:5173/login')
       ctx.email.failing = true
@@ -569,7 +569,7 @@ describe('Invitations, rôles et retrait (e2e)', () => {
       const leave = await post(richard, '/workspace/leave')
       expect(leave.status).toBe(409)
       expect(leave.body.message).toBe(
-        "Vous êtes le dernier propriétaire de l'espace : nommez un autre propriétaire avant de partir."
+        "Tu es le dernier propriétaire de l'espace : nomme un autre propriétaire avant de partir."
       )
       const demote = await patch(richard, `/workspace/members/${richardId}`, {
         role: 'member',

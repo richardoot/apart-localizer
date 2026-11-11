@@ -16,3 +16,25 @@ export function formatPercent(fraction: number): string {
       })} %`
     : '—'
 }
+
+/**
+ * Lot 22 : un nombre et son nom accordé (« 1 annonce », « 3 annonces »,
+ * « 0 annonce »), jamais « annonce(s) ». Le pluriel par défaut ajoute un
+ * « s » ; `pluralForm` pour les autres (« aléas », « prix »).
+ */
+export function plural(
+  count: number,
+  singular: string,
+  pluralForm = `${singular}s`
+): string {
+  return `${count.toLocaleString('fr-FR')} ${pluralWord(count, singular, pluralForm)}`
+}
+
+/** Le seul mot accordé, sans le nombre (« reçues » si plus d'une). */
+export function pluralWord(
+  count: number,
+  singular: string,
+  pluralForm = `${singular}s`
+): string {
+  return Math.abs(count) >= 2 ? pluralForm : singular
+}

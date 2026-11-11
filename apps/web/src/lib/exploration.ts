@@ -11,6 +11,7 @@ import type {
   SearchCriteria,
 } from '@apart/contracts'
 import { formatEuros } from './format'
+import type { BadgeVariant, Tone } from './ui'
 
 /**
  * Lot 16 : les textes de la page Critères (« Ce que Claude cherche ») et du
@@ -106,20 +107,24 @@ export function criteriaHeadline(
     .join(' · ')
 }
 
-/** La pastille d'un résultat du compte rendu, lisible sans la couleur. */
+/**
+ * La pastille d'un résultat du compte rendu, lisible sans la couleur
+ * (lot 22 : ton et variante de `UiBadge`).
+ */
 export const OUTCOME_BADGE: Record<
   ExplorationOutcome,
-  { label: string; tone: string }
+  { label: string; tone: Tone; variant: BadgeVariant }
 > = {
-  new: { label: 'À valider', tone: 'bg-accent text-accent-fg' },
-  duplicate_probable: { label: 'À valider', tone: 'bg-accent text-accent-fg' },
-  known: { label: 'Déjà suivie', tone: 'bg-accent-soft text-accent' },
+  new: { label: 'À valider', tone: 'accent', variant: 'solid' },
+  duplicate_probable: { label: 'À valider', tone: 'accent', variant: 'solid' },
+  known: { label: 'Déjà suivie', tone: 'accent', variant: 'soft' },
   attached: {
     label: 'Rattachée d’office',
-    tone: 'border border-accent text-accent',
+    tone: 'accent',
+    variant: 'outline',
   },
-  dismissed: { label: 'Déjà écartée', tone: 'bg-surface-2 text-fg' },
-  out: { label: 'Hors critères', tone: 'bg-muted text-surface' },
+  dismissed: { label: 'Déjà écartée', tone: 'neutral', variant: 'soft' },
+  out: { label: 'Hors critères', tone: 'neutral', variant: 'solid' },
 }
 
 /** Le filtre du compte rendu lu dans l'URL (`?resultat=`) ; inconnu = toutes. */

@@ -11,6 +11,10 @@
   import { useListingEditor } from '@/composables/useListingEditor'
   import { useStudyInput } from '@/composables/useStudy'
   import { assumptionsBanner } from '@/lib/budget'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCard from '@/components/ui/UiCard.vue'
+  import UiSkeleton from '@/components/ui/UiSkeleton.vue'
   import type { ListingTab } from '@/lib/listing-tabs'
   import CostSummary from '../CostSummary.vue'
   import RentalPhaseSection from '../budget/RentalPhaseSection.vue'
@@ -31,6 +35,8 @@
     assumptions: Assumptions | null
     live?: boolean
     busy?: boolean
+    /** Lot 22 : l'échec de « Retenir » le loyer de marché, dit dans la phase 2. */
+    error?: string | null
   }>()
   const emit = defineEmits<{
     go: [tab: ListingTab]
@@ -74,18 +80,21 @@
 <template>
   <div class="@container grid gap-4" data-testid="tab-budget">
     <p
-      class="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 rounded-xl bg-surface-2 px-4 py-2.5 text-sm text-fg"
+      class="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 rounded-2xl bg-surface-2 px-4 py-2.5 text-sm text-fg"
       data-testid="budget-assumptions"
     >
       <span v-if="banner"
         >Calculé avec les hypothèses de l’espace : {{ banner }}.</span
       >
-      <span v-else class="text-muted">Chargement des hypothèses…</span>
-      <RouterLink
+      <span v-else class="min-w-40 flex-1" role="status" aria-busy="true"
+        ><span class="sr-only">Chargement des hypothèses…</span
+        ><UiSkeleton :count="1"
+      /></span>
+      <UiButton
         :to="{ name: 'assumptions' }"
-        class="inline-flex min-h-11 items-center font-medium text-accent underline-offset-2 hover:underline sm:min-h-0"
+        variant="link"
         data-testid="edit-assumptions"
-        >Modifier les hypothèses</RouterLink
+        >Modifier les hypothèses</UiButton
       >
     </p>
 
@@ -98,33 +107,32 @@
       @works="emit('go', 'bien')"
     />
     <p v-else class="text-sm text-muted">
-      Saisissez un prix et un loyer visé pour voir les indicateurs.
+      Saisis un prix et un loyer visé pour voir les indicateurs.
     </p>
 
     <div class="grid gap-4 @3xl:grid-cols-2 @3xl:items-start">
-      <section
-        class="grid gap-3 rounded-2xl border border-line bg-surface p-4 sm:px-5"
-        aria-labelledby="live-title"
-        data-testid="phase1"
-      >
-        <h2 id="live-title" class="text-base font-semibold">
-          Phase 1 : y habiter
-        </h2>
+      <UiCard title="Phase 1 : y habiter" data-testid="phase1">
         <OccupancyPanel
           v-if="occupancyInput && study"
           :input="occupancyInput"
           :assumptions="study.assumptions"
           :listing-id="item.listing.id"
         />
-        <p v-else class="text-sm text-muted">Chargement des hypothèses…</p>
-      </section>
-      <RentalPhaseSection
-        :item="item"
-        :evaluation="evaluation"
-        :assumptions="assumptions"
-        :busy="busy"
-        @retain-market-rent="rent => emit('retainMarketRent', rent)"
-      />
+        <div v-else role="status" aria-busy="true">
+          <span class="sr-only">Chargement des hypothèses…</span>
+          <UiSkeleton />
+        </div>
+      </UiCard>
+      <div class="grid gap-3">
+        <RentalPhaseSection
+          :item="item"
+          :evaluation="evaluation"
+          :assumptions="assumptions"
+          :busy="busy"
+          @retain-market-rent="rent => emit('retainMarketRent', rent)"
+        />
+        <UiAlert v-if="error" data-testid="budget-error">{{ error }}</UiAlert>
+      </div>
     </div>
 
     <YieldSection

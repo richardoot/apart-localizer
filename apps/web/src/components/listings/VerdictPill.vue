@@ -1,16 +1,20 @@
 <script setup lang="ts">
   import type { Verdict } from '@apart/contracts'
-  import { VERDICT_CLASSES, VERDICT_LABELS } from '@/lib/labels'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import { VERDICT_LABELS } from '@/lib/labels'
+  import type { Tone } from '@/lib/ui'
 
   defineProps<{ verdict: Verdict }>()
+  /** Lot 22 : le verdict en pastille commune, dans le ton de ses jetons. */
+  const TONES: Record<Verdict, Tone> = {
+    target: 'good',
+    to_dig: 'warn',
+    off_target: 'bad',
+  }
 </script>
 
 <template>
-  <span
-    class="inline-block rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap"
-    :class="VERDICT_CLASSES[verdict]"
-    :data-verdict="verdict"
-  >
+  <UiBadge :tone="TONES[verdict]" :data-verdict="verdict">
     {{ VERDICT_LABELS[verdict] }}
-  </span>
+  </UiBadge>
 </template>

@@ -267,7 +267,7 @@ export class VisitsService {
       Date.parse(update.expectedUpdatedAt) !== current.updatedAt.getTime()
     ) {
       throw new ConflictException(
-        `La visite a changé depuis votre lecture (modifiée le ${current.updatedAt.toISOString()}) : relisez-la`
+        `La visite a changé depuis ta lecture (modifiée le ${current.updatedAt.toISOString()}) : relis-la`
       )
     }
     if (update.participantIds) {
@@ -355,7 +355,7 @@ export class VisitsService {
     )
     if (others.length > 0) {
       throw new ConflictException(
-        `La visite porte ${others.length} photo(s) d'un autre membre : seul leur auteur peut les supprimer.`
+        `La visite porte ${others.length > 1 ? `${others.length} photos` : 'une photo'} d'un autre membre : seul son auteur peut ${others.length > 1 ? 'les' : 'la'} supprimer.`
       )
     }
     await this.storage.remove(
@@ -473,7 +473,7 @@ export class VisitsService {
     ])
     if (!main || !thumb) {
       throw new ConflictException(
-        "La photo ou sa vignette n'est pas encore arrivée dans le stockage : terminez l'envoi puis réessayez."
+        "La photo ou sa vignette n'est pas encore arrivée dans le stockage : termine l'envoi puis réessaie."
       )
     }
     const problem =

@@ -42,7 +42,7 @@
       /></span>
     </template>
     <span v-else class="text-muted"
-      >saisissez un prix et un loyer visé pour voir les indicateurs</span
+      >saisis un prix et un loyer visé pour voir les indicateurs</span
     >
   </p>
 </template>

@@ -164,7 +164,7 @@ describe('StageRows', () => {
     stats: [{ label: 'Prix', value: '226 000 €' }],
     rowKind: 'to_sort',
     pill: 'À trier',
-    pillClass: 'bg-surface-2 text-fg',
+    pillTone: 'neutral',
     detail: 'Personne n’a encore trié',
     action: { kind: 'sort', label: 'Trier' },
     decision: null,
@@ -358,7 +358,7 @@ describe('DecisionBanner', () => {
       props: { decision: decision({ state: 'to_settle' }) },
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     })
-    expect(wrapper.text()).toContain('Vos choix diffèrent')
+    expect(wrapper.text()).toContain('Les choix diffèrent')
     expect(wrapper.get('[data-action="go-settle"]').text()).toBe(
       'À trancher ensemble'
     )

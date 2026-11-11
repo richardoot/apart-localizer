@@ -79,4 +79,22 @@ describe('FiltersBar', () => {
     await select.setValue('')
     expect(store.filters.criteriaId).toBeUndefined()
   })
+
+  it('lot 22 : « 250k » dans le prix maximal est refusé au champ, le filtre ne disparaît pas', async () => {
+    const store = useFiltersStore()
+    store.patch({ priceMax: 300_000 })
+    const wrapper = mount(FiltersBar, { props: { communes: [] } })
+    const input = wrapper.get('#f-price-max')
+    await input.setValue('250k')
+    await input.trigger('change')
+    expect(store.filters.priceMax).toBe(300_000)
+    expect(input.attributes('aria-invalid')).toBe('true')
+    expect(wrapper.get('[data-testid="field-error"]').text()).toContain(
+      '« 250k » n’est pas un nombre'
+    )
+    await input.setValue('250 000')
+    await input.trigger('change')
+    expect(store.filters.priceMax).toBe(250_000)
+    expect(wrapper.find('[data-testid="field-error"]').exists()).toBe(false)
+  })
 })

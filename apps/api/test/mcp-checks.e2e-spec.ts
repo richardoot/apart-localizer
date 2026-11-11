@@ -202,7 +202,7 @@ describe('Lot 15 : vérifications au connecteur MCP (e2e)', () => {
     })
     expect(refused.isError).toBe(true)
     expect(refused.content[0]?.text).toContain(
-      "L'annonce a changé depuis votre lecture"
+      "L'annonce a changé depuis ta lecture"
     )
     expect(await ctx.prisma.listingCheck.count()).toBe(0)
     expect(

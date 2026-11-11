@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import { computed } from 'vue'
   import type { StageRowView } from '@/lib/workflow'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
 
   /**
    * Lot 21 (ADR 0031) : les lignes d'une étape : le titre, les chiffres
@@ -30,7 +32,7 @@
   <section
     v-if="!empty"
     aria-label="Annonces de cette étape"
-    class="overflow-hidden rounded-[14px] border border-line bg-surface"
+    class="overflow-hidden rounded-2xl border border-line bg-surface"
     data-testid="stage-rows"
   >
     <ul class="m-0 list-none p-0">
@@ -45,9 +47,9 @@
           class="flex flex-col gap-1 px-3.5 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2 sm:px-4 sm:py-3"
         >
           <div class="flex min-w-0 flex-col gap-0.5 sm:flex-[3_1_280px]">
-            <button
-              type="button"
-              class="w-fit text-left font-semibold text-accent underline-offset-2 hover:underline"
+            <UiButton
+              variant="link"
+              class="w-fit justify-start text-left font-semibold no-underline hover:underline"
               :aria-expanded="
                 row.kind === 'draft' ? isExpanded(row.id) : undefined
               "
@@ -55,7 +57,7 @@
               @click="emit('open', row)"
             >
               {{ row.title }}
-            </button>
+            </UiButton>
             <span class="text-xs text-muted">{{ row.meta }}</span>
           </div>
           <p class="text-sm text-fg tabular-nums sm:hidden">
@@ -72,24 +74,18 @@
           <div
             class="flex min-w-0 flex-col items-start gap-0.5 sm:flex-[2_1_210px]"
           >
-            <span
-              class="rounded-full px-2.5 py-0.5 text-xs font-semibold"
-              :class="row.pillClass"
-              data-testid="row-pill"
-              >{{ row.pill }}</span
-            >
-            <span class="text-xs text-muted sm:text-[13px]">{{
-              row.detail
-            }}</span>
+            <UiBadge :tone="row.pillTone" data-testid="row-pill">{{
+              row.pill
+            }}</UiBadge>
+            <span class="text-xs text-muted sm:text-sm">{{ row.detail }}</span>
           </div>
-          <button
-            type="button"
-            class="mt-1 inline-flex min-h-11 flex-[0_0_auto] items-center justify-center rounded-[10px] border border-line bg-surface px-3 text-[13px] font-medium whitespace-nowrap text-fg hover:border-accent sm:mt-0 sm:min-w-[104px]"
+          <UiButton
+            class="mt-1 flex-[0_0_auto] whitespace-nowrap sm:mt-0 sm:min-w-[104px]"
             :data-action="row.action.kind"
             @click="emit('action', row)"
           >
             {{ row.action.label }}
-          </button>
+          </UiButton>
         </div>
         <div
           v-if="isExpanded(row.id)"

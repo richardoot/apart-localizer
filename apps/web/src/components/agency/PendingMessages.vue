@@ -1,20 +1,24 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
+  import { computed } from 'vue'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import { useAction } from '@/composables/useAction'
   import { usePendingAgencyRequests } from '@/composables/useAgencyRequests'
   import { useWorkspace } from '@/composables/useWorkspace'
-  import { ApiError } from '@/lib/api'
+  import { plural } from '@/lib/format'
+  import { cardClasses } from '@/lib/ui'
   import DraftsBatch from './DraftsBatch.vue'
 
   /**
    * Lot 17 : le bloc « Messages à valider » de la Synthèse, toutes annonces
    * confondues, s'il y en a. Valider par lot ne fait partir aucun message :
    * Claude enverra ceux qui sont validés. Rappelle aussi les messages validés
-   * en attente d'envoi et les relances dues.
+   * en attente d'envoi et les relances dues. Lot 22 : l'erreur dans le
+   * bloc, la réussite dans la zone de messages.
    */
   const pending = usePendingAgencyRequests()
   const { members } = useWorkspace()
-  const failure = ref<string | null>(null)
-  const notice = ref<string | null>(null)
+  const action = useAction('La validation a échoué.')
 
   const data = computed(() => pending.data.value ?? null)
   const visible = computed(
@@ -26,65 +30,49 @@
   )
 
   async function approve(ids: string[]): Promise<void> {
-    failure.value = null
-    try {
-      await pending.approve.mutateAsync(ids)
-      notice.value =
+    await action.run(() => pending.approve.mutateAsync(ids), {
+      success:
         ids.length > 1
           ? `${ids.length} messages validés : Claude peut les envoyer.`
-          : 'Message validé : Claude peut l’envoyer.'
-    } catch (error) {
-      notice.value = null
-      failure.value =
-        error instanceof ApiError ? error.message : 'La validation a échoué.'
-    }
+          : 'Message validé : Claude peut l’envoyer.',
+    })
   }
 </script>
 
 <template>
   <section
     v-if="visible && data"
-    class="grid gap-3 rounded-xl border-2 border-accent bg-surface p-4"
+    class="grid gap-3"
+    :class="cardClasses('accent')"
     aria-labelledby="pending-messages-title"
     data-testid="pending-messages"
   >
     <header class="flex flex-wrap items-baseline justify-between gap-2">
-      <h2
-        id="pending-messages-title"
-        class="font-display text-base font-semibold"
-      >
+      <h2 id="pending-messages-title" class="font-display text-base font-bold">
         Messages à valider
-        <span
+        <UiBadge
           v-if="data.toApprove.length"
-          class="ml-1 rounded-full bg-accent px-2 py-0.5 text-xs text-accent-fg"
-          >{{ data.toApprove.length }}</span
+          tone="accent"
+          variant="solid"
+          class="ml-1"
+          >{{ data.toApprove.length }}</UiBadge
         >
       </h2>
-      <p class="text-xs text-muted">
+      <p class="text-sm text-muted">
         <template v-if="data.toSend.length"
-          >{{ data.toSend.length }} validé(s), en attente d’envoi par
+          >{{ plural(data.toSend.length, 'validé') }}, en attente d’envoi par
           Claude</template
         >
         <template v-if="data.toSend.length && data.followUpsDue.length">
           ·
         </template>
         <template v-if="data.followUpsDue.length"
-          ><span class="font-medium text-warn"
-            >{{ data.followUpsDue.length }} relance(s) due(s)</span
-          ></template
+          ><span class="font-medium text-warn">{{
+            plural(data.followUpsDue.length, 'relance due', 'relances dues')
+          }}</span></template
         >
       </p>
     </header>
-    <p
-      v-if="failure"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-    >
-      {{ failure }}
-    </p>
-    <p v-else-if="notice" class="text-sm text-good" aria-live="polite">
-      {{ notice }}
-    </p>
     <DraftsBatch
       v-if="data.toApprove.length"
       :requests="data.toApprove"
@@ -94,9 +82,9 @@
       :busy="pending.approve.isPending.value"
       @approve="approve"
     />
+    <UiAlert v-if="action.error.value">{{ action.error.value }}</UiAlert>
     <p v-if="data.toApprove.length" class="text-xs text-muted">
-      Pour corriger ou annuler un message, ouvrez sa fiche (onglet « Échanges
-      »).
+      Pour corriger ou annuler un message, ouvre sa fiche (onglet « À faire »).
     </p>
     <ul
       v-if="data.followUpsDue.length"
@@ -110,10 +98,10 @@
             params: { id: r.listingId },
             query: { onglet: 'a-faire' },
           }"
-          class="text-accent underline"
+          class="inline-flex min-h-11 items-center text-accent underline sm:min-h-0"
           >{{ r.listing.title }}</RouterLink
         >
-        <span class="text-xs text-muted">
+        <span class="text-sm text-muted">
           · relance due{{
             r.recipientName ? ` (${r.recipientName})` : ''
           }}</span

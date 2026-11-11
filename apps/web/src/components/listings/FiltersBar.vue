@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed } from 'vue'
+  import { computed, ref, watch } from 'vue'
   import {
     DEFAULT_STALE_DAYS,
     DpeClassSchema,
@@ -18,7 +18,17 @@
     Verdict,
   } from '@apart/contracts'
   import { SORT_LABELS, VERDICT_LABELS } from '@/lib/labels'
-  import { formatDistance, parseNumberInput } from '@/lib/format'
+  import {
+    formatDistance,
+    numberInputError,
+    parseNumberInput,
+  } from '@/lib/format'
+  import { cardClasses } from '@/lib/ui'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import UiChip from '@/components/ui/UiChip.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import UiIcon from '@/components/ui/UiIcon.vue'
   import { DRAFT_SORTS } from '@/lib/workflow'
   import {
     SELLER_FILTER_CHOICES,
@@ -90,8 +100,27 @@
     store.patch({ search: value || undefined })
   }
 
-  function onPriceMax(event: Event): void {
-    const value = parseNumberInput((event.target as HTMLInputElement).value)
+  /**
+   * Lot 22 : le prix maximal se tape librement ; un nombre illisible
+   * (« 250k ») est refusé au champ et le filtre reste tel qu'il était,
+   * jamais « pas de filtre » en silence.
+   */
+  const priceText = ref(
+    store.filters.priceMax === undefined ? '' : String(store.filters.priceMax)
+  )
+  const priceError = ref<string | null>(null)
+  watch(
+    () => store.filters.priceMax,
+    value => {
+      if (parseNumberInput(priceText.value) === (value ?? null)) return
+      priceText.value = value === undefined ? '' : String(value)
+      priceError.value = null
+    }
+  )
+  function onPriceMax(): void {
+    priceError.value = numberInputError(priceText.value)
+    if (priceError.value) return
+    const value = parseNumberInput(priceText.value)
     store.patch({ priceMax: value ?? undefined })
   }
 
@@ -135,281 +164,203 @@
 
 <template>
   <section
-    class="grid gap-3 rounded-xl border border-line bg-surface p-3 sm:grid-cols-2 lg:grid-cols-4"
+    class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+    :class="cardClasses('default', 'sm')"
     aria-label="Filtres"
   >
-    <div class="grid gap-1">
-      <label for="f-search" class="text-xs font-medium text-muted"
-        >Rechercher</label
-      >
-      <input
-        id="f-search"
-        type="search"
-        class="rounded-lg border border-line bg-bg px-3 py-1.5 text-sm"
-        placeholder="Titre, quartier, agence, référence…"
-        :value="store.filters.search ?? ''"
-        @change="onSearch"
-      />
-    </div>
-    <div class="grid gap-1">
-      <label for="f-commune" class="text-xs font-medium text-muted"
-        >Commune</label
-      >
-      <select
-        id="f-commune"
-        class="rounded-lg border border-line bg-bg px-3 py-1.5 text-sm"
-        :value="store.filters.commune?.[0] ?? ''"
-        @change="onCommune"
-      >
-        <option value="">Toutes</option>
-        <option v-for="commune in communeOptions" :key="commune">
-          {{ commune }}
-        </option>
-      </select>
-    </div>
-    <div class="grid gap-1">
-      <label for="f-criteria" class="text-xs font-medium text-muted"
-        >Critère enregistré</label
-      >
-      <select
-        id="f-criteria"
-        class="rounded-lg border border-line bg-bg px-3 py-1.5 text-sm"
-        :value="store.filters.criteriaId ?? ''"
-        @change="onCriteria"
-      >
-        <option value="">Aucun</option>
-        <option v-for="c in props.criteria" :key="c.id" :value="c.id">
-          {{ c.name }} ({{ c.listingCount }})
-        </option>
-      </select>
-    </div>
-    <div class="grid gap-1">
-      <label for="f-price-max" class="text-xs font-medium text-muted"
-        >Prix maximal (€)</label
-      >
-      <input
-        id="f-price-max"
-        type="number"
-        min="0"
-        step="5000"
-        class="rounded-lg border border-line bg-bg px-3 py-1.5 text-sm"
-        :value="store.filters.priceMax ?? ''"
-        @change="onPriceMax"
-      />
-    </div>
-    <div class="grid gap-1">
-      <label for="f-sort" class="text-xs font-medium text-muted"
-        >Trier par</label
-      >
-      <select
-        id="f-sort"
-        class="rounded-lg border border-line bg-bg px-3 py-1.5 text-sm"
-        :value="shownSort"
-        @change="onSort"
-      >
-        <option v-for="sort in sorts" :key="sort" :value="sort">
-          {{ SORT_LABELS[sort] }}
-        </option>
-      </select>
-    </div>
+    <UiField
+      id="f-search"
+      label="Rechercher"
+      type="search"
+      align="left"
+      placeholder="Titre, quartier, agence, référence…"
+      :model-value="store.filters.search ?? ''"
+      @change="onSearch"
+    />
+    <UiField
+      id="f-commune"
+      label="Commune"
+      as="select"
+      :model-value="store.filters.commune?.[0] ?? ''"
+      :options="[
+        { value: '', label: 'Toutes' },
+        ...communeOptions.map(commune => ({ value: commune, label: commune })),
+      ]"
+      @change="onCommune"
+    />
+    <UiField
+      id="f-criteria"
+      label="Critère enregistré"
+      as="select"
+      :model-value="store.filters.criteriaId ?? ''"
+      :options="[
+        { value: '', label: 'Aucun' },
+        ...props.criteria.map(c => ({
+          value: c.id,
+          label: `${c.name} (${c.listingCount})`,
+        })),
+      ]"
+      @change="onCriteria"
+    />
+    <UiField
+      id="f-price-max"
+      v-model="priceText"
+      label="Prix maximal"
+      unit="€"
+      inputmode="numeric"
+      :error="priceError"
+      @change="onPriceMax"
+    />
+    <UiField
+      id="f-sort"
+      label="Trier par"
+      as="select"
+      :model-value="shownSort"
+      :options="sorts.map(sort => ({ value: sort, label: SORT_LABELS[sort] }))"
+      @change="onSort"
+    />
 
-    <div class="grid gap-1 sm:col-span-2">
-      <span class="text-xs font-medium text-muted">Verdict</span>
+    <div class="grid content-start gap-1.5 sm:col-span-2">
+      <span id="f-verdict-label" class="text-sm font-semibold">Verdict</span>
       <div class="flex flex-wrap gap-1.5" role="group" aria-label="Verdicts">
-        <button
+        <UiChip
           v-for="verdict in verdicts"
           :key="verdict"
-          type="button"
-          class="rounded-full border px-2.5 py-0.5 text-xs"
-          :class="
-            store.filters.verdict?.includes(verdict)
-              ? 'border-accent bg-accent-soft text-fg'
-              : 'border-line text-muted hover:text-fg'
-          "
-          :aria-pressed="store.filters.verdict?.includes(verdict) ?? false"
+          :selected="store.filters.verdict?.includes(verdict) ?? false"
           @click="toggleVerdict(verdict)"
         >
           {{ VERDICT_LABELS[verdict] }}
-        </button>
+        </UiChip>
       </div>
     </div>
 
-    <div class="grid gap-1">
-      <span class="text-xs font-medium text-muted">DPE</span>
+    <div class="grid content-start gap-1.5">
+      <span class="text-sm font-semibold">DPE</span>
       <div class="flex flex-wrap gap-1" role="group" aria-label="Classes DPE">
-        <button
+        <UiChip
           v-for="dpe in dpeClasses"
           :key="dpe"
-          type="button"
-          class="h-6 w-6 rounded border font-mono text-xs"
-          :class="
-            store.filters.dpe?.includes(dpe)
-              ? 'border-accent bg-accent-soft text-fg'
-              : 'border-line text-muted hover:text-fg'
-          "
-          :aria-pressed="store.filters.dpe?.includes(dpe) ?? false"
+          class="min-w-11 justify-center px-2! font-mono sm:min-w-8"
+          :selected="store.filters.dpe?.includes(dpe) ?? false"
           @click="toggleDpe(dpe)"
         >
           {{ dpe }}
-        </button>
+        </UiChip>
       </div>
     </div>
 
-    <div class="grid gap-1 sm:col-span-2 lg:col-span-1">
-      <span id="f-seller-label" class="text-xs font-medium text-muted"
-        >Vendeur</span
-      >
+    <div class="grid content-start gap-1.5 sm:col-span-2 lg:col-span-1">
+      <span id="f-seller-label" class="text-sm font-semibold">Vendeur</span>
       <div
         class="flex flex-wrap gap-1.5"
         role="group"
         aria-labelledby="f-seller-label"
         data-testid="filter-seller"
       >
-        <button
+        <UiChip
           v-for="option in SELLER_FILTER_CHOICES"
           :key="option.choice"
-          type="button"
-          class="rounded-full border px-2.5 py-0.5 text-xs"
-          :class="
-            sellerChoice === option.choice
-              ? 'border-accent bg-accent-soft text-fg'
-              : 'border-line text-muted hover:text-fg'
-          "
-          :aria-pressed="sellerChoice === option.choice"
+          :selected="sellerChoice === option.choice"
           :data-seller="option.choice"
           @click="store.setSellerChoice(option.choice)"
         >
           {{ option.label }}
-        </button>
+        </UiChip>
       </div>
     </div>
 
-    <div v-if="!draftsOnly" class="grid gap-1 sm:col-span-2 lg:col-span-2">
-      <span id="f-opinions-label" class="text-xs font-medium text-muted"
-        >Avis</span
-      >
+    <div
+      v-if="!draftsOnly"
+      class="grid content-start gap-1.5 sm:col-span-2 lg:col-span-2"
+    >
+      <span id="f-opinions-label" class="text-sm font-semibold">Avis</span>
       <div
         class="flex flex-wrap gap-1.5"
         role="group"
         aria-labelledby="f-opinions-label"
         data-testid="filter-opinions"
       >
-        <button
+        <UiChip
           v-for="option in OPINION_CHOICES"
           :key="option.label"
-          type="button"
-          class="inline-flex min-h-11 items-center rounded-full border px-3 text-xs sm:min-h-8"
-          :class="
-            store.filters.opinions === option.value
-              ? 'border-accent bg-accent-soft text-fg'
-              : 'border-line text-muted hover:text-fg'
-          "
-          :aria-pressed="store.filters.opinions === option.value"
+          :selected="store.filters.opinions === option.value"
           :data-opinions="option.value ?? 'all'"
           @click="store.patch({ opinions: option.value })"
         >
           {{ option.label }}
-        </button>
+        </UiChip>
       </div>
     </div>
 
-    <div class="grid gap-1 sm:col-span-2 lg:col-span-2">
-      <span class="text-xs font-medium text-muted">Repère</span>
+    <div class="grid content-start gap-1.5 sm:col-span-2 lg:col-span-2">
+      <span class="text-sm font-semibold">Repère</span>
       <div
         class="flex flex-wrap gap-1.5"
         role="group"
         aria-label="Précision du repère"
       >
-        <button
+        <UiChip
           v-for="precision in precisions"
           :key="precision"
-          type="button"
-          class="rounded-full border px-2.5 py-0.5 text-xs"
-          :class="
-            store.filters.precision?.includes(precision)
-              ? 'border-accent bg-accent-soft text-fg'
-              : 'border-line text-muted hover:text-fg'
-          "
-          :aria-pressed="store.filters.precision?.includes(precision) ?? false"
+          :selected="store.filters.precision?.includes(precision) ?? false"
           :data-precision="precision"
           @click="togglePrecision(precision)"
         >
           {{ LOCATION_PRECISION_LABELS[precision] }}
-        </button>
+        </UiChip>
       </div>
     </div>
 
-    <div class="flex flex-wrap items-end gap-2">
-      <label v-if="!draftsOnly" class="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          class="accent-accent"
-          :checked="store.filters.newForMe ?? false"
-          @change="
-            store.patch({
-              newForMe:
-                ($event.target as HTMLInputElement).checked || undefined,
-            })
-          "
-        />
-        Nouvelles pour moi
-      </label>
-      <label
+    <div class="flex flex-wrap items-end gap-x-4 gap-y-1 sm:col-span-2">
+      <UiCheckbox
         v-if="!draftsOnly"
-        class="flex items-center gap-2 text-sm"
-        :title="`Annonces actives sans vérification sur le portail depuis plus de ${DEFAULT_STALE_DAYS} jours (à défaut, depuis leur ajout)`"
-      >
-        <input
-          type="checkbox"
-          class="accent-accent"
-          data-testid="filter-stale"
-          :checked="store.filters.staleDays !== undefined"
-          @change="
-            store.patch({
-              staleDays: ($event.target as HTMLInputElement).checked
-                ? DEFAULT_STALE_DAYS
-                : undefined,
-            })
-          "
-        />
-        À revérifier
-      </label>
-      <label
+        label="Nouvelles pour moi"
+        :model-value="store.filters.newForMe ?? false"
+        @update:model-value="
+          value => store.patch({ newForMe: value === true || undefined })
+        "
+      />
+      <UiCheckbox
         v-if="!draftsOnly"
-        class="flex items-center gap-2 text-sm"
-        title="Annonces publiées sur au moins deux portails (lot 18)"
-      >
-        <input
-          type="checkbox"
-          class="accent-accent"
-          data-testid="filter-multi-portal"
-          :checked="store.filters.multiPortal ?? false"
-          @change="
+        label="À revérifier"
+        :hint="`Pas vue sur le portail depuis plus de ${DEFAULT_STALE_DAYS} jours`"
+        data-testid="filter-stale"
+        :model-value="store.filters.staleDays !== undefined"
+        @update:model-value="
+          value =>
             store.patch({
-              multiPortal:
-                ($event.target as HTMLInputElement).checked || undefined,
+              staleDays: value === true ? DEFAULT_STALE_DAYS : undefined,
             })
-          "
-        />
-        Sur plusieurs portails
-      </label>
-      <button
+        "
+      />
+      <UiCheckbox
+        v-if="!draftsOnly"
+        label="Sur plusieurs portails"
+        data-testid="filter-multi-portal"
+        :model-value="store.filters.multiPortal ?? false"
+        @update:model-value="
+          value => store.patch({ multiPortal: value === true || undefined })
+        "
+      />
+      <UiChip
         v-if="store.filters.near"
-        type="button"
-        class="rounded-full border border-accent bg-accent-soft px-2.5 py-0.5 text-xs"
+        selected
+        :toggle="false"
         title="Retirer le filtre par point et rayon"
+        :aria-label="`Retirer le filtre : rayon de ${formatDistance(store.filters.near.radiusMeters)}`"
         @click="store.setNear(undefined)"
       >
-        Rayon {{ formatDistance(store.filters.near.radiusMeters) }} ✕
-      </button>
-      <button
+        Rayon {{ formatDistance(store.filters.near.radiusMeters) }}
+        <UiIcon name="close" />
+      </UiChip>
+      <UiButton
         v-if="store.activeCount > 0"
-        type="button"
-        class="text-xs text-muted underline hover:text-fg"
+        variant="link"
+        size="sm"
         @click="store.reset()"
       >
         Effacer les filtres ({{ store.activeCount }})
-      </button>
+      </UiButton>
     </div>
   </section>
 </template>

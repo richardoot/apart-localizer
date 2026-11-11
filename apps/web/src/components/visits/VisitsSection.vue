@@ -1,12 +1,30 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
+  import { computed, nextTick, ref } from 'vue'
   import type { ListingStatus, Member, Visit } from '@apart/contracts'
   import { VISIT_STATUS_LABELS } from '@apart/contracts'
+  import QueryState from '@/components/ui/QueryState.vue'
+  import UiAlert from '@/components/ui/UiAlert.vue'
+  import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
+  import UiCheckbox from '@/components/ui/UiCheckbox.vue'
+  import UiConfirm from '@/components/ui/UiConfirm.vue'
+  import UiField from '@/components/ui/UiField.vue'
+  import UiIcon from '@/components/ui/UiIcon.vue'
+  import { useAction } from '@/composables/useAction'
   import { useVisits } from '@/composables/useVisits'
-  import { ApiError } from '@/lib/api'
+  import { plural } from '@/lib/format'
   import { LISTING_STATUS_LABELS } from '@/lib/labels'
+  import { buttonClasses, cardClasses } from '@/lib/ui'
+  import { useFeedbackStore } from '@/stores/feedback'
   import { emptyVisitForm, visitFormToInput } from './visit-form'
 
+  /**
+   * Les visites d'une annonce (lot 6) : planifier ou noter une visite, la
+   * marquer faite, ses photos (privées). Lot 22 : lecture par `QueryState`,
+   * l'erreur dans le bloc où l'on a cliqué (formulaire ou carte de la
+   * visite), la réussite dans la zone de messages ; une date illisible est
+   * refusée au champ.
+   */
   const props = defineProps<{
     listingId: string
     members: Member[]
@@ -15,11 +33,15 @@
   const emit = defineEmits<{ 'set-status': [status: ListingStatus] }>()
 
   const visits = useVisits(computed(() => props.listingId))
+  const feedback = useFeedbackStore()
   const form = ref(emptyVisitForm(new Date(), props.meId))
   const adding = ref(false)
-  const failure = ref<string | null>(null)
+  const formAction = useAction('L’enregistrement a échoué.')
+  const cardAction = useAction('L’enregistrement a échoué.')
+  /** La visite dont la carte montre la dernière erreur. */
+  const errorVisit = ref<string | null>(null)
+  const dateError = ref<string | null>(null)
   const suggested = ref<ListingStatus | null>(null)
-  const notice = ref<string | null>(null)
 
   const nameOf = (id: string | null): string =>
     props.members.find(m => m.id === id)?.displayName ?? 'Un membre'
@@ -27,74 +49,64 @@
   const activeMembers = computed(() =>
     props.members.filter(m => m.status === 'active')
   )
-
-  function report(error: unknown): void {
-    failure.value =
-      error instanceof ApiError ? error.message : "L'enregistrement a échoué."
-  }
+  const list = computed(() => visits.data.value ?? [])
 
   async function submit(): Promise<void> {
     const input = visitFormToInput(form.value)
     if (!input) {
-      failure.value = 'Date de visite illisible.'
+      dateError.value = 'Date de visite illisible : choisis le jour et l’heure.'
+      await nextTick()
+      document.getElementById('visit-date')?.focus()
       return
     }
-    failure.value = null
-    try {
-      const result = await visits.create.mutateAsync(input)
-      suggested.value = result.suggestedStatus
-      notice.value = result.createdTask
-        ? 'Visite planifiée ; la tâche « Préparer la visite » est dans la checklist.'
-        : 'Visite enregistrée.'
-      form.value = emptyVisitForm(new Date(), props.meId)
-      adding.value = false
-    } catch (error) {
-      report(error)
-    }
+    dateError.value = null
+    const result = await formAction.run(
+      () => visits.create.mutateAsync(input),
+      {
+        success: done =>
+          done.createdTask
+            ? 'Visite planifiée ; la tâche « Préparer la visite » est dans la liste.'
+            : 'Visite enregistrée.',
+      }
+    )
+    if (!result) return
+    suggested.value = result.suggestedStatus
+    form.value = emptyVisitForm(new Date(), props.meId)
+    adding.value = false
+  }
+
+  async function onVisit<T>(visitId: string, action: () => Promise<T>) {
+    errorVisit.value = visitId
+    return cardAction.run(action)
   }
 
   async function markDone(visit: Visit): Promise<void> {
-    failure.value = null
-    try {
-      const result = await visits.update.mutateAsync({
+    const result = await onVisit(visit.id, () =>
+      visits.update.mutateAsync({
         visitId: visit.id,
         update: { status: 'done', expectedUpdatedAt: visit.updatedAt },
       })
-      suggested.value = result.suggestedStatus
-    } catch (error) {
-      report(error)
-    }
+    )
+    if (result) suggested.value = result.suggestedStatus
   }
 
   /**
    * Lot 19 : une suppression se confirme dans la carte de la visite, jamais
    * par `window.confirm`.
    */
-  const confirming = ref<{ visitId: string; photoId: string | null } | null>(
-    null
-  )
-  const isConfirming = (visitId: string, photoId: string | null = null) =>
-    confirming.value?.visitId === visitId &&
-    confirming.value.photoId === photoId
+  const confirmingPhoto = ref<{ visitId: string; photoId: string } | null>(null)
 
   async function removeVisit(visit: Visit): Promise<void> {
-    confirming.value = null
-    failure.value = null
-    try {
-      await visits.remove.mutateAsync(visit.id)
-    } catch (error) {
-      report(error)
-    }
+    await onVisit(visit.id, () => visits.remove.mutateAsync(visit.id))
+    if (!cardAction.error.value) feedback.success('Visite supprimée.')
   }
 
   async function removePhoto(visitId: string, photoId: string): Promise<void> {
-    confirming.value = null
-    failure.value = null
-    try {
-      await visits.removePhoto.mutateAsync({ visitId, photoId })
-    } catch (error) {
-      report(error)
-    }
+    confirmingPhoto.value = null
+    await onVisit(visitId, () =>
+      visits.removePhoto.mutateAsync({ visitId, photoId })
+    )
+    if (!cardAction.error.value) feedback.success('Photo supprimée.')
   }
 
   async function onFiles(visitId: string, event: Event): Promise<void> {
@@ -103,7 +115,7 @@
     input.value = ''
     if (files.length === 0) return
     const sent = await visits.uploadPhotos(visitId, files)
-    notice.value = `${sent} photo(s) envoyée(s).`
+    feedback.success(`${plural(sent, 'photo envoyée', 'photos envoyées')}.`)
   }
 
   function applySuggested(): void {
@@ -112,8 +124,15 @@
     suggested.value = null
   }
 
-  const inputClass =
-    'rounded-lg border border-line bg-bg px-3 py-1.5 text-sm w-full'
+  const STATUS_OPTIONS = [
+    { value: 'done', label: 'Faite' },
+    { value: 'planned', label: 'Planifiée' },
+  ]
+  const RATING_OPTIONS = [
+    { value: 0, label: 'Sans note' },
+    ...[1, 2, 3, 4, 5].map(n => ({ value: n, label: `${n}/5` })),
+  ]
+  const fileButton = buttonClasses({ size: 'sm' })
   const when = (iso: string) =>
     new Date(iso).toLocaleString('fr-FR', {
       weekday: 'short',
@@ -128,301 +147,264 @@
 <template>
   <section class="grid gap-4" aria-labelledby="visits-title">
     <header class="flex flex-wrap items-center justify-between gap-2">
-      <h3 id="visits-title" class="font-display text-base font-semibold">
+      <h3 id="visits-title" class="font-display text-base font-bold">
         Visites
       </h3>
-      <button
+      <UiButton
         v-if="!adding"
-        type="button"
-        class="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg"
+        variant="primary"
+        size="sm"
+        icon="plus"
         data-testid="visit-add"
         @click="adding = true"
       >
-        + Visite
-      </button>
+        Visite
+      </UiButton>
     </header>
 
-    <p
-      v-if="failure"
-      role="alert"
-      class="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad"
-    >
-      {{ failure }}
-    </p>
-    <p v-else-if="notice" class="text-sm text-good" aria-live="polite">
-      {{ notice }}
-    </p>
     <div
       v-if="suggested"
       class="flex flex-wrap items-center gap-2 rounded-lg bg-accent-soft px-3 py-2 text-sm"
       data-testid="visit-suggested-status"
     >
-      Passer l'annonce à « {{ LISTING_STATUS_LABELS[suggested] }} » ?
-      <button
-        type="button"
-        class="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-accent-fg"
-        @click="applySuggested"
-      >
+      Passer l’annonce à « {{ LISTING_STATUS_LABELS[suggested] }} » ?
+      <UiButton variant="primary" size="sm" @click="applySuggested">
         Oui
-      </button>
-      <button
-        type="button"
-        class="rounded-lg border border-line px-3 py-1 text-xs"
-        @click="suggested = null"
-      >
-        Non
-      </button>
+      </UiButton>
+      <UiButton size="sm" @click="suggested = null">Non</UiButton>
     </div>
 
     <form
       v-if="adding"
-      class="grid gap-3 rounded-xl border border-line px-3 py-3"
+      class="grid gap-3"
+      :class="cardClasses('default', 'sm')"
       data-testid="visit-form"
+      novalidate
       @submit.prevent="submit"
     >
       <div class="grid gap-3 sm:grid-cols-2">
-        <label class="grid gap-1 text-xs font-medium text-muted">
-          Date et heure
-          <input
-            v-model="form.visitedAt"
-            type="datetime-local"
-            :class="inputClass"
-            required
-          />
-        </label>
-        <label class="grid gap-1 text-xs font-medium text-muted">
-          État
-          <select v-model="form.status" :class="inputClass">
-            <option value="done">Faite</option>
-            <option value="planned">Planifiée</option>
-          </select>
-        </label>
+        <UiField
+          id="visit-date"
+          v-model="form.visitedAt"
+          label="Date et heure"
+          quiet
+          type="datetime-local"
+          align="left"
+          :error="dateError"
+          required
+        />
+        <UiField
+          id="visit-status"
+          v-model="form.status"
+          as="select"
+          label="État"
+          quiet
+          :options="STATUS_OPTIONS"
+        />
       </div>
-      <fieldset class="flex flex-wrap gap-3 text-sm">
-        <legend class="mb-1 text-xs font-medium text-muted">
-          Participants
-        </legend>
-        <label
+      <fieldset class="flex flex-wrap gap-x-4 text-sm">
+        <legend class="mb-1 text-sm font-medium">Participants</legend>
+        <UiCheckbox
           v-for="member in activeMembers"
           :key="member.id"
-          class="flex items-center gap-1.5"
-        >
-          <input
-            v-model="form.participantIds"
-            type="checkbox"
-            class="accent-accent"
-            :value="member.id"
-          />
-          {{ member.displayName }}
-        </label>
-      </fieldset>
-      <label
-        v-if="form.status === 'planned'"
-        class="flex items-center gap-2 text-sm"
-      >
-        <input
-          v-model="form.createPrepTask"
-          type="checkbox"
-          class="accent-accent"
+          v-model="form.participantIds"
+          :value="member.id"
+          :label="member.displayName"
         />
-        Ajouter la tâche « Préparer la visite »
-      </label>
+      </fieldset>
+      <UiCheckbox
+        v-if="form.status === 'planned'"
+        v-model="form.createPrepTask"
+        label="Ajouter la tâche « Préparer la visite »"
+      />
       <template v-else>
-        <label class="grid gap-1 text-xs font-medium text-muted">
-          Note
-          <select v-model.number="form.rating" :class="inputClass">
-            <option :value="0">Sans note</option>
-            <option v-for="n in 5" :key="n" :value="n">{{ n }}/5</option>
-          </select>
-        </label>
-        <label class="grid gap-1 text-xs font-medium text-muted">
-          Compte rendu
-          <textarea v-model="form.report" rows="3" :class="inputClass" />
-        </label>
+        <UiField
+          id="visit-rating"
+          v-model="form.rating"
+          as="select"
+          label="Note"
+          quiet
+          :options="RATING_OPTIONS"
+        />
+        <UiField
+          id="visit-report"
+          v-model="form.report"
+          as="textarea"
+          label="Compte rendu"
+          quiet
+          :rows="3"
+        />
         <div class="grid gap-3 sm:grid-cols-2">
-          <label class="grid gap-1 text-xs font-medium text-muted">
-            Points positifs
-            <textarea v-model="form.pros" rows="2" :class="inputClass" />
-          </label>
-          <label class="grid gap-1 text-xs font-medium text-muted">
-            Points négatifs
-            <textarea v-model="form.cons" rows="2" :class="inputClass" />
-          </label>
+          <UiField
+            id="visit-pros"
+            v-model="form.pros"
+            as="textarea"
+            label="Points positifs"
+            quiet
+            :rows="2"
+          />
+          <UiField
+            id="visit-cons"
+            v-model="form.cons"
+            as="textarea"
+            label="Points négatifs"
+            quiet
+            :rows="2"
+          />
         </div>
       </template>
+      <UiAlert v-if="formAction.error.value">{{
+        formAction.error.value
+      }}</UiAlert>
       <div class="flex justify-end gap-2">
-        <button
-          type="button"
-          class="rounded-lg border border-line px-3 py-1.5 text-sm"
-          @click="adding = false"
-        >
-          Annuler
-        </button>
-        <button
+        <UiButton @click="adding = false">Annuler</UiButton>
+        <UiButton
           type="submit"
-          class="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-accent-fg disabled:opacity-60"
-          :disabled="visits.create.isPending.value"
+          variant="primary"
+          :loading="visits.create.isPending.value"
+          loading-label="Enregistrement…"
         >
           Enregistrer la visite
-        </button>
+        </UiButton>
       </div>
     </form>
 
-    <p v-if="visits.isPending.value" class="text-sm text-muted">
-      Chargement des visites…
-    </p>
-    <p
-      v-else-if="(visits.data.value ?? []).length === 0 && !adding"
-      class="text-sm text-muted"
+    <QueryState
+      :query="visits"
+      :empty="list.length === 0 && !adding"
+      empty-text="Aucune visite pour l’instant : « Visite » en planifie une ou note celle que tu viens de faire."
+      skeleton="rows"
+      :skeleton-count="1"
+      loading-label="les visites"
     >
-      Aucune visite pour l'instant.
-    </p>
-    <ul v-else class="grid gap-3">
-      <li
-        v-for="visit in visits.data.value ?? []"
-        :id="`visit-${visit.id}`"
-        :key="visit.id"
-        tabindex="-1"
-        class="grid scroll-mt-16 gap-2 rounded-xl border border-line bg-surface px-3 py-3 focus-visible:outline-2 focus-visible:outline-accent"
-        data-testid="visit"
-      >
-        <div class="flex flex-wrap items-baseline gap-2">
-          <span
-            class="rounded-full px-2 py-0.5 text-xs"
-            :class="
-              visit.status === 'planned'
-                ? 'bg-accent-soft text-fg'
-                : 'bg-good-soft text-good'
-            "
-            >{{ VISIT_STATUS_LABELS[visit.status] }}</span
-          >
-          <strong class="text-sm">{{ when(visit.visitedAt) }}</strong>
-          <span v-if="visit.rating" class="text-sm">{{ visit.rating }}/5</span>
-          <span v-if="visit.participantIds.length" class="text-xs text-muted">
-            avec {{ visit.participantIds.map(nameOf).join(', ') }}
-          </span>
-        </div>
-        <p v-if="visit.report" class="text-sm whitespace-pre-line">
-          {{ visit.report }}
-        </p>
-        <p v-if="visit.pros" class="text-sm text-good">+ {{ visit.pros }}</p>
-        <p v-if="visit.cons" class="text-sm text-bad">− {{ visit.cons }}</p>
-        <ul
-          v-if="visit.photos.length"
-          class="grid grid-cols-3 gap-2 sm:grid-cols-4"
+      <ul class="grid gap-3">
+        <li
+          v-for="visit in list"
+          :id="`visit-${visit.id}`"
+          :key="visit.id"
+          tabindex="-1"
+          class="grid scroll-mt-16 gap-2 focus-visible:outline-2 focus-visible:outline-accent"
+          :class="cardClasses('default', 'sm')"
+          data-testid="visit"
         >
-          <li v-for="photo in visit.photos" :key="photo.id" class="relative">
-            <a
-              v-if="photo.url"
-              :href="photo.url"
-              target="_blank"
-              rel="noopener noreferrer"
+          <div class="flex flex-wrap items-baseline gap-2">
+            <UiBadge :tone="visit.status === 'planned' ? 'accent' : 'good'">{{
+              VISIT_STATUS_LABELS[visit.status]
+            }}</UiBadge>
+            <strong class="text-sm">{{ when(visit.visitedAt) }}</strong>
+            <span v-if="visit.rating" class="text-sm"
+              >{{ visit.rating }}/5</span
             >
-              <img
-                :src="photo.thumbnailUrl ?? photo.url"
-                :alt="photo.caption ?? 'Photo de visite'"
-                class="aspect-square w-full rounded-lg object-cover"
-                loading="lazy"
+            <span v-if="visit.participantIds.length" class="text-sm text-muted">
+              avec {{ visit.participantIds.map(nameOf).join(', ') }}
+            </span>
+          </div>
+          <p v-if="visit.report" class="text-sm whitespace-pre-line">
+            {{ visit.report }}
+          </p>
+          <p v-if="visit.pros" class="text-sm text-good">+ {{ visit.pros }}</p>
+          <p v-if="visit.cons" class="text-sm text-bad">− {{ visit.cons }}</p>
+          <ul
+            v-if="visit.photos.length"
+            class="grid grid-cols-3 gap-2 sm:grid-cols-4"
+          >
+            <li v-for="photo in visit.photos" :key="photo.id" class="relative">
+              <a
+                v-if="photo.url"
+                :href="photo.url"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <img
+                  :src="photo.thumbnailUrl ?? photo.url"
+                  :alt="photo.caption ?? 'Photo de visite'"
+                  class="aspect-square w-full rounded-lg object-cover"
+                  loading="lazy"
+                />
+              </a>
+              <span
+                v-else
+                class="grid aspect-square place-items-center rounded-lg bg-surface-2 text-xs text-muted"
+                >indisponible</span
+              >
+              <UiButton
+                v-if="photo.uploadedById === meId"
+                size="icon"
+                class="absolute top-1 right-1 rounded-full shadow"
+                aria-label="Supprimer la photo"
+                @click="
+                  confirmingPhoto = { visitId: visit.id, photoId: photo.id }
+                "
+              >
+                <UiIcon name="close" />
+              </UiButton>
+            </li>
+          </ul>
+          <div
+            v-if="confirmingPhoto?.visitId === visit.id"
+            class="flex flex-wrap items-center gap-2 rounded-lg bg-bad-soft px-3 py-2 text-sm"
+            role="group"
+            aria-label="Supprimer cette photo ?"
+            data-testid="photo-remove-confirm"
+          >
+            <span class="flex-1">Supprimer cette photo ?</span>
+            <UiButton size="sm" @click="confirmingPhoto = null"
+              >Garder</UiButton
+            >
+            <UiButton
+              variant="danger"
+              size="sm"
+              data-testid="photo-remove-yes"
+              @click="removePhoto(visit.id, confirmingPhoto.photoId)"
+            >
+              Supprimer la photo
+            </UiButton>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-sm">
+            <label :class="fileButton" class="cursor-pointer">
+              Ajouter des photos
+              <!-- Lot 22 : le sélecteur de fichiers du système, caché derrière le bouton. -->
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                class="sr-only"
+                :data-testid="`visit-photos-${visit.id}`"
+                @change="onFiles(visit.id, $event)"
               />
-            </a>
+            </label>
+            <UiButton
+              v-if="visit.status === 'planned'"
+              size="sm"
+              @click="markDone(visit)"
+            >
+              Marquer faite
+            </UiButton>
             <span
-              v-else
-              class="grid aspect-square place-items-center rounded-lg bg-surface-2 text-xs text-muted"
-              >indisponible</span
+              v-if="visit.createdById === meId"
+              class="ml-auto inline-flex flex-wrap items-center gap-2"
+              data-testid="visit-remove-confirm"
             >
-            <button
-              v-if="photo.uploadedById === meId"
-              type="button"
-              class="absolute top-1 right-1 inline-flex size-8 items-center justify-center rounded-full bg-surface text-xs text-muted shadow hover:text-bad"
-              aria-label="Supprimer la photo"
-              @click="confirming = { visitId: visit.id, photoId: photo.id }"
-            >
-              ✕
-            </button>
-          </li>
-        </ul>
-        <div
-          v-if="confirming?.visitId === visit.id && confirming.photoId !== null"
-          class="flex flex-wrap items-center gap-2 rounded-lg bg-bad-soft px-3 py-2 text-sm"
-          role="alert"
-          data-testid="photo-remove-confirm"
-        >
-          <span class="flex-1">Supprimer cette photo ?</span>
-          <button
-            type="button"
-            class="inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm sm:min-h-9"
-            @click="confirming = null"
-          >
-            Garder
-          </button>
-          <button
-            type="button"
-            class="inline-flex min-h-11 items-center rounded-lg bg-bad px-3 text-sm font-medium text-surface sm:min-h-9"
-            data-testid="photo-remove-yes"
-            @click="removePhoto(visit.id, confirming.photoId)"
-          >
-            Supprimer la photo
-          </button>
-        </div>
-        <div class="flex flex-wrap items-center gap-2 text-sm">
-          <label
-            class="cursor-pointer rounded-lg border border-line px-3 py-1 hover:bg-surface-2"
-          >
-            Ajouter des photos
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              class="sr-only"
-              :data-testid="`visit-photos-${visit.id}`"
-              @change="onFiles(visit.id, $event)"
-            />
-          </label>
-          <button
-            v-if="visit.status === 'planned'"
-            type="button"
-            class="rounded-lg border border-line px-3 py-1 hover:bg-surface-2"
-            @click="markDone(visit)"
-          >
-            Marquer faite
-          </button>
-          <button
-            v-if="visit.createdById === meId && !isConfirming(visit.id)"
-            type="button"
-            class="ml-auto inline-flex min-h-11 items-center text-xs text-muted hover:text-bad sm:min-h-0"
-            data-testid="visit-remove"
-            @click="confirming = { visitId: visit.id, photoId: null }"
-          >
-            Supprimer la visite
-          </button>
-        </div>
-        <div
-          v-if="isConfirming(visit.id)"
-          class="flex flex-wrap items-center gap-2 rounded-lg bg-bad-soft px-3 py-2 text-sm"
-          role="alert"
-          data-testid="visit-remove-confirm"
-        >
-          <span class="flex-1">Supprimer cette visite et vos photos ?</span>
-          <button
-            type="button"
-            class="inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm sm:min-h-9"
-            @click="confirming = null"
-          >
-            Garder
-          </button>
-          <button
-            type="button"
-            class="inline-flex min-h-11 items-center rounded-lg bg-bad px-3 text-sm font-medium text-surface sm:min-h-9"
-            data-testid="visit-remove-yes"
-            @click="removeVisit(visit)"
-          >
-            Supprimer la visite
-          </button>
-        </div>
-      </li>
-    </ul>
+              <UiConfirm
+                label="Supprimer la visite"
+                question="Supprimer cette visite et tes photos ?"
+                cancel-label="Garder"
+                variant="ghost"
+                :busy="visits.remove.isPending.value"
+                :confirm-attrs="{ 'data-testid': 'visit-remove-yes' }"
+                data-testid="visit-remove"
+                @confirm="removeVisit(visit)"
+              />
+            </span>
+          </div>
+          <UiAlert v-if="errorVisit === visit.id && cardAction.error.value">{{
+            cardAction.error.value
+          }}</UiAlert>
+        </li>
+      </ul>
+    </QueryState>
 
-    <ul v-if="visits.uploads.value.length" class="grid gap-1 text-xs">
+    <ul v-if="visits.uploads.value.length" class="grid gap-1 text-sm">
       <li
         v-for="(upload, index) in visits.uploads.value"
         :key="index"
@@ -441,8 +423,8 @@
       </li>
     </ul>
     <p class="text-xs text-muted">
-      Les photos sont réduites sur l'appareil (métadonnées et position GPS
-      retirées), rangées dans un stockage privé et ne s'ouvrent que par des
+      Les photos sont réduites sur l’appareil (métadonnées et position GPS
+      retirées), rangées dans un stockage privé et ne s’ouvrent que par des
       liens temporaires ; seul le membre qui les a ajoutées peut les supprimer.
     </p>
   </section>

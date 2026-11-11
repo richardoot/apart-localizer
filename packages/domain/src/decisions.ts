@@ -266,13 +266,13 @@ export function respondRefusal(
   if (decision.authorId === memberId) {
     return {
       code: 'forbidden',
-      message: 'Vous avez fait cette proposition : un autre membre y répond.',
+      message: 'Tu as fait cette proposition : un autre membre y répond.',
     }
   }
   if (decision.responses.some(r => r.memberId === memberId)) {
     return {
       code: 'conflict',
-      message: 'Vous avez déjà répondu à cette proposition.',
+      message: 'Tu as déjà répondu à cette proposition.',
     }
   }
   return null
@@ -565,8 +565,8 @@ export function mcpBlockedMessage(input: {
   toSettle: boolean
 }): string {
   return input.toSettle
-    ? `Vos choix diffèrent sur cette annonce (« À trancher ensemble ») : tranchez-la dans l’application.`
-    : `${input.authorName} a déjà proposé « ${input.choiceLabel} » pour cette annonce. Claude ne confirme jamais pour un autre membre : répondez dans l’application.`
+    ? `Les choix diffèrent sur cette annonce (« À trancher ensemble ») : tranche-la dans l’application.`
+    : `${input.authorName} a déjà proposé « ${input.choiceLabel} » pour cette annonce. Claude ne confirme jamais pour un autre membre : réponds dans l’application.`
 }
 
 /** La ligne d'une proposition en cours dans les réponses du connecteur. */
