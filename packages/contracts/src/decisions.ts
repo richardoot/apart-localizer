@@ -390,6 +390,7 @@ export const WorkflowAgendaKeySchema = z.enum([
   'to_confirm',
   'to_settle',
   'ready',
+  'visit_today',
   'upcoming_visits',
   'visits_to_plan',
   'opinions_to_give',

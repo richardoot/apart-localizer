@@ -253,6 +253,120 @@ describe('VisitsSection', () => {
   })
 })
 
+describe('VisitsSection : visite modifiable (lot 24)', () => {
+  it('« Marquer faite » porte le compte rendu ; une visite faite se corrige par l’auteur ou un participant', async () => {
+    const planned = visit({
+      status: 'planned',
+      report: null,
+      pros: null,
+      cons: null,
+      rating: 0,
+    })
+    apiMock.visits.list.mockResolvedValue([planned])
+    apiMock.visits.update.mockResolvedValue({
+      visit: { ...planned, status: 'done', report: 'Cave saine' },
+      createdTask: null,
+      currentStatus: 'to_visit',
+      suggestedStatus: 'visited',
+    })
+    const wrapper = withClient(VisitsSection, {
+      listingId: LISTING,
+      members: MEMBERS,
+      meId: CHLOE.id,
+    })
+    await flushPromises()
+    const link = document.body.querySelector('[data-testid="visit-mode-link"]')
+    expect(link).not.toBeNull()
+    ;(
+      document.body.querySelector(
+        '[data-testid="visit-mark-done"]'
+      ) as HTMLElement
+    ).click()
+    await flushPromises()
+    const report = document.body.querySelector(
+      '[data-testid="visit-edit-report"]'
+    ) as HTMLTextAreaElement
+    report.value = 'Cave saine'
+    report.dispatchEvent(new Event('input'))
+    await flushPromises()
+    expect(
+      document.body
+        .querySelector('[data-testid="visit-edit-save"]')
+        ?.textContent?.trim()
+    ).toBe('Enregistrer comme faite')
+    ;(
+      document.body.querySelector(
+        '[data-testid="visit-edit-form"]'
+      ) as HTMLFormElement
+    ).dispatchEvent(new Event('submit'))
+    await flushPromises()
+    expect(apiMock.visits.update).toHaveBeenCalledWith(LISTING, planned.id, {
+      expectedUpdatedAt: planned.updatedAt,
+      report: 'Cave saine',
+      status: 'done',
+    })
+    expect(
+      document.body.querySelector('[data-testid="visit-suggested-status"]')
+        ?.textContent
+    ).toContain('« Visité »')
+    wrapper.unmount()
+    document.body.innerHTML = ''
+  })
+
+  it('un membre qui n’était pas à la visite faite ne la corrige pas ; un conflit se dit dans la carte', async () => {
+    const SAM = '44444444-4444-4444-8444-444444444444'
+    apiMock.visits.list.mockResolvedValue([visit({ status: 'done' })])
+    const outsider = withClient(VisitsSection, {
+      listingId: LISTING,
+      members: MEMBERS,
+      meId: SAM,
+    })
+    await flushPromises()
+    expect(document.body.querySelector('[data-testid="visit-edit"]')).toBeNull()
+    expect(
+      document.body.querySelector('[data-testid="visit-edit-refused"]')
+        ?.textContent
+    ).toContain('Seuls l’auteur de la visite et ses participants')
+    outsider.unmount()
+    document.body.innerHTML = ''
+
+    const { ApiError } = await import('@/lib/api')
+    apiMock.visits.update.mockRejectedValue(
+      new ApiError(409, 'La visite a changé depuis ta lecture : relis-la')
+    )
+    const wrapper = withClient(VisitsSection, {
+      listingId: LISTING,
+      members: MEMBERS,
+      meId: CHLOE.id,
+    })
+    await flushPromises()
+    ;(
+      document.body.querySelector('[data-testid="visit-edit"]') as HTMLElement
+    ).click()
+    await flushPromises()
+    const select = document.body.querySelector(
+      '[data-testid="visit-edit-form"] select'
+    ) as HTMLSelectElement
+    select.value = '2'
+    select.dispatchEvent(new Event('change'))
+    await flushPromises()
+    ;(
+      document.body.querySelector(
+        '[data-testid="visit-edit-form"] form, [data-testid="visit-edit-form"]'
+      ) as HTMLFormElement
+    ).dispatchEvent(new Event('submit'))
+    await flushPromises()
+    expect(
+      document.body.querySelector('[role="alert"]')?.textContent
+    ).toContain('relis-la')
+    // La saisie reste ouverte : rien de perdu.
+    expect(
+      document.body.querySelector('[data-testid="visit-edit-form"]')
+    ).not.toBeNull()
+    wrapper.unmount()
+  })
+})
+
 describe('VisitsSection : suppressions confirmées dans la carte (lot 19)', () => {
   it('une visite et une photo se suppriment après confirmation en ligne, jamais par window.confirm', async () => {
     const confirm = vi.fn(() => true)

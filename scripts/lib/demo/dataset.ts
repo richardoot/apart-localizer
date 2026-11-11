@@ -337,6 +337,13 @@ export interface DemoDataset {
 // Dates : relatives au jour du seed, à l'heure près
 // ---------------------------------------------------------------------------
 
+/** Lot 24 : `hour:minute` UTC du jour de `now` à Paris (la visite du jour). */
+function parisTodayAt(now: Date, hour: number, minute: number): string {
+  const day = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Paris' })
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return new Date(`${day}T${pad(hour)}:${pad(minute)}:00.000Z`).toISOString()
+}
+
 function clock(now: Date) {
   const midnight = Date.UTC(
     now.getUTCFullYear(),
@@ -344,10 +351,12 @@ function clock(now: Date) {
     now.getUTCDate()
   )
   /** Il y a `days` jours (négatif = à venir), à `hour` heures UTC. */
-  return (days: number, hour = 10, minute = 0): string =>
+  const at = (days: number, hour = 10, minute = 0): string =>
     new Date(
       midnight - days * 86_400_000 + (hour * 60 + minute) * 60_000
     ).toISOString()
+  // Lot 24 : « maintenant », pour la visite du jour à Paris.
+  return Object.assign(at, { now })
 }
 
 const plusMinutes = (iso: string, minutes: number): string =>
@@ -1821,7 +1830,9 @@ function buildListing(
 
   // Visites (sans photo : les photos se téléversent depuis l'application).
   const visits: DemoVisit[] = (VISITS[spec.key] ?? []).map((v, index) => {
-    const visitedAt = at(v.daysAgo, v.hour ?? 18, v.minute ?? 0)
+    const visitedAt = v.parisToday
+      ? parisTodayAt(at.now, v.hour ?? 18, v.minute ?? 0)
+      : at(v.daysAgo, v.hour ?? 18, v.minute ?? 0)
     const parsed = VisitInputSchema.parse({
       visitedAt,
       status: v.status,
@@ -2918,6 +2929,8 @@ const VISITS: Record<
     daysAgo: number
     hour?: number
     minute?: number
+    /** Lot 24 : le jour même à Paris (heure UTC donnée), quelle que soit l'heure du seed. */
+    parisToday?: boolean
     status: 'done' | 'planned'
     participants: DemoHandle[]
     by: DemoHandle
@@ -2955,8 +2968,10 @@ const VISITS: Record<
   ],
   'bastide-t2': [
     {
-      daysAgo: -3,
-      hour: 18,
+      // Lot 24 : la visite du jour (mode visite depuis l'accueil), en fin de journée.
+      daysAgo: 0,
+      parisToday: true,
+      hour: 17,
       minute: 30,
       status: 'planned',
       participants: ['demo', 'demo2'],

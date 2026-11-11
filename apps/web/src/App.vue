@@ -1,12 +1,14 @@
 <script setup lang="ts">
-  import { computed } from 'vue'
+  import { computed, watch } from 'vue'
   import { useRoute } from 'vue-router'
+  import { useQueryClient } from '@tanstack/vue-query'
   import AppHeader from '@/components/AppHeader.vue'
   import BottomNav from '@/components/nav/BottomNav.vue'
   import InvitationBanner from '@/components/workspace/InvitationBanner.vue'
   import FeedbackHost from '@/components/ui/FeedbackHost.vue'
   import UnsavedDialog from '@/components/ui/UnsavedDialog.vue'
   import { useKeyboardOpen } from '@/composables/useKeyboardOpen'
+  import { useOutbox } from '@/composables/useOutbox'
   import { useAuthStore } from '@/stores/auth'
 
   const auth = useAuthStore()
@@ -15,6 +17,19 @@
   const shell = computed(() => auth.isAuthenticated && !route.meta.bare)
   /** Le clavier ouvert retire la barre du bas : elle ne couvre jamais le champ. */
   const keyboard = useKeyboardOpen()
+  /**
+   * Lot 24 : la file des écritures en attente du mode visite repart dès la
+   * connexion, sur n'importe quelle page (pas seulement dans le mode visite).
+   */
+  const outbox = useOutbox()
+  outbox.setQueryClient(useQueryClient())
+  watch(
+    () => auth.user?.id ?? null,
+    id => {
+      if (id) void outbox.start(id)
+    },
+    { immediate: true }
+  )
 </script>
 
 <template>

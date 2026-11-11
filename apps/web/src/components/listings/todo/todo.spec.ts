@@ -583,6 +583,10 @@ describe('onglet « À faire » (lot 19)', () => {
     expect(checklist.findAll('li').map(li => li.text())).toEqual([
       'Vérifier le bruit côté rue',
     ])
+    // Lot 24 : le mode visite, d'un geste.
+    expect(wrapper.find('[data-testid="visit-mode-open"]').text()).toBe(
+      'Mode visite'
+    )
     const card = document.getElementById(`visit-${VISIT.id}`)
     expect(card).not.toBeNull()
     const focus = vi.fn()

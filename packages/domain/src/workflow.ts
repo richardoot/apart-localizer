@@ -435,6 +435,8 @@ interface AgendaInput {
   visitsToPlan: readonly string[]
   opinionsToGive: readonly string[]
   others: readonly DecisionMemberRef[]
+  /** Lot 24 : les visites planifiées d'aujourd'hui (heure de Paris). */
+  today: readonly WorkflowVisitFact[]
   upcoming: readonly WorkflowVisitFact[]
   toApprove: readonly string[]
   followUps: readonly string[]
@@ -496,6 +498,25 @@ function agendaOf(input: AgendaInput): WorkflowAgendaItem[] {
         label: 'à finaliser',
         stage: input.ready[0]?.fromStage ?? null,
         listingId: onlyListing(input.ready.map(p => p.listingId)),
+      })
+    )
+  }
+  if (input.today.length > 0) {
+    const next = input.today[0] as WorkflowVisitFact
+    const when = visitWhen(next.visitedAt)
+    const hour = when.slice(when.indexOf(',') + 2)
+    items.push(
+      item({
+        key: 'visit_today',
+        count: input.today.length,
+        label: plural(
+          input.today.length,
+          'visite aujourd’hui',
+          'visites aujourd’hui'
+        ),
+        stage: 'a-visiter',
+        detail: input.today.length > 1 ? `première à ${hour}` : `à ${hour}`,
+        listingId: onlyListing(input.today.map(v => v.listingId)),
       })
     )
   }
@@ -607,6 +628,8 @@ export function agendaActionLabel(key: WorkflowAgendaItem['key']): string {
       return 'Trancher'
     case 'ready':
       return 'Finaliser'
+    case 'visit_today':
+      return 'Mode visite'
     case 'upcoming_visits':
       return 'Préparer'
     case 'visits_to_plan':
@@ -637,6 +660,21 @@ export function upcomingVisits(
         parisDay(v.visitedAt) >= today
     )
     .sort((a, b) => Date.parse(a.visitedAt) - Date.parse(b.visitedAt))
+}
+
+/**
+ * Lot 24 : les visites à venir séparées entre aujourd'hui (la ligne « visite
+ * aujourd'hui », qui ouvre le mode visite) et les jours suivants.
+ */
+function splitToday(
+  visits: readonly WorkflowVisitFact[],
+  now: Date
+): { today: WorkflowVisitFact[]; upcoming: WorkflowVisitFact[] } {
+  const today = parisDay(now.toISOString())
+  return {
+    today: visits.filter(v => parisDay(v.visitedAt) === today),
+    upcoming: visits.filter(v => parisDay(v.visitedAt) !== today),
+  }
 }
 
 /**
@@ -757,7 +795,10 @@ export function workflowOverview(
       visitsToPlan,
       opinionsToGive,
       others,
-      upcoming: upcomingVisits(input.plannedVisits ?? [], tracked, now),
+      ...splitToday(
+        upcomingVisits(input.plannedVisits ?? [], tracked, now),
+        now
+      ),
       toApprove: agency
         .filter(a => a.kind === 'to_approve')
         .map(a => a.listingId),

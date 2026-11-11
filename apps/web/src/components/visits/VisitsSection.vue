@@ -2,6 +2,7 @@
   import { computed, nextTick, ref } from 'vue'
   import type { ListingStatus, Member, Visit } from '@apart/contracts'
   import { VISIT_STATUS_LABELS } from '@apart/contracts'
+  import { VISIT_EDIT_REFUSAL, canEditVisit } from '@apart/domain'
   import QueryState from '@/components/ui/QueryState.vue'
   import UiAlert from '@/components/ui/UiAlert.vue'
   import UiBadge from '@/components/ui/UiBadge.vue'
@@ -16,7 +17,13 @@
   import { LISTING_STATUS_LABELS } from '@/lib/labels'
   import { buttonClasses, cardClasses } from '@/lib/ui'
   import { useFeedbackStore } from '@/stores/feedback'
-  import { emptyVisitForm, visitFormToInput } from './visit-form'
+  import {
+    emptyVisitForm,
+    visitEditForm,
+    visitEditPayload,
+    visitFormToInput,
+  } from './visit-form'
+  import type { VisitEditForm } from './visit-form'
 
   /**
    * Les visites d'une annonce (lot 6) : planifier ou noter une visite, la
@@ -80,14 +87,58 @@
     return cardAction.run(action)
   }
 
-  async function markDone(visit: Visit): Promise<void> {
-    const result = await onVisit(visit.id, () =>
-      visits.update.mutateAsync({
-        visitId: visit.id,
-        update: { status: 'done', expectedUpdatedAt: visit.updatedAt },
-      })
+  /**
+   * Lot 24 : une visite enregistrée se corrige (compte rendu, points forts et
+   * faibles, note, participants, date) par son auteur ou un participant
+   * (`canEditVisit` de `domain`, la même règle que le serveur) ; « Marquer
+   * faite » ouvre la même saisie et porte le compte rendu.
+   */
+  const editing = ref<{ visitId: string; markDone: boolean } | null>(null)
+  const editForm = ref<VisitEditForm | null>(null)
+  const editDateError = ref<string | null>(null)
+  const canEdit = (visit: Visit): boolean =>
+    props.meId !== null && canEditVisit(visit, props.meId)
+
+  function startEdit(visit: Visit, markDone = false): void {
+    editing.value = { visitId: visit.id, markDone }
+    editForm.value = visitEditForm(visit)
+    editDateError.value = null
+    cardAction.clear()
+    void nextTick(() =>
+      document.getElementById(`visit-edit-report-${visit.id}`)?.focus()
     )
-    if (result) suggested.value = result.suggestedStatus
+  }
+  function stopEdit(): void {
+    editing.value = null
+    editForm.value = null
+  }
+
+  async function saveEdit(visit: Visit): Promise<void> {
+    if (!editForm.value || !editing.value) return
+    const payload = visitEditPayload(
+      editForm.value,
+      visit,
+      editing.value.markDone
+    )
+    if (!payload) {
+      editDateError.value =
+        'Date de visite illisible : choisis le jour et l’heure.'
+      return
+    }
+    editDateError.value = null
+    if (!payload.changed) {
+      stopEdit()
+      return
+    }
+    const result = await onVisit(visit.id, () =>
+      visits.update.mutateAsync({ visitId: visit.id, update: payload.update })
+    )
+    if (!result) return
+    suggested.value = result.suggestedStatus
+    feedback.success(
+      editing.value.markDone ? 'Visite marquée faite.' : 'Visite corrigée.'
+    )
+    stopEdit()
   }
 
   /**
@@ -299,11 +350,96 @@
               avec {{ visit.participantIds.map(nameOf).join(', ') }}
             </span>
           </div>
-          <p v-if="visit.report" class="text-sm whitespace-pre-line">
-            {{ visit.report }}
-          </p>
-          <p v-if="visit.pros" class="text-sm text-good">+ {{ visit.pros }}</p>
-          <p v-if="visit.cons" class="text-sm text-bad">− {{ visit.cons }}</p>
+          <form
+            v-if="editing?.visitId === visit.id && editForm"
+            class="grid gap-3"
+            novalidate
+            data-testid="visit-edit-form"
+            @submit.prevent="saveEdit(visit)"
+          >
+            <UiField
+              :id="`visit-edit-date-${visit.id}`"
+              v-model="editForm.visitedAt"
+              label="Date et heure"
+              quiet
+              type="datetime-local"
+              align="left"
+              :error="editDateError"
+            />
+            <fieldset class="flex flex-wrap gap-x-4 text-sm">
+              <legend class="mb-1 text-sm font-medium">Participants</legend>
+              <UiCheckbox
+                v-for="member in members.filter(
+                  m =>
+                    m.status === 'active' || visit.participantIds.includes(m.id)
+                )"
+                :key="member.id"
+                v-model="editForm.participantIds"
+                :value="member.id"
+                :label="member.displayName"
+              />
+            </fieldset>
+            <UiField
+              :id="`visit-edit-rating-${visit.id}`"
+              v-model="editForm.rating"
+              as="select"
+              label="Note"
+              quiet
+              :options="RATING_OPTIONS"
+            />
+            <UiField
+              :id="`visit-edit-report-${visit.id}`"
+              v-model="editForm.report"
+              as="textarea"
+              label="Compte rendu"
+              quiet
+              :rows="4"
+              data-testid="visit-edit-report"
+            />
+            <div class="grid gap-3 sm:grid-cols-2">
+              <UiField
+                :id="`visit-edit-pros-${visit.id}`"
+                v-model="editForm.pros"
+                as="textarea"
+                label="Points positifs"
+                quiet
+                :rows="2"
+              />
+              <UiField
+                :id="`visit-edit-cons-${visit.id}`"
+                v-model="editForm.cons"
+                as="textarea"
+                label="Points négatifs"
+                quiet
+                :rows="2"
+              />
+            </div>
+            <div class="flex flex-wrap justify-end gap-2">
+              <UiButton @click="stopEdit">Annuler</UiButton>
+              <UiButton
+                type="submit"
+                variant="primary"
+                :loading="visits.update.isPending.value"
+                loading-label="Enregistrement…"
+                data-testid="visit-edit-save"
+              >
+                {{
+                  editing.markDone
+                    ? 'Enregistrer comme faite'
+                    : 'Enregistrer la visite'
+                }}
+              </UiButton>
+            </div>
+          </form>
+          <template v-else>
+            <p v-if="visit.report" class="text-sm whitespace-pre-line">
+              {{ visit.report }}
+            </p>
+            <p v-if="visit.pros" class="text-sm text-good">
+              + {{ visit.pros }}
+            </p>
+            <p v-if="visit.cons" class="text-sm text-bad">− {{ visit.cons }}</p>
+          </template>
           <ul
             v-if="visit.photos.length"
             class="grid grid-cols-3 gap-2 sm:grid-cols-4"
@@ -374,12 +510,44 @@
               />
             </label>
             <UiButton
-              v-if="visit.status === 'planned'"
+              v-if="visit.status === 'planned' && editing?.visitId !== visit.id"
               size="sm"
-              @click="markDone(visit)"
+              data-testid="visit-mark-done"
+              @click="startEdit(visit, true)"
             >
               Marquer faite
             </UiButton>
+            <UiButton
+              v-if="
+                visit.status === 'done' &&
+                canEdit(visit) &&
+                editing?.visitId !== visit.id
+              "
+              size="sm"
+              icon="edit"
+              data-testid="visit-edit"
+              @click="startEdit(visit)"
+            >
+              Modifier
+            </UiButton>
+            <UiButton
+              size="sm"
+              icon="camera"
+              :to="{
+                name: 'visit-mode',
+                params: { id: listingId },
+                query: { visite: visit.id },
+              }"
+              data-testid="visit-mode-link"
+            >
+              Mode visite
+            </UiButton>
+            <span
+              v-if="visit.status === 'done' && !canEdit(visit)"
+              class="text-sm text-muted"
+              data-testid="visit-edit-refused"
+              >{{ VISIT_EDIT_REFUSAL }}</span
+            >
             <span
               v-if="visit.createdById === meId"
               class="ml-auto inline-flex flex-wrap items-center gap-2"

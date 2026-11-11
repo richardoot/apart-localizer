@@ -31,6 +31,8 @@ export interface TriagePick {
   listingId: string | null
   /** Le choix a mis l'annonce « À trancher ensemble ». */
   toSettle?: boolean
+  /** Lot 24 : affiché tout de suite, la réponse du serveur n'est pas encore là. */
+  pending?: boolean
 }
 
 export interface TriageSnapshot {
@@ -134,6 +136,29 @@ export function useTriageSession<T extends { id: string }>(input: {
     return snapshot.value?.picks.pop() ?? null
   }
 
+  /** Lot 24 : la réponse du serveur complète un choix affiché d'avance. */
+  function patch(id: string, value: Partial<TriagePick>): void {
+    const pick = snapshot.value?.picks.find(p => p.id === id && p.pending)
+    if (pick) Object.assign(pick, value, { pending: false })
+  }
+
+  /**
+   * Lot 24 : le serveur a refusé un choix affiché d'avance. Le choix sort du
+   * bilan et la carte revient tout de suite, à la place de la carte
+   * courante (celle-ci passe juste après) : rien n'est perdu ni décalé.
+   */
+  function rollback(id: string): TriagePick | null {
+    const snap = snapshot.value
+    if (!snap) return null
+    const index = snap.picks.findIndex(p => p.id === id && p.pending)
+    if (index < 0) return null
+    const [pick] = snap.picks.splice(index, 1)
+    const at = snap.order.indexOf(id)
+    if (at >= 0) snap.order.splice(at, 1)
+    snap.order.splice(snap.picks.length, 0, id)
+    return pick ?? null
+  }
+
   function setOutcome(outcome: 'sent' | 'solo', text: string): void {
     if (!snapshot.value) return
     snapshot.value.outcome = outcome
@@ -152,6 +177,8 @@ export function useTriageSession<T extends { id: string }>(input: {
     ensureSnapshot,
     push,
     pop,
+    patch,
+    rollback,
     setOutcome,
   }
 }

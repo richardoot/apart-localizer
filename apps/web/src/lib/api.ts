@@ -594,6 +594,9 @@ export const api = {
   visits: {
     list: (listingId: string) =>
       apiFetch<Visit[]>(`/listings/${listingId}/visits`),
+    /** Lot 24 : une visite (la file relit la visite après un conflit). */
+    get: (listingId: string, visitId: string) =>
+      apiFetch<Visit>(`/listings/${listingId}/visits/${visitId}`),
     create: (listingId: string, input: VisitInputRaw) =>
       apiFetch<VisitWriteResult>(`/listings/${listingId}/visits`, {
         method: 'POST',
@@ -797,6 +800,9 @@ export const api = {
     ),
 
   opinions: {
+    /** Lot 24 : les avis que je peux voir (le mien toujours), après un conflit. */
+    list: (listingId: string) =>
+      apiFetch<Opinion[]>(`/listings/${listingId}/opinions`),
     upsertMine: (listingId: string, input: OpinionInputRaw) =>
       apiFetch<Opinion>(`/listings/${listingId}/opinions/me`, {
         method: 'PUT',

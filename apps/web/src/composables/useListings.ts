@@ -9,12 +9,14 @@ import type {
   ListingStatusChange,
   OfferInputRaw,
   OfferUpdate,
+  OpenTasks,
   OpinionInputRaw,
   PriceEventInput,
   SensitivityRequestInput,
   TaskUpdate,
 } from '@apart/contracts'
 import { api } from '@/lib/api'
+import { withTaskDone, withoutOpenTask } from '@/lib/optimistic'
 
 /** Lot 23 : toutes les tâches ouvertes (accueil). */
 export const openTasksKey = ['tasks', 'open'] as const
@@ -228,6 +230,10 @@ export function useListingMutations() {
       }),
     onSuccess: (_task, { id }) => refreshTasks(id),
   })
+  /**
+   * Lot 24 : cocher s'affiche tout de suite (fiche, toutes les tâches) ; un
+   * refus du serveur remet l'état d'avant (l'erreur s'affiche dans la ligne).
+   */
   const updateTask = useMutation({
     mutationFn: ({
       id,
@@ -238,7 +244,36 @@ export function useListingMutations() {
       taskId: string
       update: TaskUpdate
     }) => api.tasks.update(id, taskId, update),
-    onSuccess: (_task, { id }) => refreshTasks(id),
+    onMutate: async ({ id, taskId, update }) => {
+      if (update.done === undefined)
+        return { detail: undefined, open: undefined }
+      const done = update.done
+      await Promise.all([
+        client.cancelQueries({ queryKey: listingKeys.detail(id) }),
+        client.cancelQueries({ queryKey: openTasksKey }),
+      ])
+      const detail = client.getQueryData<EvaluatedListing>(
+        listingKeys.detail(id)
+      )
+      const open = client.getQueryData<OpenTasks>(openTasksKey)
+      if (detail) {
+        client.setQueryData(
+          listingKeys.detail(id),
+          withTaskDone(detail, taskId, done)
+        )
+      }
+      if (open && done) {
+        client.setQueryData(openTasksKey, withoutOpenTask(open, taskId))
+      }
+      return { detail, open }
+    },
+    onError: (_error, { id }, context) => {
+      if (context?.detail) {
+        client.setQueryData(listingKeys.detail(id), context.detail)
+      }
+      if (context?.open) client.setQueryData(openTasksKey, context.open)
+    },
+    onSettled: (_task, _error, { id }) => refreshTasks(id),
   })
   const removeTask = useMutation({
     mutationFn: ({ id, taskId }: { id: string; taskId: string }) =>

@@ -52,6 +52,11 @@ export function agendaTarget(item: WorkflowAgendaItem): RouteLocationRaw {
       return { name: 'settle' }
     case 'overdue_tasks':
       return { name: 'tasks', query: { retard: '1' } }
+    case 'visit_today':
+      // Lot 24 : la visite du jour ouvre le mode visite de son annonce.
+      return item.listingId
+        ? { name: 'visit-mode', params: { id: item.listingId } }
+        : stage(item.stage)
     case 'messages_to_approve':
     case 'follow_ups_due':
       return item.listingId
@@ -72,6 +77,7 @@ export const AGENDA_TONES: Record<WorkflowAgendaKey, string> = {
   to_confirm: 'bg-warn-soft text-warn',
   to_settle: 'bg-ai-soft text-ai',
   ready: 'bg-info-soft text-info',
+  visit_today: 'bg-good-soft text-good',
   upcoming_visits: 'bg-good-soft text-good',
   visits_to_plan: 'bg-surface-2 text-fg',
   opinions_to_give: 'bg-opinion-soft text-opinion',

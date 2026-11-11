@@ -875,3 +875,29 @@ describe('lot 21 : suivre ses annonces, étape par étape', () => {
     )
   })
 })
+
+describe('Lot 24 : la visite du jour', () => {
+  it('une visite planifiée aujourd’hui à Paris (même seedée à minuit passé) et une à venir sans compte rendu', () => {
+    const today = (iso: string) =>
+      new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Europe/Paris' })
+    for (const now of [NOW, new Date('2026-11-10T23:30:00Z')]) {
+      const data = buildDemoDataset(now)
+      const bastide = data.listings.find(l => l.key === 'bastide-t2')
+      const visit = bastide?.visits[0]
+      expect(visit?.status).toBe('planned')
+      expect(today(visit?.visitedAt ?? '')).toBe(today(now.toISOString()))
+      expect(bastide?.input.status).toBe('to_visit')
+    }
+    const merignac = dataset.listings.find(l => l.key === 'merignac-t2')
+    expect(merignac?.visits[0]).toMatchObject({
+      status: 'planned',
+      report: null,
+    })
+    // Des points à vérifier sur place pour le mode visite.
+    expect(
+      dataset.listings
+        .find(l => l.key === 'bastide-t2')
+        ?.tasks.some(t => /^vérifier/i.test(t.label) && !t.done)
+    ).toBe(true)
+  })
+})

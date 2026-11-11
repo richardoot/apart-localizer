@@ -33,6 +33,7 @@
   import { useAction } from '@/composables/useAction'
   import QueryState from '@/components/ui/QueryState.vue'
   import UiAlert from '@/components/ui/UiAlert.vue'
+  import { errorMessage } from '@/lib/errors'
   import UiBadge from '@/components/ui/UiBadge.vue'
   import UiButton from '@/components/ui/UiButton.vue'
   import UiCard from '@/components/ui/UiCard.vue'
@@ -215,13 +216,53 @@
     await action.run(task)
   }
 
+  /**
+   * Lot 24 : un choix s'applique à l'écran tout de suite (la carte suivante
+   * arrive sans attendre le serveur) ; la réponse complète le bilan. Si le
+   * serveur refuse, le choix sort du bilan, la carte revient et l'erreur le
+   * dit au-dessus des boutons. Terminer, décider ou quitter attend les
+   * réponses en route.
+   */
+  const inflight = new Set<Promise<void>>()
+  const failure = ref<string | null>(null)
+  const shownError = computed(() => failure.value ?? action.error.value)
+  function optimistic(
+    item: QueueItem,
+    pick: TriagePick,
+    send: () => Promise<{ message: string; patch: Partial<TriagePick> }>
+  ): void {
+    failure.value = null
+    action.clear()
+    session.push({ ...pick, pending: true })
+    asking.value = false
+    refuseAsking.value = false
+    announce.value = `${pick.label}. ${progressLine.value}`
+    const task = (async () => {
+      try {
+        const { message, patch } = await send()
+        session.patch(item.id, patch)
+        announce.value = `${message} ${progressLine.value}`
+      } catch (error) {
+        session.rollback(item.id)
+        failure.value = `« ${item.card.title} » : ${errorMessage(error, 'le choix n’a pas été enregistré.')} La carte est revenue.`
+        announce.value = failure.value
+      }
+    })()
+    inflight.add(task)
+    void task.finally(() => inflight.delete(task))
+  }
+  const settled = () => Promise.all([...inflight])
+
   const stageWord = computed(() => primaryLabel(stage.value))
 
   function pickFrom(
     item: QueueItem,
     action: DecisionChoice,
     reason: string | null,
-    result: DecisionResult,
+    result: Pick<
+      DecisionResult,
+      'outcome' | 'proposal' | 'createdListing' | 'listingId'
+    >,
     statusBefore: ListingStatus | null
   ): TriagePick {
     const label =
@@ -253,8 +294,21 @@
   /** Trier : une proposition, ou tout de suite dans un espace à un membre. */
   function decide(choice: DecisionChoice, reason: string | null = null): void {
     const item = current.value
-    if (!item) return
-    void run(async () => {
+    if (!item || busy.value) return
+    const statusBefore = item.listing?.listing.status ?? null
+    const ahead = pickFrom(
+      item,
+      choice,
+      reason,
+      {
+        outcome: 'applied',
+        proposal: null,
+        createdListing: false,
+        listingId: null,
+      },
+      statusBefore
+    )
+    optimistic(item, { ...ahead, undo: null }, async () => {
       const result = await actions.decide.mutateAsync({
         target: {
           kind: item.listing ? 'listing' : 'draft',
@@ -267,17 +321,10 @@
           ? { expectedStatus: item.listing.listing.status }
           : {}),
       })
-      session.push(
-        pickFrom(
-          item,
-          choice,
-          reason,
-          result,
-          item.listing?.listing.status ?? null
-        )
-      )
-      asking.value = false
-      announce.value = `${result.message} ${progressLine.value}`
+      return {
+        message: result.message,
+        patch: pickFrom(item, choice, reason, result, statusBefore),
+      }
     })
   }
 
@@ -303,33 +350,39 @@
   /** Confirmer : d'accord, non avec son choix à la place, ou plus tard. */
   function agree(): void {
     const item = current.value
-    if (!item?.proposal) return
+    if (!item?.proposal || busy.value) return
     const proposal = item.proposal
-    void run(async () => {
-      const result = await actions.respond.mutateAsync({
-        id: proposal.id,
-        input: { agree: true, sessionId: sessionId.value },
-      })
-      const out = proposal.choice === 'discard'
-      session.push({
+    const out = proposal.choice === 'discard'
+    optimistic(
+      item,
+      {
         id: item.id,
         title: item.card.title,
         label: `D’accord : ${proposal.choiceLabel}`,
-        result:
-          result.outcome === 'stale'
-            ? 'Caduque'
-            : out
-              ? 'Écartée'
-              : `Passée en ${proposal.choiceLabel}`,
+        result: out ? 'Écartée' : `Passée en ${proposal.choiceLabel}`,
         action: 'agree',
         proposalId: proposal.id,
-        undo: result.createdListing ? null : 'proposal',
+        undo: null,
         statusBefore: proposal.fromStatus,
-        createdListing: result.createdListing,
-        listingId: result.listingId,
-      })
-      announce.value = `${result.message} ${progressLine.value}`
-    })
+        createdListing: false,
+        listingId: null,
+      },
+      async () => {
+        const result = await actions.respond.mutateAsync({
+          id: proposal.id,
+          input: { agree: true, sessionId: sessionId.value },
+        })
+        return {
+          message: result.message,
+          patch: {
+            ...(result.outcome === 'stale' ? { result: 'Caduque' } : {}),
+            undo: result.createdListing ? null : 'proposal',
+            createdListing: result.createdListing,
+            listingId: result.listingId,
+          },
+        }
+      }
+    )
   }
 
   const refuseAsking = ref(false)
@@ -351,34 +404,36 @@
 
   function sendRefuse(choice: DecisionChoice, reason: string | null): void {
     const item = current.value
-    if (!item?.proposal) return
+    if (!item?.proposal || busy.value) return
     const proposal = item.proposal
-    void run(async () => {
-      const result = await actions.respond.mutateAsync({
-        id: proposal.id,
-        input: {
-          agree: false,
-          choice,
-          ...(reason ? { reason } : {}),
-          sessionId: sessionId.value,
-        },
-      })
-      session.push({
+    optimistic(
+      item,
+      {
         id: item.id,
         title: item.card.title,
         label: refuseLabel(proposal.choice),
         result: 'À trancher ensemble',
         action: 'refuse',
         proposalId: proposal.id,
-        undo: 'proposal',
+        undo: null,
         statusBefore: proposal.fromStatus,
         createdListing: false,
         listingId: null,
         toSettle: true,
-      })
-      refuseAsking.value = false
-      announce.value = `${result.message} ${progressLine.value}`
-    })
+      },
+      async () => {
+        const result = await actions.respond.mutateAsync({
+          id: proposal.id,
+          input: {
+            agree: false,
+            choice,
+            ...(reason ? { reason } : {}),
+            sessionId: sessionId.value,
+          },
+        })
+        return { message: result.message, patch: { undo: 'proposal' } }
+      }
+    )
   }
 
   function later(): void {
@@ -402,6 +457,7 @@
   const canUndo = computed(
     () =>
       lastPick.value !== null &&
+      !lastPick.value.pending &&
       lastPick.value.undo !== null &&
       !session.snapshot.value?.outcome
   )
@@ -479,6 +535,7 @@
 
   function finishAndNotify(): void {
     void run(async () => {
+      await settled()
       const result = await actions.finishSession.mutateAsync(sessionId.value)
       session.setOutcome('sent', result.message)
       announce.value = result.message
@@ -487,6 +544,7 @@
 
   function decideNow(): void {
     void run(async () => {
+      await settled()
       const result = await actions.decideSessionNow.mutateAsync(sessionId.value)
       session.setOutcome('solo', result.message)
       announce.value = result.message
@@ -509,6 +567,7 @@
   /** Quitter : s'il y a des propositions, l'autre est prévenu une fois. */
   function quit(): void {
     void run(async () => {
+      await settled()
       if (hasProposals.value && !outcome.value) {
         await actions.finishSession.mutateAsync(sessionId.value)
       } else {
@@ -845,8 +904,8 @@
               class="fixed inset-x-0 bottom-0 z-10 flex flex-col gap-2 border-t border-line bg-surface px-4 pt-2.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:static sm:px-0 sm:pt-3.5 sm:pb-0"
             >
               <!-- Lot 22 : l'échec d'un choix se dit au-dessus des boutons. -->
-              <UiAlert v-if="action.error.value" data-testid="triage-failure">
-                {{ action.error.value }}
+              <UiAlert v-if="shownError" data-testid="triage-failure">
+                {{ shownError }}
               </UiAlert>
               <template v-if="confirmMode && current?.proposal">
                 <DiscardReasons
@@ -1036,7 +1095,7 @@
               Retour aux annonces
             </UiButton>
           </div>
-          <UiAlert v-if="action.error.value">{{ action.error.value }}</UiAlert>
+          <UiAlert v-if="shownError">{{ shownError }}</UiAlert>
         </article>
       </QueryState>
     </main>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import FitBadge from './FitBadge.vue'
 import FitSummary from './FitSummary.vue'
 import DpeBadge from './DpeBadge.vue'
@@ -48,8 +48,9 @@ describe('badges', () => {
 })
 
 describe('ProvenanceBadge', () => {
-  it('l’IA porte sa confiance en pourcentage, colorée, avec l’extrait au survol', () => {
+  it('l’IA porte sa confiance en pourcentage, colorée ; lot 24 : l’extrait se lit au toucher', async () => {
     const sure = mount(ProvenanceBadge, {
+      attachTo: document.body,
       props: {
         provenance: {
           source: 'ai',
@@ -58,15 +59,24 @@ describe('ProvenanceBadge', () => {
         },
       },
     })
-    expect(sure.text()).toBe('IA 95 %')
-    expect(sure.classes()).toContain('text-good')
-    expect(sure.attributes('title')).toContain('« 189 000 € FAI »')
-    expect(sure.attributes('data-source')).toBe('ai')
+    const badge = sure.get('[data-testid="provenance-badge"]')
+    expect(badge.element.tagName).toBe('BUTTON')
+    expect(badge.text()).toBe('IA 95 %')
+    expect(badge.classes()).toContain('text-good')
+    expect(badge.attributes('title')).toContain('« 189 000 € FAI »')
+    expect(badge.attributes('data-source')).toBe('ai')
+    await badge.trigger('click')
+    await flushPromises()
+    expect(
+      document.body.querySelector('[data-testid="provenance-detail"]')
+        ?.textContent
+    ).toContain('Extrait : « 189 000 € FAI »')
+    sure.unmount()
     const doubtful = mount(ProvenanceBadge, {
       props: { provenance: { source: 'ai', confidence: 0.3 } },
     })
     expect(doubtful.text()).toBe('IA 30 %')
-    expect(doubtful.classes()).toContain('text-bad')
+    expect(doubtful.get('button').classes()).toContain('text-bad')
   })
 
   it('annonce, vous, open data, estimé ; rien sans provenance', () => {

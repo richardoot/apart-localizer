@@ -107,7 +107,7 @@ describe('« Ce qui t’attend » sur l’accueil', () => {
     })
   })
 
-  it('une seule visite à venir ouvre son annonce ; ce matin compte encore', () => {
+  it('une seule visite à venir ouvre son annonce ; ce matin compte encore (lot 24 : en « visite aujourd’hui »)', () => {
     const o = overview({
       listings: [
         listingFact({ id: 'a', status: 'to_visit', plannedVisits: 1 }),
@@ -117,10 +117,11 @@ describe('« Ce qui t’attend » sur l’accueil', () => {
         { listingId: 'a', visitedAt: '2026-11-10T07:00:00.000Z' },
       ],
     })
-    expect(line(o, 'upcoming_visits')).toMatchObject({
+    expect(line(o, 'upcoming_visits')).toBeUndefined()
+    expect(line(o, 'visit_today')).toMatchObject({
       count: 1,
-      label: 'visite à venir',
-      detail: 'mardi 10 novembre, 8 h',
+      label: 'visite aujourd’hui',
+      detail: 'à 8 h',
       listingId: 'a',
     })
   })
@@ -276,6 +277,7 @@ describe('« Ce qui t’attend » sur l’accueil', () => {
         'to_confirm',
         'to_settle',
         'ready',
+        'visit_today',
         'upcoming_visits',
         'visits_to_plan',
         'opinions_to_give',
@@ -288,6 +290,7 @@ describe('« Ce qui t’attend » sur l’accueil', () => {
       'Confirmer',
       'Trancher',
       'Finaliser',
+      'Mode visite',
       'Préparer',
       'Planifier',
       'Donner mon avis',

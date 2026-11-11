@@ -420,7 +420,7 @@ describe('le mode tri', () => {
     wrapper.unmount()
   })
 
-  it('une erreur se lit et ne fait pas avancer', async () => {
+  it('lot 24 : un refus du serveur remet la carte, avec l’erreur', async () => {
     const { ApiError } = await import('@/lib/api')
     actions.decide.mockRejectedValue(new ApiError(409, 'Déjà proposé'))
     const { wrapper } = await mountPage({
@@ -428,8 +428,60 @@ describe('le mode tri', () => {
       session: SESSION,
     })
     await press('a')
-    expect(wrapper.get('[role="alert"]').text()).toBe('Déjà proposé')
+    expect(wrapper.get('[role="alert"]').text()).toBe(
+      '« [Exemple] Annonce 1 » : Déjà proposé La carte est revenue.'
+    )
     expect(wrapper.get('h1').text()).toBe('[Exemple] Annonce 1')
+    expect(wrapper.get('[data-testid="progress"]').text()).toBe(
+      'À valider · 1 sur 2'
+    )
+    wrapper.unmount()
+  })
+
+  it('lot 24 : le choix s’applique tout de suite, avant la réponse ; Annuler attend la réponse', async () => {
+    let answer: (value: unknown) => void = () => undefined
+    actions.decide.mockReturnValue(
+      new Promise(resolve => {
+        answer = resolve
+      })
+    )
+    const { wrapper } = await mountPage({
+      etape: 'a-valider',
+      session: SESSION,
+    })
+    await press('a')
+    // La carte suivante est là alors que le serveur n'a pas répondu.
+    expect(wrapper.get('h1').text()).toBe('[Exemple] Annonce 2')
+    expect(wrapper.find('[data-testid="triage-undo"]').exists()).toBe(false)
+    answer(proposed)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="triage-undo"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="triage-live"]').text()).toContain(
+      'En attente de Chloé'
+    )
+    wrapper.unmount()
+  })
+
+  it('lot 24 : une carte refusée revient même après un autre choix', async () => {
+    const { ApiError } = await import('@/lib/api')
+    let refuse: (error: unknown) => void = () => undefined
+    actions.decide.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        refuse = reject
+      })
+    )
+    const { wrapper } = await mountPage({
+      etape: 'a-valider',
+      session: SESSION,
+    })
+    await press('a')
+    expect(wrapper.get('h1').text()).toBe('[Exemple] Annonce 2')
+    refuse(new ApiError(400, 'Brouillon déjà traité'))
+    await flushPromises()
+    expect(wrapper.get('h1').text()).toBe('[Exemple] Annonce 1')
+    expect(wrapper.get('[data-testid="triage-failure"]').text()).toContain(
+      'Brouillon déjà traité'
+    )
     wrapper.unmount()
   })
 })

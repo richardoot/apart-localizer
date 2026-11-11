@@ -1,5 +1,5 @@
 import type { Task } from '@apart/contracts'
-import { isAskableTask } from '@apart/domain'
+import { visitPoints } from '@apart/domain'
 import type { TodoFilter, TodoGroup, TodoItem } from '@apart/domain'
 import type { Tone } from './ui'
 
@@ -72,27 +72,19 @@ export function requestRows(
   return rows
 }
 
-const CHECK = /^vérifier\b/i
-
 /**
- * « Pendant la visite » : ce qui reste à vérifier sur place, soit les tâches
- * à nous, ouvertes, libellées « Vérifier … », et (lot 20) les points « À
- * revoir à la contre-visite » proposés depuis « Nos avis ». Rien d'autre
- * n'est inventé.
+ * « Pendant la visite » : ce qui reste à vérifier sur place. La liste est
+ * celle du mode visite (lot 24, `visitPoints` de `domain` : les points à
+ * revoir à la contre-visite, puis nos tâches « Vérifier … » et « Évaluer
+ * … »), réduite aux points encore ouverts. Rien d'autre n'est inventé.
  */
 export function visitChecklist(
   tasks: readonly (Pick<Task, 'id' | 'label' | 'field' | 'done' | 'position'> &
     Partial<Pick<Task, 'origin'>>)[]
 ): Array<{ id: string; label: string }> {
-  return [...tasks]
-    .filter(
-      t =>
-        !t.done &&
-        !isAskableTask(t) &&
-        (t.origin === 'opinion' || CHECK.test(t.label.trim()))
-    )
-    .sort((a, b) => a.position - b.position)
-    .map(t => ({ id: t.id, label: t.label }))
+  return visitPoints(tasks)
+    .filter(p => !p.done)
+    .map(p => ({ id: p.id, label: p.label }))
 }
 
 /** Le nombre de lignes par filtre (« Agence (3) »). */

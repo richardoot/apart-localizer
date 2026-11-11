@@ -265,7 +265,7 @@
               : []
           "
           :members="members"
-          :busy="actions.busy.value || mutations.updateTask.isPending.value"
+          :busy="actions.busy.value"
           :error="errorFor(row.key)"
           @toggle="done => toggle(row.key, row.id, done)"
           @remove="remove(row.key, row.id)"
@@ -370,20 +370,27 @@
       aria-label="Contact, visite et visites"
     >
       <ExchangesSection :listing-id="item.listing.id" />
-      <UiCard
-        v-if="checklist.length"
-        title="Pendant la visite"
-        class="grid gap-2"
-        data-testid="visit-checklist"
-      >
-        <ul class="grid list-disc gap-1 pl-5 text-sm leading-relaxed">
+      <UiCard title="Pendant la visite" class="grid gap-2">
+        <ul
+          v-if="checklist.length"
+          class="grid list-disc gap-1 pl-5 text-sm leading-relaxed"
+          data-testid="visit-checklist"
+        >
           <li v-for="point in checklist" :key="point.id">{{ point.label }}</li>
         </ul>
-        <p class="text-xs text-muted">
-          Les tâches « Vérifier … » de la liste et les points à revoir à la
-          contre-visite (« Nos avis »). Les photos et le compte rendu se
-          saisissent dans la visite.
+        <p class="text-sm text-muted">
+          Le mode visite réunit sur un écran les points à vérifier (à cocher),
+          les photos, une remarque, tes notes et le compte rendu ; il enregistre
+          au fil de l’eau, même avec un réseau faible.
         </p>
+        <UiButton
+          variant="primary"
+          icon="camera"
+          :to="{ name: 'visit-mode', params: { id: item.listing.id } }"
+          data-testid="visit-mode-open"
+        >
+          Mode visite
+        </UiButton>
       </UiCard>
       <UiCard as="div">
         <VisitsSection

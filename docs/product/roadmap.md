@@ -1082,7 +1082,9 @@ mieux) ; une tâche « en retard » reste une tâche ouverte depuis quatorze jou
 
 ## Lot 24 : mode visite et capture mobile
 
-Statut : validé, à faire. Téléphone visé : iPhone.
+Statut : livré le 10 novembre 2026 (code, tests, documentation ; ADR 0034), sans migration ni
+variable nouvelle ni outil MCP nouveau ; à relire sur un vrai iPhone et pendant une vraie visite.
+Téléphone visé : iPhone.
 
 - **Pourquoi** : pendant une visite (parcours P4), cocher les points, photographier, noter les
   critères et écrire une remarque se font dans trois onglets ; « Pendant la visite » est une liste
@@ -1106,6 +1108,59 @@ Statut : validé, à faire. Téléphone visé : iPhone.
 Fini quand : une visite se note d'une seule main sans changer d'onglet, même avec un réseau
 faible ; une annonce partagée s'enregistre en moins d'une minute. (À confirmer par une vraie
 visite.)
+
+Livré :
+
+- **Mode visite** (`/annonces/:id/visite`, plein écran sans la barre du bas) : depuis la ligne
+  « visite aujourd'hui » de l'accueil (nouvelle, elle ouvre le mode visite), « Mode visite » dans
+  « À faire » et sur chaque carte de visite. Un seul défilement : « À vérifier » cochable
+  (`visitPoints` de `domain` : les points de contre-visite nés des avis, puis nos tâches
+  « Vérifier … » et « Évaluer … », rien d'inventé), photo (appareil ou photothèque), remarque
+  rapide ajoutée au compte rendu avec l'heure, mes notes par critère et la note globale (à
+  l'aveugle : rien des autres à l'écran ; notes fusionnées, garde-fou, regroupées quinze secondes
+  pour une seule notification), compte rendu, points forts et faibles, note, participants ; en
+  bas, « Terminer la visite » puis « Passer à « Visité » ? ». Sans visite prévue, « Commencer la
+  visite maintenant ».
+- **Réseau faible** : une file des écritures en attente, gardée sur l'appareil (IndexedDB, par
+  membre), rejouée dans l'ordre, qui survit au rechargement, ne double rien (visite retrouvée par
+  sa date, remarque jamais doublée par le serveur, conflit d'une écriture déjà appliquée
+  reconnu, photo reprise à son étape) et ne retire rien sans le choix du membre (« Réessayer »,
+  « Abandonner ») ; un vrai conflit se dit et n'écrase rien. Les photos attendent sur l'appareil,
+  déjà réduites et sans position GPS. L'écran se rouvre sans réseau sur le dernier état lu.
+- **Visite modifiable** : compte rendu, points forts et faibles, note, participants et date se
+  corrigent après coup par l'auteur ou un participant (`canEditVisit`, refus 403 côté serveur),
+  une visite planifiée par tout membre ; « Marquer faite » porte le compte rendu ; journalisé.
+- **Capture en cinq champs** : après l'analyse, titre, prix, surface, commune, lien, puis
+  « Enregistrer » ; « Saisie complète » ouvre le reste sur le même modèle (charge identique,
+  testée) ; la pastille de provenance se touche pour lire l'extrait ; les doublons gardent leurs
+  choix, en cibles de 44 px.
+- **Sur iPhone, coller le lien** : « Ajouter » ouvre le lien avec « Coller » (presse-papiers lu
+  au toucher, sinon on le dit et le champ prend le focus), « Ajouter des captures d'écran » depuis
+  Photos, le texte en option ; l'écran dit qu'un lien seul ne remplit rien et propose
+  « Enregistrer avec le lien seul » (lien et portail, titre et prix à saisir, doublons cherchés
+  par le lien). La cible de partage Android est inchangée.
+- **Réponses immédiates** : tâche cochée (fiche, toutes les tâches) et choix du tri à l'écran
+  tout de suite ; refus du serveur : l'état revient, avec le message, la carte du tri revient.
+- Jeu de démo : une visite planifiée aujourd'hui (Bastide, en fin de journée, quelle que soit
+  l'heure du seed) et une visite à venir sans compte rendu (Mérignac).
+
+Mesuré à la livraison (Chromium, jeu fictif, 390 × 844) : de l'accueil au compte rendu, **un
+écran et aucun changement d'onglet** (trois avant) ; 21 gestes dont 10 pour les neuf critères et
+la note globale (une vingtaine avant, sans compter les notes, sur trois onglets) ; le mode visite
+fait 3,3 écrans. API coupée : six changements montrés « en attente du réseau », gardés après un
+rechargement (bandeau du dernier état lu, photo en attente visible), rejoués au retour : la
+remarque une fois, la photo une fois, deux points cochés, les notes et le compte rendu. Capture :
+**5 champs** avant « Enregistrer » (45 avant), 2 champs sur le premier écran ; lien collé et
+capture ajoutée puis enregistrée avec le lien seul en 9 gestes (6 s de script ; l'analyse par IA
+n'a pas pu être chronométrée, la clé n'est pas configurée en local). Un lien déjà suivi : « Même
+annonce », boutons de 44 px.
+
+Reste : une vraie visite sur iPhone (appareil photo et format rendu, presse-papiers, IndexedDB
+avec des photos dans l'application installée, marges de l'encoche, clavier) et le temps d'une
+capture avec l'IA ; la file ne couvre que le mode visite (la fiche, le tri et la capture demandent
+le réseau) ; une session expirée pendant une longue coupure attend la reconnexion ; Safari peut
+effacer une file restée plus de sept jours sans usage ; les mots par critère et la phrase de mon
+avis se saisissent dans la fiche, pas dans le mode visite.
 
 ## Lot 25 : la fiche répond d'abord
 

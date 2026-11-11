@@ -21,6 +21,16 @@ export const ICONS = {
     'M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
   ],
   plus: ['M12 5v14', 'M5 12h14'],
+  // Lot 24 : l'appareil photo et la photothèque du mode visite, le presse-papiers.
+  camera: [
+    'M4 8a1 1 0 0 1 1-1h3l1.5-2h5L16 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8z',
+    'M12 10a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  ],
+  image: ['M4 5h16v14H4z', 'M4 16l5-5 4 4 2-2 5 5', 'M15.5 8.5h.01'],
+  clipboard: [
+    'M9 4h6v3H9z',
+    'M9 5H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-3',
+  ],
   minus: ['M5 12h14'],
   trash: [
     'M4 7h16',

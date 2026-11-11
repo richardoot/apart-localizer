@@ -15,6 +15,25 @@ elles sont protégées.
   retire les métadonnées EXIF (position GPS comprise). Une photo ne se supprime que par son
   auteur ; supprimer une visite supprime ses photos du stockage. Les photos ne passent ni par le
   MCP ni par l'export.
+- **Mode visite (lot 24, ADR 0034)** : ce qui est fait pendant une visite (points cochés,
+  remarques, notes, compte rendu, photos) est d'abord gardé **sur l'appareil**, dans la base
+  IndexedDB `apart-localizer` du navigateur, puis envoyé à l'API dès que le serveur répond. On y
+  trouve : la file des écritures en attente, une par membre connecté (clé `outbox:<UUID
+Supabase>` ; la file d'un membre n'est jamais rejouée sous le compte d'un autre) ; les photos
+  pas encore envoyées, **déjà réduites et sans métadonnées EXIF** (position GPS comprise),
+  effacées dès que leur envoi est terminé ou que le membre abandonne l'écriture ; le dernier état
+  lu de l'écran de visite (`visit-mode:<UUID>:<annonce>` : titre, statut, commune, tâches, **mon**
+  avis seulement, critères des avis, visites **sans photo ni lien signé**, noms des membres),
+  pour rouvrir l'écran sans réseau. Rien n'y est chiffré au-delà de ce que fait le système ;
+  la déconnexion ne vide pas la file (elle repart à la reconnexion du même membre). Les
+  écritures passées restent quelques minutes en mémoire de la page, jamais sur le disque. Sans
+  IndexedDB, la file ne vit qu'en mémoire et l'écran le dit. Safari peut effacer ce stockage
+  après sept jours sans usage du site (règle de WebKit, l'application installée sur l'écran
+  d'accueil a son propre compteur) : une file non envoyée depuis une semaine peut être perdue.
+- **Presse-papiers (lot 24)** : « Coller » lit le presse-papiers seulement au toucher du bouton
+  (Safari demande de confirmer « Coller ») ; le texte lu sert à remplir le lien et, s'il est long,
+  le texte de l'annonce, sans être envoyé ailleurs qu'à l'analyse habituelle quand le membre la
+  lance.
 - **Export** (`GET /export`) : réservé aux membres de l'espace, ne contient ni photo, ni adresse
   e-mail de membre, ni identifiant de connexion ; `Cache-Control: no-store`. Le contact de
   l'annonceur et les demandes (lot 17) sont dans le JSON, jamais dans le CSV.

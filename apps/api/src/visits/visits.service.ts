@@ -28,7 +28,12 @@ import type {
   VisitUpdate,
   VisitWriteResult,
 } from '@apart/contracts'
-import { formatActivityDate } from '@apart/domain'
+import {
+  appendVisitRemark,
+  formatActivityDate,
+  visitEditRefusal,
+  visitRemarkLine,
+} from '@apart/domain'
 import { ActivityService } from '../activity/activity.service'
 import { toTaskDto } from '../listings/listing.mapper'
 import { PrismaService } from '../prisma/prisma.service'
@@ -270,10 +275,14 @@ export class VisitsService {
         `La visite a changé depuis ta lecture (modifiée le ${current.updatedAt.toISOString()}) : relis-la`
       )
     }
+    // Lot 24 : une visite faite ne se corrige que par son auteur ou un participant.
+    const refusal = visitEditRefusal(current, member.id)
+    if (refusal) throw new ForbiddenException(refusal)
     if (update.participantIds) {
       await this.checkParticipants(member, update.participantIds)
     }
-    const { expectedUpdatedAt: _guard, ...changes } = update
+    const { expectedUpdatedAt: _guard, remark, ...changes } = update
+    const remarkLine = remark ? visitRemarkLine(remark.text, remark.at) : null
     const data: Prisma.VisitUpdateInput = {
       ...(changes.visitedAt !== undefined
         ? { visitedAt: new Date(changes.visitedAt) }
@@ -288,6 +297,19 @@ export class VisitsService {
       ...(changes.rating !== undefined ? { rating: changes.rating } : {}),
     }
     const saved = await this.prisma.$transaction(async tx => {
+      if (remarkLine) {
+        // Lot 24 : la remarque s'ajoute au compte rendu tel qu'il est en base
+        // (verrou de la ligne), sans garde-fou : deux membres peuvent en
+        // ajouter en même temps ; renvoyée, elle n'est pas doublée.
+        const [locked] = await tx.$queryRaw<{ report: string | null }[]>`
+          SELECT report FROM "app"."visits" WHERE id = ${visitId} FOR UPDATE`
+        data.report = appendVisitRemark(
+          changes.report !== undefined
+            ? changes.report
+            : (locked?.report ?? null),
+          remarkLine
+        )
+      }
       const visit = await tx.visit.update({
         where: { id: visitId },
         data,
@@ -315,7 +337,11 @@ export class VisitsService {
             cons: current.cons,
             rating: current.rating,
           },
-          after: { visitId, ...changes },
+          after: {
+            visitId,
+            ...changes,
+            ...(remarkLine ? { remark: remarkLine } : {}),
+          },
         },
         tx
       )

@@ -66,6 +66,18 @@ describe('agendaTarget', () => {
     })
   })
 
+  it('lot 24 : la visite du jour ouvre le mode visite ; plusieurs, l’étape', () => {
+    expect(
+      agendaTarget(
+        item({ key: 'visit_today', stage: 'a-visiter', listingId: ID })
+      )
+    ).toEqual({ name: 'visit-mode', params: { id: ID } })
+    expect(
+      agendaTarget(item({ key: 'visit_today', stage: 'a-visiter' }))
+    ).toEqual({ name: 'listings', query: { etape: 'a-visiter' } })
+    expect(AGENDA_TONES.visit_today).toBe('bg-good-soft text-good')
+  })
+
   it('les messages : la fiche, ou le bloc de l’accueil ; les tâches : la vue en retard', () => {
     expect(agendaTarget(item({ key: 'messages_to_approve' }))).toEqual({
       name: 'home',

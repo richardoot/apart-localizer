@@ -573,11 +573,25 @@ export function describeActivity(
         )
       )
     }
-    case 'visit.updated':
+    case 'visit.updated': {
+      // Lot 24 : une remarque rapide du mode visite se lit en entier.
+      const remark = text(after, 'remark')
+      const rest = isRecord(after)
+        ? Object.fromEntries(
+            Object.entries(after).filter(([key]) => key !== 'remark')
+          )
+        : after
+      const changes = activityChanges(before, rest, members)
+      if (remark && changes.length === 0) {
+        return describe(`a ajouté une remarque à une visite : « ${remark} »`)
+      }
       return describe(
-        'a modifié une visite',
-        activityChanges(before, after, members)
+        remark
+          ? `a modifié une visite et ajouté une remarque : « ${remark} »`
+          : 'a modifié une visite',
+        changes
       )
+    }
     case 'visit.deleted':
       return describe('a supprimé une visite')
     case 'visit.photo_added':

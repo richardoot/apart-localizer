@@ -1,8 +1,9 @@
 <script setup lang="ts">
-  import { computed, nextTick, onMounted, ref } from 'vue'
+  import { computed, nextTick, onMounted, ref, watch } from 'vue'
   import { useRoute } from 'vue-router'
   import type {
     CriteriaMatchChanges,
+    DuplicateCandidate,
     ExtractionResult,
     ListingDraft,
     ListingInput,
@@ -36,12 +37,14 @@
   } from '@/lib/listing-form'
   import type { ListingForm as ListingFormModel } from '@/lib/listing-form'
   import { parseNumberInput } from '@/lib/format'
+  import { errorsOutsideQuick } from '@/lib/capture'
   import { conflictListingOf, conflictText } from '@/lib/listing-links'
   import type { ConflictListing } from '@/lib/listing-links'
   import { provenanceAfterEdits } from '@/lib/provenance'
   import DuplicatesBanner from './DuplicatesBanner.vue'
   import ExtractionPane from './ExtractionPane.vue'
   import ListingForm from './ListingForm.vue'
+  import ListingQuickForm from './ListingQuickForm.vue'
   import MetricsPreview from './MetricsPreview.vue'
   import MissingFieldsNotice from './MissingFieldsNotice.vue'
   import RentalChecksList from './RentalChecksList.vue'
@@ -57,11 +60,20 @@
   const tab = ref<Tab>('paste')
   const tabOptions = computed(() => [
     { value: 'paste' as const, label: 'Coller une annonce' },
-    {
-      value: 'manual' as const,
-      label: extraction.value ? 'Fiche pré-remplie' : 'Saisie manuelle',
-    },
+    { value: 'manual' as const, label: 'Saisie complète' },
   ])
+  /**
+   * Lot 24 (ADR 0034) : après l'analyse (ou avec un lien seul), la relecture
+   * courte : titre, prix, surface, commune et lien, puis « Enregistrer ». Le
+   * reste se complète dans la fiche, où les champs lus par l'IA sont marqués ;
+   * « Saisie complète » ouvre le formulaire entier, sur le même modèle (ce qui
+   * part au serveur ne change pas).
+   */
+  const review = ref(false)
+  const reviewing = computed(() => tab.value === 'paste' && review.value)
+  /** Un lien seul : aucun champ lu, les doublons cherchés par le lien et ce qui est saisi. */
+  const linkOnly = ref(false)
+  const probed = ref<DuplicateCandidate[]>([])
 
   // Sans routeur (tests du panneau seul), ni partage ni brouillon.
   const query = useRoute()?.query ?? {}
@@ -178,7 +190,13 @@
     )
   })
   const visibleDuplicates = computed(() =>
-    ignoreDuplicates.value ? [] : (extraction.value?.duplicates ?? [])
+    ignoreDuplicates.value
+      ? []
+      : (extraction.value?.duplicates ?? (linkOnly.value ? probed.value : []))
+  )
+  /** Lot 24 : les erreurs que les cinq champs n'affichent pas (« Saisie complète » les montre). */
+  const hiddenErrors = computed(() =>
+    reviewing.value ? errorsOutsideQuick(errors.value) : []
   )
 
   /** Lot 18 : le lien de l'annonce saisie, à ajouter à une fiche existante. */
@@ -237,21 +255,74 @@
     ignoreDuplicates.value = false
     errors.value = {}
     failure.value = null
-    tab.value = 'manual'
+    linkOnly.value = false
+    review.value = true
+    tab.value = 'paste'
   }
 
-  /** Sans IA : la saisie manuelle, pré-remplie avec ce que le partage a transmis. */
+  /** Lot 24 : les doublons d'une annonce sans analyse, par le lien et ce qui est saisi. */
+  let probeTimer: ReturnType<typeof setTimeout> | null = null
+  async function probeDuplicates(): Promise<void> {
+    const url = form.value.url.trim()
+    const price = parseNumberInput(form.value.price)
+    const surface = parseNumberInput(form.value.surface)
+    const commune = form.value.commune.trim()
+    try {
+      probed.value =
+        (await api.listings.findDuplicates({
+          ...(url ? { url } : {}),
+          ...(price && price > 0 ? { price } : {}),
+          ...(surface && surface > 0 ? { surface } : {}),
+          ...(commune ? { commune } : {}),
+        })) ?? []
+    } catch {
+      // Sans réponse, le serveur refusera encore un lien déjà suivi à l'enregistrement.
+      probed.value = []
+    }
+  }
+  watch(
+    () => [
+      form.value.url,
+      form.value.price,
+      form.value.surface,
+      form.value.commune,
+    ],
+    () => {
+      if (!linkOnly.value) return
+      if (probeTimer) clearTimeout(probeTimer)
+      probeTimer = setTimeout(() => void probeDuplicates(), 600)
+    }
+  )
+
+  /**
+   * Lot 24 : un lien seul (rien à analyser) : la relecture courte avec le
+   * lien et son portail ; le titre et le prix sont à saisir. Rien n'est lu
+   * sur la page du portail.
+   */
+  function startLinkOnly(url: string, text: string | null = null): void {
+    const filled = emptyForm()
+    filled.url = url
+    filled.source = listingSourceFromUrl(url)
+    if (shared?.title) filled.title = shared.title
+    if (text) filled.description = text
+    form.value = filled
+    extraction.value = null
+    extractedForm.value = null
+    errors.value = {}
+    failure.value = null
+    linkOnly.value = true
+    review.value = true
+    tab.value = 'paste'
+    void probeDuplicates()
+  }
+
+  /** Sans IA : la relecture courte, avec ce que le partage a transmis. */
   function onUnavailable(): void {
     if (!shared) return
-    const filled = emptyForm()
-    filled.title = shared.title ?? 'Annonce partagée'
-    filled.url = shared.url ?? ''
-    filled.source = listingSourceFromUrl(shared.url)
-    filled.description = shared.text ?? ''
-    form.value = filled
-    tab.value = 'manual'
+    startLinkOnly(shared.url ?? '', shared.text ?? null)
+    if (!form.value.title) form.value.title = shared.title ?? 'Annonce partagée'
     notice.value =
-      "L'analyse par IA n'est pas configurée : le lien et le texte partagés sont repris, complète la fiche."
+      "L'analyse par IA n'est pas disponible : le lien et le texte partagés sont repris, complète l’essentiel."
   }
 
   /** Un brouillon reçu par e-mail ouvre comme une fiche extraite, doublons compris. */
@@ -288,6 +359,7 @@
     } catch (err) {
       failure.value = errorMessage(err, 'Brouillon introuvable.')
       tab.value = 'manual'
+      review.value = false
     }
   }
 
@@ -341,6 +413,9 @@
     extractedForm.value = null
     form.value = emptyForm()
     errors.value = {}
+    linkOnly.value = false
+    probed.value = []
+    review.value = false
     tab.value = 'paste'
   }
 
@@ -358,6 +433,17 @@
       const invalid = document.querySelector<HTMLElement>(
         '[data-testid="create-form"] [aria-invalid="true"]'
       )
+      // Une erreur hors des cinq champs : la saisie complète la montre.
+      if (!invalid && reviewing.value && hiddenErrors.value.length) {
+        tab.value = 'manual'
+        await nextTick()
+        document
+          .querySelector<HTMLElement>(
+            '[data-testid="create-form"] [aria-invalid="true"]'
+          )
+          ?.focus?.({ preventScroll: true })
+        return
+      }
       invalid?.focus?.({ preventScroll: true })
       invalid?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
       return
@@ -424,14 +510,88 @@
       </p>
 
       <ExtractionPane
-        v-if="tab === 'paste'"
+        v-if="tab === 'paste' && !review"
         :initial-text="sharedText"
         :initial-url="shared?.url ?? null"
         :auto-analyze="Boolean(shared && (sharedText || shared.url))"
         @extracted="onExtracted"
         @unavailable="onUnavailable"
         @dirty="value => (pasted = value)"
+        @link-only="url => startLinkOnly(url)"
       />
+
+      <template v-else-if="reviewing">
+        <div
+          class="grid gap-2 text-sm"
+          :class="cardClasses('default', 'sm')"
+          data-testid="quick-summary"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <p class="min-w-0 flex-[1_1_16rem]">
+              <template v-if="extraction">
+                <strong>{{
+                  draft?.extractedBy === 'parser'
+                    ? 'Fiche pré-remplie par l’analyseur simple.'
+                    : draft?.extractedBy === 'claude'
+                      ? 'Fiche pré-remplie avec ce que Claude a lu sur la page.'
+                      : 'Fiche pré-remplie par l’IA.'
+                }}</strong>
+                Relis l’essentiel, puis enregistre : le reste se complète dans
+                la fiche, où les champs lus sont marqués. Touche une pastille
+                pour lire l’extrait.
+              </template>
+              <template v-else>
+                <strong>Le lien et son portail, rien d’autre.</strong>
+                L’application n’ouvre pas la page du portail : saisis au moins
+                le titre et le prix, le reste se complète dans la fiche.
+              </template>
+            </p>
+            <UiButton size="sm" @click="startOver">Recommencer</UiButton>
+          </div>
+          <p
+            v-if="extraction"
+            class="text-xs text-muted"
+            data-testid="extraction-cost"
+          >
+            {{ describeUsage(extraction.usage) }}
+          </p>
+          <MissingFieldsNotice v-if="extraction" :missing="missingFields" />
+        </div>
+
+        <DuplicatesBanner
+          :duplicates="visibleDuplicates"
+          :link-url="linkUrl"
+          :busy="attachLink.isPending.value || merge.isPending.value"
+          @open="id => emit('open', id)"
+          @ignore="ignoreDuplicates = true"
+          @attach="attach"
+        />
+
+        <div data-testid="create-form">
+          <ListingQuickForm
+            v-model="form"
+            :errors="errors"
+            :field-sources="fieldSources"
+            :missing="missingPaths"
+          />
+        </div>
+        <UiButton
+          variant="link"
+          class="justify-self-start"
+          data-testid="full-form"
+          @click="tab = 'manual'"
+        >
+          Saisie complète (tous les champs)
+        </UiButton>
+        <UiAlert v-if="hiddenErrors.length" data-testid="create-other-errors">
+          <p class="font-semibold">À corriger dans la saisie complète :</p>
+          <ul class="list-disc pl-5">
+            <li v-for="message in hiddenErrors" :key="message">
+              {{ message }}
+            </li>
+          </ul>
+        </UiAlert>
+      </template>
 
       <template v-else>
         <div
@@ -450,7 +610,7 @@
                     : 'Fiche pré-remplie par l’IA.'
               }}</strong>
               Vérifie chaque champ : les pastilles disent d’où vient la valeur
-              et avec quelle confiance ; survole-les pour lire l’extrait. Un
+              et avec quelle confiance ; touche-les pour lire l’extrait. Un
               champ que tu modifies passe en « toi ».
             </p>
             <UiButton size="sm" @click="startOver">Recommencer</UiButton>
@@ -502,44 +662,45 @@
             </li>
           </ul>
         </UiAlert>
-        <UiAlert v-if="failure" data-testid="create-failure">
-          <p>{{ failure }}</p>
-          <template v-if="conflict" #actions>
-            <UiButton
-              v-if="!conflict.sameLink && linkUrl"
-              variant="outline"
-              size="sm"
-              :disabled="attachLink.isPending.value || merge.isPending.value"
-              data-action="conflict-attach"
-              @click="attach(conflict.id)"
-            >
-              C’est la même : ajouter ce lien à « {{ conflict.title }} »
-            </UiButton>
-            <UiButton
-              size="sm"
-              data-action="conflict-open"
-              @click="emit('open', conflict.id)"
-            >
-              Ouvrir « {{ conflict.title }} »
-            </UiButton>
-            <UiButton
-              v-if="!conflict.sameLink"
-              size="sm"
-              class="text-warn"
-              data-action="conflict-create"
-              @click="createAnyway"
-            >
-              C’en est une autre : créer quand même
-            </UiButton>
-          </template>
-        </UiAlert>
       </template>
+      <UiAlert v-if="failure" data-testid="create-failure">
+        <p>{{ failure }}</p>
+        <template v-if="conflict" #actions>
+          <UiButton
+            v-if="!conflict.sameLink && linkUrl"
+            variant="outline"
+            size="sm"
+            :disabled="attachLink.isPending.value || merge.isPending.value"
+            data-action="conflict-attach"
+            @click="attach(conflict.id)"
+          >
+            C’est la même : ajouter ce lien à « {{ conflict.title }} »
+          </UiButton>
+          <UiButton
+            size="sm"
+            data-action="conflict-open"
+            @click="emit('open', conflict.id)"
+          >
+            Ouvrir « {{ conflict.title }} »
+          </UiButton>
+          <UiButton
+            v-if="!conflict.sameLink"
+            size="sm"
+            class="text-warn"
+            data-action="conflict-create"
+            @click="createAnyway"
+          >
+            C’en est une autre : créer quand même
+          </UiButton>
+        </template>
+      </UiAlert>
     </div>
     <template #footer>
       <div class="flex justify-end gap-2">
-        <UiButton @click="requestClose">Annuler</UiButton>
+        <UiButton class="max-sm:flex-1" @click="requestClose">Annuler</UiButton>
         <UiButton
-          v-if="tab === 'manual'"
+          v-if="tab === 'manual' || reviewing"
+          class="max-sm:flex-[2]"
           variant="primary"
           :loading="create.isPending.value"
           loading-label="Enregistrement…"

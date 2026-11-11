@@ -58,6 +58,14 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Trier', requiresAuth: true, bare: true },
   },
   {
+    // Lot 24 : le mode visite, plein écran (sans la barre du bas), pour la
+    // visite sur place d'une annonce ; `?visite=` choisit la visite.
+    path: '/annonces/:id/visite',
+    name: 'visit-mode',
+    component: () => import('@/views/VisitModePage.vue'),
+    meta: { title: 'Mode visite', requiresAuth: true, bare: true },
+  },
+  {
     // Lot 21 : « À trancher ensemble ».
     path: '/annonces/a-trancher',
     name: 'settle',

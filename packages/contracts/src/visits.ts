@@ -41,6 +41,8 @@ export const VISIT_PHOTOS_MAX = 40
 export const VISIT_PHOTO_MAX_EDGE = 2048
 /** Grand côté des vignettes, en pixels. */
 export const VISIT_THUMBNAIL_EDGE = 360
+/** Lot 24 : longueur maximale d'une remarque rapide du mode visite. */
+export const VISIT_REMARK_MAX = 500
 
 const isoDateTime = z.iso.datetime({ offset: true })
 
@@ -87,6 +89,22 @@ export const VisitUpdateSchema = z
     pros: z.string().max(5000).nullable().optional(),
     cons: z.string().max(5000).nullable().optional(),
     rating: z.number().int().min(0).max(5).optional(),
+    remark: z
+      .object({
+        text: z
+          .string()
+          .trim()
+          .min(1)
+          .max(VISIT_REMARK_MAX)
+          .describe(`Remarque rapide (${VISIT_REMARK_MAX} caractères au plus)`),
+        at: isoDateTime.describe(
+          'Heure de la remarque sur l’appareil, ISO 8601 (elle préfixe la ligne : « 18 h 42 : … »)'
+        ),
+      })
+      .optional()
+      .describe(
+        'Lot 24 : une remarque ajoutée à la fin du compte rendu, horodatée ; sans garde-fou (deux membres peuvent en ajouter en même temps) et jamais doublée si elle est renvoyée'
+      ),
     expectedUpdatedAt: z
       .string()
       .datetime()

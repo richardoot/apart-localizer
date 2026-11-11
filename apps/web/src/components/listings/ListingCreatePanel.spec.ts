@@ -12,7 +12,7 @@ import {
 const apiMock = vi.hoisted(() => ({
   workspace: vi.fn(),
   assumptions: { current: vi.fn() },
-  listings: { extract: vi.fn(), create: vi.fn() },
+  listings: { extract: vi.fn(), create: vi.fn(), findDuplicates: vi.fn() },
   drafts: { get: vi.fn(), decide: vi.fn(), list: vi.fn(), merge: vi.fn() },
   links: { add: vi.fn() },
 }))
@@ -111,7 +111,7 @@ describe('ListingCreatePanel', () => {
     ]
     expect(tabs.map(t => t.textContent?.trim())).toEqual([
       'Coller une annonce',
-      'Saisie manuelle',
+      'Saisie complète',
     ])
     tabs[1]?.click()
     await flushPromises()
@@ -153,6 +153,15 @@ describe('ListingCreatePanel', () => {
       ?.querySelector('[data-source="ai"]')
     expect(priceBadge?.textContent?.trim()).toBe('IA 95 %')
     expect(priceBadge?.getAttribute('title')).toContain('189 000 € FAI')
+    // Lot 24 : cinq champs d'abord ; « Saisie complète » ouvre le reste.
+    expect(
+      [...body().querySelectorAll('[data-testid="quick-form"] input')].map(
+        i => i.id
+      )
+    ).toEqual(['f-title', 'f-price', 'f-surface', 'f-commune', 'f-url'])
+    expect(body().querySelector('#f-rent')).toBeNull()
+    query<HTMLButtonElement>('[data-testid="full-form"]').click()
+    await flushPromises()
     expect(
       body()
         .querySelector('[data-field="f-lng"]')
@@ -273,13 +282,11 @@ describe('ListingCreatePanel', () => {
       url: 'https://www.leboncoin.fr/ad/ventes_immobilieres/2890123456',
       images: [],
     })
-    expect(
-      body().querySelector('[data-testid="extraction-summary"]')
-    ).not.toBeNull()
+    expect(body().querySelector('[data-testid="quick-summary"]')).not.toBeNull()
     wrapper.unmount()
   })
 
-  it('partage sans IA : saisie manuelle pré-remplie avec le lien et le texte', async () => {
+  it('partage sans IA : la relecture courte pré-remplie avec le lien et le texte', async () => {
     routeState.query = {
       partage: '1',
       url: 'https://www.seloger.com/annonces/achat/appartement/talence-33/218765432.htm',
@@ -296,11 +303,120 @@ describe('ListingCreatePanel', () => {
       'https://www.seloger.com/annonces/achat/appartement/talence-33/218765432.htm'
     )
     expect(query<HTMLInputElement>('#f-title').value).toBe('T3 Talence')
-    expect(query<HTMLSelectElement>('#f-source').value).toBe('seloger')
     expect(
       body().querySelector('[data-testid="create-notice"]')?.textContent
-    ).toContain("L'analyse par IA n'est pas configurée")
+    ).toContain("L'analyse par IA n'est pas disponible")
+    query<HTMLButtonElement>('[data-testid="full-form"]').click()
+    await flushPromises()
+    expect(query<HTMLSelectElement>('#f-source').value).toBe('seloger')
+    expect(query<HTMLTextAreaElement>('#f-description').value).toBe(
+      'T3 lumineux'
+    )
     wrapper.unmount()
+  })
+
+  it('lot 24 : la relecture courte envoie exactement ce que la saisie complète enverrait', async () => {
+    const result = fakeExtractionResult()
+    apiMock.listings.extract.mockResolvedValue(result)
+    async function saveVia(full: boolean): Promise<unknown> {
+      apiMock.listings.create.mockClear()
+      const wrapper = mountPanel()
+      await flushPromises()
+      await fill('#x-text', 'Appartement T2 Talence Forum - 189 000 € FAI')
+      query<HTMLButtonElement>('[data-testid="analyze"]').click()
+      await flushPromises()
+      await fill('#f-price', '185000')
+      if (full) {
+        query<HTMLButtonElement>('[data-testid="full-form"]').click()
+        await flushPromises()
+      }
+      query<HTMLButtonElement>('[data-testid="save"]').click()
+      await flushPromises()
+      const sent = apiMock.listings.create.mock.calls[0]?.[0]
+      wrapper.unmount()
+      document.body.innerHTML = ''
+      return sent
+    }
+    const quick = await saveVia(false)
+    const complete = await saveVia(true)
+    expect(quick).toBeDefined()
+    expect(quick).toEqual(complete)
+  })
+
+  it('lot 24 : un lien seul, honnête : rien n’est lu, le titre et le prix à saisir, doublons cherchés par le lien', async () => {
+    apiMock.listings.findDuplicates.mockResolvedValue([similar])
+    const wrapper = mountPanel()
+    await flushPromises()
+    await fill(
+      '#x-url',
+      'https://www.seloger.com/annonces/achat/appartement/talence-33/218765432.htm'
+    )
+    expect(query('[data-testid="capture-hint"]').textContent).toContain(
+      'Un lien seul ne dit rien à l’IA'
+    )
+    expect(query<HTMLButtonElement>('[data-testid="analyze"]').disabled).toBe(
+      true
+    )
+    query<HTMLButtonElement>('[data-testid="link-only"]').click()
+    await flushPromises()
+    expect(apiMock.listings.extract).not.toHaveBeenCalled()
+    expect(query('[data-testid="quick-summary"]').textContent).toContain(
+      'Le lien et son portail, rien d’autre.'
+    )
+    expect(apiMock.listings.findDuplicates).toHaveBeenCalledWith({
+      url: 'https://www.seloger.com/annonces/achat/appartement/talence-33/218765432.htm',
+    })
+    expect(query('[data-testid="duplicates-banner"]').textContent).toContain(
+      'T2 fictif'
+    )
+    expect(query<HTMLInputElement>('#f-title').value).toBe('')
+    // Sans titre ni prix : refusé au champ, focus sur le premier.
+    query<HTMLButtonElement>('[data-testid="save"]').click()
+    await flushPromises()
+    expect(apiMock.listings.create).not.toHaveBeenCalled()
+    expect(query('#f-title').getAttribute('aria-invalid')).toBe('true')
+    await fill('#f-title', 'T3 Talence')
+    await fill('#f-price', '210000')
+    query<HTMLButtonElement>('[data-testid="save"]').click()
+    await flushPromises()
+    expect(apiMock.listings.create.mock.calls[0]?.[0]).toMatchObject({
+      title: 'T3 Talence',
+      price: 210_000,
+      url: 'https://www.seloger.com/annonces/achat/appartement/talence-33/218765432.htm',
+      source: 'seloger',
+    })
+    wrapper.unmount()
+  })
+
+  it('lot 24 : « Coller » lit le lien du presse-papiers ; refusé, il le dit et laisse coller', async () => {
+    const readText = vi
+      .fn()
+      .mockResolvedValueOnce(
+        'Regarde : https://www.leboncoin.fr/ad/ventes_immobilieres/2890123456'
+      )
+      .mockRejectedValueOnce(new DOMException('refusé', 'NotAllowedError'))
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { readText },
+      configurable: true,
+    })
+    const wrapper = mountPanel()
+    await flushPromises()
+    query<HTMLButtonElement>('[data-testid="paste-link"]').click()
+    await flushPromises()
+    expect(query<HTMLInputElement>('#x-url').value).toBe(
+      'https://www.leboncoin.fr/ad/ventes_immobilieres/2890123456'
+    )
+    query<HTMLButtonElement>('[data-testid="paste-link"]').click()
+    await flushPromises()
+    expect(query('[data-testid="clipboard-note"]').textContent).toContain(
+      'touche le champ, puis « Coller »'
+    )
+    expect(document.activeElement?.id).toBe('x-url')
+    wrapper.unmount()
+    Object.defineProperty(navigator, 'clipboard', {
+      value: undefined,
+      configurable: true,
+    })
   })
 
   it('brouillon reçu par e-mail : fiche pré-remplie, doublons, puis validé à l’enregistrement', async () => {
