@@ -452,7 +452,12 @@ ADR 0040 : le plafond d'encadrement (`rentalPlan.referenceRentPerM2`) est posé 
 loyer de marché (`rentalPlan.marketRent`) se retient dans l'application à partir des loyers
 comparables (`add_rent_comparable`), l'adresse normalisée, l'identifiant BAN et le code INSEE
 viennent du géocodeur : envoyés, ils sont ignorés (vides à la création ; une fiche rendue par
-`extract_listing` garde ce que le géocodeur du serveur a rendu).
+`extract_listing` garde ce que le géocodeur du serveur a rendu). La taxe foncière et la part non
+récupérable des charges de provenance `ai` ne sont gardées qu'avec leur extrait
+(`fieldSources.<champ>.evidence`) ; dictées, `user`. Sinon elles restent vides, l'application les
+estime et le dit, et la réponse porte « Non gardé : … ». Avec un point, l'adresse est quand même
+géocodée sans bouger le repère : code INSEE, et identifiant BAN et adresse normalisée à moins de
+150 m du point.
 
 #### `update_listing`
 
@@ -477,7 +482,9 @@ de l'espace).
 
 ADR 0040 : le plafond d'encadrement, le loyer de marché, l'adresse normalisée, l'identifiant BAN et
 le code INSEE ne s'écrivent pas ici : la fiche garde les siens, avec leur provenance, même quand
-`rentalPlan` ou `location` est remplacé.
+`rentalPlan` ou `location` est remplacé ; une nouvelle adresse avec un nouveau point les reprend du
+géocodeur. Une taxe foncière ou une part non récupérable de provenance `ai` sans extrait n'est pas
+écrite (« Non gardé : … » dans la réponse ; refus si le patch ne contenait que cela).
 
 #### `set_listing_status`
 

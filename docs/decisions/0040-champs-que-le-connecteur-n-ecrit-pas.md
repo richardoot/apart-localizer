@@ -1,4 +1,4 @@
-# 0040. Champs que le connecteur n'écrit pas : plafond d'encadrement, loyer de marché retenu, sorties du géocodeur
+# 0040. Champs que le connecteur n'écrit pas : plafond d'encadrement, loyer de marché retenu, sorties du géocodeur, estimations
 
 Statut : acceptée, 11 novembre 2026. Complète 0011 (données ouvertes : plafond posé d'office), 0012
 (loyers comparables) et 0022 (placement du repère).
@@ -18,6 +18,9 @@ pose lui-même, ou qu'un membre retient dans l'application :
   membre retient par « Retenir » dans la fiche. Le connecteur pouvait l'écrire sans aucun
   comparable : la louabilité lisait alors un « marché constaté » qui n'avait été constaté par
   personne.
+- **`propertyTax` et `nonRecoverableChargesMonthly`** : absents, ils sont estimés par `compute`
+  (un mois de loyer ; 25 % des charges annuelles / 12) et la fiche le dit. Une estimation faite
+  dans la conversation et envoyée comme valeur passait pour un montant réel.
 - **`location.addressNormalized`, `banId`, `inseeCode`** : ce sont des sorties du géocodeur. Avec un
   point fourni, rien n'est géocodé, et ces clés restaient celles de la conversation ; or l'identifiant
   BAN guide la recherche du DPE à l'ADEME.
@@ -39,6 +42,20 @@ pose lui-même, ou qu'un membre retient dans l'application :
    membre, et le dériver demanderait de lire les comparables à chaque évaluation, liste comprise.
    Pour Claude, la voie est `add_rent_comparable`, puis « Retenir » dans l'application.
 
+5. **Montants estimables** (`CONNECTOR_ESTIMATED_KEYS` : taxe foncière, part non récupérable des
+   charges) : par le connecteur, une valeur de provenance `ai` n'est gardée qu'avec son extrait
+   (`fieldSources.<champ>.evidence`, que `extract_listing` joint à une valeur lue quand le modèle la cite) ; dictée par le membre
+   (`user`), elle est gardée. Sinon elle est ignorée : vide à la création (l'application l'estime et
+   le dit), inchangée à la modification ; la réponse le dit (`describeUnsupportedEstimates`), et une
+   modification qui ne contenait que cela est refusée avec cette phrase.
+6. **Point saisi** (tous les canaux) : il prime toujours et le repère ne bouge pas, mais l'adresse
+   de l'annonce est quand même géocodée pour ce que seul le géocodeur rend
+   (`addressFieldsForManualPoint`, `manual-point.ts`) : le code INSEE, et l'identifiant BAN et
+   l'adresse normalisée si l'adresse trouvée, au numéro ou à la rue, est à moins de
+   `MANUAL_POINT_ADDRESS_TOLERANCE_METERS` (150 m) du point ; loin du point, ils restent vides (ils
+   décriraient un autre endroit). À la création, et à la modification quand l'adresse ou la commune
+   change avec un nouveau point (le BAN de l'ancienne adresse n'est plus gardé).
+
 ## Conséquences
 
 - Une annonce créée par Claude dans une commune encadrée reçoit le plafond de l'arrêté, même si la
@@ -49,5 +66,8 @@ pose lui-même, ou qu'un membre retient dans l'application :
   ignorées.
 - Écarté : refuser l'appel (422) quand ces clés sont envoyées. La fiche rendue par `extract_listing`
   et les anciennes conversations les portent ; les ignorer suit le précédent du lot 19.
-- Reste ouvert : le loyer visé (`targetRent`) peut encore être choisi par Claude ; c'est une
-  décision du membre, qui pèse sur le verdict et le prix cible.
+- Une annonce placée par un point lu sur une carte retrouve la recherche du DPE par identifiant BAN
+  et la recherche par commune et surface.
+- Écarté : détecter une estimation par sa valeur (égale à la formule) ; un arrondi la masque.
+- Gardé tel quel, au choix du membre : le loyer visé (`targetRent`) peut être proposé par Claude
+  (provenance `ai`, affichée), bien qu'il pèse sur le verdict et le prix cible.

@@ -93,6 +93,7 @@ import type {
 } from '@apart/contracts'
 import {
   checkFreshness,
+  describeUnsupportedEstimates,
   sellerText,
   formatCheckDay,
   describeListingFit,
@@ -106,6 +107,7 @@ import {
   precisionBadge,
   rentObservatoryLine,
   toleranceSummary,
+  unsupportedEstimates,
 } from '@apart/domain'
 import type { Member } from '../generated/prisma'
 import type { DuplicatesService } from '../listings/duplicates.service'
@@ -1101,6 +1103,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         "Enregistre une annonce normalisée dans l'espace, avec la checklist par défaut et un premier événement de prix. Elle apparaît « nouvelle » pour les autres membres. " +
         "Donnez tout ce que l'annonce dit (prix FAI, surface Carrez, pièces, étage, DPE, charges annuelles, taxe foncière, adresse, commune, quartier, loyer visé dans rentalPlan, point GeoJSON [lng, lat] si connu) ; sans point, l'adresse est géocodée côté serveur. " +
         'Le serveur pose seul le plafond d’encadrement (`rentalPlan.referenceRentPerM2`, d’après l’arrêté), l’adresse normalisée, l’identifiant BAN et le code INSEE (`location.addressNormalized`, `banId`, `inseeCode`, d’après le géocodeur) ; le loyer de marché (`rentalPlan.marketRent`) se retient dans l’application à partir des loyers comparables (add_rent_comparable) : ces clés envoyées sont ignorées. ' +
+        'La taxe foncière et la part non récupérable des charges ne s’estiment pas ici : envoyées avec la provenance « ai », elles ne sont gardées qu’avec leur extrait (`fieldSources.<champ>.evidence`) ; dictées par le membre, passez `user`. Absentes, l’application les estime et le dit. ' +
         'Placement du repère (lot 12) : mettez dans `location.addressRaw` l’adresse la plus précise que l’annonce ou le membre donne (numéro et rue : repère « exact ») ; et dans `location.district` le quartier ou secteur cité, du plus large au plus fin (« Bordeaux Sud, Victoire »), sans la commune ni les mentions de tram : sans numéro, le repère est placé au centre du quartier reconnu (précision `district`), sinon au centre de la commune (`commune`) ; les distances sont alors approchées. Ne passez un point que s’il est sûr (lu sur une carte de l’annonce) : il prime sur le géocodage. ' +
         'Passez la fiche rendue par extract_listing telle quelle (fieldSources : provenance, confiance et extrait par champ ; mettez `user` sur les champs que le membre a corrigés). ' +
         'La réponse liste les doublons probables (la création n’est pas bloquée ; `ignoreDuplicates: true` quand le membre a vu l’alerte et confirme), les tâches créées pour les champs indispensables manquants, ' +
@@ -1120,6 +1123,12 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         const denied = writeRefusal(ctx.scopes)
         if (denied) return denied
         const { input, ignoreDuplicates } = splitListingCreate(listing)
+        // ADR 0040 : la même règle que le service, pour le dire à Claude.
+        const ignored = unsupportedEstimates(
+          input,
+          input.fieldSources,
+          provenance
+        )
         const item = await ctx.listings.create(ctx.member, input, {
           channel: CHANNEL,
           provenance,
@@ -1130,6 +1139,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           `Annonce créée : ${describeListing(item)} [id ${item.listing.id}]`,
           describeCriteriaChanges(item.criteriaChanges),
           describeDuplicates(item.duplicates),
+          describeUnsupportedEstimates(ignored),
           item.createdTasks.length
             ? `Tâches créées pour les champs manquants : ${item.createdTasks.map(t => t.label).join(' ; ')}.`
             : null,
@@ -1146,7 +1156,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         'Mise à jour partielle : seuls les champs de `patch` changent ; un sous-objet fourni (travaux, phase 2, localisation) remplace l’existant. ' +
         'Garde-fous optimistes : `expectedUpdatedAt` (le `updatedAt` lu) et `expectedPrice` ; si l’annonce a changé entre-temps, rien n’est écrit et la réponse l’explique. ' +
         'Un nouveau prix ajoute une ligne à l’historique. ' +
-        'Le plafond d’encadrement, le loyer de marché, l’adresse normalisée, l’identifiant BAN et le code INSEE ne s’écrivent pas ici : la fiche garde les siens, même quand `rentalPlan` ou `location` est remplacé. ' +
+        'Le plafond d’encadrement, le loyer de marché, l’adresse normalisée, l’identifiant BAN et le code INSEE ne s’écrivent pas ici : la fiche garde les siens, même quand `rentalPlan` ou `location` est remplacé. Taxe foncière et charges non récupérables de provenance « ai » : gardées seulement avec leur extrait (`fieldSources.<champ>.evidence`). ' +
         'Pour préciser la localisation (lot 12), passez `location` entier (adresse au numéro dans `addressRaw`, commune, quartier cité dans `district`, sans `point`) : le repère est replacé côté serveur (adresse, sinon quartier reconnu, sinon commune) et les distances recalculées ; changer seulement le quartier ne touche pas un repère déjà à l’adresse (numéro ou rue). ' +
         'Lot 18 : le vendeur (`sellerType`, `sellerName`, `sellerReference` ; un particulier n’a ni agence ni référence) ; `url` remplace le lien principal (refusé s’il est déjà celui d’une autre annonce) : pour un autre portail, utilisez add_listing_link. Portée listings:write.',
       inputSchema: McpUpdateListingInputSchema,
@@ -1182,9 +1192,19 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
             connector: true,
           }
         )
+        // ADR 0040 : la même règle que le service, pour le dire à Claude.
+        const ignored = unsupportedEstimates(
+          patch,
+          patch.fieldSources,
+          provenance
+        )
+        const written = Object.keys(patch).filter(
+          key => !(ignored as string[]).includes(key)
+        )
         return dataResult(
           [
-            `Annonce modifiée (${Object.keys(patch).join(', ')}) : ${describeListing(item)}`,
+            `Annonce modifiée (${written.join(', ')}) : ${describeListing(item)}`,
+            describeUnsupportedEstimates(ignored),
             describeCriteriaChanges(item.criteriaChanges),
           ]
             .filter(Boolean)

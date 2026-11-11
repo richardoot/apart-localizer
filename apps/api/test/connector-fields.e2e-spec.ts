@@ -114,10 +114,14 @@ interface ListingBody {
   listing: {
     id: string
     updatedAt: string
+    propertyTax: number | null
+    nonRecoverableChargesMonthly: number | null
     location: {
       addressNormalized: string | null
       banId: string | null
       inseeCode: string | null
+      point: { coordinates: [number, number] } | null
+      placement: { method: string } | null
     }
     rentalPlan: {
       targetRent: number | null
@@ -126,7 +130,13 @@ interface ListingBody {
     }
     fieldSources: Record<string, { source: string } | undefined>
   }
-  evaluation: { metrics: { rentCap: number | null } }
+  evaluation: {
+    metrics: {
+      rentCap: number | null
+      propertyTaxEstimated: boolean
+      nonRecoverableChargesEstimated: boolean
+    }
+  }
 }
 
 describe('Champs que le connecteur n’écrit pas (e2e)', () => {
@@ -229,24 +239,169 @@ describe('Champs que le connecteur n’écrit pas (e2e)', () => {
     expect(listing.fieldSources.banId?.source).toBe('open_data')
   })
 
-  it('create_listing avec un point : rien n’est géocodé, les sorties du géocodeur restent vides', async () => {
+  it('create_listing avec un point : le repère ne bouge pas, l’adresse donne le BAN et l’INSEE', async () => {
+    const near: [number, number] = [-0.5801, 44.8401]
     const item = fenced(
       await callTool(richard, 'create_listing', {
         listing: {
           ...SENT_BY_CLAUDE,
           location: {
             ...SENT_BY_CLAUDE.location,
-            point: { type: 'Point', coordinates: INSIDE },
+            point: { type: 'Point', coordinates: near },
             precision: 'exact',
           },
         },
         provenance: 'ai',
       })
     )
-    expect(item.listing.location.banId).toBeNull()
-    expect(item.listing.location.inseeCode).toBeNull()
-    expect(item.listing.location.addressNormalized).toBeNull()
-    expect(item.listing.fieldSources).not.toHaveProperty('banId')
+    const { location, fieldSources } = item.listing
+    expect(location.point?.coordinates).toEqual(near)
+    expect(location.placement?.method).toBe('manual')
+    expect(location.banId).toBe(BAN_ID)
+    expect(location.inseeCode).toBe('33063')
+    expect(location.addressNormalized).toBe('1 Rue Fictive 33000 Bordeaux')
+    expect(fieldSources.banId?.source).toBe('open_data')
+  })
+
+  it('create_listing avec un point loin de l’adresse : seul le code INSEE est gardé', async () => {
+    const far: [number, number] = [-0.57, 44.84]
+    const item = fenced(
+      await callTool(richard, 'create_listing', {
+        listing: {
+          ...SENT_BY_CLAUDE,
+          location: {
+            ...SENT_BY_CLAUDE.location,
+            point: { type: 'Point', coordinates: far },
+            precision: 'exact',
+          },
+        },
+        provenance: 'ai',
+      })
+    )
+    const { location, fieldSources } = item.listing
+    expect(location.point?.coordinates).toEqual(far)
+    expect(location.banId).toBeNull()
+    expect(location.addressNormalized).toBeNull()
+    expect(location.inseeCode).toBe('33063')
+    expect(fieldSources).not.toHaveProperty('banId')
+  })
+
+  it('create_listing : une taxe foncière sans extrait n’est pas gardée, l’application l’estime', async () => {
+    const result = await callTool(richard, 'create_listing', {
+      listing: {
+        ...SENT_BY_CLAUDE,
+        annualCharges: 1200,
+        propertyTax: 700,
+        nonRecoverableChargesMonthly: 40,
+        fieldSources: {
+          nonRecoverableChargesMonthly: {
+            source: 'ai',
+            evidence: 'dont 40 € par mois non récupérables',
+          },
+        },
+      },
+      provenance: 'ai',
+    })
+    const item = fenced(result)
+    expect(item.listing.propertyTax).toBeNull()
+    expect(item.listing.fieldSources).not.toHaveProperty('propertyTax')
+    expect(item.listing.nonRecoverableChargesMonthly).toBe(40)
+    expect(item.evaluation.metrics.propertyTaxEstimated).toBe(true)
+    expect(item.evaluation.metrics.nonRecoverableChargesEstimated).toBe(false)
+    expect(result.content[0]?.text).toContain('Non gardé : Taxe foncière.')
+
+    // Dictée par le membre : gardée.
+    const dictated = fenced(
+      await callTool(richard, 'create_listing', {
+        listing: {
+          ...SENT_BY_CLAUDE,
+          title: '[Exemple] T2 dicté',
+          propertyTax: 700,
+        },
+        provenance: 'user',
+      })
+    )
+    expect(dictated.listing.propertyTax).toBe(700)
+    expect(dictated.evaluation.metrics.propertyTaxEstimated).toBe(false)
+  })
+
+  it('update_listing : une estimation seule est refusée en le disant, avec son extrait elle est écrite', async () => {
+    const { listing } = fenced(
+      await callTool(richard, 'create_listing', {
+        listing: SENT_BY_CLAUDE,
+        provenance: 'ai',
+      })
+    )
+    const refused = await callTool(richard, 'update_listing', {
+      listingId: listing.id,
+      patch: { propertyTax: 700 },
+      provenance: 'ai',
+    })
+    expect(refused.isError).toBe(true)
+    expect(refused.content[0]?.text).toContain('Non gardé : Taxe foncière.')
+
+    const mixed = await callTool(richard, 'update_listing', {
+      listingId: listing.id,
+      patch: { propertyTax: 700, floor: 3 },
+      provenance: 'ai',
+    })
+    const afterMixed = fenced(mixed)
+    expect(afterMixed.listing.propertyTax).toBeNull()
+    expect(mixed.content[0]?.text).toContain('Annonce modifiée (floor)')
+    expect(mixed.content[0]?.text).toContain('Non gardé : Taxe foncière.')
+
+    const read = fenced(
+      await callTool(richard, 'update_listing', {
+        listingId: listing.id,
+        patch: {
+          propertyTax: 700,
+          fieldSources: {
+            propertyTax: { source: 'ai', evidence: 'Taxe foncière : 700 €' },
+          },
+        },
+        provenance: 'ai',
+      })
+    )
+    expect(read.listing.propertyTax).toBe(700)
+    expect(read.listing.fieldSources.propertyTax?.source).toBe('ai')
+  })
+
+  it('REST : un point saisi avec une nouvelle adresse ne garde pas le BAN de l’ancienne', async () => {
+    const created = await request(ctx.server)
+      .post('/listings')
+      .set(ctx.auth(richard))
+      .send({
+        ...SENT_BY_CLAUDE,
+        location: { addressRaw: '1 rue Fictive', commune: 'Bordeaux' },
+      })
+      .expect(201)
+    const before = (created.body as ListingBody).listing
+    expect(before.location.banId).toBe(BAN_ID)
+    // Le géocodeur ne connaît pas la nouvelle adresse.
+    ctx.geocoding.fetchImpl = () =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ features: [] }),
+      })
+    const moved = await request(ctx.server)
+      .patch(`/listings/${before.id}`)
+      .set(ctx.auth(richard))
+      .send({
+        location: {
+          ...before.location,
+          addressRaw: '99 avenue Inconnue',
+          point: { type: 'Point', coordinates: [-0.585, 44.845] },
+          precision: 'exact',
+        },
+        expectedUpdatedAt: before.updatedAt,
+      })
+      .expect(200)
+    const after = (moved.body as ListingBody).listing
+    expect(after.location.point?.coordinates).toEqual([-0.585, 44.845])
+    expect(after.location.banId).toBeNull()
+    expect(after.location.addressNormalized).toBeNull()
+    expect(after.fieldSources).not.toHaveProperty('banId')
   })
 
   it('update_listing : la fiche garde le plafond saisi, le loyer de marché retenu et les sorties du géocodeur', async () => {

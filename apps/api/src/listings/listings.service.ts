@@ -20,6 +20,7 @@ import type {
   EvaluateRequest,
   EvaluateResult,
   EvaluatedListing,
+  FieldProvenanceMap,
   FieldSource,
   HypotheticalListing,
   LayerFeatureCollection,
@@ -42,11 +43,14 @@ import type {
   RentalPlanInput,
 } from '@apart/contracts'
 import {
+  addressFieldsForManualPoint,
   archivedByLabel,
   checkReference,
+  CONNECTOR_IGNORED_LOCATION_KEYS,
   connectorListingCreate,
   connectorListingUpdate,
   countFits,
+  describeUnsupportedEstimates,
   detectLinkPortal,
   fitForCriteria,
   isStale,
@@ -478,7 +482,7 @@ export class ListingsService {
     options: CreateOptions = {}
   ): Promise<ListingCreateResult> {
     const input = options.connector
-      ? connectorListingCreate(received)
+      ? connectorListingCreate(received, options.provenance ?? 'user')
       : received
     const channel = options.channel ?? 'web'
     const provenance = options.provenance ?? 'user'
@@ -510,6 +514,12 @@ export class ListingsService {
         placement = applied.placement
         area = applied.area
         fieldSources = withOpenDataProvenance(fieldSources, applied.keys)
+      }
+    } else {
+      const filled = await this.addressForManualPoint(location)
+      if (filled) {
+        location = { ...location, ...filled.fields }
+        fieldSources = withManualPointProvenance(fieldSources, filled.keys)
       }
     }
     const listing: ListingInput = { ...input, location, fieldSources }
@@ -671,11 +681,14 @@ export class ListingsService {
     this.checkGuards(before, guards)
     // ADR 0040 : le connecteur n'écrit ni le plafond, ni le loyer de marché,
     // ni les sorties du géocodeur ; la fiche garde les siens.
-    const { patch, keptKeys } = options.connector
-      ? connectorListingUpdate(received, before)
-      : { patch: received, keptKeys: [] }
+    const { patch, keptKeys, ignoredEstimates } = options.connector
+      ? connectorListingUpdate(received, before, provenance)
+      : { patch: received, keptKeys: [], ignoredEstimates: [] }
     if (Object.keys(patch).length === 0) {
-      throw new BadRequestException('Aucun champ à modifier')
+      throw new BadRequestException(
+        describeUnsupportedEstimates(ignoredEstimates) ??
+          'Aucun champ à modifier'
+      )
     }
     // Lot 21 : le statut suit ses règles (décisions à plusieurs).
     if (patch.status !== undefined && patch.status !== before.status) {
@@ -763,6 +776,15 @@ export class ListingsService {
           point: location.point ?? null,
           precision: location.precision ?? null,
         })
+        // ADR 0040 : une nouvelle adresse avec un point saisi ne garde pas
+        // l'identifiant BAN ni le code INSEE de l'ancienne.
+        const filled = addressChanged(before.location, location)
+          ? await this.addressForManualPoint(location)
+          : null
+        if (filled) {
+          location = { ...location, ...filled.fields }
+          fieldSources = withManualPointProvenance(fieldSources, filled.keys)
+        }
       }
     }
     // Lot 18 : le vendeur, nettoyé (un particulier n'a ni agence ni référence).
@@ -1293,6 +1315,25 @@ export class ListingsService {
    * alerte). Public pour les écritures faites hors de ce service (DPE retenu
    * ou appliqué par l'enrichissement).
    */
+  /**
+   * ADR 0040 : à côté d'un point saisi, l'adresse de l'annonce est géocodée
+   * pour ce que seul le géocodeur rend, sans bouger le repère. Null sans point
+   * ni adresse ni commune.
+   */
+  private async addressForManualPoint(
+    location: ListingLocationInput
+  ): Promise<ReturnType<typeof addressFieldsForManualPoint> | null> {
+    const hasAddress =
+      Boolean(location.addressRaw?.trim()) || Boolean(location.commune?.trim())
+    if (!location.point || !hasAddress) return null
+    const located = await this.geocoding.locate({
+      addressRaw: location.addressRaw,
+      commune: location.commune,
+      district: location.district,
+    })
+    return addressFieldsForManualPoint(location, located)
+  }
+
   async afterWrite(
     member: Member,
     id: string,
@@ -1384,6 +1425,21 @@ export class ListingsService {
 }
 
 /** Vrai si le patch change l'adresse ou la commune (ce qui relance le géocodage). */
+/**
+ * La provenance des sorties du géocodeur à côté d'un point saisi : `open_data`
+ * pour celles qu'il a rendues, aucune pour celles restées vides.
+ */
+function withManualPointProvenance(
+  fieldSources: FieldProvenanceMap,
+  keys: readonly string[]
+): FieldProvenanceMap {
+  const result = withOpenDataProvenance(fieldSources, keys)
+  for (const key of CONNECTOR_IGNORED_LOCATION_KEYS) {
+    if (!keys.includes(key)) delete result[key]
+  }
+  return result
+}
+
 function addressChanged(
   before: ListingLocationInput,
   patch: Partial<ListingLocationInput>

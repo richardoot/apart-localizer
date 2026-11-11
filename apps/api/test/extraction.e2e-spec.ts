@@ -522,7 +522,7 @@ describe('Extraction IA, géocodage, doublons (e2e)', () => {
       expect(noPoint.body.listing.location.point).toBeNull()
     })
 
-    it('un point fourni n’est jamais écrasé ; un changement d’adresse relance le géocodage, pas une autre modification', async () => {
+    it('un point fourni n’est jamais écrasé (l’adresse ne donne que l’INSEE et, près du point, le BAN) ; un changement d’adresse relance le géocodage, pas une autre modification', async () => {
       const spy = vi.fn(() => Promise.resolve(geoAnswer('housenumber')))
       ctx.geocoding.fetchImpl = spy
       const created = await request(ctx.server)
@@ -539,7 +539,14 @@ describe('Extraction IA, géocodage, doublons (e2e)', () => {
           },
         })
         .expect(201)
-      expect(spy).not.toHaveBeenCalled()
+      // ADR 0040 : l'adresse est géocodée, le point reste ; le géocodeur
+      // répond à ~800 m du point, donc ni BAN ni adresse normalisée.
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(created.body.listing.location.point.coordinates).toEqual([
+        -0.6, 44.81,
+      ])
+      expect(created.body.listing.location.placement.method).toBe('manual')
+      expect(created.body.listing.location.banId).toBeNull()
       const id = created.body.listing.id as string
 
       await request(ctx.server)
@@ -547,7 +554,7 @@ describe('Extraction IA, géocodage, doublons (e2e)', () => {
         .set(ctx.auth(richard))
         .send({ price: 149_000 })
         .expect(200)
-      expect(spy).not.toHaveBeenCalled()
+      expect(spy).toHaveBeenCalledTimes(1)
 
       const moved = await request(ctx.server)
         .patch(`/listings/${id}`)
@@ -561,7 +568,7 @@ describe('Extraction IA, géocodage, doublons (e2e)', () => {
           },
         })
         .expect(200)
-      expect(spy).toHaveBeenCalledTimes(1)
+      expect(spy).toHaveBeenCalledTimes(2)
       expect(moved.body.listing.location.point).toEqual({
         type: 'Point',
         coordinates: [-0.5906, 44.8083],

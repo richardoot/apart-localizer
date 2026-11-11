@@ -1,5 +1,7 @@
+import { LISTING_FIELD_LABELS } from '@apart/contracts'
 import type {
   FieldProvenanceMap,
+  FieldSource,
   ListingInput,
   ListingLocationInput,
   ListingUpdate,
@@ -14,6 +16,11 @@ import { REFERENCE_RENT_KEY } from './rent-reference.js'
  * tiré des comparables). Une entrée du connecteur qui les envoie est
  * acceptée, ces clés sont ignorées : vides à la création (le serveur les
  * remplit), celles de la fiche à la modification. Pur.
+ *
+ * Deux montants que le serveur estime quand ils manquent (taxe foncière : un
+ * mois de loyer ; charges non récupérables : 25 % des charges) ne sont gardés
+ * que s'ils sont lus avec leur extrait ou dictés par le membre : une
+ * estimation faite dans la conversation passerait pour une valeur réelle.
  */
 
 /** Phase 2 : le plafond vient de l'arrêté, le loyer de marché des comparables retenus. */
@@ -28,6 +35,40 @@ export const CONNECTOR_IGNORED_LOCATION_KEYS = [
   'banId',
   'inseeCode',
 ] as const satisfies readonly (keyof ListingLocationInput)[]
+
+/** Montants que le serveur estime quand ils manquent (`compute`), dits « estimés ». */
+export const CONNECTOR_ESTIMATED_KEYS = [
+  'propertyTax',
+  'nonRecoverableChargesMonthly',
+] as const satisfies readonly (keyof ListingInput)[]
+export type ConnectorEstimatedKey = (typeof CONNECTOR_ESTIMATED_KEYS)[number]
+
+/**
+ * Les montants estimables envoyés sans appui : valeur renseignée, provenance
+ * effective `ai` (celle de `fieldSources`, sinon celle de l'appel) et aucun
+ * extrait. Une valeur dictée (`user`) ou lue avec son extrait est gardée.
+ */
+export function unsupportedEstimates(
+  values: { [K in ConnectorEstimatedKey]?: number | null | undefined },
+  fieldSources: FieldProvenanceMap | null | undefined,
+  provenance: FieldSource
+): ConnectorEstimatedKey[] {
+  return CONNECTOR_ESTIMATED_KEYS.filter(key => {
+    if (values[key] == null) return false
+    const source = fieldSources?.[key]
+    if ((source?.source ?? provenance) !== 'ai') return false
+    return !source?.evidence?.trim()
+  })
+}
+
+/** La phrase qui dit, au connecteur, les montants non gardés et pourquoi. */
+export function describeUnsupportedEstimates(
+  keys: readonly ConnectorEstimatedKey[]
+): string | null {
+  if (keys.length === 0) return null
+  const labels = keys.map(key => LISTING_FIELD_LABELS[key] ?? key).join(', ')
+  return `Non gardé${keys.length > 1 ? 's' : ''} : ${labels}. Une valeur lue dans l’annonce porte son extrait (fieldSources.<champ>.evidence) ; une valeur dictée par le membre a la provenance « user ». Sans valeur, l’application l’estime et le dit ; ne l’estime pas toi-même.`
+}
 
 /** Les clés de provenance que la règle touche. */
 const IGNORED_PROVENANCE_KEYS: readonly string[] = [
@@ -79,11 +120,23 @@ function geocodedByServer(
  * Création par le connecteur : plafond et loyer de marché vides (le plafond
  * est posé d'office par l'enrichissement), sorties du géocodeur vides sauf
  * celles qu'il a lui-même rendues (`extract_listing`) ; le géocodage de la
- * création les remplit.
+ * création les remplit. Les montants estimables sans appui sont vides.
  */
-export function connectorListingCreate(input: ListingInput): ListingInput {
+export function connectorListingCreate(
+  input: ListingInput,
+  provenance: FieldSource = 'ai'
+): ListingInput {
   const fieldSources: FieldProvenanceMap = { ...input.fieldSources }
   const location: ListingLocationInput = { ...input.location }
+  const estimates: Partial<Pick<ListingInput, ConnectorEstimatedKey>> = {}
+  for (const key of unsupportedEstimates(
+    input,
+    input.fieldSources,
+    provenance
+  )) {
+    estimates[key] = null
+    delete fieldSources[key]
+  }
   for (const key of CONNECTOR_IGNORED_LOCATION_KEYS) {
     if (geocodedByServer(input.fieldSources, key)) continue
     location[key] = null
@@ -92,6 +145,7 @@ export function connectorListingCreate(input: ListingInput): ListingInput {
   delete fieldSources[REFERENCE_RENT_KEY]
   return {
     ...input,
+    ...estimates,
     location,
     fieldSources,
     rentalPlan: input.rentalPlan
@@ -110,15 +164,27 @@ export interface ConnectorUpdateCurrent {
 /**
  * Modification par le connecteur : un sous-objet fourni (phase 2,
  * localisation) remplace l'existant, mais garde le plafond, le loyer de
- * marché et les sorties du géocodeur de la fiche, avec leur provenance. Rend
- * le patch et les clés de provenance à reprendre de la fiche (`keptKeys`).
+ * marché et les sorties du géocodeur de la fiche, avec leur provenance ; un
+ * montant estimable sans appui n'est pas modifié. Rend le patch, les clés de
+ * provenance à reprendre de la fiche (`keptKeys`) et les montants écartés.
  */
 export function connectorListingUpdate(
   patch: ListingUpdate,
-  current: ConnectorUpdateCurrent
-): { patch: ListingUpdate; keptKeys: string[] } {
+  current: ConnectorUpdateCurrent,
+  provenance: FieldSource = 'ai'
+): {
+  patch: ListingUpdate
+  keptKeys: string[]
+  ignoredEstimates: ConnectorEstimatedKey[]
+} {
   const next: ListingUpdate = { ...patch }
   const keptKeys: string[] = []
+  const ignoredEstimates = unsupportedEstimates(
+    patch,
+    patch.fieldSources,
+    provenance
+  )
+  for (const key of ignoredEstimates) delete next[key]
   if (patch.rentalPlan) {
     next.rentalPlan = {
       ...patch.rentalPlan,
@@ -135,10 +201,12 @@ export function connectorListingUpdate(
   }
   if (patch.fieldSources) {
     const fieldSources = { ...patch.fieldSources }
-    for (const key of IGNORED_PROVENANCE_KEYS) delete fieldSources[key]
+    for (const key of [...IGNORED_PROVENANCE_KEYS, ...ignoredEstimates]) {
+      delete fieldSources[key]
+    }
     next.fieldSources = fieldSources
   }
-  return { patch: next, keptKeys }
+  return { patch: next, keptKeys, ignoredEstimates }
 }
 
 /**

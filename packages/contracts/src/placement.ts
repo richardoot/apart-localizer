@@ -151,3 +151,11 @@ export type OsmPlaceType = (typeof OSM_PLACE_TYPES)[number]
 
 export const OSM_PLACES_SOURCE_LABEL =
   'OpenStreetMap, lieux-dits (place=neighbourhood, quarter, suburb), © contributeurs OpenStreetMap (ODbL)'
+
+/**
+ * Un point saisi (carte, formulaire, MCP) prime sur le géocodage, mais
+ * l'adresse de l'annonce est quand même géocodée pour l'identifiant BAN et
+ * l'adresse normalisée : gardés seulement si l'adresse trouvée, au numéro ou à
+ * la rue, est à moins de cette distance du point saisi, en mètres (ADR 0040).
+ */
+export const MANUAL_POINT_ADDRESS_TOLERANCE_METERS = 150

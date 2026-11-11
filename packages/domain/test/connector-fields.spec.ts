@@ -6,12 +6,15 @@ import { describe, expect, it } from 'vitest'
 import { ListingInputSchema, ListingUpdateSchema } from '@apart/contracts'
 import type { FieldProvenanceMap } from '@apart/contracts'
 import {
+  CONNECTOR_ESTIMATED_KEYS,
   CONNECTOR_IGNORED_LOCATION_KEYS,
   CONNECTOR_IGNORED_RENTAL_KEYS,
   REFERENCE_RENT_KEY,
   connectorListingCreate,
   connectorListingUpdate,
+  describeUnsupportedEstimates,
   restoreKeptProvenance,
+  unsupportedEstimates,
 } from '../src/index.js'
 
 const AT = '2026-11-11T10:00:00.000Z'
@@ -179,6 +182,7 @@ describe('connectorListingUpdate', () => {
     expect(connectorListingUpdate(patch, current)).toEqual({
       patch,
       keptKeys: [],
+      ignoredEstimates: [],
     })
   })
 
@@ -216,5 +220,105 @@ describe('restoreKeptProvenance', () => {
       'banId',
       'inseeCode',
     ])
+  })
+})
+
+describe('montants estimables : lus avec leur extrait ou dictés', () => {
+  const read = { source: 'ai' as const, recordedAt: AT }
+
+  it('une valeur « ai » sans extrait est écartée, avec ou sans entrée de provenance', () => {
+    expect(
+      unsupportedEstimates(
+        { propertyTax: 900, nonRecoverableChargesMonthly: 30 },
+        { propertyTax: read },
+        'ai'
+      )
+    ).toEqual(['propertyTax', 'nonRecoverableChargesMonthly'])
+  })
+
+  it('une valeur lue avec son extrait, ou dictée, est gardée', () => {
+    expect(
+      unsupportedEstimates(
+        { propertyTax: 900, nonRecoverableChargesMonthly: 30 },
+        {
+          propertyTax: { ...read, evidence: 'Taxe foncière : 900 €' },
+          nonRecoverableChargesMonthly: { source: 'user', recordedAt: AT },
+        },
+        'ai'
+      )
+    ).toEqual([])
+    expect(unsupportedEstimates({ propertyTax: 900 }, {}, 'user')).toEqual([])
+  })
+
+  it('un extrait vide ne compte pas ; une valeur absente ou nulle non plus', () => {
+    expect(
+      unsupportedEstimates(
+        { propertyTax: 900 },
+        { propertyTax: { ...read, evidence: '  ' } },
+        'ai'
+      )
+    ).toEqual(['propertyTax'])
+    expect(unsupportedEstimates({ propertyTax: null }, {}, 'ai')).toEqual([])
+    expect(unsupportedEstimates({}, null, 'ai')).toEqual([])
+  })
+
+  it('la provenance du champ l’emporte sur celle de l’appel', () => {
+    expect(
+      unsupportedEstimates({ propertyTax: 900 }, { propertyTax: read }, 'user')
+    ).toEqual(['propertyTax'])
+  })
+
+  it('création : les montants sans appui sont vidés, leur provenance retirée', () => {
+    const input = connectorListingCreate(
+      {
+        ...sent,
+        propertyTax: 750,
+        nonRecoverableChargesMonthly: 25,
+        annualCharges: 1200,
+        fieldSources: {
+          nonRecoverableChargesMonthly: {
+            ...read,
+            evidence: 'dont 25 €/mois non récupérables',
+          },
+        },
+      },
+      'ai'
+    )
+    expect(input.propertyTax).toBeNull()
+    expect(input.nonRecoverableChargesMonthly).toBe(25)
+    expect(input.annualCharges).toBe(1200)
+    expect(input.fieldSources).not.toHaveProperty('propertyTax')
+  })
+
+  it('modification : le montant sans appui n’est pas modifié, il est signalé', () => {
+    const patch = ListingUpdateSchema.parse({
+      propertyTax: 750,
+      surface: 46,
+      fieldSources: { propertyTax: read },
+    })
+    const result = connectorListingUpdate(
+      patch,
+      {
+        location: { addressNormalized: null, banId: null, inseeCode: null },
+        rentalPlan: null,
+        fieldSources: {},
+      },
+      'ai'
+    )
+    expect(result.patch).not.toHaveProperty('propertyTax')
+    expect(result.patch.surface).toBe(46)
+    expect(result.patch.fieldSources).toEqual({})
+    expect(result.ignoredEstimates).toEqual(['propertyTax'])
+  })
+
+  it('dit ce qui n’est pas gardé et comment le faire garder', () => {
+    expect(describeUnsupportedEstimates([])).toBeNull()
+    const one = describeUnsupportedEstimates(['propertyTax'])
+    expect(one).toContain('Non gardé : Taxe foncière.')
+    expect(one).toContain('fieldSources.<champ>.evidence')
+    expect(one).toContain('« user »')
+    expect(
+      describeUnsupportedEstimates([...CONNECTOR_ESTIMATED_KEYS])
+    ).toContain('Non gardés : Taxe foncière, Charges non récupérables.')
   })
 })

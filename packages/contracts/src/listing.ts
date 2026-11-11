@@ -181,7 +181,7 @@ export const ListingPropertyInputSchema = z.object({
     'Charges de copropriété annuelles, total avant répartition'
   ),
   nonRecoverableChargesMonthly: euros(
-    'Part des charges non récupérable sur le locataire, en euros par mois ; estimée à 25 % des charges annuelles / 12 si absente'
+    'Part des charges non récupérable sur le locataire, en euros par mois, telle que lue ou dictée ; absente, l’application l’estime à 25 % des charges annuelles / 12 et le dit (ne pas l’estimer soi-même)'
   ),
   lotsCount: z
     .number()
@@ -194,7 +194,7 @@ export const ListingPropertyInputSchema = z.object({
   votedWorks: nullableText(1000, 'Travaux votés et leur prise en charge'),
   syndic: nullableText(120, 'Syndic'),
   propertyTax: euros(
-    'Taxe foncière annuelle ; estimée à un mois de loyer si absente'
+    'Taxe foncière annuelle, telle que lue ou dictée ; absente, l’application l’estime à un mois de loyer et le dit (ne pas l’estimer soi-même)'
   ),
   furnitureValue: euros('Mobilier à acheter pour louer meublé'),
 })

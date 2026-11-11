@@ -265,7 +265,10 @@ intérieurs, recouvrements, table `places`, zone de l'annonce), `scripts/lib/pla
   net, la plus petite surface ; « à vérifier » pour un « près de », deux zones distinctes
   (moins de 5 % de la plus petite en commun) ou un nom ambigu. Rien de reconnu : la commune.
 - **Ce qui prime** : un point saisi ; un repère à l'adresse ne bouge jamais quand seul le
-  quartier change ; le rattrapage ne redescend jamais une précision.
+  quartier change ; le rattrapage ne redescend jamais une précision. À côté d'un point saisi,
+  l'adresse est quand même géocodée sans bouger le repère (ADR 0040) : code INSEE, et identifiant
+  BAN et adresse normalisée si l'adresse trouvée (au numéro ou à la rue) est à moins de 150 m du
+  point (`MANUAL_POINT_ADDRESS_TOLERANCE_METERS`) ; sinon vides.
 - **Calculs** : tous partent du repère ; au quartier ou à la commune, les distances (tram,
   équipements) se lisent « ≈ », le quartier est indicatif, les comparables DVF indicatifs (« à
   vérifier » au centre de la commune), la zone d'encadrement « probable » si tout le contour
