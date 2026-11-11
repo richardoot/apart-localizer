@@ -5,6 +5,7 @@ import type {
   LocationApproximation,
   LocationPrecision,
   MarketContext,
+  MarketTrend,
   Point,
 } from '@apart/contracts'
 import {
@@ -13,7 +14,9 @@ import {
   gapToMarket,
   marketPrice,
   marketStats,
+  marketTrend,
   marketWindow,
+  trendCoversLastCompleteYear,
 } from '@apart/domain'
 import { GeoService } from '../geo/geo.service'
 import type { DvfSaleHit } from '../geo/geo.service'
@@ -53,6 +56,12 @@ export class MarketService {
     const period = marketWindow(at)
     const years = await this.geo.dvfYears()
     const dataYears = years.map(y => y.year)
+    const noTrend = marketTrend({
+      byYear: [],
+      dataYears: years,
+      radiusMeters: null,
+      located: false,
+    })
     const empty: MarketContext = {
       status: 'unavailable',
       point: target.point,
@@ -67,6 +76,7 @@ export class MarketService {
       gapToMarket: null,
       reasons: [],
       dataYears,
+      trend: noTrend,
     }
     if (dataYears.length === 0) {
       return {
@@ -125,6 +135,13 @@ export class MarketService {
       ? approximationReason('market', target.approximation)
       : null
     if (approximate) reasons.push(approximate)
+    const trend = await this.trend(
+      target.point,
+      target.precision ?? null,
+      years,
+      radii,
+      approximate
+    )
     const listingPricePerM2 =
       target.price && surface ? target.price / surface : null
     const enough = stats !== null && stats.count >= MARKET_MIN_COMPARABLES
@@ -162,6 +179,44 @@ export class MarketService {
       gapToMarket: enough ? gapToMarket(listingPricePerM2, stats) : null,
       reasons,
       dataYears,
+      trend,
     }
+  }
+
+  /**
+   * Lot 29 : la tendance des prix autour du repère, toutes surfaces, sur
+   * toutes les années en base. Ses rayons sont ceux des comparables (500 m,
+   * puis 1 000 et 2 000 m, ou le rayon imposé), élargis tant que la dernière
+   * année complète n'a pas dix ventes : indépendamment des comparables, dont
+   * le rayon dépend aussi de la surface. Les médianes et les écarts viennent
+   * de `domain`.
+   */
+  private async trend(
+    point: Point,
+    precision: LocationPrecision | null,
+    years: { year: number; count: number; lastDate: string }[],
+    radii: readonly number[],
+    reserve: string | null
+  ): Promise<MarketTrend> {
+    let trend = marketTrend({
+      byYear: [],
+      dataYears: years,
+      radiusMeters: null,
+    })
+    for (const radiusMeters of radii) {
+      const byYear = await this.geo.dvfPricesByYearWithinRadius({
+        point,
+        radiusMeters,
+      })
+      trend = marketTrend({
+        byYear,
+        dataYears: years,
+        radiusMeters,
+        reserve,
+        toVerify: precision === 'commune',
+      })
+      if (trendCoversLastCompleteYear(trend)) break
+    }
+    return trend
   }
 }

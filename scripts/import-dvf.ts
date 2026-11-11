@@ -4,10 +4,14 @@
  * d'appartements de Bordeaux Métropole dans `dvf_sales` (besoins D5, N4).
  *
  *   pnpm import:dvf [--dry-run] [--year 2024 --year 2023] [--file chemin.csv.gz]
- *                   [--url https://...csv.gz] [--download] [--batch 500] [--database-url ...]
+ *                   [--url https://...csv.gz] [--download] [--cerema]
+ *                   [--batch 500] [--database-url ...]
  *
  * Sans option : data/opendata/dvf/33-<année>.csv.gz pour chaque --year (défaut
  * 2024). `--download` lit l'URL Etalab de chaque année au lieu du fichier local.
+ * `--cerema` (lot 29) lit chaque --year à l'API « DVF+ open-data » du Cerema :
+ * les années que les fichiers d'Etalab ne gardent plus (2014 à 2020), sans
+ * adresse ni nombre de pièces, pour la tendance des prix.
  * Lecture en flux (gzip), une vente par mutation d'un seul appartement,
  * upsert par lots sur l'identifiant de mutation : relancer l'import ne crée
  * pas de doublon.
@@ -24,6 +28,12 @@ import {
   repoRoot,
 } from './lib/db.js'
 import { csvLines, dvfUrl, readDvf, sourceLabel } from './lib/dvf.js'
+import type { DvfSale, DvfStats } from './lib/dvf.js'
+import {
+  CEREMA_DVF_API,
+  CEREMA_FIRST_YEAR,
+  readCeremaDvf,
+} from './lib/dvf-cerema.js'
 
 const HELP = `Import DVF géolocalisé (ventes d'appartements de Bordeaux Métropole) dans dvf_sales.
 
@@ -32,6 +42,8 @@ Options :
   --file CHEMIN       fichier CSV (ou .csv.gz) à importer, répétable
   --url URL           fichier à lire en ligne, répétable
   --download          lire l'URL Etalab de chaque --year plutôt que le fichier local
+  --cerema            lire chaque --year à l'API DVF+ open-data du Cerema (depuis ${CEREMA_FIRST_YEAR} ;
+                      pour les années absentes des fichiers d'Etalab ; ni adresse ni pièces)
   --batch N           taille des lots d'écriture (défaut 500)
   --dry-run           lit et filtre sans rien écrire
                       (une année importée remplace en entier les ventes de cette année en base)
@@ -45,6 +57,7 @@ const { values: args } = parseArgs({
     file: { type: 'string', multiple: true },
     url: { type: 'string', multiple: true },
     download: { type: 'boolean', default: false },
+    cerema: { type: 'boolean', default: false },
     batch: { type: 'string', default: '500' },
     'dry-run': { type: 'boolean', default: false },
     'database-url': { type: 'string' },
@@ -52,7 +65,43 @@ const { values: args } = parseArgs({
   },
 })
 
-function sources(): string[] {
+interface Source {
+  label: string
+  read: () => Promise<{ sales: DvfSale[]; stats: DvfStats }>
+}
+
+function fileSource(source: string): Source {
+  return {
+    label: /^https?:/.test(source) ? source : path.relative(repoRoot, source),
+    read: () => readDvf(csvLines(source), sourceLabel(source)),
+  }
+}
+
+function ceremaSources(): Source[] {
+  const years = (args.year ?? []).map(Number)
+  if (years.length === 0) {
+    throw new Error('--cerema demande au moins une année : --year 2015')
+  }
+  if (args.file?.length || args.url?.length || args.download) {
+    throw new Error(
+      '--cerema lit une API : sans --file, --url ni --download dans la même commande'
+    )
+  }
+  for (const year of years) {
+    if (!Number.isInteger(year) || year < CEREMA_FIRST_YEAR) {
+      throw new Error(
+        `Année illisible ou d'avant ${CEREMA_FIRST_YEAR} (début de DVF+ open-data) : ${year}`
+      )
+    }
+  }
+  return years.map(year => ({
+    label: `${CEREMA_DVF_API} (${year})`,
+    read: () => readCeremaDvf(year, { pauseMs: 200 }),
+  }))
+}
+
+function sources(): Source[] {
+  if (args.cerema) return ceremaSources()
   const list = [...(args.file ?? []), ...(args.url ?? [])]
   const years = args.year ?? (list.length ? [] : ['2024'])
   for (const year of years) {
@@ -64,7 +113,7 @@ function sources(): string[] {
         `Fichier absent : ${local} (ou --download pour lire ${dvfUrl(Number(year))})`
       )
   }
-  return list
+  return list.map(fileSource)
 }
 
 async function main(): Promise<void> {
@@ -79,13 +128,8 @@ async function main(): Promise<void> {
   try {
     for (const source of sources()) {
       const started = Date.now()
-      const label = /^https?:/.test(source)
-        ? source
-        : path.relative(repoRoot, source)
-      const { sales, stats } = await readDvf(
-        csvLines(source),
-        sourceLabel(source)
-      )
+      const { label } = source
+      const { sales, stats } = await source.read()
       const skipped = Object.entries(stats.skipped)
         .sort((a, b) => b[1] - a[1])
         .map(([reason, n]) => `${n} ${reason}`)

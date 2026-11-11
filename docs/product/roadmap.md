@@ -1485,3 +1485,24 @@ aucune variable nouvelle, aucun outil MCP nouveau (42).
 - **Ventes DVF** : années 2025 et 1er semestre 2026 importées depuis les fichiers nationaux de la
   livraison d'octobre 2026 (`import:dvf --url`).
 
+## Lot 29 : tendance des prix de vente, ventes DVF depuis 2014
+
+Statut : livré le 11 novembre 2026 (code, tests, documentation ; ADR 0039). Aucune migration,
+aucune variable nouvelle, aucun outil MCP nouveau (42).
+
+- **Pourquoi** : la fiche disait le prix médian des ventes comparables des trois dernières années,
+  pas le sens du marché ; il fallait des ventes plus anciennes pour dire la tendance.
+- **Ventes** : douze ans en base. 2021 à 2023 par les fichiers « DVF géolocalisées » d'Etalab ;
+  2014 à 2020, qu'Etalab ne publie plus, par l'API « DVF+ open-data » du Cerema
+  (`import:dvf --cerema`), sans adresse ni nombre de pièces. Les deux sources concordent sur
+  l'année qu'elles ont en commun (0,3 % d'écart sur la médiane de 2021).
+- **Tendance** : médiane au m² de chaque année autour du repère (toutes les ventes
+  d'appartements, toutes surfaces, dix ventes au moins), écarts sur un, cinq et dix ans jusqu'à la
+  dernière année complète, année du pic et écart depuis, année incomplète dite à part. Bloc
+  « Tendance des prix » de l'onglet Négocier (courbe, chiffres par année), `market.trend` du
+  contexte, de `POST /market-context`, de `get_market_context` et de `get_listing`.
+- **Un indicateur** : il n'entre dans aucun calcul (ni le critère « marché », ni le prix cible, ni
+  l'hypothèse de revalorisation de la projection) et n'est pas écrit sur l'annonce.
+
+Limites : médiane brute, sensible à ce qui se vend chaque année ; euros courants ; avant 2021, des
+ventes repérées à la parcelle ; l'API du Cerema n'a pas de fichier figé à rejouer.

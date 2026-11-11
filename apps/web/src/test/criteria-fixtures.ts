@@ -4,10 +4,12 @@ import {
 } from '@apart/contracts'
 import type {
   ListingContext,
+  MarketTrend,
   NearbyAmenity,
   SearchCriteriaSummary,
   Surroundings,
 } from '@apart/contracts'
+import { marketTrend } from '@apart/domain'
 
 const now = '2026-11-03T10:00:00.000Z'
 
@@ -169,6 +171,42 @@ export function fakeSurroundings(
   }
 }
 
+/** Médianes fictives d'un secteur : hausse jusqu'en 2022, baisse ensuite ; 2026 s'arrête en juin. */
+export const FAKE_TREND_MEDIANS: Record<number, number> = {
+  2015: 3000,
+  2016: 3150,
+  2017: 3500,
+  2018: 3900,
+  2019: 4100,
+  2020: 4200,
+  2021: 4500,
+  2022: 4800,
+  2023: 4600,
+  2024: 4400,
+  2025: 4200,
+  2026: 4150,
+}
+
+/** Lot 29 : une tendance fictive, calculée par `domain` (douze ventes par année). */
+export function fakeTrend(
+  medians: Record<number, number> = FAKE_TREND_MEDIANS,
+  radiusMeters = 500
+): MarketTrend {
+  const years = Object.keys(medians).map(Number)
+  const last = Math.max(...years)
+  return marketTrend({
+    byYear: years.map(year => ({
+      year,
+      pricesPerM2: Array.from({ length: 12 }, () => medians[year] as number),
+    })),
+    dataYears: years.map(year => ({
+      year,
+      lastDate: year === last ? `${year}-06-30` : `${year}-12-30`,
+    })),
+    radiusMeters,
+  })
+}
+
 /** Un contexte de fiche fictif : tram, DPE à valider, plafond, comparables. */
 export function fakeContext(
   over: Partial<ListingContext> = {}
@@ -313,6 +351,7 @@ export function fakeContext(
       gapToMarket: 0.046,
       reasons: ["Données DVF disponibles jusqu'en 2024."],
       dataYears: [2024],
+      trend: fakeTrend(),
     },
     surroundings: fakeSurroundings(),
     computedAt: now,

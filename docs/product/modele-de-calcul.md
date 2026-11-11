@@ -224,6 +224,26 @@ la médiane (quantiles par interpolation linéaire), sans ajustement. Elle est l
 l'instantané de l'annonce, donc la même dans la liste, la fiche et le MCP ; le prix de marché est
 une estimation (provenance `estimated`). Le critère est inactif par défaut.
 
+Tendance des prix (lot 29, ADR 0039 ; `marketTrend`) : un indicateur à côté des comparables, qui
+n'entre ni dans le critère « marché », ni dans le prix cible, ni dans la projection. Pour chaque
+année `a` en base (depuis 2014) :
+
+```
+med(a)        = médiane des prix au m² de toutes les ventes d'appartements du rayon en a
+                (ventes classiques, toutes surfaces ; non retenue sous 10 ventes)
+aRef          = dernière année complète dont la médiane est retenue
+                (une année dont les ventes s'arrêtent avant décembre est incomplète)
+ecart(n)      = med(aRef) / med(aRef − n) − 1          pour n = 1, 5, 10 ans
+ecartAnnuel(n)= (med(aRef) / med(aRef − n))^(1/n) − 1
+pic           = année complète à la médiane la plus haute ; ecartPic = med(aRef) / med(pic) − 1
+sens          = stable si |ecart(1)| < 2 %, sinon en hausse ou en baisse
+```
+
+Le rayon est 500 m, élargi à 1 000 puis 2 000 m tant que la dernière année complète n'a pas dix
+ventes. Un écart dont une borne manque n'est pas rendu ; rien n'est extrapolé. Les médianes sont
+en euros courants et sensibles à ce qui se vend chaque année (taille, neuf) : c'est écrit avec
+elles.
+
 ```
 prixCible   = min des prix maximaux des critères actifs (défaut : brut et effort, comme le verdict)
 critereLiant = le critère qui donne ce minimum

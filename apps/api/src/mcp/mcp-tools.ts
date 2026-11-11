@@ -100,6 +100,7 @@ import {
   formatEuros,
   formatPercent,
   keptLabel,
+  marketTrendLine,
   mcpDecisionLine,
   mergeAssumptions,
   precisionBadge,
@@ -637,6 +638,7 @@ export function describeContext(context: ListingContext): string {
     `  - ${rentObservatoryLine(context.rentObservatory)}`,
     `  - DPE ${context.dpe.verified ? 'vérifié auprès de l’ADEME' : 'non vérifié'} : ${context.dpe.validity.messages.join(' ')}${context.dpe.search && !context.dpe.verified && context.dpe.search.candidates.length ? ` (${context.dpe.search.candidates.length} DPE candidat(s) à l'ADEME, à valider dans l'application)` : ''}`,
     `  - ${describeMarket(context.market)}`,
+    `  - ${marketTrendLine(context.market.trend)}`,
     ...describeSurroundings(context.surroundings).map(line => `  - ${line}`),
   ].join('\n')
 }
@@ -651,6 +653,7 @@ export function describeMarketReport(report: MarketContextReport): string {
   return [
     `Contexte de marché pour ${where}${report.location.commune ? ` (${report.location.commune})` : ''} :`,
     `  - ${describeMarket(report.market)}`,
+    `  - ${marketTrendLine(report.market.trend)}`,
     `  - ${describeRentControl(report.rentControl)}`,
     `  - ${rentObservatoryLine(report.rentObservatory)}`,
     `  - ${describeTransit(report.transit)}`,
@@ -1570,7 +1573,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
     {
       title: 'Contexte de marché',
       description:
-        "Pour une annonce (`listingId`), une adresse (`address`, géocodée) ou un point GeoJSON : ventes DVF d'appartements comparables (500 m, élargi à 1 000 puis 2 000 m faute de ventes, surface ±25 % si `surface`, trois dernières années) avec prix médian au m², quartiles, dispersion et liste datée ; " +
+        "Pour une annonce (`listingId`), une adresse (`address`, géocodée) ou un point GeoJSON : ventes DVF d'appartements comparables (500 m, élargi à 1 000 puis 2 000 m faute de ventes, surface ±25 % si `surface`, trois dernières années) avec prix médian au m², quartiles, dispersion et liste datée ; tendance des prix du même secteur, année par année depuis 2014 (médiane de toutes les ventes d'appartements, écarts sur un, cinq et dix ans, année du pic), un indicateur en euros courants ; " +
         "plafond d'encadrement des loyers (Bordeaux seulement : zone, loyer de référence majoré selon `rooms`, `constructionYear`, `furnished`) ; arrêt de tram et arrêt le plus proches. Données ouvertes importées (DVF, TBM, arrêté préfectoral), rien n'est inventé : un doute rend « à vérifier ».",
       inputSchema: McpGetMarketContextInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },

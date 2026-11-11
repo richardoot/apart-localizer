@@ -258,7 +258,12 @@ Entrée : `listingId`, **ou** `address` (géocodée), **ou** `point` ; `surface`
 Réponse : `MarketContextReport` : `location`, `market` (ventes DVF d'appartements, 500 m élargis à 1
 000 puis 2 000 m, surface ±25 %, trois ans : médiane, quartiles, dispersion, comparables datés, prix
 de marché estimé, écart au prix affiché), `rentControl` (plafond de l'arrêté en vigueur, Bordeaux
-seulement), `transit` (tram et arrêt le plus proches). Voir [open-data.md](open-data.md) Lot 28 :
+seulement), `transit` (tram et arrêt le plus proches). Voir [open-data.md](open-data.md) Lot 29 :
+`market.trend`, la tendance des prix du secteur année par année depuis 2014 (médiane de toutes les
+ventes d'appartements à 500 m, élargis faute de dix ventes par an ; écarts sur un, cinq et dix ans
+jusqu'à la dernière année complète, année du pic et écart depuis, année incomplète à part) ; un
+indicateur en euros courants, à dire avec ses années et son nombre de ventes, jamais une prévision.
+Lot 28 :
 `rentObservatory`, le loyer médian observé par l'observatoire local des loyers dans la zone (hors
 charges, par nombre de pièces, quartiles, loyer mensuel pour la surface, place du loyer visé) ; un
 indicateur à présenter comme tel, jamais un plafond ni un loyer de référence ; « à vérifier » depuis

@@ -559,12 +559,46 @@ export class GeoService {
     }
   }
 
-  /** Les années DVF présentes en base et le nombre de ventes de chacune. */
-  async dvfYears(): Promise<{ year: number; count: number }[]> {
+  /**
+   * Lot 29 : les prix au m² des ventes d'appartements d'un rayon, par année,
+   * toutes surfaces (ventes classiques seulement), pour la tendance. Les
+   * médianes se calculent dans `domain`.
+   */
+  async dvfPricesByYearWithinRadius(query: {
+    point: Point
+    radiusMeters: number
+  }): Promise<{ year: number; pricesPerM2: number[] }[]> {
+    const [longitude, latitude] = query.point.coordinates
+    const target = Prisma.sql`ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography`
     const rows = await this.prisma.$queryRaw`
-      SELECT EXTRACT(YEAR FROM "mutation_date")::int AS "year", COUNT(*)::int AS "count"
+      SELECT EXTRACT(YEAR FROM "mutation_date")::int AS "year",
+             array_agg("price_per_m2"::float8) AS "prices"
+      FROM "app"."dvf_sales"
+      WHERE "geom" IS NOT NULL
+        AND "property_type" = 'Appartement'
+        AND "mutation_nature" = 'Vente'
+        AND "price_per_m2" IS NOT NULL
+        AND ST_DWithin("geom", ${target}, ${query.radiusMeters})
+      GROUP BY 1 ORDER BY 1`
+    return YearPricesRows.parse(rows).map(row => ({
+      year: row.year,
+      pricesPerM2: row.prices,
+    }))
+  }
+
+  /** Les années DVF présentes en base, le nombre de ventes de chacune et la date de la dernière. */
+  async dvfYears(): Promise<
+    { year: number; count: number; lastDate: string }[]
+  > {
+    const rows = await this.prisma.$queryRaw`
+      SELECT EXTRACT(YEAR FROM "mutation_date")::int AS "year", COUNT(*)::int AS "count",
+             MAX("mutation_date")::text AS "last_date"
       FROM "app"."dvf_sales" GROUP BY 1 ORDER BY 1`
-    return YearCountRows.parse(rows)
+    return YearCountRows.parse(rows).map(row => ({
+      year: row.year,
+      count: row.count,
+      lastDate: row.last_date,
+    }))
   }
 
   // -------------------------------------------------------------------------
@@ -1227,7 +1261,13 @@ const CountRows = z.array(z.object({ count: z.number() }))
 const CountByKeyRows = z.array(
   z.object({ mode: z.string(), count: z.number() })
 )
-const YearCountRows = z.array(z.object({ year: z.number(), count: z.number() }))
+const YearCountRows = z.array(
+  z.object({ year: z.number(), count: z.number(), last_date: z.string() })
+)
+
+const YearPricesRows = z.array(
+  z.object({ year: z.number(), prices: z.array(z.number()) })
+)
 
 const TransitStopLayerRows = z.array(
   z.object({

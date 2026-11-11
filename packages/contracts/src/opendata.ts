@@ -339,6 +339,87 @@ export const MarketStatsSchema = z.object({
 })
 export type MarketStats = z.infer<typeof MarketStatsSchema>
 
+/** Lot 29 : ventes minimales d'une année pour que sa médiane soit retenue dans la tendance. */
+export const MARKET_TREND_MIN_SALES = 10
+/** Écarts de la tendance : sur un an, cinq ans et dix ans. */
+export const MARKET_TREND_HORIZONS = [1, 5, 10] as const
+/** Variation sur un an en deçà de laquelle les prix sont dits stables (±2 %). */
+export const MARKET_TREND_STABLE = 0.02
+
+/** Une année de la tendance : toutes les ventes d'appartements du rayon, toutes surfaces. */
+export const MarketTrendYearSchema = z.object({
+  year: z.number().int(),
+  count: z.number().int().min(0).describe('Ventes de l’année dans le rayon'),
+  medianPricePerM2: z
+    .number()
+    .nullable()
+    .describe(
+      'Prix médian au m² en euros courants ; null = moins de dix ventes, médiane non retenue'
+    ),
+  partial: z
+    .boolean()
+    .describe(
+      'Année incomplète en base (les ventes ne vont pas jusqu’à décembre)'
+    ),
+})
+export type MarketTrendYear = z.infer<typeof MarketTrendYearSchema>
+
+export const MarketTrendChangeSchema = z.object({
+  years: z.number().int().min(1).describe('Durée de l’écart, en années'),
+  fromYear: z.number().int(),
+  toYear: z.number().int(),
+  change: z
+    .number()
+    .describe(
+      'Médiane de l’année d’arrivée / médiane de départ − 1 (0,08 = +8 %)'
+    ),
+  annualized: z.number().describe('Le même écart, par an (taux composé)'),
+})
+export type MarketTrendChange = z.infer<typeof MarketTrendChangeSchema>
+
+export const MarketTrendDirectionSchema = z
+  .enum(['up', 'down', 'stable'])
+  .describe('Sens des prix sur un an : en hausse, en baisse, stables (±2 %)')
+export type MarketTrendDirection = z.infer<typeof MarketTrendDirectionSchema>
+
+/**
+ * Lot 29 (ADR 0039) : la tendance des prix de vente autour d'un repère, année
+ * par année. Un indicateur : elle n'entre dans aucun calcul.
+ */
+export const MarketTrendSchema = z.object({
+  status: OpenDataStatusSchema,
+  radiusMeters: z.number().int().nullable(),
+  years: z
+    .array(MarketTrendYearSchema)
+    .describe('De la plus ancienne année en base à la plus récente'),
+  referenceYear: z
+    .number()
+    .int()
+    .nullable()
+    .describe('Dernière année complète dont la médiane est retenue'),
+  changes: z
+    .array(MarketTrendChangeSchema)
+    .describe(
+      'Écarts jusqu’à l’année de référence, du plus court au plus long'
+    ),
+  peak: z
+    .object({
+      year: z.number().int(),
+      medianPricePerM2: z.number(),
+      changeSince: z
+        .number()
+        .describe('Médiane de l’année de référence / médiane du pic − 1'),
+    })
+    .nullable()
+    .describe('Année complète à la médiane la plus haute'),
+  direction: MarketTrendDirectionSchema.nullable(),
+  reasons: z
+    .array(z.string())
+    .describe('Pourquoi la tendance manque ou est à vérifier'),
+  notes: z.array(z.string()).describe('Limites de la donnée'),
+})
+export type MarketTrend = z.infer<typeof MarketTrendSchema>
+
 export const MarketContextSchema = z.object({
   status: OpenDataStatusSchema,
   point: PointSchema.nullable(),
@@ -366,6 +447,9 @@ export const MarketContextSchema = z.object({
     ),
   reasons: z.array(z.string()),
   dataYears: z.array(z.number().int()).describe('Années DVF présentes en base'),
+  trend: MarketTrendSchema.describe(
+    'Tendance des prix du secteur, année par année (indicatif)'
+  ),
 })
 export type MarketContext = z.infer<typeof MarketContextSchema>
 

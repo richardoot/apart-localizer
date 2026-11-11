@@ -35,7 +35,17 @@ export const OpenDataStatusReportSchema = z.object({
       .describe('Arrêtés de loyers de référence importés'),
   }),
   transitStops: z.record(z.string(), z.number().int()),
-  dvf: z.array(z.object({ year: z.number().int(), count: z.number().int() })),
+  dvf: z.array(
+    z.object({
+      year: z.number().int(),
+      count: z.number().int(),
+      lastDate: z
+        .string()
+        .date()
+        .optional()
+        .describe('Date de la dernière vente de l’année en base'),
+    })
+  ),
   amenities: z
     .object({
       athletics_track: z.number().int(),

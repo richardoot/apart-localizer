@@ -344,13 +344,22 @@ describe('MarketService', () => {
   })
   function geo(
     byRadius: Record<number, ReturnType<typeof hit>[]>,
-    years = [{ year: 2024, count: 10 }]
+    years = [{ year: 2024, count: 10, lastDate: '2024-12-30' }],
+    /** Lot 29 : prix au m² par année et par rayon, pour la tendance. */
+    pricesByRadius: Record<
+      number,
+      { year: number; pricesPerM2: number[] }[]
+    > = {}
   ) {
     return {
       dvfYears: vi.fn(() => Promise.resolve(years)),
       dvfSalesWithinRadius: vi.fn(
         ({ radiusMeters }: { radiusMeters: number }) =>
           Promise.resolve(byRadius[radiusMeters] ?? [])
+      ),
+      dvfPricesByYearWithinRadius: vi.fn(
+        ({ radiusMeters }: { radiusMeters: number }) =>
+          Promise.resolve(pricesByRadius[radiusMeters] ?? [])
       ),
     } as unknown as GeoService
   }
@@ -396,6 +405,153 @@ describe('MarketService', () => {
       at
     )
     expect(imposed.radiusMeters).toBe(300)
+  })
+
+  describe('lot 29 : tendance des prix', () => {
+    const years = [2028, 2029, 2030, 2031].map(year => ({
+      year,
+      count: 100,
+      lastDate: year === 2031 ? '2031-06-30' : `${year}-12-30`,
+    }))
+    const twelve = (median: number): number[] =>
+      Array.from({ length: 12 }, () => median)
+    const five = [3000, 3500, 4000, 4500, 5000].map((p, i) => hit(i, p))
+    const later = new Date('2031-11-03T12:00:00Z')
+
+    it('même rayon que les comparables quand la dernière année complète a dix ventes', async () => {
+      const g = geo({ 500: five }, years, {
+        500: [
+          { year: 2028, pricesPerM2: twelve(4000) },
+          { year: 2029, pricesPerM2: twelve(5000) },
+          { year: 2030, pricesPerM2: twelve(4500) },
+          { year: 2031, pricesPerM2: twelve(4400) },
+        ],
+      })
+      const ctx = await new MarketService(g).context(
+        { point, surface: 40 },
+        later
+      )
+      expect(g.dvfPricesByYearWithinRadius).toHaveBeenCalledTimes(1)
+      expect(g.dvfPricesByYearWithinRadius).toHaveBeenCalledWith({
+        point,
+        radiusMeters: 500,
+      })
+      expect(ctx.trend).toMatchObject({
+        status: 'ok',
+        radiusMeters: 500,
+        referenceYear: 2030,
+        direction: 'down',
+        peak: { year: 2029, medianPricePerM2: 5000 },
+      })
+      expect(ctx.trend.changes).toHaveLength(1)
+      expect(ctx.trend.changes[0]?.change).toBeCloseTo(-0.1, 10)
+      expect(ctx.trend.years.map(y => y.partial)).toEqual([
+        false,
+        false,
+        false,
+        true,
+      ])
+    })
+
+    it('élargit le rayon tant que la dernière année complète manque de ventes', async () => {
+      const g = geo({ 500: five }, years, {
+        500: [{ year: 2029, pricesPerM2: twelve(5000) }],
+        1000: [
+          { year: 2029, pricesPerM2: twelve(5000) },
+          { year: 2030, pricesPerM2: twelve(5200) },
+        ],
+      })
+      const ctx = await new MarketService(g).context(
+        { point, surface: 40 },
+        later
+      )
+      expect(g.dvfPricesByYearWithinRadius).toHaveBeenCalledTimes(2)
+      expect(ctx.radiusMeters).toBe(500)
+      expect(ctx.trend).toMatchObject({
+        radiusMeters: 1000,
+        referenceYear: 2030,
+        direction: 'up',
+      })
+    })
+
+    it('ses rayons ne dépendent pas de ceux des comparables ; à bout de rayons, « à vérifier »', async () => {
+      // Comparables à 1 000 m seulement, ventes de toutes surfaces dès 500 m.
+      const local = geo({ 1000: five }, years, {
+        500: [
+          { year: 2029, pricesPerM2: twelve(5000) },
+          { year: 2030, pricesPerM2: twelve(5000) },
+        ],
+      })
+      const near = await new MarketService(local).context(
+        { point, surface: 40 },
+        later
+      )
+      expect(near.radiusMeters).toBe(1000)
+      expect(near.trend.radiusMeters).toBe(500)
+
+      const g = geo({ 1000: five }, years)
+      const ctx = await new MarketService(g).context(
+        { point, surface: 40 },
+        later
+      )
+      expect(
+        vi
+          .mocked(g.dvfPricesByYearWithinRadius)
+          .mock.calls.map(([q]) => q.radiusMeters)
+      ).toEqual([500, 1000, 2000])
+      expect(ctx.trend).toMatchObject({
+        status: 'to_verify',
+        radiusMeters: 2000,
+        referenceYear: null,
+      })
+    })
+
+    it('rayon imposé : lui seul ; repère à la commune : « à vérifier » avec sa réserve', async () => {
+      const prices = {
+        300: [
+          { year: 2029, pricesPerM2: twelve(5000) },
+          { year: 2030, pricesPerM2: twelve(5000) },
+        ],
+      }
+      const g = geo({ 300: five }, years, prices)
+      const ctx = await new MarketService(g).context(
+        {
+          point,
+          surface: 40,
+          radiusMeters: 300,
+          precision: 'commune',
+          approximation: {
+            approximate: true,
+            origin: 'centre de la commune',
+            note: 'n',
+          },
+        },
+        later
+      )
+      expect(g.dvfPricesByYearWithinRadius).toHaveBeenCalledTimes(1)
+      expect(ctx.trend.status).toBe('to_verify')
+      expect(ctx.trend.direction).toBe('stable')
+      expect(ctx.trend.reasons.join(' ')).toContain('centre de la commune')
+    })
+
+    it('sans vente importée ou sans point : pas de tendance, aucune lecture', async () => {
+      const none = geo({}, [])
+      expect(
+        (await new MarketService(none).context({ point, surface: 40 }, later))
+          .trend
+      ).toMatchObject({ status: 'unavailable', years: [] })
+      const g = geo({}, years)
+      const ctx = await new MarketService(g).context(
+        { point: null, surface: 40 },
+        later
+      )
+      expect(ctx.trend).toMatchObject({
+        status: 'to_verify',
+        reasons: ['Adresse non localisée : pas de tendance.'],
+      })
+      expect(ctx.trend.years).toHaveLength(4)
+      expect(g.dvfPricesByYearWithinRadius).not.toHaveBeenCalled()
+    })
   })
 })
 

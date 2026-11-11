@@ -68,6 +68,8 @@ Règles à ne pas casser :
   (`visitEditRefusal`).
 - `portalSearchUrls` construit les recherches sans réseau.
 - Le loyer observé est un indicateur, jamais un plafond, hors de tout calcul.
+- La tendance des prix (`marketTrend`) est un indicateur, hors de tout calcul : une année de moins
+  de dix ventes n'a pas de médiane, une année incomplète ne porte aucun écart, rien n'est extrapolé.
 
 ### `packages/contracts` : schémas Zod, types, énumérations, GeoJSON, filtres, tables datées
 
@@ -108,7 +110,8 @@ quartiers, contours d'une commune, zone `location_area` de l'annonce, lieux-dits
 validés par Zod. Les mesures de l'adéquation (`criteriaFitMeasures`) tiennent en une seule requête
 pour la liste, l'aperçu, les alertes et le rattrapage ; `criteriaFitMeasuresForPoints` rend les
 mêmes pour des annonces pas enregistrées, `criteriaZones` les zones d'un critère élargi de sa marge.
-La décision est dans `domain`.
+La décision est dans `domain`. Pour la tendance des prix, le module rend les prix au m² par année
+(`dvfPricesByYearWithinRadius`) : les médianes sont dans `domain`.
 
 ### `apps/api/prisma/schema.prisma` + `prisma/migrations` : modèle de données
 
@@ -207,7 +210,8 @@ Règles :
   pour toutes les annonces.
 - `list_listings` rend par défaut l'onglet « Dans les critères » (`fit[]`).
 - Jamais de couverture ni d'URL signée dans les réponses ; le loyer observé est dit comme un
-  indicateur, jamais comme un plafond.
+  indicateur, jamais comme un plafond ; la tendance des prix comme un constat daté, jamais comme une
+  prévision.
 
 ### `apps/api/src/ai` : IA (extraction)
 
@@ -246,7 +250,8 @@ risques v1, sans jeton, cache trente jours). `GeocodingService` ajoute le cache 
 `SurroundingsService`, `RentControlService`, `MarketService`, `TransitService` et
 `RentObservatoryService` lisent les données importées, sans réseau. L'orchestration (instantané
 `open_data_context`, plafond et DPE appliqués) est dans `listings/enrichment.service.ts`. Le loyer
-observé (lot 28) est calculé à la lecture, jamais écrit sur l'annonce ni dans l'instantané. Aucun
+observé (lot 28) et la tendance des prix (lot 29, `MarketContext.trend`, sur son propre rayon) sont
+calculés à la lecture, jamais écrits sur l'annonce ni dans l'instantané. Aucun
 appel réseau dans les tests (le harnais e2e stubbe géocodeur, ADEME, isochrones et Géorisques). Voir
 `docs/open-data.md`.
 
@@ -362,6 +367,7 @@ MCP et consentement OAuth : 0017.
 - Lot 26, filtres, comparaison, page « Claude » : 0036
 - Lot 27, fusion des doublons, agences multiples : 0037
 - Lot 28, loyers observés : 0038
+- Lot 29, tendance des prix de vente, ventes DVF depuis 2014 : 0039
 
 Identifiants de code en anglais ; textes d'interface, messages d'erreur métier et descriptions
 Zod en français.
@@ -409,6 +415,7 @@ pnpm import:artifact -- --no-geocode   # import des données de l'artefact (voir
 pnpm import:rent-control               # zonage et arrêté de l'encadrement (data/opendata/encadrement)
 pnpm import:transit-stops              # arrêts TBM (data/opendata/tbm)
 pnpm import:dvf -- --year 2024         # ventes DVF de la métropole (data/opendata/dvf)
+pnpm import:dvf -- --cerema --year 2015   # lot 29 : années d'avant 2021, API DVF+ open-data du Cerema
 pnpm import:rent-observatory           # lot 28 : loyers observés par l'observatoire local des loyers (data/opendata/loyers-oll)
 pnpm geocode:missing -- --dry-run      # annonces sans point ou au centroïde
 pnpm import:places                     # lieux-dits OpenStreetMap (data/opendata/osm), après les quartiers

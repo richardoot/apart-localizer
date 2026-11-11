@@ -12,6 +12,7 @@ import { DEFAULT_ASSUMPTIONS } from '@apart/contracts'
 import type { NegotiationBrief } from '@apart/contracts'
 import {
   financialsFromListing,
+  marketTrend,
   negotiationBrief,
   outcomeAtPrice,
   priceRangeGauge,
@@ -307,6 +308,126 @@ describe('Ventes comparables et arguments (lot 19)', () => {
     expect(market.text()).toContain('À vérifier')
     expect(market.find('[data-testid="market-sales"]').exists()).toBe(false)
     expect(market.find('[data-testid="market-map"]').exists()).toBe(false)
+  })
+
+  it('lot 29 : tendance des prix, écarts sur un, cinq et dix ans, courbe, pic et chiffres par année', async () => {
+    const wrapper = mountTab()
+    await flushPromises()
+    const trend = wrapper.get('[data-testid="market-trend"]')
+    expect(n(trend.text())).toContain(
+      'DVF, appartements à moins de 500 m, toutes surfaces'
+    )
+    expect(trend.get('[data-testid="market-trend-direction"]').text()).toBe(
+      'Prix en baisse sur un an'
+    )
+    expect(n(trend.get('[data-testid="market-trend-reference"]').text())).toBe(
+      'Médiane 4 200 €/m² en 2025, sur 12 ventes.'
+    )
+    const tiles = trend.findAll('[data-testid="market-trend-changes"] > div')
+    expect(tiles.map(t => n(t.text()))).toEqual([
+      'sur un an−4,5 %2024 → 2025',
+      'sur cinq ans0,0 %2020 → 2025, 0,0 % par an',
+      'sur dix ans+40 %2015 → 2025, +3,4 % par an',
+    ])
+    // La courbe : onze tronçons, douze points, deux valeurs écrites (pic, année de référence).
+    const chart = trend.get('[data-testid="market-trend-chart"]')
+    expect(chart.findAll('path')).toHaveLength(11)
+    expect(chart.findAll('[data-point]')).toHaveLength(12)
+    expect(chart.findAll('[data-point-label]').map(l => n(l.text()))).toEqual([
+      '4 800 €',
+      '4 200 €',
+    ])
+    // Le tronçon vers l'année incomplète est en pointillé, hors de la couleur de la série.
+    const last = chart.findAll('path')[10]
+    expect(last?.attributes('stroke-dasharray')).toBe('4 4')
+    expect(last?.classes()).toContain('stroke-muted')
+    // Au survol d'une année, sa valeur ; en quittant le tracé, l'année de référence.
+    const readout = trend.get('[data-testid="market-trend-readout"]')
+    expect(n(readout.text())).toBe('2025 : 4 200 €/m² · 12 ventes')
+    const hits = chart.findAll('[data-hit]')
+    expect(hits).toHaveLength(12)
+    await hits[7]?.trigger('pointerenter')
+    expect(n(readout.text())).toBe('2022 : 4 800 €/m² · 12 ventes')
+    await hits[11]?.trigger('click')
+    expect(n(readout.text())).toBe(
+      '2026 (année incomplète) : 4 150 €/m² · 12 ventes'
+    )
+    await hits[11]?.element.parentElement?.dispatchEvent(
+      new Event('pointerleave')
+    )
+    await flushPromises()
+    expect(n(readout.text())).toBe('2025 : 4 200 €/m² · 12 ventes')
+    expect(n(trend.get('[data-testid="market-trend-peak"]').text())).toBe(
+      'Pic en 2022 à 4 800 €/m² : −13 % depuis. 2026 (année incomplète) : 4 150 €/m² sur 12 ventes.'
+    )
+    // Les mêmes chiffres en tableau, de l'année la plus récente à la plus ancienne.
+    const rows = trend.findAll('[data-testid="market-trend-table"] tbody tr')
+    expect(rows).toHaveLength(12)
+    expect(n(rows[0]?.text() ?? '')).toBe('2026 (incomplète)124 150 €/m²')
+    expect(n(rows[11]?.text() ?? '')).toBe('2015123 000 €/m²')
+    const notes = trend.get('[data-testid="market-trend-notes"]').text()
+    expect(notes).toContain('il n’entre dans aucun calcul')
+    expect(notes).toContain('repérées à la parcelle')
+  })
+
+  it('lot 29 : sans tendance retenue, la raison seule ; une année sans médiane se dit dans le tableau', async () => {
+    const base = fakeContext()
+    apiMock.listings.context.mockResolvedValueOnce({
+      ...base,
+      market: {
+        ...base.market,
+        trend: marketTrend({
+          byYear: [],
+          dataYears: [{ year: 2025, lastDate: '2025-12-30' }],
+          radiusMeters: 2000,
+        }),
+      },
+    })
+    const wrapper = mountTab()
+    await flushPromises()
+    const trend = wrapper.get('[data-testid="market-trend"]')
+    expect(trend.text()).toContain('À vérifier')
+    expect(trend.find('[data-testid="market-trend-chart"]').exists()).toBe(
+      false
+    )
+    expect(trend.find('[data-testid="market-trend-direction"]').exists()).toBe(
+      false
+    )
+    expect(trend.get('[data-testid="market-trend-notes"]').text()).toBe(
+      'Moins de 10 ventes par an à 2000 m : tendance non retenue.'
+    )
+    wrapper.unmount()
+
+    // Une seule année retenue, une autre trop mince : pas de courbe ni d'écart.
+    apiMock.listings.context.mockResolvedValueOnce({
+      ...base,
+      market: {
+        ...base.market,
+        trend: marketTrend({
+          byYear: [
+            { year: 2024, pricesPerM2: [4000, 4100] },
+            { year: 2025, pricesPerM2: Array.from({ length: 12 }, () => 4200) },
+          ],
+          dataYears: [
+            { year: 2024, lastDate: '2024-12-30' },
+            { year: 2025, lastDate: '2025-12-30' },
+          ],
+          radiusMeters: 1000,
+        }),
+      },
+    })
+    const single = mountTab()
+    await flushPromises()
+    const block = single.get('[data-testid="market-trend"]')
+    expect(block.find('[data-testid="market-trend-chart"]').exists()).toBe(
+      false
+    )
+    expect(block.find('[data-testid="market-trend-changes"]').exists()).toBe(
+      false
+    )
+    expect(block.find('[data-testid="market-trend-peak"]').exists()).toBe(false)
+    const rows = block.findAll('[data-testid="market-trend-table"] tbody tr')
+    expect(n(rows[1]?.text() ?? '')).toBe('20242trop peu de ventes')
   })
 
   it('arguments du brief et copie : texte composé, « Copié » ou refus', async () => {

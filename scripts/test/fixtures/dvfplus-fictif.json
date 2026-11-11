@@ -1,0 +1,394 @@
+{
+  "pages": [
+    {
+      "type": "FeatureCollection",
+      "count": 9,
+      "next": "http://exemple.invalid/?page=2",
+      "previous": null,
+      "features": [
+        {
+          "type": "Feature",
+          "id": 900001,
+          "geometry": {
+            "type": "MultiPolygon",
+            "coordinates": [
+              [
+                [
+                  [-0.58, 44.84],
+                  [-0.5798, 44.84],
+                  [-0.5798, 44.8402],
+                  [-0.58, 44.8402],
+                  [-0.58, 44.84]
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "idmutation": 900001,
+            "idmutinvar": "fictif0001",
+            "idopendata": "fictif0001",
+            "datemut": "2030-03-15",
+            "anneemut": 2030,
+            "coddep": "33",
+            "libnatmut": "Vente",
+            "vefa": false,
+            "valeurfonc": "180000.00",
+            "nbcomm": 1,
+            "l_codinsee": ["33063"],
+            "nbpar": 1,
+            "l_idpar": ["33063000ZZ0001"],
+            "nbparmut": 0,
+            "l_idparmut": [],
+            "sterr": "0.00",
+            "nbvolmut": 0,
+            "nblocmut": 1,
+            "l_idlocmut": ["fictif_0"],
+            "sbati": "45.00",
+            "codtypbien": "121",
+            "libtypbien": "UN APPARTEMENT"
+          }
+        },
+        {
+          "type": "Feature",
+          "id": 900002,
+          "geometry": {
+            "type": "MultiPolygon",
+            "coordinates": [
+              [
+                [
+                  [-0.7, 44.8],
+                  [-0.6999, 44.8],
+                  [-0.6999, 44.8001],
+                  [-0.7, 44.8001],
+                  [-0.7, 44.8]
+                ]
+              ],
+              [
+                [
+                  [-0.65, 44.83],
+                  [-0.6496000000000001, 44.83],
+                  [-0.6496000000000001, 44.8304],
+                  [-0.65, 44.8304],
+                  [-0.65, 44.83]
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "idmutation": 900002,
+            "idmutinvar": "fictif0002",
+            "idopendata": "fictif0002",
+            "datemut": "2030-03-15",
+            "anneemut": 2030,
+            "coddep": "33",
+            "libnatmut": "Vente en l'état futur d'achèvement",
+            "vefa": true,
+            "valeurfonc": "250000.00",
+            "nbcomm": 1,
+            "l_codinsee": ["33281"],
+            "nbpar": 1,
+            "l_idpar": ["33063000ZZ0001"],
+            "nbparmut": 0,
+            "l_idparmut": [],
+            "sterr": "0.00",
+            "nbvolmut": 0,
+            "nblocmut": 1,
+            "l_idlocmut": ["fictif_0"],
+            "sbati": "50.00",
+            "codtypbien": "121",
+            "libtypbien": "UN APPARTEMENT"
+          }
+        },
+        {
+          "type": "Feature",
+          "id": 900003,
+          "geometry": {
+            "type": "MultiPolygon",
+            "coordinates": [
+              [
+                [
+                  [-0.58, 44.84],
+                  [-0.5798, 44.84],
+                  [-0.5798, 44.8402],
+                  [-0.58, 44.8402],
+                  [-0.58, 44.84]
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "idmutation": 900003,
+            "idmutinvar": "fictif0003",
+            "idopendata": "fictif0003",
+            "datemut": "2030-03-15",
+            "anneemut": 2030,
+            "coddep": "33",
+            "libnatmut": "Echange",
+            "vefa": false,
+            "valeurfonc": "180000.00",
+            "nbcomm": 1,
+            "l_codinsee": ["33063"],
+            "nbpar": 1,
+            "l_idpar": ["33063000ZZ0001"],
+            "nbparmut": 0,
+            "l_idparmut": [],
+            "sterr": "0.00",
+            "nbvolmut": 0,
+            "nblocmut": 1,
+            "l_idlocmut": ["fictif_0"],
+            "sbati": "45.00",
+            "codtypbien": "121",
+            "libtypbien": "UN APPARTEMENT"
+          }
+        },
+        {
+          "type": "Feature",
+          "id": 900004,
+          "geometry": null,
+          "properties": {
+            "idmutation": 900004,
+            "idmutinvar": "fictif0004",
+            "idopendata": "fictif0004",
+            "datemut": "2030-03-15",
+            "anneemut": 2030,
+            "coddep": "33",
+            "libnatmut": "Vente",
+            "vefa": false,
+            "valeurfonc": "180000.00",
+            "nbcomm": 1,
+            "l_codinsee": ["33063"],
+            "nbpar": 1,
+            "l_idpar": ["33063000ZZ0001"],
+            "nbparmut": 0,
+            "l_idparmut": [],
+            "sterr": "0.00",
+            "nbvolmut": 0,
+            "nblocmut": 1,
+            "l_idlocmut": ["fictif_0"],
+            "sbati": "45.00",
+            "codtypbien": "121",
+            "libtypbien": "UN APPARTEMENT"
+          }
+        },
+        {
+          "type": "Feature",
+          "id": 900005,
+          "geometry": {
+            "type": "MultiPolygon",
+            "coordinates": [
+              [
+                [
+                  [-0.58, 44.84],
+                  [-0.5798, 44.84],
+                  [-0.5798, 44.8402],
+                  [-0.58, 44.8402],
+                  [-0.58, 44.84]
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "idmutation": 900005,
+            "idmutinvar": "fictif0005",
+            "idopendata": "fictif0005",
+            "datemut": "2030-03-15",
+            "anneemut": 2030,
+            "coddep": "33",
+            "libnatmut": "Vente",
+            "vefa": false,
+            "valeurfonc": "9000000.00",
+            "nbcomm": 1,
+            "l_codinsee": ["33063"],
+            "nbpar": 1,
+            "l_idpar": ["33063000ZZ0001"],
+            "nbparmut": 0,
+            "l_idparmut": [],
+            "sterr": "0.00",
+            "nbvolmut": 0,
+            "nblocmut": 1,
+            "l_idlocmut": ["fictif_0"],
+            "sbati": "45.00",
+            "codtypbien": "121",
+            "libtypbien": "UN APPARTEMENT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "FeatureCollection",
+      "count": 9,
+      "next": null,
+      "previous": "http://exemple.invalid/?page=1",
+      "features": [
+        {
+          "type": "Feature",
+          "id": 900006,
+          "geometry": {
+            "type": "MultiPolygon",
+            "coordinates": [
+              [
+                [
+                  [-0.58, 44.84],
+                  [-0.5798, 44.84],
+                  [-0.5798, 44.8402],
+                  [-0.58, 44.8402],
+                  [-0.58, 44.84]
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "idmutation": 900006,
+            "idmutinvar": "fictif0006",
+            "idopendata": "fictif0006",
+            "datemut": "2030-03-15",
+            "anneemut": 2030,
+            "coddep": "33",
+            "libnatmut": "Vente",
+            "vefa": false,
+            "valeurfonc": "180000.00",
+            "nbcomm": 2,
+            "l_codinsee": ["33063", "33281"],
+            "nbpar": 1,
+            "l_idpar": ["33063000ZZ0001"],
+            "nbparmut": 0,
+            "l_idparmut": [],
+            "sterr": "0.00",
+            "nbvolmut": 0,
+            "nblocmut": 1,
+            "l_idlocmut": ["fictif_0"],
+            "sbati": "45.00",
+            "codtypbien": "121",
+            "libtypbien": "UN APPARTEMENT"
+          }
+        },
+        {
+          "type": "Feature",
+          "id": 900007,
+          "geometry": {
+            "type": "MultiPolygon",
+            "coordinates": [
+              [
+                [
+                  [-0.58, 44.84],
+                  [-0.5798, 44.84],
+                  [-0.5798, 44.8402],
+                  [-0.58, 44.8402],
+                  [-0.58, 44.84]
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "idmutation": 900007,
+            "idmutinvar": "fictif0007",
+            "idopendata": "fictif0007",
+            "datemut": "2030-03-15",
+            "anneemut": 2030,
+            "coddep": "33",
+            "libnatmut": "Vente",
+            "vefa": false,
+            "valeurfonc": "180000.00",
+            "nbcomm": 1,
+            "l_codinsee": ["33063"],
+            "nbpar": 1,
+            "l_idpar": ["33063000ZZ0001"],
+            "nbparmut": 0,
+            "l_idparmut": [],
+            "sterr": "0.00",
+            "nbvolmut": 0,
+            "nblocmut": 1,
+            "l_idlocmut": ["fictif_0"],
+            "sbati": "5.00",
+            "codtypbien": "121",
+            "libtypbien": "UN APPARTEMENT"
+          }
+        },
+        {
+          "type": "Feature",
+          "id": 900008,
+          "geometry": {
+            "type": "MultiPolygon",
+            "coordinates": [
+              [
+                [
+                  [-0.58, 44.84],
+                  [-0.5798, 44.84],
+                  [-0.5798, 44.8402],
+                  [-0.58, 44.8402],
+                  [-0.58, 44.84]
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "idmutation": 900008,
+            "idmutinvar": "fictif0008",
+            "idopendata": "fictif0008",
+            "datemut": "2030-03-15",
+            "anneemut": 2030,
+            "coddep": "33",
+            "libnatmut": "Vente",
+            "vefa": false,
+            "valeurfonc": null,
+            "nbcomm": 1,
+            "l_codinsee": ["33063"],
+            "nbpar": 1,
+            "l_idpar": ["33063000ZZ0001"],
+            "nbparmut": 0,
+            "l_idparmut": [],
+            "sterr": "0.00",
+            "nbvolmut": 0,
+            "nblocmut": 1,
+            "l_idlocmut": ["fictif_0"],
+            "sbati": "45.00",
+            "codtypbien": "121",
+            "libtypbien": "UN APPARTEMENT"
+          }
+        },
+        {
+          "type": "Feature",
+          "id": 900009,
+          "geometry": {
+            "type": "MultiPolygon",
+            "coordinates": [
+              [
+                [
+                  [-0.58, 44.84],
+                  [-0.5798, 44.84],
+                  [-0.5798, 44.8402],
+                  [-0.58, 44.8402],
+                  [-0.58, 44.84]
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "idmutation": 900009,
+            "idmutinvar": "fictif0009",
+            "idopendata": "fictif0009",
+            "datemut": "2030-03-15",
+            "anneemut": 2030,
+            "coddep": "33",
+            "libnatmut": "Vente",
+            "vefa": false,
+            "valeurfonc": "180000.00",
+            "nbcomm": 1,
+            "l_codinsee": ["33063"],
+            "nbpar": 1,
+            "l_idpar": ["33063000ZZ0001"],
+            "nbparmut": 0,
+            "l_idparmut": [],
+            "sterr": "0.00",
+            "nbvolmut": 0,
+            "nblocmut": 1,
+            "l_idlocmut": ["fictif_0"],
+            "sbati": "45.00",
+            "codtypbien": "122",
+            "libtypbien": "DEUX APPARTEMENTS"
+          }
+        }
+      ]
+    }
+  ]
+}

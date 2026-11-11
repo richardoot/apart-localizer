@@ -17,7 +17,11 @@ import {
   describeRentControl,
   describeTransit,
 } from './mcp-tools'
-import { lookupRentObservatory, surroundingsOf } from '@apart/domain'
+import {
+  lookupRentObservatory,
+  marketTrend,
+  surroundingsOf,
+} from '@apart/domain'
 
 const rent: RentControlLookup = {
   status: 'ok',
@@ -61,6 +65,18 @@ const market: MarketContext = {
   gapToMarket: -0.11,
   reasons: [],
   dataYears: [2024],
+  // Lot 29 : une tendance fictive (calculée par `domain`).
+  trend: marketTrend({
+    byYear: [
+      { year: 2029, pricesPerM2: Array.from({ length: 12 }, () => 5000) },
+      { year: 2030, pricesPerM2: Array.from({ length: 12 }, () => 4500) },
+    ],
+    dataYears: [
+      { year: 2029, lastDate: '2029-12-30' },
+      { year: 2030, lastDate: '2030-12-30' },
+    ],
+    radiusMeters: 500,
+  }),
 }
 
 describe('réponses MCP du lot 4', () => {
@@ -307,6 +323,13 @@ describe('réponses MCP du lot 4', () => {
     )
     expect(text).toContain('au-dessus du 3e quartile')
     expect(text).toContain('un indicateur, pas un plafond')
+    // Lot 29 : la tendance des prix du secteur, dite comme un indicateur.
+    expect(text).toContain('Tendance des prix (Calculé) : médiane 4')
+    expect(text).toContain(
+      '€/m² en 2030 (12 ventes d’appartements à moins de 500 m, toutes surfaces) ; −10 % sur un an ; pic en 2029 à 5'
+    )
+    expect(text).toContain('€/m², −10 % depuis')
+    expect(text).toContain('il n’entre dans aucun calcul')
     expect(
       describeMarketReport({
         location: {
@@ -327,7 +350,7 @@ describe('réponses MCP du lot 4', () => {
         },
       })
     ).toMatch(
-      /-0\.58, 44\.84[\s\S]*Loyer observé \(observatoire des loyers\) : Aucun résultat/
+      /-0\.58, 44\.84[\s\S]*Tendance des prix \(Calculé\)[\s\S]*Loyer observé \(observatoire des loyers\) : Aucun résultat/
     )
   })
 

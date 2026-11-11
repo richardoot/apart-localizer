@@ -21,6 +21,7 @@
   import SensitivityTable from '../SensitivityTable.vue'
   import TargetPriceSection from '../TargetPriceSection.vue'
   import MarketSales from '../negotiate/MarketSales.vue'
+  import MarketTrend from '../negotiate/MarketTrend.vue'
   import NegotiationArguments from '../negotiate/NegotiationArguments.vue'
 
   /**
@@ -33,6 +34,9 @@
    *
    * Lot 25 (ADR 0035) : « Prix et offres » remonte sous le prix cible (c'est
    * ce qu'on vient faire ici) ; les ventes comparables suivent, cinq d'abord.
+   *
+   * Lot 29 (ADR 0039) : la tendance des prix du secteur sous les ventes
+   * comparables.
    */
   /** Lot 25 : la fiche dit si l'écriture a réussi ; la saisie n'est vidée qu'alors. */
   type Done = (ok: boolean) => void
@@ -126,7 +130,13 @@
     <div
       class="grid gap-4 @4xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] @4xl:items-start"
     >
-      <MarketSales :listing-id="item.listing.id" @go="tab => emit('go', tab)" />
+      <div class="grid min-w-0 content-start gap-4">
+        <MarketSales
+          :listing-id="item.listing.id"
+          @go="tab => emit('go', tab)"
+        />
+        <MarketTrend :listing-id="item.listing.id" />
+      </div>
       <NegotiationArguments
         :title="item.listing.title"
         :price="price"
