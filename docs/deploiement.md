@@ -303,6 +303,25 @@ FROM app.listings;
 Aucun outil MCP ne change. Après le déploiement du web, la première visite recharge la page une
 fois (service worker, ADR 0022) ; sur ordinateur, la fiche s'ouvre désormais en pleine page.
 
+### Fusion des doublons et agences multiples (lot 27)
+
+Migration `20261113100000_lot27_listing_merge` : purement additive (colonnes facultatives
+`listings.merged_into_id` et `merged_at`, null pour toutes les annonces existantes ; tables
+`listing_sellers`, les autres agences qui vendent le même bien, et `listing_merges`, une ligne par
+fusion ; énumération `ListingSellerOrigin` ; index et clés étrangères), aucune donnée réécrite.
+Appliquée par `prisma:deploy` (ou `build:vercel`). Ni variable, ni import, ni script de
+rattrapage : aucune annonce n'est fusionnée ni ne reçoit d'autre agence d'office. Contrôle après :
+
+```sql
+SELECT (SELECT count(*) FROM app.listings WHERE merged_into_id IS NOT NULL) AS fiches_fusionnees,
+       (SELECT count(*) FROM app.listing_merges WHERE undone_at IS NULL) AS fusions_en_cours,
+       (SELECT count(*) FROM app.listing_sellers) AS autres_agences;
+```
+
+Les deux premiers nombres sont égaux (zéro juste après la migration). Le connecteur passe à 42
+outils (`find_similar_listings`, `merge_listings`, `add_listing_seller`) : claude.ai relit la liste
+à la prochaine conversation, sans rien reconnecter.
+
 ### Adéquation aux critères (lot 14)
 
 Migration `20261106100000_lot14_criteria_fit` : purement additive (énumération
