@@ -17,7 +17,7 @@
   import { useListingContext } from '@/composables/useListingContext'
   import { useListingEditor } from '@/composables/useListingEditor'
   import { useRentComparables } from '@/composables/useStudy'
-  import { budgetRentalYear, marketRange } from '@/lib/budget'
+  import { budgetRentalYear, marketRange, observedRentText } from '@/lib/budget'
   import {
     formatCssPercent,
     formatEuros,
@@ -113,6 +113,11 @@
   )
 
   const rentControl = computed(() => context.value?.rentControl ?? null)
+  /** Lot 28 : loyer médian observé dans la zone (indicatif, hors calculs). */
+  const rentObservatory = computed(() => context.value?.rentObservatory ?? null)
+  const observedRent = computed(() =>
+    rentObservatory.value ? observedRentText(rentObservatory.value) : null
+  )
   const STATUS_TONES: Record<OpenDataStatus, Tone> = {
     ok: 'good',
     to_verify: 'warn',
@@ -341,6 +346,59 @@
             {{ note }}
           </li>
         </ul>
+      </div>
+    </details>
+
+    <details
+      v-if="rentObservatory"
+      class="rounded-xl border border-line px-3 text-sm"
+      data-testid="rent-observatory"
+    >
+      <summary
+        class="flex min-h-11 cursor-pointer flex-wrap items-center gap-2 font-medium"
+      >
+        Loyers observés dans la zone
+        <UiBadge :tone="STATUS_TONES[rentObservatory.status]">{{
+          OPEN_DATA_STATUS_LABELS[rentObservatory.status]
+        }}</UiBadge>
+        <UiBadge
+          v-if="rentObservatory.position === 'above_q3'"
+          tone="warn"
+          data-testid="rent-observatory-above"
+          >Loyer visé au-dessus du 3e quartile</UiBadge
+        >
+      </summary>
+      <div class="grid gap-1 pb-3">
+        <p v-if="observedRent">
+          Loyer médian observé
+          <strong>{{ observedRent.perM2 }}</strong>
+          <template v-if="observedRent.monthly">
+            · {{ observedRent.monthly }}
+          </template>
+          <span class="block text-xs text-muted">{{
+            observedRent.detail
+          }}</span>
+        </p>
+        <ul class="grid gap-0.5 text-xs">
+          <li
+            v-for="reason in rentObservatory.reasons"
+            :key="reason"
+            class="text-warn"
+          >
+            {{ reason }}
+          </li>
+          <li
+            v-for="note in rentObservatory.notes"
+            :key="note"
+            class="text-muted"
+          >
+            {{ note }}
+          </li>
+        </ul>
+        <p class="text-xs text-muted">
+          Indicatif : n’entre dans aucun calcul. Source :
+          {{ rentObservatory.attribution }}.
+        </p>
       </div>
     </details>
 

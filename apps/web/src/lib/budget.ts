@@ -3,6 +3,7 @@ import type {
   Assumptions,
   LeaseType,
   RentMarketStats,
+  RentObservatoryLookup,
   ScenarioOverrides,
 } from '@apart/contracts'
 import { rentalStartYear } from '@apart/domain'
@@ -110,4 +111,40 @@ export function scenarioSummary(overrides: ScenarioOverrides): string {
     parts.push(`horizon ${a.horizonYears} ans`)
   }
   return parts.join(', ')
+}
+
+/**
+ * Lot 28 : le loyer observé par l'observatoire local des loyers, en deux
+ * lignes (la médiane et son loyer mensuel, puis la zone et l'enquête) ; null
+ * quand aucune médiane n'est lue. Indicatif : jamais un plafond.
+ */
+export function observedRentText(
+  lookup: RentObservatoryLookup
+): { perM2: string; monthly: string | null; detail: string } | null {
+  if (lookup.medianPerM2 === null || lookup.zone === null) return null
+  const perM2 = (value: number): string =>
+    `${value.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} €/m²`
+  const rooms =
+    lookup.rooms === null
+      ? 'toutes tailles'
+      : lookup.rooms === 4
+        ? '4 pièces et plus'
+        : lookup.rooms === 1
+          ? '1 pièce'
+          : `${lookup.rooms} pièces`
+  const monthly =
+    lookup.monthlyMedian !== null &&
+    lookup.monthlyQ1 !== null &&
+    lookup.monthlyQ3 !== null
+      ? `${lookup.approximate ? '≈ ' : ''}${formatEurosPerMonth(lookup.monthlyMedian)} hors charges, de ${formatEuros(lookup.monthlyQ1)} à ${formatEuros(lookup.monthlyQ3)} entre les quartiles`
+      : null
+  const quartiles =
+    lookup.q1PerM2 !== null && lookup.q3PerM2 !== null
+      ? `, quartiles ${perM2(lookup.q1PerM2)} et ${perM2(lookup.q3PerM2)}`
+      : ''
+  return {
+    perM2: perM2(lookup.medianPerM2),
+    monthly,
+    detail: `${lookup.zone.label}, appartements ${rooms}${quartiles}${lookup.year !== null ? `, enquête ${lookup.year}` : ''}`,
+  }
 }

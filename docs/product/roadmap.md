@@ -1466,3 +1466,22 @@ Livré :
 Limites : l'adresse et le repère de la fiche gardée ne changent pas ; pas de choix champ par
 champ ; l'historique des prix de la fiche absorbée reste sur elle ; la ressemblance classe, elle
 ne prouve pas.
+
+## Lot 28 : loyers observés hors de Bordeaux, ventes DVF 2025 et 2026
+
+Statut : livré le 11 novembre 2026 (code, tests, documentation ; ADR 0038). Aucune migration,
+aucune variable nouvelle, aucun outil MCP nouveau (42).
+
+- **Pourquoi** : hors de la commune de Bordeaux il n'y a pas d'encadrement, donc pas de loyer de
+  référence ; une annonce de Talence ou de Mérignac n'avait aucun repère de loyer avant la saisie
+  de cinq comparables.
+- **Loyers observés** : médiane et quartiles hors charges de l'Observatoire local des loyers de
+  l'agglomération de Bordeaux (enquête 2025), par zone et nombre de pièces, pour les 28 communes ;
+  la zone vient de la commune ou de l'IRIS du repère. Bloc « Loyers observés dans la zone » de
+  l'onglet Budget, `rentObservatory` du contexte, de `POST /market-context` et de
+  `get_market_context`. Un indicateur : il n'entre dans aucun calcul, n'est jamais un plafond et
+  n'est pas écrit sur l'annonce.
+- **Import** : `pnpm import:rent-observatory` (`--year`, `--download`, `--dry-run`).
+- **Ventes DVF** : années 2025 et 1er semestre 2026 importées depuis les fichiers nationaux de la
+  livraison d'octobre 2026 (`import:dvf --url`).
+

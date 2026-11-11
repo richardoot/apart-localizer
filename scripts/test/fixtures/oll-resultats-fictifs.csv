@@ -1,0 +1,25 @@
+Observatory;Data_year;agglomeration;Zone_calcul;Zone_complementaire;Type_habitat;epoque_construction_local;epoque_construction_homogene;anciennete_locataire_local;anciennete_locataire_homogene;nombre_pieces_local;nombre_pieces_homogene;loyer_1_decile;loyer_1_quartile;loyer_median;loyer_3_quartile;loyer_9_decile;loyer_moyen;loyer_mensuel_1_decile;loyer_mensuel_1_quartile;loyer_mensuel_median;loyer_mensuel_3_quartile;loyer_mensuel_9_decile;moyenne_loyer_mensuel;surface_moyenne;nombre_observations;nombre_logements;methodologie_production
+B9900;2030;L9900;;;;;;;;;;7,0;8,0;9,0;10,0;11,0;9,1;400;450;500;550;600;505;55;3000;9000;Estimation directe
+B9900;2030;L9900;;;Appartement;;;;;;;7,1;8,1;9,1;10,1;11,1;9,2;400;450;500;550;600;505;50;2500;8000;Estimation directe
+B9900;2030;L9900;;;;;;;;;Appart 2P;7,2;8,2;9,2;10,2;11,2;9,3;400;450;500;550;600;505;45;900;3000;Estimation directe
+B9900;2030;L9900;L9900.1.01;;;;;;;;;8,0;9,0;10,0;11,0;12,0;10,1;400;450;500;550;600;505;50;1 200;4000;Estimation directe
+B9900;2030;L9900;L9900.1.01;;Appartement;;;;;;;8,5;9,5;10,5;11,5;12,5;10,6;400;450;500;550;600;505;48;1000;3500;Estimation directe
+B9900;2030;L9900;L9900.1.01;;Maison;;;;;;;7,5;8,5;9,5;10,5;11,5;9,6;600;700;800;900;1000;805;90;200;500;Estimation directe
+B9900;2030;L9900;L9900.1.01;;;;;;;;Appart 1P;11,0;12,0;13,0;14,0;15,0;13,1;300;330;360;390;420;362;27;150;600;Estimation directe
+B9900;2030;L9900;L9900.1.01;;;;;;;;Appart 2P;9,0;10,0;11,0;12,0;13,0;11,1;400;450;500;550;600;505;45;400;1500;Estimation directe
+B9900;2030;L9900;L9900.1.01;;;;;;;;Appart 3P;8,0;9,0;10,0;11,0;12,0;10,1;550;600;650;700;750;655;65;300;1000;Estimation directe
+B9900;2030;L9900;L9900.1.01;;;;;;;;Appart 4P+;7,0;8,0;9,0;10,0;11,0;9,1;700;750;800;850;900;805;88;;400;Estimation directe
+B9900;2030;L9900;L9900.1.01;;;;;;;;Ensemble 2P;9,0;10,0;11,1;12,0;13,0;11,1;400;450;500;550;600;505;45;410;1550;Estimation directe
+B9900;2030;L9900;L9900.1.01;;;;;;;;Maison 4P+;7,0;8,0;9,0;10,0;11,0;9,1;800;850;900;950;1000;905;100;100;300;Estimation directe
+B9900;2030;L9900;L9900.1.01;;;;;;;Appart 2P;;9,0;10,0;11,0;12,0;13,0;11,1;400;450;500;550;600;505;45;400;1500;Estimation directe
+B9900;2030;L9900;L9900.1.01;;;;1. Avant 1946;;;;;8,0;9,0;10,2;11,0;12,0;10,1;400;450;500;550;600;505;50;200;700;Estimation directe
+B9900;2030;L9900;L9900.1.01;;Appartement;;;;1. Moins de 1 an;;;9,0;10,0;11,5;12,5;13,5;11,6;400;450;500;550;600;505;46;250;;Estimation directe
+B9900;2030;L9900;L9900.1.01;;Appartement;;;;2. 1 an et plus;;;8,0;9,0;10,2;11,2;12,2;10,3;400;450;500;550;600;505;49;750;;Estimation directe
+B9900;2030;L9900;L9900.1.01;;;;;;1. Moins de 1 an;;;9,0;10,0;11,4;12,4;13,4;11,5;400;450;500;550;600;505;47;280;;Estimation directe
+B9900;2030;L9900;L9900.1.01;;Appartement;;1. Avant 1946;;;;Appart 2P;;;;;;;;;;;;;;;;
+B9900;2030;L9900;L9900.1.02;;Appartement;;;;;;;7,5;8,5;9,5;10,5;11,5;9,6;400;450;500;550;600;505;52;800;3000;Estimation directe
+B9900;2030;L9900;L9900.1.02;;;;;;;;Appart 2P;8,0;9,0;10,0;11,0;12,0;10,1;400;450;500;550;600;505;46;300;1100;Estimation directe
+B9900;2030;L9900;L9900.1.02;;;;;;;;Appart 3P;;;;;;;;;;;;;;;;
+B9900;2030;L9900;L9900.1.03;;Appartement;;;;;;;6,5;7,5;8,5;9,5;10,5;8,6;400;450;500;550;600;505;55;500;2000;Estimation directe
+B9900;2030;L9900;L9900.1.01;Ville centre;Appartement;;;;;;;8,6;9,6;10,6;11,6;12,6;10,7;400;450;500;550;600;505;48;900;3000;Estimation directe
+B9901;2030;L9901;L9901.1.01;;Appartement;;;;;;;20,0;21,0;22,0;23,0;24,0;22,1;400;450;500;550;600;505;48;900;3000;Estimation directe

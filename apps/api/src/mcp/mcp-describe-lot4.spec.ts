@@ -17,7 +17,7 @@ import {
   describeRentControl,
   describeTransit,
 } from './mcp-tools'
-import { surroundingsOf } from '@apart/domain'
+import { lookupRentObservatory, surroundingsOf } from '@apart/domain'
 
 const rent: RentControlLookup = {
   status: 'ok',
@@ -184,6 +184,54 @@ describe('réponses MCP du lot 4', () => {
     )
   })
 
+  /** Lot 28 : loyers observés fictifs (aucune valeur réelle). */
+  const observed = (tables: 'none' | 'one') =>
+    lookupRentObservatory({
+      tables:
+        tables === 'none'
+          ? []
+          : [
+              {
+                territory: 'bordeaux',
+                observatory: 'L9900',
+                year: 2030,
+                observedAt: '2030-01-01',
+                housingType: 'apartment',
+                zones: [
+                  {
+                    zone: 2,
+                    label: 'Zone 2',
+                    stats: [
+                      {
+                        rooms: 2,
+                        medianPerM2: 15,
+                        q1PerM2: 13,
+                        q3PerM2: 17,
+                        observations: 400,
+                      },
+                    ],
+                    recentTenants: null,
+                  },
+                ],
+                irisZones: {},
+                communeZones: { '99002': 2 },
+                source: {
+                  url: null,
+                  file: 'fictif.zip',
+                  sha256: 'abc',
+                  importedAt: '2030-11-11T10:00:00.000Z',
+                },
+              },
+            ],
+      hasPoint: false,
+      precision: null,
+      inseeCode: '99002',
+      irisCodes: [],
+      rooms: 2,
+      surface: 40,
+      targetRent: 700,
+    })
+
   it('contexte de fiche et contexte de marché', () => {
     const text = describeContext({
       listingId: '11111111-1111-4111-8111-111111111111',
@@ -233,6 +281,7 @@ describe('réponses MCP du lot 4', () => {
         },
       },
       market,
+      rentObservatory: observed('one'),
       surroundings: surroundingsOf({
         point: null,
         precision: null,
@@ -253,6 +302,11 @@ describe('réponses MCP du lot 4', () => {
     expect(text).toContain('DPE non vérifié')
     expect(text).toContain('Quartier : Annonce sans point')
     expect(text).toContain('1 DPE candidat(s)')
+    expect(text).toContain(
+      'Loyer observé, zone 2 de l’observatoire des loyers 2030, appartements 2 pièces : médiane 15,0 €/m² (quartiles 13,0 €/m² et 17,0 €/m²), soit 600 € par mois hors charges'
+    )
+    expect(text).toContain('au-dessus du 3e quartile')
+    expect(text).toContain('un indicateur, pas un plafond')
     expect(
       describeMarketReport({
         location: {
@@ -264,6 +318,7 @@ describe('réponses MCP du lot 4', () => {
         },
         market,
         rentControl: rent,
+        rentObservatory: observed('none'),
         transit: {
           nearestTram: null,
           nearestStop: null,
@@ -271,7 +326,9 @@ describe('réponses MCP du lot 4', () => {
           reasons: [],
         },
       })
-    ).toContain('-0.58, 44.84')
+    ).toMatch(
+      /-0\.58, 44\.84[\s\S]*Loyer observé \(observatoire des loyers\) : Aucun résultat/
+    )
   })
 
   it('un critère en une ligne', () => {

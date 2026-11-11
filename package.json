@@ -30,6 +30,7 @@
     "link:identities": "pnpm --filter @apart/scripts link:identities",
     "import:artifact": "pnpm --filter @apart/scripts import:artifact",
     "import:rent-control": "pnpm --filter @apart/scripts import:rent-control",
+    "import:rent-observatory": "pnpm --filter @apart/scripts import:rent-observatory",
     "import:transit-stops": "pnpm --filter @apart/scripts import:transit-stops",
     "import:dvf": "pnpm --filter @apart/scripts import:dvf",
     "geocode:missing": "pnpm --filter @apart/scripts geocode:missing",

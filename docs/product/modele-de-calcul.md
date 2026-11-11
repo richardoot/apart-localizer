@@ -519,6 +519,26 @@ position      = part des comparables dont le loyer au m² est sous celui du loye
 Un comparable relevé il y a plus de 12 mois est signalé « ancien ». Le loyer estimé n'entre dans
 les contrôles de louabilité que si le membre le retient comme loyer de marché de la phase 2.
 
+### Loyer observé par l'observatoire local des loyers (lot 28, ADR 0038)
+
+Hors de la commune de Bordeaux il n'y a ni encadrement ni loyer de référence. `lookupRentObservatory`
+lit, pour les 28 communes, les loyers hors charges observés par l'Observatoire local des loyers de
+l'agglomération de Bordeaux ([open-data.md](../open-data.md)) :
+
+```
+zone          = zone de la commune si elle est entière dans une zone, sinon zone de l'IRIS du repère
+ligne         = appartements du même nombre de pièces (1, 2, 3, « 4 et plus »), sinon toutes tailles
+loyerObservé  = médiane(loyerM2 de la ligne) × S          fourchette : 1er et 3e quartiles × S
+écart         = loyerVisé / loyerObservé − 1
+position      = sous le 1er quartile | entre les quartiles | au-dessus du 3e quartile   (loyerVisé / S)
+```
+
+Un **indicateur** : il n'entre ni dans `L`, ni dans les rendements, ni dans le prix cible, ni dans
+la louabilité, et n'est jamais un plafond. Il n'est pas écrit sur l'annonce. Un loyer visé
+au-dessus du 3e quartile est signalé. Adresse à la rue : « ≈ » ; repère au quartier ou au centre
+de la commune : « à vérifier » ; repère en limite de deux zones : aucune valeur. Les loyers sont
+ceux de tous les locataires en place à la date de l'enquête, pas des seules mises en location.
+
 ## 11. Checklist réglementaire datée (lot 5, besoins L5, D6)
 
 `complianceReport` évalue une table de règles datées et sourcées (`DEFAULT_REGULATORY_RULES`

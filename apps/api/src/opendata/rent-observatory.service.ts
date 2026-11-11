@@ -1,0 +1,87 @@
+import { Injectable } from '@nestjs/common'
+import {
+  NEIGHBOURHOOD_TERRITORY,
+  RentObservatoryTableSchema,
+} from '@apart/contracts'
+import type {
+  LeaseType,
+  LocationPrecision,
+  Point,
+  RentObservatoryLookup,
+  RentObservatoryTable,
+} from '@apart/contracts'
+import { lookupRentObservatory } from '@apart/domain'
+import { GeoService } from '../geo/geo.service'
+import { ReferenceCacheService } from './reference-cache.service'
+
+/** Sorte de `ReferenceData` des résultats de l'observatoire local des loyers. */
+export const RENT_OBSERVATORY_KIND = 'rent_observatory'
+
+export interface RentObservatoryTarget {
+  point: Point | null
+  precision: LocationPrecision | null
+  inseeCode: string | null
+  rooms: number | null
+  surface: number | null
+  targetRent: number | null
+  leaseType: LeaseType | null
+}
+
+/**
+ * Lot 28 (ADR 0038) : le loyer médian observé par l'observatoire local des
+ * loyers dans la zone d'une annonce. La table vient de `ReferenceData`
+ * (import `import:rent-observatory`), l'IRIS du repère des contours importés
+ * au lot 11 (module geo), le calcul de `domain`. Un indicateur : rien n'est
+ * écrit sur l'annonce, aucun calcul n'en dépend.
+ */
+@Injectable()
+export class RentObservatoryService {
+  constructor(
+    private readonly geo: GeoService,
+    private readonly cache: ReferenceCacheService
+  ) {}
+
+  /** Les années d'enquête importées ; une entrée illisible est ignorée. */
+  async tables(): Promise<RentObservatoryTable[]> {
+    const rows = await this.cache.all<unknown>(RENT_OBSERVATORY_KIND)
+    return rows
+      .map(row => RentObservatoryTableSchema.safeParse(row.payload))
+      .filter(parsed => parsed.success)
+      .map(parsed => parsed.data)
+  }
+
+  async lookup(target: RentObservatoryTarget): Promise<RentObservatoryLookup> {
+    const tables = await this.tables()
+    // Les contours qui contiennent le repère (distance nulle), pas ses voisins.
+    const hits =
+      target.point && tables.length > 0
+        ? (
+            await this.geo.neighbourhoodsNear(
+              target.point,
+              0,
+              NEIGHBOURHOOD_TERRITORY
+            )
+          ).filter(hit => hit.distance_meters === 0)
+        : []
+    // Aucun contour au repère : hors du territoire, ou contours pas importés.
+    const contoursImported =
+      hits.length > 0 || !target.point || tables.length === 0
+        ? true
+        : Object.values(
+            await this.geo.neighbourhoodCounts(NEIGHBOURHOOD_TERRITORY)
+          ).some(count => count > 0)
+    return lookupRentObservatory({
+      tables,
+      contoursImported,
+      hasPoint: target.point !== null,
+      precision: target.point ? target.precision : null,
+      inseeCode: target.inseeCode ?? hits[0]?.insee_code ?? null,
+      irisCodes: hits.filter(hit => hit.kind === 'iris').map(hit => hit.code),
+      rooms: target.rooms,
+      surface: target.surface,
+      targetRent: target.targetRent,
+      furnished:
+        target.leaseType === 'furnished' || target.leaseType === 'shared',
+    })
+  }
+}

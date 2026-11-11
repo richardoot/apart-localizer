@@ -13,6 +13,7 @@ import {
   LocationApproximationSchema,
 } from './placement.js'
 import { SurroundingsSchema } from './surroundings.js'
+import { RentObservatoryLookupSchema } from './rent-observatory.js'
 
 /**
  * Données ouvertes (lot 4, besoins D1 à D7, L2, L3, N4) : arrêts TBM, DPE de
@@ -446,6 +447,9 @@ export const ListingContextSchema = z.object({
     search: DpeSearchResultSchema.nullable(),
   }),
   market: MarketContextSchema,
+  rentObservatory: RentObservatoryLookupSchema.describe(
+    'Lot 28 : loyer médian observé par l’observatoire local des loyers dans la zone de l’annonce (indicatif, hors charges)'
+  ),
   surroundings: SurroundingsSchema.describe(
     'Lot 11 : quartier, piste d’athlétisme, drives et Fitness Park les plus proches (à vol d’oiseau)'
   ),
@@ -521,6 +525,9 @@ export const MarketContextReportSchema = z.object({
   }),
   market: MarketContextSchema,
   rentControl: RentControlLookupSchema,
+  rentObservatory: RentObservatoryLookupSchema.describe(
+    'Lot 28 : loyer médian observé par l’observatoire local des loyers (indicatif, hors charges)'
+  ),
   transit: TransitContextSchema,
 })
 export type MarketContextReport = z.infer<typeof MarketContextReportSchema>

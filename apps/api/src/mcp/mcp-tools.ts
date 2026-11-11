@@ -103,6 +103,7 @@ import {
   mcpDecisionLine,
   mergeAssumptions,
   precisionBadge,
+  rentObservatoryLine,
   toleranceSummary,
 } from '@apart/domain'
 import type { Member } from '../generated/prisma'
@@ -633,6 +634,7 @@ export function describeContext(context: ListingContext): string {
       : []),
     `  - ${describeTransit(context.transit)}`,
     `  - ${describeRentControl(context.rentControl)}`,
+    `  - ${rentObservatoryLine(context.rentObservatory)}`,
     `  - DPE ${context.dpe.verified ? 'vérifié auprès de l’ADEME' : 'non vérifié'} : ${context.dpe.validity.messages.join(' ')}${context.dpe.search && !context.dpe.verified && context.dpe.search.candidates.length ? ` (${context.dpe.search.candidates.length} DPE candidat(s) à l'ADEME, à valider dans l'application)` : ''}`,
     `  - ${describeMarket(context.market)}`,
     ...describeSurroundings(context.surroundings).map(line => `  - ${line}`),
@@ -650,6 +652,7 @@ export function describeMarketReport(report: MarketContextReport): string {
     `Contexte de marché pour ${where}${report.location.commune ? ` (${report.location.commune})` : ''} :`,
     `  - ${describeMarket(report.market)}`,
     `  - ${describeRentControl(report.rentControl)}`,
+    `  - ${rentObservatoryLine(report.rentObservatory)}`,
     `  - ${describeTransit(report.transit)}`,
   ].join('\n')
 }

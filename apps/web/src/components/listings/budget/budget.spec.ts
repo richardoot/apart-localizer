@@ -286,10 +286,71 @@ describe('onglet Budget (lot 19)', () => {
     expect(rent).toContain('zone 2')
     expect(rent).toContain('vide')
     expect(rent).toContain('Arrêté fictif.')
+    // Lot 28 : le loyer médian observé dans la zone, indicatif.
+    const observed = n(phase.get('[data-testid="rent-observatory"]').text())
+    expect(observed).toContain('Loyers observés dans la zone')
+    expect(observed).toContain('Calculé')
+    expect(observed).toContain('Loyer médian observé 15,0 €/m²')
+    expect(observed).toContain(
+      '675 €/mois hors charges, de 585 € à 765 € entre les quartiles'
+    )
+    expect(observed).toContain(
+      'Zone 2, appartements 2 pièces, quartiles 13,0 €/m² et 17,0 €/m², enquête 2030'
+    )
+    expect(observed).toContain('un indicateur, pas un plafond')
+    expect(observed).toContain(
+      'Indicatif : n’entre dans aucun calcul. Source : Observatoire fictif des loyers.'
+    )
+    expect(phase.find('[data-testid="rent-observatory-above"]').exists()).toBe(
+      false
+    )
     expect(phase.text()).toContain('Demande locative')
     // Loyers comparables et conformité, repliés.
     expect(phase.text()).toContain('Loyers comparables')
     expect(phase.text()).toContain('Conformité réglementaire')
+  })
+
+  it('lot 28 : loyer visé au-dessus du 3e quartile signalé ; sans médiane, la raison seule', async () => {
+    const base = fakeContext()
+    apiMock.listings.context.mockResolvedValue({
+      ...base,
+      rentObservatory: {
+        ...base.rentObservatory,
+        status: 'to_verify',
+        approximate: true,
+        position: 'above_q3',
+        reasons: ['Repère approché (quartier) : zone à confirmer.'],
+      },
+    })
+    const { wrapper } = mountTab()
+    await flushPromises()
+    const observed = wrapper.get('[data-testid="rent-observatory"]')
+    expect(observed.text()).toContain('À vérifier')
+    expect(observed.get('[data-testid="rent-observatory-above"]').text()).toBe(
+      'Loyer visé au-dessus du 3e quartile'
+    )
+    expect(n(observed.text())).toContain('≈ 675 €/mois')
+    expect(observed.text()).toContain('Repère approché (quartier)')
+
+    apiMock.listings.context.mockResolvedValue({
+      ...base,
+      rentObservatory: {
+        ...base.rentObservatory,
+        status: 'unavailable',
+        zone: null,
+        medianPerM2: null,
+        monthlyMedian: null,
+        position: null,
+        reasons: ['Aucun résultat de l’observatoire des loyers importé.'],
+        notes: [],
+      },
+    })
+    const empty = mountTab().wrapper
+    await flushPromises()
+    const block = empty.get('[data-testid="rent-observatory"]')
+    expect(block.text()).toContain('Indisponible')
+    expect(block.text()).not.toContain('Loyer médian observé')
+    expect(block.text()).toContain('Aucun résultat de l’observatoire')
   })
 
   it('phase 2 modifiée sur place : loyer visé d’abord, sans année ni type, même mise à jour que l’ancien formulaire', async () => {

@@ -15,6 +15,7 @@ import type {
   MarketContextRequest,
   Point,
   RentControlLookup,
+  RentObservatoryLookup,
 } from '@apart/contracts'
 import {
   REFERENCE_RENT_KEY,
@@ -29,6 +30,7 @@ import { GeocodingService } from '../opendata/geocoding.service'
 import { listingAreaRef } from '../opendata/placement.service'
 import { MarketService } from '../opendata/market.service'
 import { RentControlService } from '../opendata/rent-control.service'
+import { RentObservatoryService } from '../opendata/rent-observatory.service'
 import { SurroundingsService } from '../opendata/surroundings.service'
 import { TransitService } from '../opendata/transit.service'
 import { PrismaService } from '../prisma/prisma.service'
@@ -88,7 +90,8 @@ export class ListingEnrichmentService {
     private readonly transit: TransitService,
     private readonly dpe: DpeService,
     private readonly geocoding: GeocodingService,
-    private readonly surroundings: SurroundingsService
+    private readonly surroundings: SurroundingsService,
+    private readonly rentObservatory: RentObservatoryService
   ) {}
 
   private async load(member: Member, id: string): Promise<ListingDto> {
@@ -125,6 +128,26 @@ export class ListingEnrichmentService {
       },
       at
     )
+  }
+
+  /**
+   * Lot 28 : le loyer médian observé dans la zone de l'annonce (indicatif,
+   * calculé à la lecture, jamais enregistré sur l'annonce).
+   */
+  private async observedRentFor(
+    member: Member,
+    listing: ListingDto
+  ): Promise<RentObservatoryLookup> {
+    const values = await this.assumptions.currentValues(member.workspaceId)
+    return this.rentObservatory.lookup({
+      point: listing.location.point,
+      precision: listing.location.precision,
+      inseeCode: listing.location.inseeCode,
+      rooms: listing.rooms,
+      surface: listing.surface,
+      targetRent: listing.rentalPlan?.targetRent ?? null,
+      leaseType: values.leaseType,
+    })
   }
 
   private marketFor(listing: ListingDto, at: Date): Promise<MarketContext> {
@@ -356,12 +379,14 @@ export class ListingEnrichmentService {
     const now = new Date()
     const listing = await this.load(member, id)
     const approximation = locationApproximation(listing.location)
-    const [transit, rentControl, market, surroundings] = await Promise.all([
-      this.transit.at(listing.location.point, approximation),
-      this.rentFor(member, listing, now),
-      this.marketFor(listing, now),
-      this.surroundingsFor(listing, now),
-    ])
+    const [transit, rentControl, market, surroundings, rentObservatory] =
+      await Promise.all([
+        this.transit.at(listing.location.point, approximation),
+        this.rentFor(member, listing, now),
+        this.marketFor(listing, now),
+        this.surroundingsFor(listing, now),
+        this.observedRentFor(member, listing),
+      ])
     return {
       listingId: listing.id,
       point: listing.location.point,
@@ -381,6 +406,7 @@ export class ListingEnrichmentService {
         search: listing.openDataContext?.dpe ?? null,
       },
       market,
+      rentObservatory,
       surroundings,
       computedAt: now.toISOString(),
     }
@@ -525,7 +551,7 @@ export class ListingEnrichmentService {
       placement,
       commune,
     })
-    const [market, rentControl, transit] = await Promise.all([
+    const [market, rentControl, transit, rentObservatory] = await Promise.all([
       this.market.context(
         {
           point,
@@ -563,11 +589,21 @@ export class ListingEnrichmentService {
         now
       ),
       this.transit.at(point, approximation),
+      this.rentObservatory.lookup({
+        point,
+        precision,
+        inseeCode,
+        rooms: request.rooms ?? listing?.rooms ?? null,
+        surface,
+        targetRent: listing?.rentalPlan?.targetRent ?? null,
+        leaseType,
+      }),
     ])
     return {
       location: { point, label, precision, commune, inseeCode },
       market,
       rentControl,
+      rentObservatory,
       transit,
     }
   }

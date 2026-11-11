@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { RentObservatoryLookup } from '@apart/contracts'
 import {
   AssumptionsSchema,
   DEFAULT_ASSUMPTIONS,
@@ -10,6 +11,7 @@ import {
   leaseTypeText,
   marketRange,
   notaryText,
+  observedRentText,
   scenarioSummary,
 } from './budget'
 
@@ -92,5 +94,70 @@ describe('onglet Budget : les textes (lot 19)', () => {
       })
     ).toBe('colocation, location le 2029-06-01')
     expect(scenarioSummary({})).toBe('')
+  })
+})
+
+describe('onglet Budget : loyers observés dans la zone (lot 28)', () => {
+  /** Valeurs fictives : aucune donnée réelle de l'observatoire. */
+  const lookup = (
+    over: Partial<RentObservatoryLookup> = {}
+  ): RentObservatoryLookup => ({
+    status: 'ok',
+    zone: { zone: 3, label: 'Zone 3' },
+    approximate: false,
+    rooms: 2,
+    medianPerM2: 13.4,
+    q1PerM2: 12.3,
+    q3PerM2: 14.9,
+    observations: 300,
+    monthlyMedian: 536,
+    monthlyQ1: 492,
+    monthlyQ3: 596,
+    targetRent: null,
+    gapToMedian: null,
+    position: null,
+    year: 2030,
+    observedAt: '2030-01-01',
+    sourceUrl: null,
+    attribution: 'Observatoire fictif',
+    reasons: [],
+    notes: [],
+    ...over,
+  })
+
+  it('la médiane au m², le loyer mensuel et sa fourchette, la zone et l’enquête', () => {
+    const text = observedRentText(lookup())
+    expect(text?.perM2).toBe('13,4 €/m²')
+    expect(n(text?.monthly ?? '')).toBe(
+      '536 €/mois hors charges, de 492 € à 596 € entre les quartiles'
+    )
+    expect(text?.detail).toBe(
+      'Zone 3, appartements 2 pièces, quartiles 12,3 €/m² et 14,9 €/m², enquête 2030'
+    )
+  })
+
+  it('« ≈ » pour un repère approché ; tranches de pièces ; sans surface ni quartiles', () => {
+    expect(
+      n(observedRentText(lookup({ approximate: true }))?.monthly ?? '')
+    ).toMatch(/^≈ 536 €\/mois/)
+    expect(observedRentText(lookup({ rooms: 1 }))?.detail).toContain(
+      'appartements 1 pièce,'
+    )
+    expect(observedRentText(lookup({ rooms: 4 }))?.detail).toContain(
+      'appartements 4 pièces et plus'
+    )
+    expect(observedRentText(lookup({ rooms: null }))?.detail).toContain(
+      'appartements toutes tailles'
+    )
+    const bare = observedRentText(
+      lookup({ monthlyMedian: null, q1PerM2: null, year: null })
+    )
+    expect(bare?.monthly).toBeNull()
+    expect(bare?.detail).toBe('Zone 3, appartements 2 pièces')
+  })
+
+  it('rien sans médiane ou sans zone', () => {
+    expect(observedRentText(lookup({ medianPerM2: null }))).toBeNull()
+    expect(observedRentText(lookup({ zone: null }))).toBeNull()
   })
 })
