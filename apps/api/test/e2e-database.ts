@@ -56,6 +56,32 @@ function withDatabase(url: string, database: string): string {
   return parsed.toString()
 }
 
+/**
+ * Drops a throwaway database once nobody is connected to it any more.
+ *
+ * `pool.end()` resolves as soon as its clients are removed, before the
+ * server has seen them disconnect. A `DROP DATABASE … WITH (FORCE)` sent
+ * right away can therefore terminate a backend whose client is still
+ * closing: that client then receives « terminating connection due to
+ * administrator command » (57P01) with nobody listening, an uncaught
+ * exception that fails a run in which every test passed. So wait for the
+ * backends to go (five seconds at most), and keep FORCE as a last resort.
+ */
+export async function dropE2eDatabase(
+  admin: Pool,
+  name: string
+): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const { rows } = await admin.query<{ connected: number }>(
+      'SELECT count(*)::int AS connected FROM pg_stat_activity WHERE datname = $1',
+      [name]
+    )
+    if ((rows[0]?.connected ?? 0) === 0) break
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+  await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`)
+}
+
 export async function createE2eDatabase(): Promise<E2eDatabase> {
   const adminUrl = process.env.TEST_DATABASE_URL ?? DEFAULT_TEST_DATABASE_URL
   const name = `e2e_${process.pid}_${randomBytes(4).toString('hex')}`
@@ -120,7 +146,7 @@ export async function createE2eDatabase(): Promise<E2eDatabase> {
     close: async () => {
       await prisma.$disconnect()
       await pool.end()
-      await admin.query(`DROP DATABASE "${name}" WITH (FORCE)`)
+      await dropE2eDatabase(admin, name)
       await admin.end()
     },
   }

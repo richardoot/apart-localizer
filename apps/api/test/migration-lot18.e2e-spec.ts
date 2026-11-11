@@ -14,7 +14,11 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Pool } from 'pg'
 import { linkKey } from '@apart/domain'
-import { DEFAULT_TEST_DATABASE_URL, migrationFiles } from './e2e-database'
+import {
+  DEFAULT_TEST_DATABASE_URL,
+  dropE2eDatabase,
+  migrationFiles,
+} from './e2e-database'
 
 const LOT18 = '20261108100000_lot18_listing_links'
 
@@ -159,7 +163,7 @@ describe('Migration du lot 18 : liens d’origine et vendeur (e2e)', () => {
 
   afterAll(async () => {
     await pool?.end()
-    await admin?.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`)
+    if (admin) await dropE2eDatabase(admin, name)
     await admin?.end()
   })
 
