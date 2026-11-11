@@ -8,6 +8,8 @@ import type {
   DecisionSettingsUpdate,
   DecisionSettle,
   WorkflowOverview,
+  GettingStarted,
+  OpenTasks,
   AgencyApplyProposed,
   AgencyApplyResult,
   AgencyRequestDraftInput,
@@ -154,6 +156,9 @@ const baseUrl = (
   import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 ).replace(/\/$/, '')
 
+/** Lot 23 : l'adresse du connecteur MCP, à coller dans claude.ai (mise en route). */
+export const MCP_URL = `${baseUrl}/mcp`
+
 /** The bearer token of the current session, refreshed by Supabase as needed. */
 async function accessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession()
@@ -273,6 +278,8 @@ export function queryString(params: Record<string, string>): string {
  */
 export const api = {
   workspace: () => apiFetch<WorkspaceMe>('/workspace'),
+  /** Lot 23 : la mise en route de l'espace (accueil). */
+  gettingStarted: () => apiFetch<GettingStarted>('/workspace/getting-started'),
 
   /** Lot 8 : membres, invitations, rôles (REST seulement, jamais par le MCP). */
   members: {
@@ -850,6 +857,8 @@ export const api = {
       apiFetch<void>(`/listings/${listingId}/tasks/${taskId}`, {
         method: 'DELETE',
       }),
+    /** Lot 23 : toutes les tâches ouvertes des annonces suivies, par annonce. */
+    open: () => apiFetch<OpenTasks>('/tasks/open'),
   },
 
   /**

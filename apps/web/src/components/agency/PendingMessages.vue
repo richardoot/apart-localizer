@@ -7,6 +7,7 @@
   import { useWorkspace } from '@/composables/useWorkspace'
   import { plural } from '@/lib/format'
   import { cardClasses } from '@/lib/ui'
+  import { MESSAGES_ANCHOR } from '@/lib/home'
   import DraftsBatch from './DraftsBatch.vue'
 
   /**
@@ -42,7 +43,9 @@
 <template>
   <section
     v-if="visible && data"
-    class="grid gap-3"
+    :id="MESSAGES_ANCHOR"
+    tabindex="-1"
+    class="grid gap-3 focus:outline-none"
     :class="cardClasses('accent')"
     aria-labelledby="pending-messages-title"
     data-testid="pending-messages"

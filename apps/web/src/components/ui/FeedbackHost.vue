@@ -7,7 +7,8 @@
   /**
    * Lot 22 : la zone des messages (`stores/feedback.ts`), en bas de l'écran,
    * au-dessus de la barre d'accueil de l'iPhone (`safe-area-inset-bottom`),
-   * à droite sur ordinateur. Les messages sont annoncés (`aria-live`) ; une
+   * à droite sur ordinateur. Lot 23 : au téléphone, au-dessus de la barre du
+   * bas (`--bottom-nav`, posé par `App.vue`). Les messages sont annoncés (`aria-live`) ; une
    * erreur l'est tout de suite. Survol ou focus : le message reste.
    */
   const store = useFeedbackStore()
@@ -37,7 +38,7 @@
 
 <template>
   <div
-    class="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 px-4 pb-[max(1rem,calc(env(safe-area-inset-bottom)+0.5rem))] sm:items-end sm:px-6"
+    class="pointer-events-none fixed inset-x-0 bottom-[var(--bottom-nav,0px)] z-[60] flex flex-col items-center gap-2 px-4 pb-[max(1rem,calc(var(--bottom-safe,env(safe-area-inset-bottom))+0.5rem))] sm:items-end sm:px-6"
     aria-live="polite"
     aria-relevant="additions"
     data-testid="feedback"

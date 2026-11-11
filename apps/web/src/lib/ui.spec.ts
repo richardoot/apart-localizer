@@ -13,6 +13,7 @@ import {
   cardClasses,
   chipClasses,
   controlBoxClasses,
+  controlFocusClasses,
 } from './ui'
 
 describe('recettes des composants partagés (lot 22)', () => {
@@ -99,5 +100,19 @@ describe('pluriels accordés (lot 22)', () => {
     expect(plural(1200, 'vente')).toBe('1 200 ventes')
     expect(pluralWord(2, 'nouvelle')).toBe('nouvelles')
     expect(pluralWord(1, 'nouvelle')).toBe('nouvelle')
+  })
+})
+
+describe('lot 23 : le focus d’une case', () => {
+  it('un seul trait de couleur : rouge sur un champ en erreur, vert sinon', () => {
+    expect(controlFocusClasses(false)).toContain('focus-within:outline-accent')
+    expect(controlFocusClasses(true)).toContain('focus-within:outline-bad')
+    expect(controlFocusClasses(true)).not.toContain('outline-accent')
+    expect(controlFocusClasses(true, 'visible')).toContain(
+      'focus-visible:outline-bad'
+    )
+    expect(controlFocusClasses(false, 'visible')).toContain(
+      'focus-visible:outline-accent'
+    )
   })
 })

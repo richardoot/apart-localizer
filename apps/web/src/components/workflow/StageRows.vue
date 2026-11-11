@@ -71,21 +71,26 @@
             <span class="text-xs text-muted">{{ stat.label }}</span>
             <span class="tabular-nums">{{ stat.value }}</span>
           </div>
-          <div
-            class="flex min-w-0 flex-col items-start gap-0.5 sm:flex-[2_1_210px]"
-          >
-            <UiBadge :tone="row.pillTone" data-testid="row-pill">{{
-              row.pill
-            }}</UiBadge>
-            <span class="text-xs text-muted sm:text-sm">{{ row.detail }}</span>
+          <!-- Lot 23 : au téléphone, l'état et le bouton sur une même ligne (trois annonces à l'écran). -->
+          <div class="flex items-center gap-3 sm:contents">
+            <div
+              class="flex min-w-0 flex-1 flex-col items-start gap-0.5 sm:flex-[2_1_210px]"
+            >
+              <UiBadge :tone="row.pillTone" data-testid="row-pill">{{
+                row.pill
+              }}</UiBadge>
+              <span class="text-xs text-muted sm:text-sm">{{
+                row.detail
+              }}</span>
+            </div>
+            <UiButton
+              class="flex-[0_0_auto] whitespace-nowrap sm:min-w-[104px]"
+              :data-action="row.action.kind"
+              @click="emit('action', row)"
+            >
+              {{ row.action.label }}
+            </UiButton>
           </div>
-          <UiButton
-            class="mt-1 flex-[0_0_auto] whitespace-nowrap sm:mt-0 sm:min-w-[104px]"
-            :data-action="row.action.kind"
-            @click="emit('action', row)"
-          >
-            {{ row.action.label }}
-          </UiButton>
         </div>
         <div
           v-if="isExpanded(row.id)"

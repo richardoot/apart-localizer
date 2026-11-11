@@ -134,11 +134,12 @@ function makeRouter() {
   })
 }
 
-async function mountAt(path: string) {
+async function mountAt(path: string, attach = false) {
   const router = makeRouter()
   await router.push(path)
   await router.isReady()
   const wrapper = mount(ListingsPage, {
+    ...(attach ? { attachTo: document.body } : {}),
     global: {
       plugins: [router],
       stubs: {
@@ -478,5 +479,73 @@ describe('ListingsPage : onglet de la fiche dans l’URL', () => {
     expect(wrapper.get('[data-testid="legend-all-in"]').text()).toContain(
       'coût tout compris'
     )
+  })
+
+  it('lot 23 : « Ce qui t’attend » change l’étape et donne le focus à sa question', async () => {
+    listState.overview = {
+      ...overviewOf([
+        { stage: 'a-valider', count: 2, sub: '2 à trier', toSort: 2 },
+        { stage: 'a-visiter', count: 1, sub: '1 sans date', toSort: 0 },
+      ]),
+      agenda: [
+        {
+          key: 'visits_to_plan',
+          count: 1,
+          label: 'visite à planifier',
+          stage: 'a-visiter',
+          detail: null,
+          listingId: null,
+        },
+        // Une ligne de l'accueil : pas sur la page Annonces.
+        {
+          key: 'overdue_tasks',
+          count: 4,
+          label: 'tâches en retard',
+          stage: null,
+          detail: null,
+          listingId: null,
+        },
+      ],
+    }
+    const { router, wrapper } = await mountAt('/annonces?etape=a-valider', true)
+    const agenda = wrapper.get('[data-testid="workflow-agenda"]')
+    expect(agenda.find('[data-agenda="overdue_tasks"]').exists()).toBe(false)
+    await agenda.get('[data-agenda="visits_to_plan"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.etape).toBe('a-visiter')
+    expect(document.activeElement?.getAttribute('data-testid')).toBe(
+      'stage-question'
+    )
+    wrapper.unmount()
+  })
+
+  it('lot 23 : au téléphone, le choix de la vue et l’export sont rangés dans « Filtres »', async () => {
+    const { wrapper } = await mountAt('/annonces?etape=a-etudier')
+    expect(wrapper.find('[data-testid="filters-panel"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="filters-toggle"]').trigger('click')
+    const panel = wrapper.get('[data-testid="filters-panel"]')
+    expect(panel.find('.sm\\:hidden').exists()).toBe(true)
+  })
+
+  it('lot 23 : une fiche ouverte depuis l’accueil y revient à la fermeture', async () => {
+    const { router, wrapper } = await mountAt(`/annonces/${ID}`)
+    router.addRoute({ path: '/', name: 'home', component: Empty })
+    const back = vi.spyOn(router, 'back')
+    const state = window.history.state
+    // La mémoire du routeur de test n'écrit pas `history.state` : on y pose la page d'avant.
+    window.history.replaceState({ ...(state ?? {}), back: '/' }, '')
+    wrapper.findComponent(PanelStub).vm.$emit('close')
+    await flushPromises()
+    expect(back).toHaveBeenCalled()
+    window.history.replaceState({ ...(state ?? {}), back: '/annonces' }, '')
+    back.mockClear()
+    const push = vi.spyOn(router, 'push')
+    wrapper.findComponent(PanelStub).vm.$emit('close')
+    await flushPromises()
+    expect(back).not.toHaveBeenCalled()
+    expect(push).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'listings' })
+    )
+    window.history.replaceState(state, '')
   })
 })

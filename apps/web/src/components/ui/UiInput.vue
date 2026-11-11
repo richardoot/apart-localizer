@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { computed, useAttrs } from 'vue'
-  import { controlBoxClasses } from '@/lib/ui'
+  import { controlBoxClasses, controlFocusClasses } from '@/lib/ui'
 
   defineOptions({ inheritAttrs: false })
 
@@ -71,14 +71,15 @@
 <template>
   <div
     v-bind="boxAttrs"
-    class="flex h-11 min-w-0 items-center px-3 focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent"
-    :class="
+    class="flex h-11 min-w-0 items-center px-3"
+    :class="[
       controlBoxClasses({
         invalid,
         changed,
         disabled: inputAttrs.disabled === true || inputAttrs.disabled === '',
-      })
-    "
+      }),
+      controlFocusClasses(invalid),
+    ]"
   >
     <input
       :id="id"

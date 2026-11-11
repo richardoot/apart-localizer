@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod'
 import {
+  GettingStartedSchema,
   InvitationInputSchema,
   InvitationSchema,
   InvitationWriteResultSchema,
@@ -24,3 +25,6 @@ export class ReceivedInvitationDto extends createZodDto(
   ReceivedInvitationSchema
 ) {}
 export class MemberRoleUpdateDto extends createZodDto(MemberRoleUpdateSchema) {}
+
+/** Lot 23 : la mise en route de l'espace. */
+export class GettingStartedDto extends createZodDto(GettingStartedSchema) {}

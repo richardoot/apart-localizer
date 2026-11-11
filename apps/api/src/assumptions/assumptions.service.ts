@@ -13,6 +13,7 @@ import type {
   AssumptionsUpdateResult,
   AssumptionsVersion as AssumptionsVersionDto,
 } from '@apart/contracts'
+import { DEFAULT_ASSUMPTIONS_LABEL } from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { CriteriaMatchService } from '../listings/criteria-match.service'
@@ -45,7 +46,7 @@ export class AssumptionsService {
     const created = await this.prisma.assumptionsVersion.create({
       data: {
         workspaceId,
-        label: 'Hypothèses par défaut',
+        label: DEFAULT_ASSUMPTIONS_LABEL,
         values: DEFAULT_ASSUMPTIONS,
       },
     })

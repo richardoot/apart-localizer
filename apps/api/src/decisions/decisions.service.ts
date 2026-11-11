@@ -62,6 +62,7 @@ import {
 import type { DecisionJournal, DecisionTargetState } from '@apart/domain'
 import { randomUUID } from 'node:crypto'
 import { ActivityService } from '../activity/activity.service'
+import { AgencyRequestsService } from '../agency-requests/agency-requests.service'
 import { DraftsService } from '../inbound/drafts.service'
 import {
   listingInclude,
@@ -116,7 +117,8 @@ export class DecisionsService {
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly listings: ListingsService,
-    private readonly drafts: DraftsService
+    private readonly drafts: DraftsService,
+    private readonly agency: AgencyRequestsService
   ) {}
 
   context(workspaceId: string): Promise<DecisionContext> {
@@ -125,7 +127,7 @@ export class DecisionsService {
 
   /** Les compteurs de la barre, « Ce qui t'attend » et les propositions en cours. */
   async overview(member: Member): Promise<WorkflowOverview> {
-    const [ctx, opinions, listingRows, drafts, open, dismissedDrafts] =
+    const [ctx, opinions, listingRows, drafts, open, dismissedDrafts, agency] =
       await Promise.all([
         this.context(member.workspaceId),
         loadOpinionContext(this.prisma, member.workspaceId),
@@ -137,7 +139,9 @@ export class DecisionsService {
             criteriaFitChangedAt: true,
             criteriaFitOrigin: true,
             criteriaMatches: listingInclude.criteriaMatches,
-            visits: { select: { status: true } },
+            visits: { select: { status: true, visitedAt: true } },
+            // Lot 23 : les tâches en retard de « Ce qui t'attend ».
+            tasks: { select: { done: true, createdAt: true } },
             opinions: {
               where: { memberId: member.id },
               include: { scores: true },
@@ -161,6 +165,8 @@ export class DecisionsService {
         this.prisma.listingDraft.count({
           where: { workspaceId: member.workspaceId, status: 'dismissed' },
         }),
+        // Lot 23 : les messages à valider et les relances dues de l'accueil.
+        this.agency.pending(member),
       ])
     const views = open.map(row => decisionViewOf(row, member, ctx))
     const byListing = new Map(
@@ -203,6 +209,32 @@ export class DecisionsService {
         })),
         proposals: views,
         dismissedDrafts,
+        now: new Date(),
+        plannedVisits: listingRows.flatMap(row =>
+          row.visits
+            .filter(v => v.status === 'planned')
+            .map(v => ({
+              listingId: row.id,
+              visitedAt: v.visitedAt.toISOString(),
+            }))
+        ),
+        tasks: listingRows.flatMap(row =>
+          row.tasks.map(t => ({
+            listingId: row.id,
+            done: t.done,
+            createdAt: t.createdAt.toISOString(),
+          }))
+        ),
+        agency: [
+          ...agency.toApprove.map(r => ({
+            listingId: r.listingId,
+            kind: 'to_approve' as const,
+          })),
+          ...agency.followUpsDue.map(r => ({
+            listingId: r.listingId,
+            kind: 'follow_up_due' as const,
+          })),
+        ],
       })
     )
   }

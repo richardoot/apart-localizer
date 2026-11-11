@@ -43,11 +43,11 @@
 
 <template>
   <div
-    class="sticky bottom-0 z-10 border-t border-line bg-bg/95 backdrop-blur"
+    class="sticky bottom-[var(--bottom-nav,0px)] z-10 border-t border-line bg-bg/95 backdrop-blur"
     data-testid="save-bar"
   >
     <div
-      class="mx-auto grid max-w-6xl gap-2.5 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+      class="mx-auto grid max-w-6xl gap-2.5 px-4 pt-3 pb-[max(0.75rem,var(--bottom-safe,env(safe-area-inset-bottom)))]"
     >
       <ImpactPanel
         v-if="impactVisible && (impact || previewing)"

@@ -38,6 +38,8 @@
     busy?: boolean
     /** Lot 22 : le refus du dernier changement de statut. */
     statusError?: string | null
+    /** Lot 23 : où mène le retour (« Accueil » pour une fiche ouverte depuis l'accueil). */
+    backLabel?: string | undefined
   }>()
   const emit = defineEmits<{
     back: []
@@ -80,7 +82,7 @@
           data-testid="listing-back"
           @click="emit('back')"
         >
-          Annonces
+          {{ backLabel ?? 'Annonces' }}
         </UiButton>
         <StatusChanger
           :status="listing.status"

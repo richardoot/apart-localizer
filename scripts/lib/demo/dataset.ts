@@ -967,8 +967,9 @@ const OPINIONS: Record<string, Array<[DemoHandle, number, string, number]>> = {
       29,
     ],
   ],
+  // Lot 23 : Sacha a visité seul ; Camille n'a pas encore donné son avis
+  // (« avis à donner » sur son accueil).
   'talence-peixotto-t3': [
-    ['demo', 4, 'Calme et lumineux.', 17],
     ['demo2', 3, 'Les charges me paraissent élevées pour la taille.', 17],
   ],
   'pessac-t4': [['demo', 2, 'Trop cher pour les travaux à faire.', 23]],

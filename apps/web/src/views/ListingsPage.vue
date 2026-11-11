@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue'
+  import { computed, nextTick, ref, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import {
     WORKFLOW_STAGE_INTROS,
@@ -55,6 +55,7 @@
     withoutListingTab,
   } from '@/lib/listing-tabs'
   import type { ListingTab } from '@/lib/listing-tabs'
+  import { closesBack } from '@/lib/navigation'
   import { criteriaFeatures } from '@/lib/perimeter'
   import { useAction } from '@/composables/useAction'
   import type { ActionOptions } from '@/composables/useAction'
@@ -344,7 +345,29 @@
       .join(' ')
     open(id)
   }
+  /**
+   * Lot 23 : une fiche (ou la nouvelle annonce) ouverte depuis l'accueil, les
+   * tâches ou le tri y revient à la fermeture ; sinon, la liste.
+   */
+  /** La page d'où la fiche a été ouverte, si elle n'est pas la page Annonces. */
+  function origin(): { name: unknown; title: string | undefined } | null {
+    const back: unknown = window.history.state?.back
+    if (typeof back !== 'string') return null
+    const resolved = router.resolve(back)
+    return closesBack(resolved.name)
+      ? { name: resolved.name, title: resolved.meta.title }
+      : null
+  }
+  /** « Accueil », « Toutes les tâches » : le bouton retour de la fiche dit où il mène. */
+  const backLabel = computed(() => {
+    void route.fullPath
+    return origin()?.title
+  })
   function closePanel(): void {
+    if (origin()) {
+      router.back()
+      return
+    }
     void router.push({
       name: 'listings',
       query: withoutListingTab(route.query),
@@ -362,6 +385,19 @@
     store.setStage(next)
     showAllArchives.value = false
     pageAction.clear()
+  }
+  /**
+   * Lot 23 : « Ce qui t'attend » change l'étape plus bas dans la page : la
+   * question de l'étape reçoit le focus et vient à l'écran (lecteur d'écran
+   * compris), au lieu d'un changement invisible.
+   */
+  const stageQuestion = ref<HTMLElement | null>(null)
+  function selectStageFromAgenda(next: WorkflowStage): void {
+    selectStage(next)
+    void nextTick(() => {
+      stageQuestion.value?.scrollIntoView?.({ block: 'start' })
+      stageQuestion.value?.focus({ preventScroll: true })
+    })
   }
 
   const mutations = useListingMutations()
@@ -514,7 +550,10 @@
 
 <template>
   <section class="mx-auto grid max-w-7xl min-w-0 gap-3.5 px-4 py-5">
-    <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+    <!-- Lot 23 : au téléphone, la barre du bas nomme la page et porte « Ajouter » ; l'export est dans « Filtres ». -->
+    <header
+      class="hidden flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:flex"
+    >
       <div>
         <h1 class="font-display text-3xl font-bold">Annonces</h1>
         <p
@@ -537,7 +576,11 @@
       </div>
     </header>
 
-    <WorkflowAgenda :items="overview?.agenda ?? []" @stage="selectStage" />
+    <h1 class="sr-only sm:hidden">Annonces</h1>
+    <WorkflowAgenda
+      :items="overview?.agenda ?? []"
+      @stage="selectStageFromAgenda"
+    />
 
     <StageBar :stages="stages" :current="stage" @select="selectStage" />
     <UiAlert
@@ -553,16 +596,27 @@
     </UiAlert>
 
     <div
-      class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5"
+      class="flex flex-wrap items-center justify-between gap-x-2 gap-y-2.5 sm:gap-x-4"
       data-testid="stage-head"
     >
-      <div class="flex min-w-0 flex-[1_1_380px] flex-col gap-0.5">
-        <h2 class="font-display text-xl font-bold" data-testid="stage-question">
+      <div
+        class="flex min-w-0 flex-[1_1_160px] flex-col gap-0.5 sm:flex-[1_1_380px]"
+      >
+        <h2
+          ref="stageQuestion"
+          tabindex="-1"
+          class="font-display text-lg font-bold focus:outline-none sm:text-xl"
+          data-testid="stage-question"
+        >
           {{ WORKFLOW_STAGE_QUESTIONS[stage] }}
         </h2>
-        <p class="text-sm text-muted">{{ WORKFLOW_STAGE_INTROS[stage] }}</p>
+        <!-- Lot 23 : au téléphone, la question suffit ; l'explication reste sur ordinateur. -->
+        <p class="hidden text-sm text-muted sm:block">
+          {{ WORKFLOW_STAGE_INTROS[stage] }}
+        </p>
       </div>
-      <div class="flex flex-wrap items-center gap-2">
+      <!-- Lot 23 : au téléphone, « Filtres » sur la ligne de la question, les deux boutons d'action côte à côte. -->
+      <div class="contents sm:flex sm:flex-wrap sm:items-center sm:gap-2">
         <UiButton
           icon="filter"
           :aria-expanded="filtersOpen"
@@ -573,7 +627,8 @@
             ({{ store.activeCount }})</template
           >
         </UiButton>
-        <ViewSwitch v-model="store.view" />
+        <!-- Lot 23 : au téléphone, le choix de la vue est rangé dans « Filtres ». -->
+        <ViewSwitch v-model="store.view" class="hidden! sm:inline-flex!" />
         <UiField
           v-if="store.view === 'map'"
           id="map-color-by"
@@ -587,13 +642,14 @@
           v-if="toConfirm > 0"
           :to="{ name: 'triage', query: { mode: 'confirmer' } }"
           variant="outline"
+          class="flex-1 sm:flex-none"
           data-testid="stage-confirm"
           >{{ confirmLabel(toConfirm) }}</UiButton
         >
         <UiButton
           v-if="ctaLabel"
           variant="primary"
-          class="min-h-13! w-full sm:min-h-11! sm:w-auto"
+          class="flex-[1_1_auto] sm:flex-none"
           data-testid="stage-cta"
           @click="runCta"
         >
@@ -603,6 +659,10 @@
     </div>
 
     <div v-if="filtersOpen" class="grid gap-2" data-testid="filters-panel">
+      <div class="flex flex-wrap items-center gap-2 sm:hidden">
+        <ViewSwitch v-model="store.view" data-testid="view-switch-phone" />
+        <ExportMenu :filters="draftsStage ? store.apiFilters() : listFilters" />
+      </div>
       <FiltersBar
         :communes="communes"
         :criteria="criteria"
@@ -847,6 +907,7 @@
       :key="openedId"
       v-model:tab="panelTab"
       :notice="notice"
+      :back-label="backLabel"
       @close="
         () => {
           notice = null

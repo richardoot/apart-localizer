@@ -390,20 +390,75 @@ export const WorkflowAgendaKeySchema = z.enum([
   'to_confirm',
   'to_settle',
   'ready',
+  'upcoming_visits',
   'visits_to_plan',
   'opinions_to_give',
+  'messages_to_approve',
+  'follow_ups_due',
+  'overdue_tasks',
 ])
 export type WorkflowAgendaKey = z.infer<typeof WorkflowAgendaKeySchema>
+
+/**
+ * Lot 23 (ADR 0033) : les lignes de « Ce qui t'attend » que la page Annonces
+ * montre ; l'accueil les montre toutes (messages, relances, visites à venir,
+ * tâches en retard en plus).
+ */
+export const STAGE_AGENDA_KEYS: readonly WorkflowAgendaKey[] = [
+  'to_sort',
+  'to_confirm',
+  'to_settle',
+  'ready',
+  'visits_to_plan',
+  'opinions_to_give',
+]
 
 export const WorkflowAgendaItemSchema = z.object({
   key: WorkflowAgendaKeySchema,
   count: z.number().int().min(1),
   label: z.string().describe('« à trier », « visite à planifier »'),
   stage: WorkflowStageSchema.nullable().describe(
-    'L’étape à ouvrir ; null pour le tri des propositions ou « À trancher ensemble »'
+    'L’étape à ouvrir ; null pour le tri des propositions, « À trancher ensemble », les messages, les relances et les tâches'
   ),
+  detail: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe(
+      'Lot 23 : la précision de la ligne (« prochaine : samedi 15 novembre, 10 h ») ; null sinon'
+    ),
+  listingId: z
+    .string()
+    .uuid()
+    .nullable()
+    .default(null)
+    .describe(
+      'Lot 23 : l’annonce concernée quand toute la ligne n’en vise qu’une (elle s’ouvre directement) ; null sinon'
+    ),
 })
 export type WorkflowAgendaItem = z.infer<typeof WorkflowAgendaItemSchema>
+
+/** Lot 23 : les tâches ouvertes des annonces suivies (accueil, « Toutes les tâches »). */
+export const WorkflowTaskCountsSchema = z.object({
+  open: z
+    .number()
+    .int()
+    .min(0)
+    .describe(
+      'Tâches ouvertes des annonces suivies (ni écartées, ni vendues, ni refusées)'
+    ),
+  overdue: z
+    .number()
+    .int()
+    .min(0)
+    .describe('Dont ouvertes depuis plus de `overdueDays` jours'),
+  overdueDays: z
+    .number()
+    .int()
+    .min(1)
+    .describe('Au-delà de ce délai, en jours, une tâche ouverte est en retard'),
+})
+export type WorkflowTaskCounts = z.infer<typeof WorkflowTaskCountsSchema>
 
 /** `GET /decisions/overview`. */
 export const WorkflowOverviewSchema = z.object({
@@ -423,6 +478,13 @@ export const WorkflowOverviewSchema = z.object({
   proposals: z
     .array(DecisionProposalSchema)
     .describe('Les propositions ouvertes ou à trancher de l’espace'),
+  tasks: WorkflowTaskCountsSchema.default({
+    open: 0,
+    overdue: 0,
+    overdueDays: 14,
+  }).describe(
+    'Lot 23 : les tâches ouvertes et en retard (chiffres de l’accueil)'
+  ),
 })
 export type WorkflowOverview = z.infer<typeof WorkflowOverviewSchema>
 

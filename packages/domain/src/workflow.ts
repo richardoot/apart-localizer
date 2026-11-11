@@ -14,10 +14,14 @@ import type {
   WorkflowStage,
   WorkflowStageCount,
 } from '@apart/contracts'
+import { parisDay } from './agency-requests.js'
 import { inMainFitTab } from './criteria-fit.js'
 import { decisionJournalOf } from './decision-activity.js'
 import { agreementRequired, stageOfStatus, waitingLabel } from './decisions.js'
 import { joinFrench } from './exploration.js'
+import { visitWhen } from './listing-overview.js'
+import { isOverdueTask, isTrackedStatus, openTaskCounts } from './open-tasks.js'
+import { TASK_OVERDUE_DAYS } from './summary.js'
 
 /**
  * Lot 21 (ADR 0031) : les étapes de la page Annonces. Quelle étape pour quel
@@ -329,6 +333,26 @@ export interface WorkflowDraftFact {
   decision: DecisionProposal | null
 }
 
+/** Lot 23 : une visite planifiée de l'espace (date ISO). */
+export interface WorkflowVisitFact {
+  listingId: string
+  visitedAt: string
+}
+
+/** Lot 23 : une tâche d'une annonce de l'espace. */
+export interface WorkflowTaskFact {
+  listingId: string
+  done: boolean
+  createdAt: string
+}
+
+/** Lot 23 : un message à l'annonceur qui attend un membre. */
+export interface WorkflowAgencyFact {
+  listingId: string
+  /** À valider (brouillon), ou relance due (jours ouvrés, calculée par le serveur). */
+  kind: 'to_approve' | 'follow_up_due'
+}
+
 export interface WorkflowOverviewInput {
   viewerId: string
   decideTogether: boolean
@@ -339,6 +363,16 @@ export interface WorkflowOverviewInput {
   proposals: readonly DecisionProposal[]
   /** Les brouillons écartés : ils comptent dans les archives. */
   dismissedDrafts?: number
+  /** Lot 23 : « maintenant » (visites à venir, tâches en retard). */
+  now?: Date
+  /** Lot 23 : les visites planifiées (pas encore faites). */
+  plannedVisits?: readonly WorkflowVisitFact[]
+  /** Lot 23 : les tâches des annonces (ouvertes et faites). */
+  tasks?: readonly WorkflowTaskFact[]
+  /** Lot 23 : les messages à valider et les relances dues. */
+  agency?: readonly WorkflowAgencyFact[]
+  /** Lot 23 : au-delà, une tâche ouverte est en retard (14 jours par défaut). */
+  overdueDays?: number
 }
 
 const plural = (n: number, one: string, many: string): string =>
@@ -385,72 +419,224 @@ function confirmLabel(others: readonly DecisionMemberRef[]): string {
     : 'à confirmer après les autres'
 }
 
-/** « Ce qui t'attend » : ce qui demande quelque chose au membre connecté. */
-function agendaOf(input: {
+/** L'annonce d'une ligne quand toute la ligne n'en vise qu'une ; null sinon. */
+function onlyListing(ids: readonly (string | null)[]): string | null {
+  const set = new Set(ids)
+  if (set.size !== 1) return null
+  return [...set][0] ?? null
+}
+
+/** Ce que « Ce qui t'attend » compte, ligne par ligne. */
+interface AgendaInput {
   toSort: { 'a-valider': number; 'a-etudier': number }
-  toConfirm: number
-  toSettle: number
-  ready: number
-  visitsToPlan: number
-  opinionsToGive: number
+  toConfirm: readonly DecisionProposal[]
+  toSettle: readonly DecisionProposal[]
+  ready: readonly DecisionProposal[]
+  visitsToPlan: readonly string[]
+  opinionsToGive: readonly string[]
   others: readonly DecisionMemberRef[]
-  readyStage: WorkflowStage | null
-}): WorkflowAgendaItem[] {
+  upcoming: readonly WorkflowVisitFact[]
+  toApprove: readonly string[]
+  followUps: readonly string[]
+  overdue: readonly string[]
+  overdueDays: number
+}
+
+const item = (
+  value: Omit<WorkflowAgendaItem, 'detail' | 'listingId'> &
+    Partial<Pick<WorkflowAgendaItem, 'detail' | 'listingId'>>
+): WorkflowAgendaItem => ({ detail: null, listingId: null, ...value })
+
+/**
+ * « Ce qui t'attend » : ce qui demande quelque chose au membre connecté,
+ * dans l'ordre du bandeau. Les décisions d'abord (trier, confirmer,
+ * trancher, finaliser), puis les visites (à venir, à planifier), les avis à
+ * donner, les messages à valider, les relances dues et les tâches en
+ * retard. Aucune note n'y entre : « avis à donner » ne lit que « a noté ou
+ * non » pour le membre connecté.
+ */
+function agendaOf(input: AgendaInput): WorkflowAgendaItem[] {
   const items: WorkflowAgendaItem[] = []
   const totalToSort = input.toSort['a-valider'] + input.toSort['a-etudier']
   if (totalToSort > 0) {
-    items.push({
-      key: 'to_sort',
-      count: totalToSort,
-      label: 'à trier',
-      stage: input.toSort['a-valider'] > 0 ? 'a-valider' : 'a-etudier',
-    })
+    items.push(
+      item({
+        key: 'to_sort',
+        count: totalToSort,
+        label: 'à trier',
+        stage: input.toSort['a-valider'] > 0 ? 'a-valider' : 'a-etudier',
+      })
+    )
   }
-  if (input.toConfirm > 0) {
-    items.push({
-      key: 'to_confirm',
-      count: input.toConfirm,
-      label: confirmLabel(input.others),
-      stage: null,
-    })
+  if (input.toConfirm.length > 0) {
+    items.push(
+      item({
+        key: 'to_confirm',
+        count: input.toConfirm.length,
+        label: confirmLabel(input.others),
+        stage: null,
+      })
+    )
   }
-  if (input.toSettle > 0) {
-    items.push({
-      key: 'to_settle',
-      count: input.toSettle,
-      label: 'à trancher ensemble',
-      stage: null,
-    })
+  if (input.toSettle.length > 0) {
+    items.push(
+      item({
+        key: 'to_settle',
+        count: input.toSettle.length,
+        label: 'à trancher ensemble',
+        stage: null,
+      })
+    )
   }
-  if (input.ready > 0) {
-    items.push({
-      key: 'ready',
-      count: input.ready,
-      label: 'à finaliser',
-      stage: input.readyStage,
-    })
+  if (input.ready.length > 0) {
+    items.push(
+      item({
+        key: 'ready',
+        count: input.ready.length,
+        label: 'à finaliser',
+        stage: input.ready[0]?.fromStage ?? null,
+        listingId: onlyListing(input.ready.map(p => p.listingId)),
+      })
+    )
   }
-  if (input.visitsToPlan > 0) {
-    items.push({
-      key: 'visits_to_plan',
-      count: input.visitsToPlan,
-      label: plural(
-        input.visitsToPlan,
-        'visite à planifier',
-        'visites à planifier'
-      ),
-      stage: 'a-visiter',
-    })
+  if (input.upcoming.length > 0) {
+    const next = input.upcoming[0] as WorkflowVisitFact
+    const when = visitWhen(next.visitedAt)
+    items.push(
+      item({
+        key: 'upcoming_visits',
+        count: input.upcoming.length,
+        label: plural(
+          input.upcoming.length,
+          'visite à venir',
+          'visites à venir'
+        ),
+        stage: 'a-visiter',
+        detail: input.upcoming.length > 1 ? `prochaine : ${when}` : when,
+        listingId: onlyListing(input.upcoming.map(v => v.listingId)),
+      })
+    )
   }
-  if (input.opinionsToGive > 0) {
-    items.push({
-      key: 'opinions_to_give',
-      count: input.opinionsToGive,
-      label: 'avis à donner',
-      stage: 'visitees',
-    })
+  if (input.visitsToPlan.length > 0) {
+    items.push(
+      item({
+        key: 'visits_to_plan',
+        count: input.visitsToPlan.length,
+        label: plural(
+          input.visitsToPlan.length,
+          'visite à planifier',
+          'visites à planifier'
+        ),
+        stage: 'a-visiter',
+        listingId: onlyListing(input.visitsToPlan),
+      })
+    )
+  }
+  if (input.opinionsToGive.length > 0) {
+    items.push(
+      item({
+        key: 'opinions_to_give',
+        count: input.opinionsToGive.length,
+        label: 'avis à donner',
+        stage: 'visitees',
+        listingId: onlyListing(input.opinionsToGive),
+      })
+    )
+  }
+  if (input.toApprove.length > 0) {
+    items.push(
+      item({
+        key: 'messages_to_approve',
+        count: input.toApprove.length,
+        label: plural(
+          input.toApprove.length,
+          'message à valider',
+          'messages à valider'
+        ),
+        stage: null,
+        detail:
+          input.toApprove.length > 1
+            ? 'avant que Claude les envoie aux agences'
+            : 'avant que Claude l’envoie à l’agence',
+        listingId: onlyListing(input.toApprove),
+      })
+    )
+  }
+  if (input.followUps.length > 0) {
+    items.push(
+      item({
+        key: 'follow_ups_due',
+        count: input.followUps.length,
+        label: plural(input.followUps.length, 'relance due', 'relances dues'),
+        stage: null,
+        detail: 'une agence n’a pas répondu',
+        listingId: onlyListing(input.followUps),
+      })
+    )
+  }
+  if (input.overdue.length > 0) {
+    items.push(
+      item({
+        key: 'overdue_tasks',
+        count: input.overdue.length,
+        label: plural(
+          input.overdue.length,
+          'tâche en retard',
+          'tâches en retard'
+        ),
+        stage: null,
+        detail: `ouvertes depuis plus de ${input.overdueDays} jours`,
+        listingId: onlyListing(input.overdue),
+      })
+    )
   }
   return items
+}
+
+/**
+ * Lot 23 : le verbe du bouton d'une ligne de « Ce qui t'attend » sur
+ * l'accueil (ce que la ligne ouvre).
+ */
+export function agendaActionLabel(key: WorkflowAgendaItem['key']): string {
+  switch (key) {
+    case 'to_sort':
+      return 'Trier'
+    case 'to_confirm':
+      return 'Confirmer'
+    case 'to_settle':
+      return 'Trancher'
+    case 'ready':
+      return 'Finaliser'
+    case 'upcoming_visits':
+      return 'Préparer'
+    case 'visits_to_plan':
+      return 'Planifier'
+    case 'opinions_to_give':
+      return 'Donner mon avis'
+    case 'messages_to_approve':
+      return 'Relire'
+    case 'follow_ups_due':
+      return 'Relancer'
+    case 'overdue_tasks':
+      return 'Voir les tâches'
+  }
+}
+
+/** Les visites planifiées d'aujourd'hui (heure de Paris) ou plus tard, des annonces suivies, la plus proche d'abord. */
+export function upcomingVisits(
+  visits: readonly WorkflowVisitFact[],
+  tracked: ReadonlySet<string>,
+  now: Date
+): WorkflowVisitFact[] {
+  const today = parisDay(now.toISOString())
+  return visits
+    .filter(
+      v =>
+        tracked.has(v.listingId) &&
+        Number.isFinite(Date.parse(v.visitedAt)) &&
+        parisDay(v.visitedAt) >= today
+    )
+    .sort((a, b) => Date.parse(a.visitedAt) - Date.parse(b.visitedAt))
 }
 
 /**
@@ -493,8 +679,8 @@ export function workflowOverview(
     if (!draft.decision) bucket.toSort += 1
   }
   counts.archives.total += input.dismissedDrafts ?? 0
-  let visitsToPlan = 0
-  let opinionsToGive = 0
+  const visitsToPlan: string[] = []
+  const opinionsToGive: string[] = []
   for (const listing of input.listings) {
     const stage = stageOfStatus(listing.status)
     const bucket = counts[stage]
@@ -506,11 +692,11 @@ export function workflowOverview(
     if (listing.status === 'to_study' && !listing.decision) bucket.toSort += 1
     if (listing.status === 'to_visit' && listing.plannedVisits === 0) {
       bucket.noDate += 1
-      visitsToPlan += 1
+      visitsToPlan.push(listing.id)
     }
     if (listing.status === 'visited' && !listing.viewerRated) {
       bucket.toRate += 1
-      opinionsToGive += 1
+      opinionsToGive.push(listing.id)
     }
     if (
       listing.status === 'offer_made' &&
@@ -526,11 +712,35 @@ export function workflowOverview(
     toSort: counts[stage].toSort,
     sub: stageSub(stage, counts[stage], offersPending),
   }))
-  const toConfirm = input.proposals.filter(p => p.viewer.canRespond).length
-  const toSettle = input.proposals.filter(p => p.viewer.canSettle).length
+  const toConfirm = input.proposals.filter(p => p.viewer.canRespond)
+  const toSettle = input.proposals.filter(p => p.viewer.canSettle)
   const ready = input.proposals.filter(
     p => p.viewer.canDecideNow && p.viewer.nobodyLeft
   )
+  // Lot 23 : les visites, les messages et les tâches des annonces suivies.
+  const now = input.now ?? new Date()
+  const overdueDays = input.overdueDays ?? TASK_OVERDUE_DAYS
+  const statusOf = new Map(input.listings.map(l => [l.id, l.status]))
+  const tracked = new Set(
+    input.listings.filter(l => isTrackedStatus(l.status)).map(l => l.id)
+  )
+  const tasksOf = new Map<string, { done: boolean; createdAt: string }[]>()
+  for (const task of input.tasks ?? []) {
+    const list = tasksOf.get(task.listingId) ?? []
+    list.push(task)
+    tasksOf.set(task.listingId, list)
+  }
+  const taskListings = [...tasksOf].flatMap(([id, tasks]) => {
+    const status = statusOf.get(id)
+    return status ? [{ id, status, tasks }] : []
+  })
+  const tasks = openTaskCounts(taskListings, now, overdueDays)
+  const overdue = taskListings.flatMap(l =>
+    isTrackedStatus(l.status)
+      ? l.tasks.filter(t => isOverdueTask(t, now, overdueDays)).map(() => l.id)
+      : []
+  )
+  const agency = input.agency ?? []
   return {
     decideTogether: input.decideTogether,
     agreementRequired: required,
@@ -543,13 +753,22 @@ export function workflowOverview(
       },
       toConfirm,
       toSettle,
-      ready: ready.length,
+      ready,
       visitsToPlan,
       opinionsToGive,
       others,
-      readyStage: ready[0]?.fromStage ?? null,
+      upcoming: upcomingVisits(input.plannedVisits ?? [], tracked, now),
+      toApprove: agency
+        .filter(a => a.kind === 'to_approve')
+        .map(a => a.listingId),
+      followUps: agency
+        .filter(a => a.kind === 'follow_up_due')
+        .map(a => a.listingId),
+      overdue,
+      overdueDays,
     }),
     proposals: [...input.proposals],
+    tasks,
   }
 }
 

@@ -37,6 +37,20 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Accueil', requiresAuth: true },
   },
   {
+    // Lot 23 : toutes les tâches ouvertes, par annonce et par retard (depuis l'accueil).
+    path: '/taches',
+    name: 'tasks',
+    component: () => import('@/views/TasksPage.vue'),
+    meta: { title: 'Toutes les tâches', requiresAuth: true },
+  },
+  {
+    // Lot 23 : au téléphone, « Plus » (critères, hypothèses, activité, espace, thème, déconnexion).
+    path: '/plus',
+    name: 'more',
+    component: () => import('@/views/MorePage.vue'),
+    meta: { title: 'Plus', requiresAuth: true },
+  },
+  {
     // Lot 21 : le mode tri, une annonce à la fois.
     path: '/annonces/tri',
     name: 'triage',
@@ -160,6 +174,8 @@ const router = createRouter({
   routes,
   scrollBehavior(to, from, savedPosition) {
     if (savedPosition) return savedPosition
+    // Lot 23 : « Ce qui t'attend » mène à un bloc de l'accueil (`#messages-a-valider`).
+    if (to.hash) return { el: to.hash, top: 72 }
     if (to.path === from.path) return false
     return { top: 0 }
   },

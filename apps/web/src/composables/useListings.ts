@@ -16,6 +16,9 @@ import type {
 } from '@apart/contracts'
 import { api } from '@/lib/api'
 
+/** Lot 23 : toutes les tâches ouvertes (accueil). */
+export const openTasksKey = ['tasks', 'open'] as const
+
 export const listingKeys = {
   all: ['listings'] as const,
   list: (filters: ListingFiltersInput) =>
@@ -147,6 +150,12 @@ export function useListingMutations() {
       queryKey: listingKeys.targetPrice(listingId),
     })
   }
+  /** Lot 23 : une tâche change aussi « Toutes les tâches » et les retards de l'accueil. */
+  function refreshTasks(listingId: string): void {
+    refresh(listingId)
+    void client.invalidateQueries({ queryKey: openTasksKey })
+    void client.invalidateQueries({ queryKey: ['decisions', 'overview'] })
+  }
 
   const create = useMutation({
     mutationFn: (input: ListingCreateRaw) => api.listings.create(input),
@@ -217,7 +226,7 @@ export function useListingMutations() {
         ...(details ? { details } : {}),
         ...(origin ? { origin } : {}),
       }),
-    onSuccess: (_task, { id }) => refresh(id),
+    onSuccess: (_task, { id }) => refreshTasks(id),
   })
   const updateTask = useMutation({
     mutationFn: ({
@@ -229,12 +238,12 @@ export function useListingMutations() {
       taskId: string
       update: TaskUpdate
     }) => api.tasks.update(id, taskId, update),
-    onSuccess: (_task, { id }) => refresh(id),
+    onSuccess: (_task, { id }) => refreshTasks(id),
   })
   const removeTask = useMutation({
     mutationFn: ({ id, taskId }: { id: string; taskId: string }) =>
       api.tasks.remove(id, taskId),
-    onSuccess: (_void, { id }) => refresh(id),
+    onSuccess: (_void, { id }) => refreshTasks(id),
   })
   const addOffer = useMutation({
     mutationFn: ({ id, input }: { id: string; input: OfferInputRaw }) =>

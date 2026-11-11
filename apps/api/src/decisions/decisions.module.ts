@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common'
+import { AgencyRequestsModule } from '../agency-requests/agency-requests.module'
 import { InboundModule } from '../inbound/inbound.module'
 import { ListingsModule } from '../listings/listings.module'
 import { WorkspaceModule } from '../workspace/workspace.module'
@@ -17,7 +18,12 @@ import { DecisionsService } from './decisions.service'
  * ce module, il dépend d'eux.
  */
 @Module({
-  imports: [ListingsModule, InboundModule, WorkspaceModule],
+  imports: [
+    ListingsModule,
+    InboundModule,
+    WorkspaceModule,
+    AgencyRequestsModule,
+  ],
   controllers: [DecisionsController, DecisionRulesController],
   providers: [DecisionsService, DecisionSettingsService],
   exports: [DecisionsService],

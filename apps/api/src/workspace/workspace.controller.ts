@@ -21,6 +21,7 @@ import type { Member } from '../generated/prisma'
 import { WorkspaceService } from './workspace.service'
 import { MembersService } from './members.service'
 import {
+  GettingStartedDto,
   InvitationDto,
   InvitationInputDto,
   InvitationWriteResultDto,
@@ -54,6 +55,16 @@ export class WorkspaceController {
   @ZodResponse({ status: 200, type: WorkspaceMeDto })
   me(@CurrentMember() member: Member): Promise<WorkspaceMeDto> {
     return this.workspace.me(member)
+  }
+
+  @Get('getting-started')
+  @ApiOperation({
+    summary:
+      'Lot 23 : la mise en route (hypothèses, critères, première annonce, Claude), ce qui est fait et ce qui reste',
+  })
+  @ZodResponse({ status: 200, type: GettingStartedDto })
+  gettingStarted(@CurrentMember() member: Member): Promise<GettingStartedDto> {
+    return this.workspace.gettingStarted(member)
   }
 
   @Patch()

@@ -88,6 +88,26 @@ export function controlBoxClasses(state: {
     .join(' ')
 }
 
+/**
+ * Lot 23 : le focus d'une case. Un seul trait de couleur autour d'un champ
+ * en erreur : le contour du focus prend la couleur de l'erreur (plus de vert
+ * par-dessus le rouge), collé à la bordure.
+ */
+export function controlFocusClasses(
+  invalid: boolean,
+  on: 'within' | 'visible' = 'within'
+): string {
+  // Des classes écrites en entier : Tailwind ne lit pas un nom composé.
+  if (on === 'within') {
+    return invalid
+      ? 'focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-bad'
+      : 'focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent'
+  }
+  return invalid
+    ? 'focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-bad'
+    : 'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent'
+}
+
 export type Tone =
   'neutral' | 'accent' | 'good' | 'warn' | 'bad' | 'info' | 'ai' | 'opinion'
 export type BadgeVariant = 'soft' | 'solid' | 'outline'

@@ -7,6 +7,7 @@
     explorationLineFilterCounts,
     filterExplorationLines,
   } from '@apart/domain'
+  import { useBackLink } from '@/composables/useBackLink'
   import { useExploration } from '@/composables/useExplorations'
   import {
     EXPLORATION_LINE_FILTER_LABELS,
@@ -68,16 +69,19 @@
       : 'aucun critère actif'
     return `${who} · ${criteria} · ${explorationDuration(e.startedAt, e.finishedAt)}`
   })
+  const back = useBackLink({ name: 'criteria' }, 'Critères')
 </script>
 
 <template>
   <section class="mx-auto grid max-w-6xl gap-5 px-4 py-6">
+    <!-- Lot 23 : retour à la page d'où l'on vient (brief du critère, À valider), sinon Critères. -->
     <UiButton
-      :to="{ name: 'criteria' }"
       variant="link"
       icon="arrow-left"
       class="w-fit"
-      >Critères</UiButton
+      data-testid="exploration-back"
+      @click="back.go"
+      >{{ back.label }}</UiButton
     >
     <QueryState
       :query="explorationQuery"

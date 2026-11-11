@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { computed, useAttrs } from 'vue'
-  import { controlBoxClasses } from '@/lib/ui'
+  import { controlBoxClasses, controlFocusClasses } from '@/lib/ui'
 
   defineOptions({ inheritAttrs: false })
 
@@ -40,7 +40,8 @@
     :aria-invalid="invalid ? 'true' : undefined"
     :class="[
       controlBoxClasses({ invalid, changed }),
-      'block w-full min-w-0 px-3 py-2.5 leading-snug placeholder:text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent',
+      'block w-full min-w-0 px-3 py-2.5 leading-snug placeholder:text-muted',
+      controlFocusClasses(invalid, 'visible'),
       attrs.class,
     ]"
     :style="styleAttr"

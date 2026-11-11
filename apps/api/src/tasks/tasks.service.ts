@@ -5,11 +5,13 @@ import {
 } from '@nestjs/common'
 import type {
   ActivityChannel,
+  OpenTasks,
   Task,
   TaskInput,
   TaskUpdate,
 } from '@apart/contracts'
-import { taskFieldForLabel } from '@apart/contracts'
+import { OpenTasksSchema, taskFieldForLabel } from '@apart/contracts'
+import { ACTIVE_STATUSES, openTasksView, stageOfStatus } from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { toTaskDto } from '../listings/listing.mapper'
@@ -35,6 +37,46 @@ export class TasksService {
       orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
     })
     return rows.map(toTaskDto)
+  }
+
+  /**
+   * Lot 23 : les tâches ouvertes de toutes les annonces suivies, par annonce
+   * et par retard (`openTasksView` de `domain`), pour la vue « Toutes les
+   * tâches » de l'accueil.
+   */
+  async openAll(member: Member, now: Date = new Date()): Promise<OpenTasks> {
+    const rows = await this.prisma.listing.findMany({
+      where: {
+        workspaceId: member.workspaceId,
+        status: { in: [...ACTIVE_STATUSES] },
+        tasks: { some: { done: false } },
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        commune: true,
+        tasks: {
+          where: { done: false },
+          orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+        },
+      },
+    })
+    return OpenTasksSchema.parse(
+      openTasksView(
+        rows.map(row => ({
+          listing: {
+            id: row.id,
+            title: row.title,
+            status: row.status,
+            stage: stageOfStatus(row.status),
+            commune: row.commune,
+          },
+          tasks: row.tasks.map(toTaskDto),
+        })),
+        now
+      )
+    )
   }
 
   async create(

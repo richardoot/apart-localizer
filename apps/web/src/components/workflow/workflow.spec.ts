@@ -80,6 +80,24 @@ describe('StageBar', () => {
     expect(wrapper.get('nav').attributes('aria-label')).toBe('Étapes du suivi')
   })
 
+  it('lot 23 : l’étape courante est ramenée au milieu de la barre qui défile', async () => {
+    const wrapper = mount(StageBar, {
+      props: { stages, current: 'a-valider' },
+      attachTo: document.body,
+    })
+    const nav = wrapper.get('nav').element as HTMLElement
+    Object.defineProperty(nav, 'scrollWidth', { value: 900 })
+    Object.defineProperty(nav, 'clientWidth', { value: 390 })
+    nav.getBoundingClientRect = () => ({ left: 0, width: 390 }) as DOMRect
+    await wrapper.setProps({ current: 'archives' })
+    const pill = wrapper.get('[aria-current="step"]').element as HTMLElement
+    pill.getBoundingClientRect = () => ({ left: 700, width: 120 }) as DOMRect
+    ;(wrapper.vm as unknown as { reveal: () => void }).reveal()
+    // 700 - (390 - 120) / 2 = 565
+    expect(nav.scrollLeft).toBe(565)
+    wrapper.unmount()
+  })
+
   it('une étape sans compteur reste à zéro', () => {
     const wrapper = mount(StageBar, {
       props: { stages: [], current: 'offres' },
@@ -89,27 +107,43 @@ describe('StageBar', () => {
 })
 
 describe('WorkflowAgenda', () => {
+  // Lot 23 : chaque ligne a aussi sa précision et son annonce (null ici).
+  const item = (
+    value: Omit<WorkflowAgendaItem, 'detail' | 'listingId'>
+  ): WorkflowAgendaItem => ({ detail: null, listingId: null, ...value })
   const items: WorkflowAgendaItem[] = [
-    { key: 'to_sort', count: 6, label: 'à trier', stage: 'a-valider' },
-    {
+    item({ key: 'to_sort', count: 6, label: 'à trier', stage: 'a-valider' }),
+    item({
       key: 'to_confirm',
       count: 2,
       label: 'à confirmer après Chloé',
       stage: null,
-    },
-    { key: 'to_settle', count: 2, label: 'à trancher ensemble', stage: null },
-    {
+    }),
+    item({
+      key: 'to_settle',
+      count: 2,
+      label: 'à trancher ensemble',
+      stage: null,
+    }),
+    item({
       key: 'visits_to_plan',
       count: 1,
       label: 'visite à planifier',
       stage: 'a-visiter',
-    },
-    {
+    }),
+    item({
       key: 'opinions_to_give',
       count: 1,
       label: 'avis à donner',
       stage: 'visitees',
-    },
+    }),
+    // Lot 23 : une ligne de l'accueil, absente de la page Annonces.
+    item({
+      key: 'overdue_tasks',
+      count: 3,
+      label: 'tâches en retard',
+      stage: null,
+    }),
   ]
 
   it('chaque élément ouvre le bon travail', async () => {
@@ -147,6 +181,15 @@ describe('WorkflowAgenda', () => {
     expect(visits.element.tagName).toBe('BUTTON')
     await visits.trigger('click')
     expect(wrapper.emitted('stage')?.[0]).toEqual(['a-visiter'])
+    // Lot 23 : les tâches en retard restent sur l'accueil.
+    expect(wrapper.find('[data-agenda="overdue_tasks"]').exists()).toBe(false)
+  })
+
+  it('lot 23 : seulement des lignes de l’accueil, pas de bandeau', () => {
+    const wrapper = mount(WorkflowAgenda, {
+      props: { items: items.slice(-1) },
+    })
+    expect(wrapper.find('section').exists()).toBe(false)
   })
 
   it('rien en attente : pas de bandeau', () => {

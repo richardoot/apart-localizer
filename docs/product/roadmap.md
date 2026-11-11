@@ -1014,7 +1014,8 @@ arrière dans l'application installée) et au lecteur d'écran.
 
 ## Lot 23 : le téléphone et l'accueil
 
-Statut : validé, à faire après le lot 22.
+Statut : livré le 10 novembre 2026 (code, tests, documentation ; ADR 0033), sans migration ni
+variable nouvelle ni outil MCP nouveau ; à relire sur un vrai iPhone.
 
 - **Pourquoi** : au téléphone l'en-tête collé prend trois lignes (130 px sur 844), l'accueil fait
   5,9 écrans et une seule annonce tient sur le premier écran de la liste. « Ce qui t'attend »
@@ -1040,6 +1041,44 @@ Statut : validé, à faire après le lot 22.
 Fini quand : au téléphone, l'en-tête tient en une ligne et trois annonces sont visibles sans
 défiler ; l'accueil répond à « que faire maintenant ? » sur le premier écran ; un nouvel espace
 sait par où commencer.
+
+Livré :
+
+- **Navigation** : au téléphone, une barre en bas (Accueil, Annonces, Ajouter, Notifications,
+  Plus) qui garde la marge de l'encoche et se retire quand le clavier est ouvert, un en-tête
+  d'une ligne qui dit qui est connecté, une page « Plus » (critères, hypothèses, activité,
+  espace, critères des avis, thème, déconnexion) ; sur ordinateur, cinq entrées de 44 px et un
+  menu du compte au nom du membre (espace, critères des avis, notifications, thème,
+  déconnexion). Chaque page secondaire allume sa page parente. Le tri et « À trancher » restent
+  sans barre, la fiche et la nouvelle annonce la couvrent ; la zone de messages et la barre
+  d'enregistrement des Hypothèses se posent au-dessus.
+- **Accueil** : « Ce qui t'attend » en tête, étendu dans `workflowOverview` (visites à venir,
+  messages à valider, relances dues, tâches en retard, en plus des lignes du lot 21), chaque
+  ligne ouvre le bon travail (la fiche quand elle ne vise qu'une annonce) ; « Depuis ta dernière
+  visite » en une ligne ; les étapes à la place du « Par statut » (plus de liens `?status=`) ;
+  les chiffres généraux en bas. Une fiche ouverte depuis l'accueil y revient à la fermeture.
+- **Toutes les tâches** (`/taches`) : par annonce, en retard d'abord ; cocher comme dans la
+  fiche, avec « Annuler ».
+- **Mise en route** : pour un espace vide, hypothèses, critères, première annonce, connecter
+  Claude (adresse du connecteur à copier), chacune faite quand elle l'est ; ce qui reste, en bas,
+  ensuite.
+- **Annonces au téléphone** : « Ce qui t'attend » sur une ligne, le choix de la vue et l'export
+  dans « Filtres », l'étape active ramenée à l'écran, le focus sur la question de l'étape quand
+  « Ce qui t'attend » la change.
+- **Retouches du lot 22** : un seul trait autour d'un champ en erreur (plus de bordures doublées
+  autour de l'unité au focus) ; cibles de 44 px dans l'en-tête d'ordinateur.
+
+Mesuré à la livraison (Chromium, jeu fictif) : en-tête de 56 px au téléphone (130 avant) ; trois
+annonces visibles sans défiler à 390 × 844 sur l'étape À valider (une avant) ; accueil de 4,1
+écrans au téléphone pour les deux membres (5,9 avant) et 2,8 sur ordinateur (2,4 avant : « Ce
+qui t'attend », les étapes et les tâches s'ajoutent) ; le premier écran du téléphone montre
+« Ce qui t'attend » en entier (huit lignes pour Camille, sept pour Sacha) ; un espace vide tient
+sur un écran avec sa mise en route.
+
+Reste : une vérification sur un vrai iPhone (barre au clavier, marge de l'encoche dans
+l'application installée, défilement des pastilles) ; l'accueil sur ordinateur, un peu plus long
+qu'avant ; « Connecter Claude » ne voit Claude qu'à sa première écriture (la page du lot 26 dira
+mieux) ; une tâche « en retard » reste une tâche ouverte depuis quatorze jours, sans échéance.
 
 ## Lot 24 : mode visite et capture mobile
 

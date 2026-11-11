@@ -565,7 +565,10 @@ describe('les compteurs et « Ce qui t’attend »', () => {
         }),
       ],
     })
-    expect(o.agenda).toEqual([
+    // Lot 23 : chaque ligne porte aussi sa précision et l'annonce unique qu'elle vise.
+    expect(
+      o.agenda.map(({ detail: _d, listingId: _l, ...rest }) => rest)
+    ).toEqual([
       { key: 'to_sort', count: 2, label: 'à trier', stage: 'a-valider' },
       {
         key: 'to_confirm',

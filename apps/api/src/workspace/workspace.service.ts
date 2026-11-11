@@ -6,7 +6,14 @@ import type {
   Member as MemberDto,
   WorkspaceMe,
 } from '@apart/contracts'
-import { claimableMember, invitationState } from '@apart/domain'
+import { GettingStartedSchema } from '@apart/contracts'
+import type { GettingStarted } from '@apart/contracts'
+import {
+  assumptionsSaved,
+  claimableMember,
+  gettingStarted,
+  invitationState,
+} from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { ActivityService } from '../activity/activity.service'
 import { Prisma } from '../generated/prisma'
@@ -36,6 +43,44 @@ export class WorkspaceService {
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService
   ) {}
+
+  /**
+   * Lot 23 (ADR 0033) : la mise en route de l'espace. Des faits seulement
+   * (hypothèses enregistrées, critères actifs, annonces, annonces à valider,
+   * une écriture du connecteur au journal) ; ce qui est fait se décide dans
+   * `domain` (`gettingStarted`). Claude n'est vu que s'il a déjà écrit.
+   */
+  async gettingStarted(member: Member): Promise<GettingStarted> {
+    const workspaceId = member.workspaceId
+    const [versions, criteriaCount, listingCount, draftCount, mcp] =
+      await Promise.all([
+        this.prisma.assumptionsVersion.findMany({
+          where: { workspaceId },
+          select: { label: true },
+          take: 2,
+        }),
+        this.prisma.searchCriteria.count({
+          where: { workspaceId, active: true },
+        }),
+        this.prisma.listing.count({ where: { workspaceId } }),
+        this.prisma.listingDraft.count({
+          where: { workspaceId, status: 'pending' },
+        }),
+        this.prisma.activityLog.findFirst({
+          where: { workspaceId, channel: 'mcp' },
+          select: { id: true },
+        }),
+      ])
+    return GettingStartedSchema.parse(
+      gettingStarted({
+        assumptionsSaved: assumptionsSaved(versions),
+        criteriaCount,
+        listingCount,
+        draftCount,
+        claudeSeen: mcp !== null,
+      })
+    )
+  }
 
   async resolveMember(
     identity: AuthIdentity,

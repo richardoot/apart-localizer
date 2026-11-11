@@ -1,13 +1,15 @@
 <script setup lang="ts">
   import { WORKFLOW_STAGES, WORKFLOW_STAGE_LABELS } from '@apart/contracts'
   import type { WorkflowStage, WorkflowStageCount } from '@apart/contracts'
-  import { computed } from 'vue'
+  import { computed, nextTick, onMounted, ref, watch } from 'vue'
   import UiIcon from '@/components/ui/UiIcon.vue'
 
   /**
    * Lot 21 (ADR 0031) : la barre des six étapes, à la place des onglets
    * d'adéquation et des pastilles de statut. Sur téléphone, des pastilles
-   * qui défilent horizontalement (sans défilement de la page).
+   * qui défilent horizontalement (sans défilement de la page). Lot 23 :
+   * l'étape courante est ramenée au milieu de la barre (au chargement, et
+   * quand elle change d'ailleurs : « Ce qui t'attend », un lien).
    */
   const props = defineProps<{
     stages: readonly WorkflowStageCount[]
@@ -27,10 +29,29 @@
     })
   )
   const lastIndex = WORKFLOW_STAGES.length - 1
+
+  const bar = ref<HTMLElement | null>(null)
+  /** Le décalage qui centre l'étape courante dans la barre qui défile. */
+  function reveal(): void {
+    const nav = bar.value
+    const pill = nav?.querySelector<HTMLElement>('[aria-current="step"]')
+    if (!nav || !pill || nav.scrollWidth <= nav.clientWidth) return
+    const navBox = nav.getBoundingClientRect()
+    const pillBox = pill.getBoundingClientRect()
+    nav.scrollLeft +=
+      pillBox.left - navBox.left - (navBox.width - pillBox.width) / 2
+  }
+  onMounted(reveal)
+  watch(
+    () => props.current,
+    () => void nextTick(reveal)
+  )
+  defineExpose({ reveal })
 </script>
 
 <template>
   <nav
+    ref="bar"
     aria-label="Étapes du suivi"
     class="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0"
     data-testid="stage-bar"

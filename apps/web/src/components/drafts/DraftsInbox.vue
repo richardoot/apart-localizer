@@ -43,7 +43,8 @@
         Voir dans Annonces, étape À valider
       </UiButton>
     </div>
-    <ul class="grid gap-1.5">
+    <!-- Lot 23 : au téléphone, le compte et le lien suffisent (« Ce qui t'attend » dit déjà « à trier »). -->
+    <ul class="hidden gap-1.5 sm:grid">
       <li
         v-for="draft in shown"
         :key="draft.id"
@@ -65,10 +66,13 @@
         >
       </li>
     </ul>
-    <p v-if="drafts.length > shown.length" class="text-sm text-muted">
+    <p
+      v-if="drafts.length > shown.length"
+      class="hidden text-sm text-muted sm:block"
+    >
       Et {{ plural(drafts.length - shown.length, 'autre') }}.
     </p>
-    <p class="text-sm text-muted">
+    <p class="hidden text-sm text-muted sm:block">
       Rien n’est ajouté à la liste sans ton choix : ajoute, écarte ou tranche un
       doublon depuis l’étape « À valider ».
     </p>

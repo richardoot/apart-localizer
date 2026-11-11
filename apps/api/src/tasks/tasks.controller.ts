@@ -16,7 +16,12 @@ import { SupabaseGuard } from '../auth/guards/supabase.guard'
 import { CurrentMember } from '../auth/decorators/current-member.decorator'
 import type { Member } from '../generated/prisma'
 import { TasksService } from './tasks.service'
-import { TaskDto, TaskInputDto, TaskUpdateDto } from './dto/task.dto'
+import {
+  OpenTasksDto,
+  TaskDto,
+  TaskInputDto,
+  TaskUpdateDto,
+} from './dto/task.dto'
 
 @ApiTags('tasks')
 @ApiBearerAuth()
@@ -70,5 +75,27 @@ export class TasksController {
     @Param('taskId', ParseUUIDPipe) taskId: string
   ): Promise<void> {
     return this.tasks.remove(member, id, taskId)
+  }
+}
+
+/**
+ * Lot 23 (ADR 0033) : toutes les tâches ouvertes de l'espace, lues depuis
+ * l'accueil. Lecture seule ; une tâche se coche par la route de son annonce.
+ */
+@ApiTags('tasks')
+@ApiBearerAuth()
+@UseGuards(SupabaseGuard)
+@Controller('tasks')
+export class OpenTasksController {
+  constructor(private readonly tasks: TasksService) {}
+
+  @Get('open')
+  @ApiOperation({
+    summary:
+      'Les tâches ouvertes des annonces suivies, par annonce, en retard d’abord',
+  })
+  @ZodResponse({ status: 200, type: OpenTasksDto })
+  open(@CurrentMember() member: Member): Promise<OpenTasksDto> {
+    return this.tasks.openAll(member)
   }
 }

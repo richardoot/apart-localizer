@@ -64,6 +64,8 @@
     id: string
     /** Message à afficher à l'ouverture (critères dans lesquels l'annonce créée entre). */
     notice?: string | null
+    /** Lot 23 : le libellé du retour (la page d'où la fiche a été ouverte). */
+    backLabel?: string | undefined
   }>()
   const emit = defineEmits<{ close: [] }>()
   /**
@@ -510,6 +512,7 @@
           :evaluation="shownEvaluation"
           :busy="busy"
           :status-error="statusError"
+          :back-label="backLabel"
           @back="requestClose"
           @status="change => changeStatus(change, 'header')"
         />

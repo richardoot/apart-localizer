@@ -170,7 +170,32 @@
 }
 
 html {
-  scroll-padding-top: env(safe-area-inset-top, 0px);
+  /* Lot 23 : l'en-tête collé (56 px au téléphone, 60 px sur ordinateur) ne cache pas la cible d'un défilement. */
+  scroll-padding-top: calc(env(safe-area-inset-top, 0px) + 4rem);
+}
+
+/*
+ * Lot 23 (ADR 0033) : la barre du bas du téléphone (60 px, plus la barre
+ * d'accueil de l'iPhone). `--bottom-nav-space` : la place gardée sous la page
+ * (le corps garde déjà la marge de l'encoche) ; `--bottom-nav` : le décalage
+ * de ce qui est collé en bas, nul quand le clavier est ouvert (la barre se
+ * retire) ; `--bottom-safe` : la marge de l'encoche qu'un élément collé garde
+ * encore (prise par la barre quand elle est là). Rien sur ordinateur.
+ */
+.has-bottom-nav {
+  --bottom-nav-space: 3.75rem;
+}
+.bottom-nav-shown {
+  --bottom-nav: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+  --bottom-safe: 0px;
+}
+@media (width >= 40rem) {
+  .has-bottom-nav,
+  .bottom-nav-shown {
+    --bottom-nav-space: 0px;
+    --bottom-nav: 0px;
+    --bottom-safe: env(safe-area-inset-bottom, 0px);
+  }
 }
 
 body {
