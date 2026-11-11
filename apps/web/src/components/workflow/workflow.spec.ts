@@ -208,6 +208,7 @@ describe('StageRows', () => {
     rowKind: 'to_sort',
     pill: 'À trier',
     pillTone: 'neutral',
+    judgements: [],
     detail: 'Personne n’a encore trié',
     action: { kind: 'sort', label: 'Trier' },
     decision: null,

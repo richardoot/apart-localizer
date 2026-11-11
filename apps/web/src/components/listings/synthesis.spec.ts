@@ -373,9 +373,14 @@ describe('ListingSynthesis (lot 19)', () => {
       'Désaccord sur le calme (Richard 4, Chloé 2) et « on s’y voit » (4 et 2)'
     )
     const discuss = wrapper.get('[data-step="discuss"]')
+    // Lot 25 : chaque prochaine étape mène à son bloc.
     expect(discuss.text()).toBe(
-      'À rediscuterLe calme et « on s’y voit » : les notes s’écartent de 2 points'
+      'À rediscuterLe calme et « on s’y voit » : les notes s’écartent de 2 pointsVoir nos avis'
     )
+    await discuss.get('[data-testid="step-link"]').trigger('click')
+    expect(wrapper.emitted('goTo')?.[0]).toEqual([
+      { tab: 'synthese', anchor: 'nos-avis', label: 'Voir nos avis' },
+    ])
     wrapper.unmount()
   })
 

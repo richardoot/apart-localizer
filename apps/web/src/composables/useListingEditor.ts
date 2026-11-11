@@ -1,12 +1,18 @@
 import { computed, inject, provide, ref, watch } from 'vue'
 import type { ComputedRef, InjectionKey, Ref } from 'vue'
 import type { FieldProvenanceMap, Listing } from '@apart/contracts'
-import { errorMessage } from '@/lib/errors'
+import { listingFieldLabel } from '@apart/contracts'
+import {
+  SECTION_CONFLICT_MESSAGE,
+  errorMessage,
+  isConflict,
+} from '@/lib/errors'
 import { emptyForm, formFromListing } from '@/lib/listing-form'
 import type { ListingForm } from '@/lib/listing-form'
 import {
   LISTING_SECTIONS,
   isSectionDirty,
+  rebaseSection,
   sectionOfErrorKey,
   validateSection,
 } from '@/lib/listing-sections'
@@ -57,6 +63,12 @@ export interface ListingEditor {
   pending: Ref<{ section: EditorSectionId; run: () => void } | null>
   /** Enregistrement en cours. */
   saving: Ref<boolean>
+  /** Lot 25 : la dernière tentative a été refusée pour conflit (fiche modifiée entre-temps). */
+  conflict: Ref<boolean>
+  /** Lot 25 : relit la fiche et garde la saisie de la section ; rend le message à dire. */
+  reloadKeepingDraft: () => Promise<string | null>
+  /** Relecture en cours. */
+  reloading: Ref<boolean>
   /** L'aperçu en direct du brouillon. */
   preview: ComputedRef<LivePreview>
   /** La provenance des champs (pastille « IA »). */
@@ -97,6 +109,8 @@ export interface ListingEditorOptions {
   ) => Promise<void>
   /** Après l'ouverture d'une section : le champ à atteindre. */
   focus?: (id: string) => void
+  /** Lot 25 : relit la fiche (après un conflit) et rend l'annonce relue. */
+  reload?: () => Promise<Listing | null>
 }
 
 export function createListingEditor(
@@ -110,6 +124,8 @@ export function createListingEditor(
     null
   )
   const saving = ref(false)
+  const conflict = ref(false)
+  const reloading = ref(false)
   const externals = new Map<ExternalSectionId, ExternalSection>()
   const externalOf = (
     section: EditorSectionId | null
@@ -123,6 +139,7 @@ export function createListingEditor(
     draft.value = listing ? formFromListing(listing) : emptyForm()
     pristine.value = listing ? formFromListing(listing) : emptyForm()
     errors.value = {}
+    conflict.value = false
   }
 
   // La fiche relue (enregistrement, autre membre) : le brouillon s'y cale
@@ -203,12 +220,49 @@ export function createListingEditor(
       return true
     } catch (err) {
       // Lot 22 : le refus du serveur se dit dans la section, pas en haut.
+      // Lot 25 : un conflit se dit en mots, avec de quoi relire sans rien perdre.
+      conflict.value = isConflict(err)
       errors.value = {
-        _submit: errorMessage(err, 'L’enregistrement a échoué.'),
+        _submit: conflict.value
+          ? SECTION_CONFLICT_MESSAGE
+          : errorMessage(err, 'L’enregistrement a échoué.'),
       }
       return false
     } finally {
       saving.value = false
+    }
+  }
+
+  async function reloadKeepingDraft(): Promise<string | null> {
+    const section = editing.value
+    if (!options.reload || section === null || externalOf(section)) return null
+    reloading.value = true
+    try {
+      const fresh = await options.reload()
+      if (!fresh) return null
+      const rebased = rebaseSection(
+        section as ListingSectionId,
+        pristine.value,
+        draft.value,
+        formFromListing(fresh)
+      )
+      pristine.value = formFromListing(fresh)
+      draft.value = rebased.draft
+      errors.value = {}
+      conflict.value = false
+      const both = rebased.overlapping.map(f => `« ${listingFieldLabel(f)} »`)
+      return both.length
+        ? `Fiche relue, ta saisie est gardée. ${both.join(', ')} ${
+            both.length > 1 ? 'ont' : 'a'
+          } aussi été modifié par quelqu’un d’autre : relis avant d’enregistrer.`
+        : 'Fiche relue, ta saisie est gardée : relis puis enregistre.'
+    } catch (err) {
+      errors.value = {
+        _submit: errorMessage(err, 'La relecture de la fiche a échoué.'),
+      }
+      return null
+    } finally {
+      reloading.value = false
     }
   }
 
@@ -249,6 +303,9 @@ export function createListingEditor(
     dirty,
     pending,
     saving,
+    conflict,
+    reloading,
+    reloadKeepingDraft,
     preview: options.preview(draft),
     fieldSources: computed(() => options.listing.value?.fieldSources ?? null),
     changedFields: options.changedFields,

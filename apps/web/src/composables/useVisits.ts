@@ -41,6 +41,8 @@ export function useVisits(listingId: MaybeRef<string>) {
     void client.invalidateQueries({
       queryKey: ['listings', 'activity', unref(listingId)],
     })
+    // Lot 25 : une photo envoyée ou supprimée change la couverture.
+    void client.invalidateQueries({ queryKey: ['listings', 'covers'] })
   }
 
   const create = useMutation({

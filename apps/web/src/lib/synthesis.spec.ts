@@ -127,5 +127,20 @@ describe('l’adéquation en une ligne', () => {
     expect(fitLine({ ...fit, level: 'out', name: null, reasons: [] })).toBe(
       'Le meilleur critère.'
     )
+    // Lot 25 : un sigle en tête garde ses majuscules (« DPE D au plus », pas « dPE »).
+    const dpe = {
+      ...entry,
+      checks: [
+        {
+          ...entry.checks[0],
+          key: 'dpe_max' as const,
+          label: 'DPE D au plus',
+          value: 'C',
+        },
+      ],
+    }
+    expect(fitLine({ ...fit, criteria: [dpe as never] })).toBe(
+      '« [Exemple] Talence T2 » : DPE D au plus (C).'
+    )
   })
 })

@@ -1,6 +1,10 @@
 <script setup lang="ts">
-  import type { EvaluatedListing } from '@apart/contracts'
+  import type {
+    EvaluatedListing,
+    ListingCover as Cover,
+  } from '@apart/contracts'
   import {
+    judgementsOfListing,
     locationApproximation,
     priceRangeText,
     sellerListLabel,
@@ -22,19 +26,27 @@
   import NewBadge from './NewBadge.vue'
   import PortalChips from './PortalChips.vue'
   import PrecisionBadge from './PrecisionBadge.vue'
-  import RentalPill from './RentalPill.vue'
+  import JudgementPills from './JudgementPills.vue'
+  import ListingCover from './ListingCover.vue'
   import StatusBadge from './StatusBadge.vue'
-  import VerdictPill from './VerdictPill.vue'
 
+  /**
+   * Les cartes des annonces. Lot 25 (ADR 0035) : la photo de couverture en
+   * bandeau quand l'annonce en a une (photo de visite, jamais du portail),
+   * les trois jugements étiquetés sous le titre, la raison de l'adéquation
+   * dessous.
+   */
   withDefaults(
     defineProps<{
       items: EvaluatedListing[]
       /** Lot 14 : l'onglet « Hors critères » (depuis quand). */
       outTab?: boolean
+      /** Lot 25 : les couvertures par annonce. */
+      covers?: ReadonlyMap<string, Cover> | null
     }>(),
-    { outTab: false }
+    { outTab: false, covers: null }
   )
-  const emit = defineEmits<{ open: [id: string] }>()
+  const emit = defineEmits<{ open: [id: string]; coverExpired: [] }>()
 
   const openTasks = (item: EvaluatedListing): number =>
     item.tasks.filter(t => !t.done).length
@@ -54,13 +66,19 @@
       @click="emit('open', item.listing.id)"
       @keydown.enter="emit('open', item.listing.id)"
     >
+      <ListingCover
+        :cover="covers?.get(item.listing.id) ?? null"
+        size="card"
+        @expired="emit('coverExpired')"
+      />
       <header class="flex items-start justify-between gap-2">
-        <div class="grid gap-1">
+        <div class="grid min-w-0 gap-1">
           <h3 class="flex items-center gap-2 font-medium">
             {{ item.listing.title }}
             <NewBadge :is-new="item.isNewForMe" />
           </h3>
-          <FitSummary :fit="item.criteriaFit" :since="outTab" />
+          <JudgementPills :judgements="judgementsOfListing(item)" />
+          <FitSummary :fit="item.criteriaFit" :since="outTab" :badge="false" />
           <p class="text-xs text-muted">
             {{
               [item.listing.location.commune, item.listing.location.district]
@@ -94,7 +112,6 @@
             >
           </div>
         </div>
-        <VerdictPill :verdict="item.evaluation.metrics.verdict" />
       </header>
       <dl class="grid grid-cols-3 gap-2 text-sm">
         <div>
@@ -156,7 +173,6 @@
       <footer class="flex flex-wrap items-center gap-1.5 text-xs text-muted">
         <StatusBadge :status="item.listing.status" />
         <DpeBadge :dpe="item.listing.dpeClass" />
-        <RentalPill :verdict="item.evaluation.rental.verdict" />
         <span v-if="openTasks(item) > 0"
           >{{ plural(openTasks(item), 'tâche') }} à faire</span
         >

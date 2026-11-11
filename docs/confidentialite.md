@@ -15,6 +15,16 @@ elles sont protégées.
   retire les métadonnées EXIF (position GPS comprise). Une photo ne se supprime que par son
   auteur ; supprimer une visite supprime ses photos du stockage. Les photos ne passent ni par le
   MCP ni par l'export.
+- **Photo de couverture (lot 25, ADR 0035)** : une annonce peut montrer, dans sa fiche, ses
+  cartes et les lignes de la liste, la **vignette d'une de ses photos de visite** (celle qu'un
+  membre a choisie, sinon la première de la première visite) ; jamais une image prise sur un
+  portail, rien avant la première photo de visite. La vignette passe par les mêmes URL signées à
+  durée courte (600 s par défaut), émises par l'API pour les seuls membres de l'espace
+  (`GET /listing-covers`), en un seul appel au stockage pour une liste ; le navigateur ne la garde
+  pas au-delà de son cache HTTP et l'image est chargée sans référent. Le choix est enregistré
+  (`listings.cover_photo_id`) et entre au journal (« a choisi la photo de couverture », sans
+  identifiant de photo ni lien) ; ni le MCP ni l'export ne portent la couverture ou son URL.
+  Supprimer la photo choisie rend la première.
 - **Mode visite (lot 24, ADR 0034)** : ce qui est fait pendant une visite (points cochés,
   remarques, notes, compte rendu, photos) est d'abord gardé **sur l'appareil**, dans la base
   IndexedDB `apart-localizer` du navigateur, puis envoyé à l'API dès que le serveur répond. On y

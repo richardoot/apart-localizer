@@ -40,6 +40,7 @@
   import type { CostBasis } from '@/lib/labels'
   import CostBasisBadge from './CostBasisBadge.vue'
   import DpeBadge from './DpeBadge.vue'
+  import { JUDGEMENT_LABELS } from '@apart/contracts'
   import FitSummary from './FitSummary.vue'
   import CheckFreshnessBadge from './CheckFreshnessBadge.vue'
   import NewBadge from './NewBadge.vue'
@@ -244,10 +245,22 @@
         ]),
       sortFn: 'basic',
     }),
+    // Lot 25 : les trois jugements, étiquetés et dans leur ordre :
+    // rentabilité, recherche (l'adéquation du lot 14), location (phase 2).
+    helper.accessor(row => row.evaluation.metrics.score, {
+      id: 'score',
+      header: JUDGEMENT_LABELS.profitability,
+      cell: ctx =>
+        h(VerdictPill, {
+          verdict: ctx.row.original.evaluation.metrics.verdict,
+        }),
+      sortFn: 'basic',
+    }),
     // Lot 14 : l'adéquation aux critères actifs, sa raison, depuis quand.
     helper.accessor(row => fitRank(row.criteriaFit.level), {
       id: 'fit',
-      header: () => (props.outTab ? 'Pourquoi hors critères' : 'Adéquation'),
+      header: () =>
+        props.outTab ? 'Pourquoi hors critères' : JUDGEMENT_LABELS.search,
       cell: ctx =>
         h(FitSummary, {
           fit: ctx.row.original.criteriaFit,
@@ -256,13 +269,11 @@
         }),
       sortFn: 'basic',
     }),
-    helper.accessor(row => row.evaluation.metrics.score, {
-      id: 'score',
-      header: 'Verdict',
+    helper.accessor(row => row.evaluation.rental.rank, {
+      id: 'rental',
+      header: JUDGEMENT_LABELS.rental,
       cell: ctx =>
-        h(VerdictPill, {
-          verdict: ctx.row.original.evaluation.metrics.verdict,
-        }),
+        h(RentalPill, { verdict: ctx.row.original.evaluation.rental.verdict }),
       sortFn: 'basic',
     }),
     helper.accessor(row => row.listing.price, {
@@ -457,13 +468,6 @@
         sortFn: 'basic',
       }
     ),
-    helper.accessor(row => row.evaluation.rental.rank, {
-      id: 'rental',
-      header: 'Phase 2',
-      cell: ctx =>
-        h(RentalPill, { verdict: ctx.row.original.evaluation.rental.verdict }),
-      sortFn: 'basic',
-    }),
     helper.accessor(row => row.tasks.filter(t => !t.done).length, {
       id: 'tasks',
       header: 'À faire',

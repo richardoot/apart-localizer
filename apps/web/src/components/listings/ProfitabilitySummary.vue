@@ -194,7 +194,8 @@
       class="flex flex-wrap items-center gap-1.5 text-sm"
       data-testid="summary-verdict"
     >
-      <span class="text-muted">Verdict :</span>
+      <!-- Lot 25 : le verdict est le jugement « Rentabilité ». -->
+      <span class="text-muted">Rentabilité :</span>
       <VerdictPill :verdict="metrics.verdict" />
       <DefinitionButton term="verdict" />
       <span v-if="metrics.failures.length" class="text-muted">

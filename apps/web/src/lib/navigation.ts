@@ -187,3 +187,47 @@ export function closesBack(previousRouteName: unknown): boolean {
     !LISTINGS_PAGE.has(previousRouteName)
   )
 }
+
+/**
+ * Lot 25 (ADR 0035) : à partir de cette largeur (Tailwind `lg`), la fiche est
+ * une pleine page ; en dessous, le panneau plein écran du lot 19.
+ */
+export const FICHE_PAGE_QUERY = '(min-width: 1024px)'
+
+/** Les routes qui ouvrent un panneau par-dessus la liste (fiche au téléphone, nouvelle annonce). */
+const OVER_LIST = new Set(['listing', 'listing-new'])
+
+/**
+ * Le défilement de la fenêtre entre la liste et une fiche (règle du routeur).
+ * Un panneau s'ouvre et se ferme par-dessus la liste, qui ne bouge pas
+ * (`false`). La fiche en pleine page s'ouvre en haut ; un retour arrière
+ * vers la liste reprend sa position enregistrée (le routeur la garde).
+ * `null` : la règle ordinaire.
+ */
+export function listingScroll(
+  toName: unknown,
+  fromName: unknown,
+  fichePage: boolean
+): false | null {
+  const to = nameOf(toName)
+  const from = nameOf(fromName)
+  const between =
+    (to === 'listings' && OVER_LIST.has(from)) ||
+    (from === 'listings' && OVER_LIST.has(to)) ||
+    (OVER_LIST.has(to) && OVER_LIST.has(from))
+  if (!between) return null
+  const pageInvolved = fichePage && (to === 'listing' || from === 'listing')
+  return pageInvolved ? null : false
+}
+
+/**
+ * Fermer une fiche ou la nouvelle annonce (lot 23, lot 25) : par
+ * l'historique si la page précédente est une autre page de l'application
+ * (accueil, tâches, tri) ou la liste elle-même (même étape, mêmes filtres,
+ * même position) ; sinon (lien direct), la liste.
+ */
+export function closeTarget(previousRouteName: unknown): 'history' | 'list' {
+  return closesBack(previousRouteName) || previousRouteName === 'listings'
+    ? 'history'
+    : 'list'
+}

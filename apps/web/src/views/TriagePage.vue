@@ -34,6 +34,7 @@
   import QueryState from '@/components/ui/QueryState.vue'
   import UiAlert from '@/components/ui/UiAlert.vue'
   import { errorMessage } from '@/lib/errors'
+  import JudgementPills from '@/components/listings/JudgementPills.vue'
   import UiBadge from '@/components/ui/UiBadge.vue'
   import UiButton from '@/components/ui/UiButton.vue'
   import UiCard from '@/components/ui/UiCard.vue'
@@ -813,15 +814,9 @@
                   >Ouvrir la fiche</RouterLink
                 >
               </div>
+              <!-- Lot 25 : les trois jugements étiquetés, puis le DPE. -->
               <div class="flex flex-wrap items-center gap-1.5">
-                <UiBadge
-                  v-if="currentCard.verdict"
-                  :tone="currentCard.verdictTone"
-                  >{{ currentCard.verdict }}</UiBadge
-                >
-                <UiBadge v-if="currentCard.fit" :tone="currentCard.fitTone">{{
-                  currentCard.fit
-                }}</UiBadge>
+                <JudgementPills :judgements="currentCard.judgements" />
                 <UiBadge>{{ currentCard.dpe }}</UiBadge>
               </div>
             </div>

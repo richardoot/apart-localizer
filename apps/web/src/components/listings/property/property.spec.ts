@@ -484,7 +484,7 @@ describe('Le bien : l’annonce et son adresse', () => {
 })
 
 describe('Le bien : description et notes', () => {
-  it('dépli : lecture, puis édition ouverte ; l’enregistrement envoie notes et description', async () => {
+  it('lot 25 : nos notes se lisent sans déplier, la description reste repliée ; l’enregistrement envoie notes et description', async () => {
     const listing = fakeListing({ description: '[Exemple] T2 lumineux.' })
     const { wrapper, editor, submit } = mountWith(
       NotesSection,
@@ -499,10 +499,10 @@ describe('Le bien : description et notes', () => {
     expect(wrapper.get('[data-testid="notes-text"]').text()).toBe(
       'PV à demander'
     )
+    expect(wrapper.get('[data-testid="notes-text"]').isVisible()).toBe(true)
     await wrapper.get('[data-testid="edit-notes"]').trigger('click')
     await nextTick()
     expect(editor.editing.value).toBe('notes')
-    expect(details.open).toBe(true)
     await wrapper.get('#f-notes').setValue('Demander l’âge de la chaudière.')
     await wrapper.get('[data-testid="save-notes"]').trigger('submit')
     await flushPromises()
@@ -540,13 +540,14 @@ describe('onglet « Le bien »', () => {
     const sections = wrapper
       .findAll('[data-section]')
       .map(s => s.attributes('data-section'))
+    // Lot 25 : nos notes juste après les travaux.
     expect(sections).toEqual([
       'works',
+      'notes',
       'features',
       'energy',
       'copro',
       'listing',
-      'notes',
     ])
     expect(wrapper.find('[data-testid="ai-legend"]').text()).toContain(
       'valeur lue par l’IA dans l’annonce, à confirmer'

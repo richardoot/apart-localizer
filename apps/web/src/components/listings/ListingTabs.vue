@@ -34,7 +34,12 @@
   function select(next: ListingTab, focus = false): void {
     tab.value = next
     if (!focus) return
+    // Lot 25 : le focus ne suit que si l'onglet s'est vraiment ouvert. Si la
+    // garde des modifications a retenu le changement (bandeau « Modifications
+    // non enregistrées »), il ne va jamais sur l'onglet refusé : le bandeau
+    // le prend.
     void nextTick(() => {
+      if (tab.value !== next) return
       const index = LISTING_TABS.findIndex(t => t.id === next)
       buttons.value[index]?.focus()
     })

@@ -18,6 +18,7 @@
     VERDICT_CLASSES,
     VERDICT_SYMBOLS,
   } from '@/lib/labels'
+  import ScrollTable from '@/components/ui/ScrollTable.vue'
   import UiSelect from '@/components/ui/UiSelect.vue'
   import { cardClasses } from '@/lib/ui'
   import CostBasisBadge from './CostBasisBadge.vue'
@@ -183,9 +184,13 @@
       Le tableau se calcule dès que le prix et le loyer visé sont connus.
     </p>
     <template v-else>
-      <div class="max-w-full overflow-x-auto" data-testid="sensitivity-scroll">
+      <!-- Lot 25 : le tableau défile dans son cadre, jamais la page. -->
+      <ScrollTable
+        label="Tableau de sensibilité"
+        data-testid="sensitivity-scroll"
+      >
         <table
-          class="w-full min-w-[30rem] border-separate border-spacing-1 text-xs tabular-nums"
+          class="w-full min-w-[30rem] border-separate border-spacing-1 text-sm tabular-nums"
           data-testid="sensitivity-grid"
         >
           <caption class="sr-only">
@@ -202,7 +207,7 @@
             <tr>
               <th
                 scope="col"
-                class="w-px px-2 py-1 text-left font-medium whitespace-nowrap text-muted"
+                class="sticky left-0 z-[1] w-px bg-surface px-2 py-1 text-left text-xs font-medium whitespace-nowrap text-muted"
               >
                 {{ SENSITIVITY_AXIS_LABELS[grid.rowAxis] }} ↓ ·
                 {{ SENSITIVITY_AXIS_LABELS[grid.colAxis].toLowerCase() }} →
@@ -241,8 +246,8 @@
             >
               <th
                 scope="row"
-                class="rounded-lg px-2 py-1 text-left whitespace-nowrap"
-                :class="row.isTarget ? 'bg-accent-soft' : ''"
+                class="sticky left-0 z-[1] rounded-lg px-2 py-1 text-left whitespace-nowrap"
+                :class="row.isTarget ? 'bg-accent-soft' : 'bg-surface'"
               >
                 <span class="block font-semibold text-fg"
                   >{{ stepLabel(grid.rowAxis, row) }}
@@ -291,7 +296,7 @@
             </tr>
           </tbody>
         </table>
-      </div>
+      </ScrollTable>
 
       <div
         v-if="selection"
@@ -345,7 +350,7 @@
             <dd>{{ formatSignedEurosPerMonth(selection.cell.effort) }}</dd>
           </div>
           <div class="flex justify-between gap-2">
-            <dt class="text-muted">Verdict</dt>
+            <dt class="text-muted">Rentabilité</dt>
             <dd data-testid="detail-verdict">
               <span aria-hidden="true">{{
                 VERDICT_SYMBOLS[selection.cell.verdict]

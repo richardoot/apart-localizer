@@ -473,7 +473,7 @@ describe('Préparer une offre (lot 19)', () => {
     const at = outcomeAtPrice(financials, A, 147_000)
     expect(n(prep.get('[data-testid="offer-outcome"]').text())).toBe(
       n(
-        `À ${formatEuros(147_000)} : coût tout compris ${formatEuros(at.totalCost)}, mensualité ${formatEurosPerMonth(at.monthlyPayment)}. Verdict Cible.`
+        `À ${formatEuros(147_000)} : coût tout compris ${formatEuros(at.totalCost)}, mensualité ${formatEurosPerMonth(at.monthlyPayment)}. Rentabilité : Cible.`
       )
     )
 
@@ -490,7 +490,9 @@ describe('Préparer une offre (lot 19)', () => {
     expect(text).toContain(
       n(`coût tout compris ${formatEuros(high.totalCost)}`)
     )
-    expect(text).toContain('Verdict Hors cible (en échec : rendement brut')
+    expect(text).toContain(
+      'Rentabilité : Hors cible (en échec : rendement brut'
+    )
     await prep.trigger('submit')
     expect(
       (wrapper.emitted('addOffer')?.[0] as [{ amount: number }])[0].amount
@@ -513,11 +515,12 @@ describe('Onglet Négocier (lot 19)', () => {
   it('les blocs dans l’ordre, la sensibilité demandée seulement à l’ouverture', async () => {
     const wrapper = mountTab()
     await flushPromises()
+    // Lot 25 : « Prix et offres » sous le prix cible, avant les ventes comparables.
     const order = [
       '[data-testid="target-price-section"]',
+      '[data-testid="prices-offers"]',
       '[data-testid="market"]',
       '[data-testid="negotiation-arguments"]',
-      '[data-testid="prices-offers"]',
       '[data-testid="sensitivity"]',
     ].map(selector => wrapper.get(selector).element)
     for (let i = 1; i < order.length; i += 1) {
@@ -539,6 +542,18 @@ describe('Onglet Négocier (lot 19)', () => {
     expect(details.find('table').exists()).toBe(true)
   })
 
+  it('lot 25 : « Préparer une offre » du prix cible remplit le montant de l’offre', async () => {
+    const wrapper = mountTab()
+    await flushPromises()
+    const button = wrapper.get('[data-testid="prepare-suggested-offer"]')
+    expect(button.text()).toContain('Préparer une offre à')
+    await button.trigger('click')
+    await flushPromises()
+    expect(
+      (wrapper.get('#offer-amount').element as HTMLInputElement).value
+    ).toBe('147000')
+  })
+
   it('relaie le nouveau prix, l’offre, la réponse et le statut suggéré', async () => {
     const wrapper = mountTab({
       item: { ...example, offers: [fakeOffer()] },
@@ -548,7 +563,7 @@ describe('Onglet Négocier (lot 19)', () => {
     const priceForm = wrapper.get('form[aria-label="Nouveau prix constaté"]')
     await priceForm.get('input').setValue('190 000')
     await priceForm.trigger('submit')
-    expect(wrapper.emitted('recordPrice')).toEqual([[190_000]])
+    expect(wrapper.emitted('recordPrice')?.[0]?.[0]).toBe(190_000)
     const prep = wrapper.get('[data-testid="offer-prep"]')
     await prep.get('[data-proposal="suggested"]').trigger('click')
     await prep.trigger('submit')
@@ -558,7 +573,10 @@ describe('Onglet Négocier (lot 19)', () => {
     await wrapper
       .get(`select[aria-label="Réponse à l'offre de ${formatEuros(150_000)}"]`)
       .setValue('accepted')
-    expect(wrapper.emitted('updateOffer')?.[0]).toEqual([
+    // Lot 25 : la réponse se confirme avant de partir.
+    expect(wrapper.emitted('updateOffer')).toBeUndefined()
+    await wrapper.get('[data-testid="response-confirm"]').trigger('submit')
+    expect(wrapper.emitted('updateOffer')?.[0]?.slice(0, 2)).toEqual([
       fakeOffer().id,
       { response: 'accepted', expectedResponse: 'pending' },
     ])

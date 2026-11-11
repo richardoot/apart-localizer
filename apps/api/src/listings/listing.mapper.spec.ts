@@ -118,6 +118,7 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     criteriaFitLevel: null,
     criteriaFitChangedAt: null,
     criteriaFitOrigin: null,
+    coverPhotoId: null,
     sellerType: 'unknown',
     sellerName: null,
     sellerReference: null,

@@ -1,8 +1,12 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue'
   import type { ListingDraft } from '@apart/contracts'
-  import { decisionDetail, waitingLabel } from '@apart/domain'
-  import FitBadge from '@/components/listings/FitBadge.vue'
+  import {
+    decisionDetail,
+    judgementsOfDraft,
+    waitingLabel,
+  } from '@apart/domain'
+  import JudgementPills from '@/components/listings/JudgementPills.vue'
   import {
     draftFitReason,
     draftSellerLabel,
@@ -115,13 +119,11 @@
         <span>DPE {{ d.listing.dpeClass ?? '?' }}</span>
         <span>{{ draftPlace(d) }}</span>
       </div>
-      <div
-        v-if="d.fit && d.fit.activeCriteria > 0"
-        class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5"
-      >
-        <FitBadge :level="d.fit.level" />
+      <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <!-- Lot 25 : les trois jugements étiquetés (rentabilité à confirmer sans loyer visé). -->
+        <JudgementPills :judgements="judgementsOfDraft(d)" />
         <span
-          v-if="fitReason"
+          v-if="fitReason && d.fit && d.fit.activeCriteria > 0"
           class="text-sm text-muted"
           data-testid="draft-fit-reason"
           >{{ fitReason }}</span

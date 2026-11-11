@@ -51,7 +51,12 @@ describe('ListingsTable', () => {
         header(start)?.find('[data-basis]').attributes('data-basis'),
         start
       ).toBe(basis)
-    expect(header('Verdict')?.find('[data-basis]').exists()).toBe(false)
+    // Lot 25 : les trois jugements, étiquetés et dans leur ordre.
+    expect(header('Rentabilité')?.find('[data-basis]').exists()).toBe(false)
+    const labels = wrapper.findAll('thead th').map(th => th.text())
+    const at = (label: string) => labels.findIndex(t => t.startsWith(label))
+    expect(at('Rentabilité')).toBeLessThan(at('Recherche'))
+    expect(at('Recherche')).toBeLessThan(at('Location'))
   })
 
   it('trie au clic sur un en-tête : décroissant d’abord sur un nombre, puis croissant', async () => {

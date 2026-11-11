@@ -84,7 +84,8 @@
 
 <template>
   <li
-    class="grid gap-2 rounded-xl border border-line px-3 py-2.5 sm:px-3.5"
+    :id="item.kind === 'task' ? `todo-${item.id}` : undefined"
+    class="grid scroll-mt-32 gap-2 rounded-xl border border-line px-3 py-2.5 sm:px-3.5"
     :class="item.done ? 'bg-surface-2/60' : 'bg-surface'"
     :data-key="item.key"
     :data-group="item.group"

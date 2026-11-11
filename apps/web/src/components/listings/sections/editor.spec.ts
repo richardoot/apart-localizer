@@ -16,6 +16,7 @@ import {
 import type { ListingEditor } from '@/composables/useListingEditor'
 import { useLivePreview } from '@/composables/useLivePreview'
 import { fakeEvaluated, fakeLink, fakeListing } from '@/test/fixtures'
+import ListingIdentity from '../ListingIdentity.vue'
 import ListingHeader from '../ListingHeader.vue'
 import AiMark from './AiMark.vue'
 import EditableSection from './EditableSection.vue'
@@ -199,8 +200,10 @@ describe('ListingHeader (lot 19)', () => {
         distanceMeters: 420,
       }
     )
-    const wrapper = mount(ListingHeader, {
-      props: { item, evaluation: item.evaluation },
+    // Lot 25 : la ligne d'identité collée (retour, titre, prix, jugements),
+    // puis l'en-tête qui défile (faits, pastilles, statut au téléphone).
+    const identity = mount(ListingIdentity, {
+      props: { item, evaluation: item.evaluation, layout: 'panel' },
       global: {
         stubs: {
           DialogTitle: {
@@ -216,20 +219,51 @@ describe('ListingHeader (lot 19)', () => {
         },
       },
     })
-    expect(wrapper.get('h1').text()).toBe('[Exemple] T2 lot 19')
+    expect(identity.get('h1').text()).toBe('[Exemple] T2 lot 19')
+    expect(
+      identity
+        .get('[data-testid="header-price"]')
+        .text()
+        .replace(/[\u202f\u00a0]/g, ' ')
+    ).toBe('200 000 €')
+    // Au téléphone, la ligne collée reste courte : les jugements sont dessous.
+    expect(identity.find('[data-judgement]').exists()).toBe(false)
+    await identity.get('[data-testid="listing-back"]').trigger('click')
+    expect(identity.emitted('back')).toHaveLength(1)
+    await identity.get('[data-testid="edit-price"]').trigger('click')
+    expect(identity.emitted('editPrice')).toHaveLength(1)
+    expect(identity.find('select').exists()).toBe(false)
+    const page = mount(ListingIdentity, {
+      props: { item, evaluation: item.evaluation, layout: 'page' },
+    })
+    expect(page.get('h1').text()).toBe('[Exemple] T2 lot 19')
+    expect(
+      page.findAll('[data-judgement]').map(j => j.attributes('data-judgement'))
+    ).toEqual(['profitability', 'rental'])
+    // Sur ordinateur, le statut est dans la ligne collée.
+    await page.get('select').setValue('to_visit')
+    expect(page.emitted('status')).toEqual([
+      [{ status: 'to_visit', reason: null }],
+    ])
+
+    const wrapper = mount(ListingHeader, {
+      props: { item, evaluation: item.evaluation, layout: 'panel' },
+    })
     const facts = wrapper
       .get('[data-testid="listing-facts"]')
       .text()
       .replace(/[\u202f\u00a0]/g, ' ')
-    expect(facts).toContain('200 000 €')
     expect(facts).toContain('4 444 €/m²')
     expect(facts).toContain('45 m²')
     expect(facts).toContain('2 pièces')
     expect(facts).toContain('3e étage')
     expect(facts).toContain('Talence · Forum')
     expect(facts).toContain('à 420 m')
+    // Les trois jugements étiquetés, en entier, sous la ligne collée.
+    expect(wrapper.get('[data-judgement="profitability"]').text()).toContain(
+      'Rentabilité'
+    )
     const pills = wrapper.get('[data-testid="listing-pills"]')
-    expect(pills.find('[data-verdict]').exists()).toBe(true)
     expect(pills.text()).toContain('LBC')
     expect(pills.get('[data-testid="check-freshness"]').text()).toBe(
       'Vérifiée hier'
@@ -239,8 +273,6 @@ describe('ListingHeader (lot 19)', () => {
     )
     expect(wrapper.text()).not.toContain('Ajoutée le')
     expect(wrapper.text()).not.toContain('Modifier la fiche')
-    await wrapper.get('[data-testid="listing-back"]').trigger('click')
-    expect(wrapper.emitted('back')).toHaveLength(1)
     await wrapper.get('select').setValue('to_visit')
     expect(wrapper.emitted('status')).toEqual([
       [{ status: 'to_visit', reason: null }],

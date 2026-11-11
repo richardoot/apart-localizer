@@ -24,6 +24,8 @@ export class FakePhotoStorage implements PhotoStorage {
   readonly objects = new Map<string, StoredObjectInfo>()
   readonly removed: string[] = []
   readonly uploadUrls: string[] = []
+  /** Lot 25: each `createSignedUrls` call, with its paths (one call per list read). */
+  readonly signCalls: string[][] = []
   /** When set, every call fails as if Storage were down. */
   down = false
 
@@ -48,6 +50,7 @@ export class FakePhotoStorage implements PhotoStorage {
     expiresIn: number
   ): Promise<Array<string | null>> {
     this.check()
+    this.signCalls.push([...paths])
     return Promise.resolve(
       paths.map(path =>
         this.objects.has(path)
@@ -75,6 +78,7 @@ export class FakePhotoStorage implements PhotoStorage {
     this.objects.clear()
     this.removed.length = 0
     this.uploadUrls.length = 0
+    this.signCalls.length = 0
     this.down = false
   }
 }

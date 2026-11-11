@@ -284,6 +284,25 @@ Le connecteur claude.ai découvre `add_listing_link` et les prompts mis à jour 
 lecture de `tools/list` (nouvelle conversation ; le reconnecter s'il n'apparaît pas). Après le
 déploiement du web, la première visite recharge la page une fois (service worker, ADR 0022).
 
+### La fiche répond d'abord (lot 25)
+
+Migration `20261112100000_lot25_listing_cover` : purement additive (colonne facultative
+`listings.cover_photo_id`, la photo de couverture choisie par un membre, et sa clé étrangère vers
+`visit_photos`, `ON DELETE SET NULL`). Toutes les annonces existantes restent à null : leur
+couverture est la première photo prête de leur première visite, calculée à la lecture (aucune
+avant la première photo). Appliquée par `prisma:deploy` (ou `build:vercel`). Ni variable, ni
+import, ni script de rattrapage ; le bucket des photos ne change pas (mêmes URL signées, même
+durée `STORAGE_SIGNED_URL_TTL_SECONDS`). Contrôle après :
+
+```sql
+SELECT count(*) FILTER (WHERE cover_photo_id IS NOT NULL) AS couvertures_choisies,
+       count(*) AS annonces
+FROM app.listings;
+```
+
+Aucun outil MCP ne change. Après le déploiement du web, la première visite recharge la page une
+fois (service worker, ADR 0022) ; sur ordinateur, la fiche s'ouvre désormais en pleine page.
+
 ### Adéquation aux critères (lot 14)
 
 Migration `20261106100000_lot14_criteria_fit` : purement additive (énumération

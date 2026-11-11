@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import UiButton from '@/components/ui/UiButton.vue'
   import { computed } from 'vue'
+  import { CRITERIA_FIT_LEVEL_LABELS, JUDGEMENT_LABELS } from '@apart/contracts'
   import type {
     CompareItem,
     CompareRanks,
@@ -128,15 +129,24 @@
       basis: 'all_in',
       value: i => formatEurosPerMonth(i.evaluation.metrics.effort),
     },
+    // Lot 25 : les trois jugements, étiquetés et dans leur ordre.
     {
       key: 'verdict',
-      label: 'Verdict',
+      label: JUDGEMENT_LABELS.profitability,
       best: 'score',
       value: i => VERDICT_LABELS[i.evaluation.metrics.verdict],
     },
     {
+      key: 'fit',
+      label: JUDGEMENT_LABELS.search,
+      value: i =>
+        i.criteriaFit.activeCriteria > 0
+          ? CRITERIA_FIT_LEVEL_LABELS[i.criteriaFit.level]
+          : '—',
+    },
+    {
       key: 'rental',
-      label: 'Phase 2',
+      label: JUDGEMENT_LABELS.rental,
       value: i => RENTAL_VERDICT_LABELS[i.evaluation.rental.verdict],
     },
     {

@@ -26,6 +26,10 @@ const apiMock = vi.hoisted(() => ({
   drafts: { list: vi.fn(), decide: vi.fn() },
   activity: { list: vi.fn() },
   export: vi.fn(),
+  covers: {
+    list: vi.fn(() => Promise.resolve({ covers: [] })),
+    choose: vi.fn(),
+  },
 }))
 const upload = vi.hoisted(() => vi.fn())
 const routerPush = vi.hoisted(() => vi.fn())
@@ -188,6 +192,35 @@ describe('VisitsSection', () => {
     expect(prompt?.textContent).toContain('« Visité »')
     ;(prompt?.querySelector('button') as HTMLElement).click()
     expect(wrapper.emitted('set-status')).toEqual([['visited']])
+    wrapper.unmount()
+  })
+
+  it('lot 25 : choisir la photo de couverture, puis « Annuler » remet la précédente', async () => {
+    const shown = visit()
+    const photoId = shown.photos[0]?.id ?? ''
+    apiMock.visits.list.mockResolvedValue([shown])
+    apiMock.covers.list.mockResolvedValueOnce({ covers: [] })
+    apiMock.covers.choose.mockResolvedValue({ covers: [] })
+    const wrapper = withClient(VisitsSection, {
+      listingId: LISTING,
+      members: MEMBERS,
+      meId: RICHARD.id,
+    })
+    await flushPromises()
+    const pick = document.body.querySelector(
+      '[data-testid="photo-cover-pick"]'
+    ) as HTMLElement
+    expect(pick.getAttribute('aria-label')).toContain(
+      'Choisir comme photo de couverture'
+    )
+    pick.click()
+    await flushPromises()
+    expect(apiMock.covers.choose).toHaveBeenCalledWith(LISTING, photoId)
+    const { useFeedbackStore } = await import('@/stores/feedback')
+    const message = useFeedbackStore().messages.at(-1)
+    expect(message?.text).toBe('Photo de couverture choisie.')
+    await message?.action?.run()
+    expect(apiMock.covers.choose).toHaveBeenLastCalledWith(LISTING, null)
     wrapper.unmount()
   })
 

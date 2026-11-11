@@ -221,8 +221,10 @@
     />
 
     <div class="grid content-start gap-1.5 sm:col-span-2">
-      <span id="f-verdict-label" class="text-sm font-semibold">Verdict</span>
-      <div class="flex flex-wrap gap-1.5" role="group" aria-label="Verdicts">
+      <span id="f-verdict-label" class="text-sm font-semibold"
+        >Rentabilité</span
+      >
+      <div class="flex flex-wrap gap-1.5" role="group" aria-label="Rentabilité">
         <UiChip
           v-for="verdict in verdicts"
           :key="verdict"

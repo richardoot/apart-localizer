@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { LocationQuery, RouteRecordRaw } from 'vue-router'
 import { parseSharedListing } from '@apart/contracts'
 import { installLeaveGuard } from '@/composables/useLeaveGuard'
+import { FICHE_PAGE_QUERY, listingScroll } from '@/lib/navigation'
 import { useAuthStore } from '@/stores/auth'
 import { useLeaveGuardStore } from '@/stores/leave-guard'
 
@@ -185,6 +186,13 @@ const router = createRouter({
     // Lot 23 : « Ce qui t'attend » mène à un bloc de l'accueil (`#messages-a-valider`).
     if (to.hash) return { el: to.hash, top: 72 }
     if (to.path === from.path) return false
+    // Lot 25 : un panneau s'ouvre et se ferme sans faire bouger la liste.
+    const fichePage =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia(FICHE_PAGE_QUERY).matches
+    const listing = listingScroll(to.name, from.name, fichePage)
+    if (listing !== null) return listing
     return { top: 0 }
   },
 })

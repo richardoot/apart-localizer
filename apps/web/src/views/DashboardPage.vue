@@ -15,6 +15,7 @@
   import GettingStarted from '@/components/home/GettingStarted.vue'
   import HomeAgenda from '@/components/home/HomeAgenda.vue'
   import HomeStages from '@/components/home/HomeStages.vue'
+  import { useListingCovers } from '@/composables/useCovers'
   import { useGettingStarted } from '@/composables/useHome'
   import { useListingList } from '@/composables/useListings'
   import { useMediaQuery } from '@/composables/useMediaQuery'
@@ -71,6 +72,13 @@
   const shownCount = computed(() => (wide.value ? 3 : 1))
   const allNew = ref(false)
   const allBest = ref(false)
+  /** Lot 25 : les photos de couverture des meilleures annonces montrées. */
+  const shownBest = computed(() =>
+    allBest.value ? best.value : best.value.slice(0, shownCount.value)
+  )
+  const covers = useListingCovers(
+    computed(() => shownBest.value.map(item => item.listing.id))
+  )
   const newOnes = computed(() =>
     items.value.filter(
       item =>
@@ -241,8 +249,10 @@
             >
           </div>
           <ListingCards
-            :items="allBest ? best : best.slice(0, shownCount)"
+            :items="shownBest"
+            :covers="covers.byId.value"
             @open="open"
+            @cover-expired="covers.refresh"
           />
         </section>
 

@@ -27,6 +27,7 @@
   import TargetCriteriaTable from './TargetCriteriaTable.vue'
   import VerdictPill from './VerdictPill.vue'
   import UiBadge from '@/components/ui/UiBadge.vue'
+  import UiButton from '@/components/ui/UiButton.vue'
   import { cardClasses } from '@/lib/ui'
   import type { Tone } from '@/lib/ui'
 
@@ -53,6 +54,8 @@
     /** Vrai pendant l'édition : valeurs de l'aperçu en direct, sans rang ni historique. */
     live?: boolean
   }>()
+  /** Lot 25 : « Préparer une offre » au montant suggéré (le formulaire de « Prix et offres »). */
+  const emit = defineEmits<{ prepareOffer: [amount: number] }>()
 
   const target = computed(() => props.targetPrice?.targetPrice ?? null)
   const discount = computed(() => props.targetPrice?.discount ?? null)
@@ -211,6 +214,16 @@
             prix affiché</template
           >.
         </p>
+        <!-- Lot 25 : l'action de l'onglet dès le premier écran (téléphone compris). -->
+        <UiButton
+          variant="primary"
+          size="sm"
+          class="mt-1 justify-self-start"
+          data-testid="prepare-suggested-offer"
+          @click="emit('prepareOffer', negotiation.suggestedOffer)"
+        >
+          Préparer une offre à {{ formatEuros(negotiation.suggestedOffer) }}
+        </UiButton>
       </div>
 
       <p
@@ -233,10 +246,11 @@
         >
         <span
           >effort
-          <strong>{{
-            formatSignedEurosPerMonth(atTarget.effort)
-          }}</strong></span
+          <strong>{{ formatSignedEurosPerMonth(atTarget.effort) }}</strong
+          >.</span
         >
+        <!-- Lot 25 : le verdict est le jugement « Rentabilité ». -->
+        <span class="text-muted">Rentabilité :</span>
         <VerdictPill :verdict="atTarget.verdict" />
         <span
           v-if="atTarget.verdict !== 'target'"

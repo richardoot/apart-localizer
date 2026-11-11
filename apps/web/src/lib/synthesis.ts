@@ -117,9 +117,11 @@ export function fitLine(fit: ListingCriteriaFit): string {
     const values = (best?.checks ?? [])
       .filter(c => c.level === 'in' && c.value)
       .slice(0, 3)
-      .map(
-        c =>
-          `${c.label.charAt(0).toLowerCase()}${c.label.slice(1)} (${c.value})`
+      // Lot 25 : un sigle en tête (« DPE ») garde ses majuscules.
+      .map(c =>
+        /^\p{Lu}{2}/u.test(c.label)
+          ? `${c.label} (${c.value})`
+          : `${c.label.charAt(0).toLowerCase()}${c.label.slice(1)} (${c.value})`
       )
     return values.length
       ? `${name} : ${values.join(', ')}.`

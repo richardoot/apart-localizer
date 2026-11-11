@@ -55,7 +55,9 @@
     withoutListingTab,
   } from '@/lib/listing-tabs'
   import type { ListingTab } from '@/lib/listing-tabs'
-  import { closesBack } from '@/lib/navigation'
+  import { FICHE_PAGE_QUERY, closeTarget, closesBack } from '@/lib/navigation'
+  import { useMediaQuery } from '@/composables/useMediaQuery'
+  import { useListingCovers } from '@/composables/useCovers'
   import { criteriaFeatures } from '@/lib/perimeter'
   import { useAction } from '@/composables/useAction'
   import type { ActionOptions } from '@/composables/useAction'
@@ -363,8 +365,16 @@
     void route.fullPath
     return origin()?.title
   })
+  /**
+   * Lot 25 : fermer revient par l'historique à la page d'où la fiche a été
+   * ouverte, la liste comprise (même étape, mêmes filtres, même position :
+   * le routeur garde le défilement) ; un lien direct mène à la liste.
+   */
   function closePanel(): void {
-    if (origin()) {
+    const back: unknown = window.history.state?.back
+    const previous =
+      typeof back === 'string' ? router.resolve(back).name : undefined
+    if (closeTarget(previous) === 'history') {
       router.back()
       return
     }
@@ -373,6 +383,22 @@
       query: withoutListingTab(route.query),
     })
   }
+
+  /**
+   * Lot 25 (ADR 0035) : sur ordinateur, la fiche est une page ; la liste reste
+   * montée, cachée (filtres, étape, lignes dépliées gardés), et la carte se
+   * remonte au retour (MapLibre ne se dessine pas dans un bloc caché).
+   */
+  const fichePage = useMediaQuery(FICHE_PAGE_QUERY)
+  const pageFiche = computed(() => Boolean(openedId.value) && fichePage.value)
+
+  /** Lot 25 : les photos de couverture des annonces affichées, en une lecture. */
+  const coverIds = computed(() =>
+    store.view === 'list' || store.view === 'cards'
+      ? mainItems.value.map(item => item.listing.id)
+      : []
+  )
+  const covers = useListingCovers(coverIds)
   function onNear(near: PointRadius | undefined): void {
     store.setNear(near)
   }
@@ -550,362 +576,379 @@
 
 <template>
   <section class="mx-auto grid max-w-7xl min-w-0 gap-3.5 px-4 py-5">
-    <!-- Lot 23 : au téléphone, la barre du bas nomme la page et porte « Ajouter » ; l'export est dans « Filtres ». -->
-    <header
-      class="hidden flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:flex"
-    >
-      <div>
-        <h1 class="font-display text-3xl font-bold">Annonces</h1>
-        <p
-          v-if="isFetching && !isPending"
-          class="text-sm text-muted"
-          aria-live="polite"
-        >
-          actualisation…
-        </p>
-      </div>
-      <div class="flex flex-wrap items-center gap-2">
-        <ExportMenu :filters="draftsStage ? store.apiFilters() : listFilters" />
-        <UiButton
-          :to="{ name: 'listing-new', query: withoutListingTab(route.query) }"
-          variant="primary"
-          icon="plus"
-        >
-          Ajouter
-        </UiButton>
-      </div>
-    </header>
-
-    <h1 class="sr-only sm:hidden">Annonces</h1>
-    <WorkflowAgenda
-      :items="overview?.agenda ?? []"
-      @stage="selectStageFromAgenda"
-    />
-
-    <StageBar :stages="stages" :current="stage" @select="selectStage" />
-    <UiAlert
-      v-if="overviewFailed"
-      tone="warn"
-      retry
-      :retrying="overviewQuery.isFetching?.value ?? false"
-      data-testid="overview-error"
-      @retry="overviewQuery.refetch?.()"
-    >
-      Les compteurs des étapes et « Ce qui t’attend » n’ont pas pu être lus :
-      les chiffres affichés sont peut-être faux.
-    </UiAlert>
-
-    <div
-      class="flex flex-wrap items-center justify-between gap-x-2 gap-y-2.5 sm:gap-x-4"
-      data-testid="stage-head"
-    >
-      <div
-        class="flex min-w-0 flex-[1_1_160px] flex-col gap-0.5 sm:flex-[1_1_380px]"
+    <div v-show="!pageFiche" class="contents" data-testid="listings-list">
+      <!-- Lot 23 : au téléphone, la barre du bas nomme la page et porte « Ajouter » ; l'export est dans « Filtres ». -->
+      <header
+        class="hidden flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:flex"
       >
-        <h2
-          ref="stageQuestion"
-          tabindex="-1"
-          class="font-display text-lg font-bold focus:outline-none sm:text-xl"
-          data-testid="stage-question"
-        >
-          {{ WORKFLOW_STAGE_QUESTIONS[stage] }}
-        </h2>
-        <!-- Lot 23 : au téléphone, la question suffit ; l'explication reste sur ordinateur. -->
-        <p class="hidden text-sm text-muted sm:block">
-          {{ WORKFLOW_STAGE_INTROS[stage] }}
-        </p>
-      </div>
-      <!-- Lot 23 : au téléphone, « Filtres » sur la ligne de la question, les deux boutons d'action côte à côte. -->
-      <div class="contents sm:flex sm:flex-wrap sm:items-center sm:gap-2">
-        <UiButton
-          icon="filter"
-          :aria-expanded="filtersOpen"
-          data-testid="filters-toggle"
-          @click="filtersOpen = !filtersOpen"
-        >
-          Filtres<template v-if="store.activeCount">
-            ({{ store.activeCount }})</template
+        <div>
+          <h1 class="font-display text-3xl font-bold">Annonces</h1>
+          <p
+            v-if="isFetching && !isPending"
+            class="text-sm text-muted"
+            aria-live="polite"
           >
-        </UiButton>
-        <!-- Lot 23 : au téléphone, le choix de la vue est rangé dans « Filtres ». -->
-        <ViewSwitch v-model="store.view" class="hidden! sm:inline-flex!" />
-        <UiField
-          v-if="store.view === 'map'"
-          id="map-color-by"
-          v-model="colorBy"
-          as="select"
-          label="Couleur des repères"
-          sr-label
-          :options="COLOR_OPTIONS"
-        />
-        <UiButton
-          v-if="toConfirm > 0"
-          :to="{ name: 'triage', query: { mode: 'confirmer' } }"
-          variant="outline"
-          class="flex-1 sm:flex-none"
-          data-testid="stage-confirm"
-          >{{ confirmLabel(toConfirm) }}</UiButton
-        >
-        <UiButton
-          v-if="ctaLabel"
-          variant="primary"
-          class="flex-[1_1_auto] sm:flex-none"
-          data-testid="stage-cta"
-          @click="runCta"
-        >
-          {{ ctaLabel }}
-        </UiButton>
-      </div>
-    </div>
-
-    <div v-if="filtersOpen" class="grid gap-2" data-testid="filters-panel">
-      <div class="flex flex-wrap items-center gap-2 sm:hidden">
-        <ViewSwitch v-model="store.view" data-testid="view-switch-phone" />
-        <ExportMenu :filters="draftsStage ? store.apiFilters() : listFilters" />
-      </div>
-      <FiltersBar
-        :communes="communes"
-        :criteria="criteria"
-        :drafts-only="draftsStage"
-      />
-      <p
-        v-if="activeCriteria.length"
-        class="text-sm text-muted"
-        data-testid="fit-criteria"
-      >
-        Comparées
-        {{
-          activeCriteria.length > 1
-            ? `aux ${activeCriteria.length} critères actifs`
-            : 'au critère actif'
-        }}
-        :
-        <template v-for="(c, index) in activeCriteria" :key="c.id"
-          ><template v-if="index > 0"> · </template
-          ><RouterLink
-            :to="{ name: 'listings', query: { criteriaId: c.id } }"
-            class="text-accent underline-offset-2 hover:underline"
-            >{{ c.name }}</RouterLink
-          ></template
-        >
-      </p>
-      <UiButton
-        v-if="!draftsStage"
-        variant="link"
-        class="w-fit"
-        data-testid="full-table"
-        @click="store.view = store.view === 'table' ? 'list' : 'table'"
-      >
-        {{
-          store.view === 'table'
-            ? 'Revenir à la liste'
-            : 'Voir le tableau complet (toutes les colonnes, comparer)'
-        }}
-      </UiButton>
-    </div>
-
-    <template v-if="draftsStage && store.view !== 'map'">
-      <DraftsTab
-        :view="store.view === 'cards' ? 'cards' : 'list'"
-        :drafts="sortedDrafts"
-        :keep-order="draftsKeepOrder"
-        :agreement="agreement"
-        :expanded="draftsExpandedId"
-        :filtered="filtered"
-        @update:expanded="draftsExpandedId = $event"
-        @clear-filters="store.reset()"
-      />
-      <OutOfCriteria
-        :label="outLabel('draft', outDraftRows.length)"
-        :rows="outDraftRows"
-        :default-open="outOpenByDefault"
-        @open="id => (draftsExpandedId = id)"
-      />
-    </template>
-    <template v-else-if="draftsStage">
-      <ListingsMap
-        v-model:toggles="toggles"
-        :items="mapItems"
-        :near="store.filters.near"
-        :color-by="colorBy"
-        :layers="mapLayers"
-        :areas="null"
-        @open="
-          id => {
-            draftsExpandedId = id
-            store.view = 'list'
-          }
-        "
-        @update:near="onNear"
-        @bounds="value => (bbox = value)"
-      />
-    </template>
-    <QueryState
-      v-else
-      :query="listQuery"
-      :pending="switching"
-      :skeleton="store.view === 'cards' ? 'cards' : 'rows'"
-      loading-label="les annonces"
-      error-fallback="Impossible de lire les annonces."
-    >
-      <UiCard
-        v-if="stageEmpty && !switching"
-        padding="sm"
-        class="grid gap-2 text-sm"
-        data-testid="stage-empty"
-      >
-        <p class="text-muted">{{ STAGE_EMPTY_TEXT[stage] }}</p>
-        <template v-if="filtered">
-          <p class="text-muted" data-testid="stage-empty-filters">
-            Des filtres sont actifs ({{ store.activeCount }}) : ils cachent
-            peut-être des annonces de cette étape.
+            actualisation…
           </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <ExportMenu
+            :filters="draftsStage ? store.apiFilters() : listFilters"
+          />
           <UiButton
-            size="sm"
-            class="w-fit"
-            data-testid="clear-filters"
-            @click="store.reset()"
-            >Effacer les filtres</UiButton
+            :to="{ name: 'listing-new', query: withoutListingTab(route.query) }"
+            variant="primary"
+            icon="plus"
           >
-        </template>
-      </UiCard>
-      <UiAlert v-if="pageAction.error.value" data-testid="page-failure">
-        {{ pageAction.error.value }}
+            Ajouter
+          </UiButton>
+        </div>
+      </header>
+
+      <h1 class="sr-only sm:hidden">Annonces</h1>
+      <WorkflowAgenda
+        :items="overview?.agenda ?? []"
+        @stage="selectStageFromAgenda"
+      />
+
+      <StageBar :stages="stages" :current="stage" @select="selectStage" />
+      <UiAlert
+        v-if="overviewFailed"
+        tone="warn"
+        retry
+        :retrying="overviewQuery.isFetching?.value ?? false"
+        data-testid="overview-error"
+        @retry="overviewQuery.refetch?.()"
+      >
+        Les compteurs des étapes et « Ce qui t’attend » n’ont pas pu être lus :
+        les chiffres affichés sont peut-être faux.
       </UiAlert>
-      <StageRows
-        v-if="store.view === 'list'"
-        :rows="visibleRows"
-        :expanded="expandedDismissedIds"
-        @open="openRow"
-        @action="onRowAction"
+
+      <div
+        class="flex flex-wrap items-center justify-between gap-x-2 gap-y-2.5 sm:gap-x-4"
+        data-testid="stage-head"
       >
-        <template #expanded="{ row }">
-          <div class="flex flex-col gap-2.5">
-            <UiButton
-              v-if="dismissedOf(row.id)?.url"
-              :href="dismissedOf(row.id)?.url ?? undefined"
-              variant="link"
-              icon-right="external"
-              class="w-fit font-semibold"
-              target="_blank"
-              rel="noopener noreferrer"
-              >Voir l’annonce en ligne
-              <span class="sr-only">(nouvel onglet)</span></UiButton
+        <div
+          class="flex min-w-0 flex-[1_1_160px] flex-col gap-0.5 sm:flex-[1_1_380px]"
+        >
+          <h2
+            ref="stageQuestion"
+            tabindex="-1"
+            class="font-display text-lg font-bold focus:outline-none sm:text-xl"
+            data-testid="stage-question"
+          >
+            {{ WORKFLOW_STAGE_QUESTIONS[stage] }}
+          </h2>
+          <!-- Lot 23 : au téléphone, la question suffit ; l'explication reste sur ordinateur. -->
+          <p class="hidden text-sm text-muted sm:block">
+            {{ WORKFLOW_STAGE_INTROS[stage] }}
+          </p>
+        </div>
+        <!-- Lot 23 : au téléphone, « Filtres » sur la ligne de la question, les deux boutons d'action côte à côte. -->
+        <div class="contents sm:flex sm:flex-wrap sm:items-center sm:gap-2">
+          <UiButton
+            icon="filter"
+            :aria-expanded="filtersOpen"
+            data-testid="filters-toggle"
+            @click="filtersOpen = !filtersOpen"
+          >
+            Filtres<template v-if="store.activeCount">
+              ({{ store.activeCount }})</template
             >
-            <PropertyFacts
-              v-if="dismissedOf(row.id)"
-              v-model:open="factsOpen"
-              :facts="propertyFacts(dismissedOf(row.id)!.listing)"
-              :description="dismissedOf(row.id)!.listing.description"
-            />
-          </div>
-        </template>
-      </StageRows>
-      <ListingsTable
-        v-else-if="store.view === 'table'"
-        :items="items"
-        :members="activeMembers"
-        :me-id="me?.id ?? null"
-        @open="open"
-        @compare="compare"
-      />
-      <ListingCards
-        v-else-if="store.view === 'cards'"
-        :items="mainItems"
-        @open="open"
-      />
-      <ListingsMap
+          </UiButton>
+          <!-- Lot 23 : au téléphone, le choix de la vue est rangé dans « Filtres ». -->
+          <ViewSwitch v-model="store.view" class="hidden! sm:inline-flex!" />
+          <UiField
+            v-if="store.view === 'map'"
+            id="map-color-by"
+            v-model="colorBy"
+            as="select"
+            label="Couleur des repères"
+            sr-label
+            :options="COLOR_OPTIONS"
+          />
+          <UiButton
+            v-if="toConfirm > 0"
+            :to="{ name: 'triage', query: { mode: 'confirmer' } }"
+            variant="outline"
+            class="flex-1 sm:flex-none"
+            data-testid="stage-confirm"
+            >{{ confirmLabel(toConfirm) }}</UiButton
+          >
+          <UiButton
+            v-if="ctaLabel"
+            variant="primary"
+            class="flex-[1_1_auto] sm:flex-none"
+            data-testid="stage-cta"
+            @click="runCta"
+          >
+            {{ ctaLabel }}
+          </UiButton>
+        </div>
+      </div>
+
+      <div v-if="filtersOpen" class="grid gap-2" data-testid="filters-panel">
+        <div class="flex flex-wrap items-center gap-2 sm:hidden">
+          <ViewSwitch v-model="store.view" data-testid="view-switch-phone" />
+          <ExportMenu
+            :filters="draftsStage ? store.apiFilters() : listFilters"
+          />
+        </div>
+        <FiltersBar
+          :communes="communes"
+          :criteria="criteria"
+          :drafts-only="draftsStage"
+        />
+        <p
+          v-if="activeCriteria.length"
+          class="text-sm text-muted"
+          data-testid="fit-criteria"
+        >
+          Comparées
+          {{
+            activeCriteria.length > 1
+              ? `aux ${activeCriteria.length} critères actifs`
+              : 'au critère actif'
+          }}
+          :
+          <template v-for="(c, index) in activeCriteria" :key="c.id"
+            ><template v-if="index > 0"> · </template
+            ><RouterLink
+              :to="{ name: 'listings', query: { criteriaId: c.id } }"
+              class="text-accent underline-offset-2 hover:underline"
+              >{{ c.name }}</RouterLink
+            ></template
+          >
+        </p>
+        <UiButton
+          v-if="!draftsStage"
+          variant="link"
+          class="w-fit"
+          data-testid="full-table"
+          @click="store.view = store.view === 'table' ? 'list' : 'table'"
+        >
+          {{
+            store.view === 'table'
+              ? 'Revenir à la liste'
+              : 'Voir le tableau complet (toutes les colonnes, comparer)'
+          }}
+        </UiButton>
+      </div>
+
+      <template v-if="draftsStage && store.view !== 'map'">
+        <DraftsTab
+          :view="store.view === 'cards' ? 'cards' : 'list'"
+          :drafts="sortedDrafts"
+          :keep-order="draftsKeepOrder"
+          :agreement="agreement"
+          :expanded="draftsExpandedId"
+          :filtered="filtered"
+          @update:expanded="draftsExpandedId = $event"
+          @clear-filters="store.reset()"
+        />
+        <OutOfCriteria
+          :label="outLabel('draft', outDraftRows.length)"
+          :rows="outDraftRows"
+          :default-open="outOpenByDefault"
+          @open="id => (draftsExpandedId = id)"
+        />
+      </template>
+      <template v-else-if="draftsStage">
+        <ListingsMap
+          v-if="!pageFiche"
+          v-model:toggles="toggles"
+          :items="mapItems"
+          :near="store.filters.near"
+          :color-by="colorBy"
+          :layers="mapLayers"
+          :areas="null"
+          @open="
+            id => {
+              draftsExpandedId = id
+              store.view = 'list'
+            }
+          "
+          @update:near="onNear"
+          @bounds="value => (bbox = value)"
+        />
+      </template>
+      <QueryState
         v-else
-        v-model:toggles="toggles"
-        :items="mapItems"
-        :near="store.filters.near"
-        :color-by="colorBy"
-        :layers="mapLayers"
-        :areas="listingAreas.data.value ?? null"
-        @open="open"
-        @update:near="onNear"
-        @bounds="value => (bbox = value)"
-      />
-      <section
-        v-if="
-          (store.view === 'table' || store.view === 'cards') &&
-          dismissedRows.length
-        "
-        class="grid gap-2"
-        data-testid="dismissed-drafts"
+        :query="listQuery"
+        :pending="switching"
+        :skeleton="store.view === 'cards' ? 'cards' : 'rows'"
+        loading-label="les annonces"
+        error-fallback="Impossible de lire les annonces."
       >
-        <h3 class="text-base font-semibold">Écartées à l’étape À valider</h3>
+        <UiCard
+          v-if="stageEmpty && !switching"
+          padding="sm"
+          class="grid gap-2 text-sm"
+          data-testid="stage-empty"
+        >
+          <p class="text-muted">{{ STAGE_EMPTY_TEXT[stage] }}</p>
+          <template v-if="filtered">
+            <p class="text-muted" data-testid="stage-empty-filters">
+              Des filtres sont actifs ({{ store.activeCount }}) : ils cachent
+              peut-être des annonces de cette étape.
+            </p>
+            <UiButton
+              size="sm"
+              class="w-fit"
+              data-testid="clear-filters"
+              @click="store.reset()"
+              >Effacer les filtres</UiButton
+            >
+          </template>
+        </UiCard>
+        <UiAlert v-if="pageAction.error.value" data-testid="page-failure">
+          {{ pageAction.error.value }}
+        </UiAlert>
         <StageRows
-          :rows="dismissedRows"
+          v-if="store.view === 'list'"
+          :rows="visibleRows"
+          :covers="covers.byId.value"
           :expanded="expandedDismissedIds"
           @open="openRow"
           @action="onRowAction"
         >
           <template #expanded="{ row }">
-            <PropertyFacts
-              v-if="dismissedOf(row.id)"
-              v-model:open="factsOpen"
-              :facts="propertyFacts(dismissedOf(row.id)!.listing)"
-              :description="dismissedOf(row.id)!.listing.description"
-            />
+            <div class="flex flex-col gap-2.5">
+              <UiButton
+                v-if="dismissedOf(row.id)?.url"
+                :href="dismissedOf(row.id)?.url ?? undefined"
+                variant="link"
+                icon-right="external"
+                class="w-fit font-semibold"
+                target="_blank"
+                rel="noopener noreferrer"
+                >Voir l’annonce en ligne
+                <span class="sr-only">(nouvel onglet)</span></UiButton
+              >
+              <PropertyFacts
+                v-if="dismissedOf(row.id)"
+                v-model:open="factsOpen"
+                :facts="propertyFacts(dismissedOf(row.id)!.listing)"
+                :description="dismissedOf(row.id)!.listing.description"
+              />
+            </div>
           </template>
         </StageRows>
-      </section>
-      <UiButton
-        v-if="store.view === 'list' && hiddenArchives > 0"
-        variant="link"
-        class="w-fit"
-        data-testid="archives-more"
-        @click="showAllArchives = true"
-      >
-        {{
-          hiddenArchives > 1
-            ? `Voir les ${hiddenArchives} autres`
-            : 'Voir l’autre'
-        }}
-      </UiButton>
-      <OutOfCriteria
-        v-if="store.view !== 'table'"
-        :label="outLabel('listing', outRows.length)"
-        :rows="outRows"
-        :default-open="outOpenByDefault"
-        @open="open"
-      />
-    </QueryState>
+        <ListingsTable
+          v-else-if="store.view === 'table'"
+          :items="items"
+          :members="activeMembers"
+          :me-id="me?.id ?? null"
+          @open="open"
+          @compare="compare"
+        />
+        <ListingCards
+          v-else-if="store.view === 'cards'"
+          :items="mainItems"
+          :covers="covers.byId.value"
+          @open="open"
+          @cover-expired="covers.refresh"
+        />
+        <template v-else>
+          <ListingsMap
+            v-if="!pageFiche"
+            v-model:toggles="toggles"
+            :items="mapItems"
+            :near="store.filters.near"
+            :color-by="colorBy"
+            :layers="mapLayers"
+            :areas="listingAreas.data.value ?? null"
+            @open="open"
+            @update:near="onNear"
+            @bounds="value => (bbox = value)"
+          />
+        </template>
+        <section
+          v-if="
+            (store.view === 'table' || store.view === 'cards') &&
+            dismissedRows.length
+          "
+          class="grid gap-2"
+          data-testid="dismissed-drafts"
+        >
+          <h3 class="text-base font-semibold">Écartées à l’étape À valider</h3>
+          <StageRows
+            :rows="dismissedRows"
+            :expanded="expandedDismissedIds"
+            @open="openRow"
+            @action="onRowAction"
+          >
+            <template #expanded="{ row }">
+              <PropertyFacts
+                v-if="dismissedOf(row.id)"
+                v-model:open="factsOpen"
+                :facts="propertyFacts(dismissedOf(row.id)!.listing)"
+                :description="dismissedOf(row.id)!.listing.description"
+              />
+            </template>
+          </StageRows>
+        </section>
+        <UiButton
+          v-if="store.view === 'list' && hiddenArchives > 0"
+          variant="link"
+          class="w-fit"
+          data-testid="archives-more"
+          @click="showAllArchives = true"
+        >
+          {{
+            hiddenArchives > 1
+              ? `Voir les ${hiddenArchives} autres`
+              : 'Voir l’autre'
+          }}
+        </UiButton>
+        <OutOfCriteria
+          v-if="store.view !== 'table'"
+          :label="outLabel('listing', outRows.length)"
+          :rows="outRows"
+          :default-open="outOpenByDefault"
+          @open="open"
+        />
+      </QueryState>
 
-    <p
-      v-if="store.view === 'table' && !draftsStage"
-      class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted"
-    >
-      <span
-        ><UiBadge tone="good">Cible</UiBadge> rendement brut ≥ seuil, effort ≤
-        maximum, DPE A à D</span
+      <p
+        v-if="store.view === 'table' && !draftsStage"
+        class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted"
       >
-      <span
-        ><UiBadge tone="warn">À creuser</UiBadge> un critère manque de peu</span
-      >
-      <span
-        ><UiBadge tone="bad">Hors cible</UiBadge> rendement trop faible, DPE E à
-        G ou effort trop lourd</span
-      >
-      <span
-        >« ≈ » : valeur estimée faute de saisie (taxe foncière = 1 mois de
-        loyer), ou distance depuis le centre du quartier ou de la commune</span
-      >
-      <span class="inline-flex items-center gap-1" data-testid="legend-price"
-        ><CostBasisBadge basis="price" /> se compare au prix affiché</span
-      >
-      <span class="inline-flex items-center gap-1" data-testid="legend-all-in"
-        ><CostBasisBadge basis="all_in" /> coût tout compris : prix + notaire +
-        travaux + mobilier</span
-      >
-    </p>
+        <!-- Lot 25 : la légende nomme le jugement qu'elle explique. -->
+        <span class="font-semibold text-fg">Rentabilité :</span>
+        <span
+          ><UiBadge tone="good">Cible</UiBadge> rendement brut ≥ seuil, effort ≤
+          maximum, DPE A à D</span
+        >
+        <span
+          ><UiBadge tone="warn">À creuser</UiBadge> un critère manque de
+          peu</span
+        >
+        <span
+          ><UiBadge tone="bad">Hors cible</UiBadge> rendement trop faible, DPE E
+          à G ou effort trop lourd</span
+        >
+        <span
+          >« ≈ » : valeur estimée faute de saisie (taxe foncière = 1 mois de
+          loyer), ou distance depuis le centre du quartier ou de la
+          commune</span
+        >
+        <span class="inline-flex items-center gap-1" data-testid="legend-price"
+          ><CostBasisBadge basis="price" /> se compare au prix affiché</span
+        >
+        <span class="inline-flex items-center gap-1" data-testid="legend-all-in"
+          ><CostBasisBadge basis="all_in" /> coût tout compris : prix + notaire
+          + travaux + mobilier</span
+        >
+      </p>
+    </div>
 
     <ListingPanel
       v-if="openedId"
       :id="openedId"
       :key="openedId"
       v-model:tab="panelTab"
+      :layout="fichePage ? 'page' : 'panel'"
       :notice="notice"
       :back-label="backLabel"
       @close="

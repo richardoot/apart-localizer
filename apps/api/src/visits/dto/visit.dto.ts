@@ -1,5 +1,9 @@
 import { createZodDto } from 'nestjs-zod'
 import {
+  ListingCoverInputSchema,
+  ListingCoverSchema,
+  ListingCoversQuerySchema,
+  ListingCoversSchema,
   VisitInputSchema,
   VisitPhotoSchema,
   VisitPhotoUploadRequestSchema,
@@ -18,3 +22,13 @@ export class VisitPhotoUploadRequestDto extends createZodDto(
   VisitPhotoUploadRequestSchema
 ) {}
 export class VisitPhotoUploadDto extends createZodDto(VisitPhotoUploadSchema) {}
+
+// Lot 25 : la photo de couverture.
+export class ListingCoverDto extends createZodDto(ListingCoverSchema) {}
+export class ListingCoversDto extends createZodDto(ListingCoversSchema) {}
+export class ListingCoversQueryDto extends createZodDto(
+  ListingCoversQuerySchema
+) {}
+export class ListingCoverInputDto extends createZodDto(
+  ListingCoverInputSchema
+) {}

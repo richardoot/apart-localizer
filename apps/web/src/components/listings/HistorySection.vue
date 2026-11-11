@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue'
+  import { computed, nextTick, ref } from 'vue'
   import { OfferChannelSchema, OfferResponseSchema } from '@apart/contracts'
   import type {
     Assumptions,
@@ -13,7 +13,6 @@
     PriceEvent,
   } from '@apart/contracts'
   import { outcomeAtPrice } from '@apart/domain'
-  import UiAlert from '@/components/ui/UiAlert.vue'
   import UiButton from '@/components/ui/UiButton.vue'
   import UiCard from '@/components/ui/UiCard.vue'
   import UiChip from '@/components/ui/UiChip.vue'
@@ -48,7 +47,15 @@
    * compris, la mensualité et le verdict à ce prix (`outcomeAtPrice` de
    * `domain`), avant d'enregistrer l'offre. Lot 22 : un montant illisible
    * (« 150k ») est refusé au champ, jamais envoyé.
+   *
+   * Lot 25 (ADR 0035) : la réponse du vendeur se choisit, puis se confirme
+   * (« Enregistrer la réponse », le montant de la contre-proposition dans la
+   * même confirmation) et se défait par « Annuler » dans la zone de messages ;
+   * les formulaires gardent leur saisie jusqu'à la réponse du serveur (un
+   * refus la laisse en place).
    */
+  /** Lot 25 : la fiche dit si l'écriture a réussi ; la saisie n'est vidée qu'alors. */
+  type Done = (ok: boolean) => void
   const props = defineProps<{
     events: PriceEvent[]
     offers: Offer[]
@@ -66,9 +73,9 @@
     targetPrice?: number | null
   }>()
   const emit = defineEmits<{
-    record: [newPrice: number]
-    addOffer: [input: OfferInputRaw]
-    updateOffer: [offerId: string, update: OfferUpdate]
+    record: [newPrice: number, done?: Done]
+    addOffer: [input: OfferInputRaw, done?: Done]
+    updateOffer: [offerId: string, update: OfferUpdate, done?: Done]
     setStatus: [status: ListingStatus]
   }>()
 
@@ -112,6 +119,7 @@
   // Nouveau prix constaté
   const newPrice = ref('')
   const priceError = ref<string | null>(null)
+  const savingPrice = ref(false)
   function submitPrice(): void {
     const value = parseNumberInput(newPrice.value)
     if (value === null || value < 0) {
@@ -124,8 +132,11 @@
       return
     }
     priceError.value = null
-    emit('record', value)
-    newPrice.value = ''
+    savingPrice.value = true
+    emit('record', value, ok => {
+      savingPrice.value = false
+      if (ok) newPrice.value = ''
+    })
   }
 
   // Préparer une offre : un montant proposé ou libre, évalué par `domain`.
@@ -134,6 +145,7 @@
   const offerChannel = ref<OfferChannel | ''>('')
   const offerNotes = ref('')
   const offerError = ref<string | null>(null)
+  const savingOffer = ref(false)
 
   const proposals = computed(() =>
     [
@@ -152,6 +164,16 @@
   function pick(value: number): void {
     offerAmount.value = String(Math.round(value))
   }
+  /** Lot 25 : « Préparer une offre » du prix cible remplit le montant et y met le focus. */
+  function prepare(value: number): void {
+    pick(value)
+    void nextTick(() => {
+      const field = document.getElementById('offer-amount')
+      field?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+      field?.focus({ preventScroll: true })
+    })
+  }
+  defineExpose({ prepare })
   const outcome = computed(() => {
     const value = amount.value
     if (value === null || !(value > 0)) return null
@@ -183,51 +205,89 @@
     if (offerDate.value) {
       input.madeAt = new Date(`${offerDate.value}T12:00:00`).toISOString()
     }
-    emit('addOffer', input)
-    offerAmount.value = ''
-    offerDate.value = ''
-    offerChannel.value = ''
-    offerNotes.value = ''
+    savingOffer.value = true
+    emit('addOffer', input, ok => {
+      savingOffer.value = false
+      if (!ok) return
+      offerAmount.value = ''
+      offerDate.value = ''
+      offerChannel.value = ''
+      offerNotes.value = ''
+    })
   }
 
-  // Réponse du vendeur
+  // Réponse du vendeur (lot 25) : choisie, puis confirmée ; « Annuler » dans
+  // la zone de messages la défait.
+  /** La réponse choisie, pas encore enregistrée, par offre. */
+  const chosen = ref<Record<string, OfferResponse>>({})
   const counters = ref<Record<string, string>>({})
-  const responseError = ref<string | null>(null)
-  /** Le choix affiché dans la liste de chaque offre (revient en arrière sur un refus). */
-  const shownResponse = ref<Record<string, OfferResponse>>({})
+  const responseErrors = ref<Record<string, string | null>>({})
+  const savingResponse = ref<string | null>(null)
   const responseOf = (offer: Offer): OfferResponse =>
-    shownResponse.value[offer.id] ?? offer.response
-  function respond(offer: Offer, value: unknown): void {
+    chosen.value[offer.id] ?? offer.response
+
+  function forget(offerId: string): void {
+    const { [offerId]: _chosen, ...rest } = chosen.value
+    chosen.value = rest
+    responseErrors.value = { ...responseErrors.value, [offerId]: null }
+  }
+
+  function choose(offer: Offer, value: unknown): void {
     const response = value as OfferResponse
-    if (response === offer.response) return
+    if (response === offer.response) {
+      forget(offer.id)
+      return
+    }
+    chosen.value = { ...chosen.value, [offer.id]: response }
+    responseErrors.value = { ...responseErrors.value, [offer.id]: null }
+    if (response === 'counter_offer' && !counters.value[offer.id]) {
+      counters.value = {
+        ...counters.value,
+        [offer.id]:
+          offer.counterAmount === null ? '' : String(offer.counterAmount),
+      }
+    }
+    void nextTick(() =>
+      document
+        .getElementById(
+          response === 'counter_offer'
+            ? `offer-counter-${offer.id}`
+            : `offer-confirm-${offer.id}`
+        )
+        ?.focus()
+    )
+  }
+
+  function cancelResponse(offer: Offer): void {
+    forget(offer.id)
+    void nextTick(() =>
+      document.getElementById(`offer-response-${offer.id}`)?.focus()
+    )
+  }
+
+  function confirmResponse(offer: Offer): void {
+    const response = chosen.value[offer.id]
+    if (!response) return
+    let update: OfferUpdate = { response, expectedResponse: offer.response }
     if (response === 'counter_offer') {
       const raw = counters.value[offer.id]
       const value = parseNumberInput(raw)
       if (value === null || value <= 0) {
-        responseError.value =
-          numberInputError(raw) ??
-          'Écris le montant de la contre-proposition avant de la choisir.'
-        shownResponse.value = { ...shownResponse.value, [offer.id]: response }
-        void Promise.resolve().then(() => {
-          shownResponse.value = {
-            ...shownResponse.value,
-            [offer.id]: offer.response,
-          }
-        })
+        responseErrors.value = {
+          ...responseErrors.value,
+          [offer.id]:
+            numberInputError(raw) ??
+            'Écris le montant de la contre-proposition en euros.',
+        }
+        document.getElementById(`offer-counter-${offer.id}`)?.focus()
         return
       }
-      responseError.value = null
-      emit('updateOffer', offer.id, {
-        response,
-        counterAmount: value,
-        expectedResponse: offer.response,
-      })
-      return
+      update = { ...update, counterAmount: value }
     }
-    responseError.value = null
-    emit('updateOffer', offer.id, {
-      response,
-      expectedResponse: offer.response,
+    savingResponse.value = offer.id
+    emit('updateOffer', offer.id, update, ok => {
+      savingResponse.value = null
+      if (ok) forget(offer.id)
     })
   }
 
@@ -246,7 +306,8 @@
 
 <template>
   <UiCard
-    class="grid gap-3 text-sm"
+    id="prix-et-offres"
+    class="grid scroll-mt-[var(--fiche-sticky,3.5rem)] gap-3 text-sm"
     aria-labelledby="history-title"
     data-testid="prices-offers"
   >
@@ -328,27 +389,63 @@
               class="w-auto"
               :model-value="responseOf(entry.offer)"
               :options="responseOptions"
-              :disabled="busy"
+              :disabled="busy || savingResponse === entry.offer.id"
               :aria-label="`Réponse à l'offre de ${formatEuros(entry.offer.amount)}`"
-              @update:model-value="value => respond(entry.offer, value)"
-            />
-            <UiInput
-              v-model="counters[entry.offer.id]"
-              class="w-48"
-              inputmode="numeric"
-              unit="€"
-              placeholder="Contre-proposition"
-              :invalid="!!responseError"
-              :aria-label="`Contre-proposition à l'offre de ${formatEuros(entry.offer.amount)}`"
+              @update:model-value="value => choose(entry.offer, value)"
             />
           </div>
+          <form
+            v-if="chosen[entry.offer.id]"
+            class="grid gap-2 rounded-xl border border-accent bg-accent-soft/40 p-3"
+            :aria-label="`Confirmer la réponse à l’offre de ${formatEuros(entry.offer.amount)}`"
+            data-testid="response-confirm"
+            novalidate
+            @submit.prevent="confirmResponse(entry.offer)"
+          >
+            <p class="text-sm text-fg">
+              Enregistrer «
+              {{ OFFER_RESPONSE_LABELS[chosen[entry.offer.id]!] }} » comme
+              réponse du vendeur à l’offre de
+              {{ formatEuros(entry.offer.amount) }} ?
+            </p>
+            <UiField
+              v-if="chosen[entry.offer.id] === 'counter_offer'"
+              :id="`offer-counter-${entry.offer.id}`"
+              v-model="counters[entry.offer.id]"
+              label="Montant de la contre-proposition"
+              quiet
+              unit="€"
+              inputmode="numeric"
+              :error="responseErrors[entry.offer.id] ?? null"
+            />
+            <div class="flex flex-wrap gap-2">
+              <UiButton
+                :id="`offer-confirm-${entry.offer.id}`"
+                type="submit"
+                variant="primary"
+                size="sm"
+                :loading="savingResponse === entry.offer.id"
+                loading-label="Enregistrement…"
+                data-testid="response-save"
+              >
+                Enregistrer la réponse
+              </UiButton>
+              <UiButton
+                size="sm"
+                :disabled="savingResponse === entry.offer.id"
+                data-testid="response-cancel"
+                @click="cancelResponse(entry.offer)"
+              >
+                Annuler
+              </UiButton>
+            </div>
+          </form>
         </div>
       </li>
     </ol>
     <p v-if="timeline.length === 0" class="text-muted">
       Aucun prix ni aucune offre enregistrés.
     </p>
-    <UiAlert v-if="responseError">{{ responseError }}</UiAlert>
 
     <div class="grid gap-3 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <form
@@ -402,7 +499,7 @@
         >
           À {{ formatEuros(outcome.price) }} : coût tout compris
           {{ formatEuros(outcome.totalCost) }}, mensualité
-          {{ formatEurosPerMonth(outcome.monthlyPayment) }}. Verdict
+          {{ formatEurosPerMonth(outcome.monthlyPayment) }}. Rentabilité :
           <strong>{{ VERDICT_LABELS[outcome.verdict] }}</strong
           ><template v-if="outcomeWhy"> ({{ outcomeWhy }})</template>.
         </p>
@@ -429,7 +526,9 @@
           type="submit"
           variant="primary"
           class="justify-self-start"
-          :disabled="busy"
+          :disabled="busy && !savingOffer"
+          :loading="savingOffer"
+          loading-label="Enregistrement…"
         >
           Enregistrer l’offre
         </UiButton>
@@ -451,7 +550,12 @@
           :error="priceError"
           aria-label="Nouveau prix constaté"
         />
-        <UiButton type="submit" :disabled="busy">
+        <UiButton
+          type="submit"
+          :disabled="busy && !savingPrice"
+          :loading="savingPrice"
+          loading-label="Enregistrement…"
+        >
           Enregistrer la baisse ou la hausse
         </UiButton>
       </form>

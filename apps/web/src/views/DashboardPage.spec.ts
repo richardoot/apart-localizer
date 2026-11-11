@@ -18,6 +18,7 @@ const apiMock = vi.hoisted(() => ({
   whatsNew: { report: vi.fn() },
   drafts: { list: vi.fn() },
   agency: { pending: vi.fn() },
+  covers: { list: vi.fn(() => Promise.resolve({ covers: [] })) },
 }))
 
 vi.mock('@/lib/api', async () => {

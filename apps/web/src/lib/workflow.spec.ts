@@ -95,16 +95,17 @@ const stage = (over = {}) => ({
 })
 
 describe('les lignes d’une annonce', () => {
-  it('À étudier : prix, coût, verdict ; à trier', () => {
+  it('À étudier : prix, coût ; les trois jugements étiquetés ; à trier', () => {
     const row = listingRow(
       'a-etudier',
       fakeEvaluated({ price: 226_000, surface: 66, dpeClass: 'D' }),
       context
     )
-    expect(row.stats.map(s => s.label)).toEqual([
-      'Prix',
-      'Coût tout compris',
-      'Verdict',
+    // Lot 25 : la rentabilité n'est plus une colonne « Verdict » sans étiquette.
+    expect(row.stats.map(s => s.label)).toEqual(['Prix', 'Coût tout compris'])
+    expect(row.judgements.map(j => j.label)).toEqual([
+      'Rentabilité',
+      'Location',
     ])
     expect(row.meta).toContain('66 m²')
     expect(row.meta).toContain('DPE D')
@@ -378,11 +379,9 @@ describe('les lignes d’un brouillon', () => {
       'Alerte e-mail · hier'
     )
     const row = draftRow(draft(), { meId: RICHARD, now: NOW })
-    expect(row.stats.map(s => s.label)).toEqual([
-      'Prix',
-      'Surface',
-      'Adéquation',
-    ])
+    // Lot 25 : l'adéquation est le jugement « Recherche », étiqueté.
+    expect(row.stats.map(s => s.label)).toEqual(['Prix', 'Surface'])
+    expect(row.judgements[0]?.label).toBe('Rentabilité')
     expect(row.pill).toBe('À trier')
     expect(row.detail).toBe('Personne n’a encore trié')
     expect(row.action.kind).toBe('sort')
@@ -576,7 +575,9 @@ describe('les lignes d’un brouillon', () => {
     expect(card.whyTitle).toBe('Pourquoi Claude l’a proposée')
     expect(card.why[0]).toBe('Dans le critère « Bastide »')
     expect(card.why).toContain('Traversant, balcon de 8 m²')
-    expect(card.fit).toBe('Dans les critères')
+    expect(card.judgements.find(j => j.key === 'search')?.value).toBe(
+      'Dans les critères'
+    )
     expect(card.dpe).toBe('DPE C')
     expect(card.figures.map(f => f.label)).toEqual([
       'Prix',
@@ -585,7 +586,10 @@ describe('les lignes d’un brouillon', () => {
       'Prix cible',
     ])
     // Sans loyer visé : le verdict n'est pas inventé.
-    expect(card.verdict).toBe('Verdict à confirmer')
+    expect(card.judgements[0]).toMatchObject({
+      label: 'Rentabilité',
+      value: 'À confirmer',
+    })
     expect(card.figures[3]?.value).toBe('—')
     expect(card.figures[3]?.note).toBe('loyer visé inconnu')
   })
@@ -606,7 +610,7 @@ describe('les lignes d’un brouillon', () => {
     expect(card.why).toEqual(['« Alerte fictive »'])
     expect(card.figures).toEqual([{ label: 'Prix', value: 'prix ?', note: '' }])
     expect(card.dpe).toBe('DPE inconnu')
-    expect(card.fit).toBeNull()
+    expect(card.judgements.map(j => j.key)).toEqual(['profitability'])
   })
 })
 
@@ -625,7 +629,11 @@ describe('la carte du tri d’une annonce', () => {
       )
     )
     expect(card.whyTitle).toBe('Ce qui plaît')
-    expect(card.fit).toBe('À la marge')
+    expect(card.judgements.map(j => `${j.label} : ${j.value}`)).toEqual([
+      expect.stringMatching(/^Rentabilité : /),
+      'Recherche : À la marge',
+      expect.stringMatching(/^Location : /),
+    ])
     expect(card.dpe).toBe('DPE inconnu')
     expect(card.figures).toHaveLength(4)
     expect(card.missing.length).toBeLessThanOrEqual(4)

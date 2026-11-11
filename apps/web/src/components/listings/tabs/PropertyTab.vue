@@ -14,10 +14,11 @@
 
   /**
    * Lot 19 (ADR 0029) : « Le bien : qu'est-ce qu'on achète ? ». Les travaux
-   * avant d'emménager en tête, puis les caractéristiques, l'énergie, la
-   * copropriété et les charges, l'annonce et son adresse, et le dépli de la
-   * description et de nos notes ; chaque section se modifie sur place. À
-   * droite : « Où la trouver » et « Qui la vend » (lot 18).
+   * avant d'emménager en tête, nos notes (lot 25 : visibles sans déplier), puis
+   * les caractéristiques, l'énergie, la copropriété et les charges, l'annonce
+   * et son adresse (dont le prix, que « Corriger » de l'en-tête ouvre) ;
+   * chaque section se modifie sur place. À droite : « Où la trouver » et
+   * « Qui la vend » (lot 18).
    */
   const props = defineProps<{ item: EvaluatedListing }>()
   const emit = defineEmits<{ go: [tab: ListingTab] }>()
@@ -50,11 +51,12 @@
     >
       <div class="grid min-w-0 gap-4">
         <WorksSection :listing="listing" @go="go" />
+        <!-- Lot 25 : nos notes se lisent sans déplier, juste après les travaux. -->
+        <NotesSection :listing="listing" />
         <FeaturesSection :listing="listing" />
         <EnergySection :listing="listing" />
         <CoproSection :listing="listing" :tasks="item.tasks" @go="go" />
         <ListingInfoSection :listing="listing" />
-        <NotesSection :listing="listing" />
       </div>
       <aside
         class="grid min-w-0 content-start gap-4"

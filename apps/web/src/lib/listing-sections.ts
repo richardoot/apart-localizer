@@ -197,3 +197,35 @@ export function isSectionDirty(
  * modifie dans « L'annonce et son adresse ».
  */
 export const ADDRESS_FIELD_ID = 'f-address'
+
+/** Lot 25 : « Corriger le prix » depuis l'en-tête ouvre la même section, sur le prix. */
+export const PRICE_FIELD_ID = 'f-price'
+
+/**
+ * Lot 25 : après un conflit (la fiche a changé pendant la saisie), la
+ * section relue garde ce que le membre a tapé : pour chaque champ de la
+ * section, la valeur tapée si elle diffère de celle d'avant, sinon la valeur
+ * relue. `overlapping` : les champs changés des deux côtés (la valeur tapée
+ * est gardée). Pur.
+ */
+export function rebaseSection(
+  section: ListingSectionId,
+  pristine: ListingForm,
+  draft: ListingForm,
+  fresh: ListingForm
+): { draft: ListingForm; overlapping: string[] } {
+  const next: Record<string, unknown> = { ...fresh }
+  const overlapping: string[] = []
+  const same = (a: unknown, b: unknown) =>
+    JSON.stringify(a) === JSON.stringify(b)
+  for (const field of LISTING_SECTIONS[section].fields as readonly string[]) {
+    const before = (pristine as unknown as Record<string, unknown>)[field]
+    const typed = (draft as unknown as Record<string, unknown>)[field]
+    const now = (fresh as unknown as Record<string, unknown>)[field]
+    if (!same(typed, before)) {
+      next[field] = typed
+      if (!same(now, before)) overlapping.push(field)
+    }
+  }
+  return { draft: next as unknown as ListingForm, overlapping }
+}

@@ -195,12 +195,16 @@ export const INDICATOR_GLOSSARY: readonly GlossaryEntry[] = [
     term: 'Cash-flow net d’impôt',
     definition:
       'Par année de détention : loyers encaissés (ou loyer actuel évité en phase 1) − mensualités − charges − taxe foncière − frais − impôt sur les loyers. Négatif = somme à sortir.',
+    short:
+      'Le flux de trésorerie de l’année : ce qui reste (ou ce qu’il faut sortir, si négatif) après mensualités, charges, taxe foncière, frais et impôt sur les loyers.',
   },
   {
     key: 'irr',
     term: 'TRI (taux de rendement interne)',
     definition:
       'Le taux annuel qui annule la valeur actuelle des flux du foyer : mise de départ (apport), cash-flows de chaque année, produit net de la revente au terme (prix − frais − capital restant dû − impôt sur la plus-value). Avant impôt : sans impôt sur les loyers ni sur la plus-value. Le loyer actuel évité en phase 1 compte : le TRI compare l’achat au fait de rester locataire.',
+    short:
+      'Le rendement annuel de tout le projet : apport, cash-flows de chaque année et revente au terme ; il le compare au fait de rester locataire.',
   },
   {
     key: 'npv',

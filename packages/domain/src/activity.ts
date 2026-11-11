@@ -598,6 +598,12 @@ export function describeActivity(
       return describe('a ajouté une photo de visite')
     case 'visit.photo_deleted':
       return describe('a supprimé une photo de visite')
+    case 'visit.cover_chosen':
+      return describe(
+        text(after, 'photoId')
+          ? 'a choisi la photo de couverture'
+          : 'a remis la première photo de visite en couverture'
+      )
     case 'draft.received': {
       const count = num(after, 'created') ?? 0
       return describe(

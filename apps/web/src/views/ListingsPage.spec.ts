@@ -66,6 +66,11 @@ vi.mock('@/composables/useWorkflow', () => ({
     refetch: listState.refetch,
   }),
 }))
+// Lot 25 : les couvertures (une lecture pour la liste), sans réseau.
+vi.mock('@/composables/useCovers', () => ({
+  useListingCovers: () => ({ byId: ref(new Map()), refresh: vi.fn() }),
+  useListingCover: () => ({ cover: ref(null), refresh: vi.fn() }),
+}))
 vi.mock('@/composables/useSearchCriteria', () => ({
   useSearchCriteriaList: () => ({ data: ref([]) }),
 }))
@@ -537,7 +542,15 @@ describe('ListingsPage : onglet de la fiche dans l’URL', () => {
     wrapper.findComponent(PanelStub).vm.$emit('close')
     await flushPromises()
     expect(back).toHaveBeenCalled()
+    // Lot 25 : ouverte depuis la liste, elle y revient aussi par l'historique
+    // (même étape, mêmes filtres, même position).
     window.history.replaceState({ ...(state ?? {}), back: '/annonces' }, '')
+    back.mockClear()
+    wrapper.findComponent(PanelStub).vm.$emit('close')
+    await flushPromises()
+    expect(back).toHaveBeenCalled()
+    // Un lien direct (rien avant) : la liste.
+    window.history.replaceState({ ...(state ?? {}), back: null }, '')
     back.mockClear()
     const push = vi.spyOn(router, 'push')
     wrapper.findComponent(PanelStub).vm.$emit('close')

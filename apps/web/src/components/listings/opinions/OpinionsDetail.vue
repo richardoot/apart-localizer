@@ -21,6 +21,8 @@
    * chaque désaccord, « À revoir à la contre-visite : le calme » PROPOSE une
    * tâche pré-remplie (titre et contexte des notes et des mots) ; elle n'est
    * ajoutée à « À faire » qu'au clic de confirmation, jamais d'office.
+   * Lot 25 : au téléphone, une carte par critère (les notes de chacun, l'écart,
+   * ce que chacun en dit) à la place du tableau, gardé à partir de `sm`.
    */
   const props = defineProps<{
     summary: OpinionSummary
@@ -80,7 +82,54 @@
 
 <template>
   <div id="opinions-detail" class="grid gap-3" data-testid="opinions-detail">
-    <div class="overflow-x-auto">
+    <ul
+      class="m-0 grid list-none gap-2 p-0 sm:hidden"
+      aria-label="Nos notes, critère par critère"
+      data-testid="opinions-stack"
+    >
+      <li
+        v-for="row in summary.rows"
+        :key="row.key"
+        class="grid gap-1.5 rounded-xl border border-line px-3 py-2.5"
+        :class="
+          row.agreement === 'disagree' ? 'border-warn bg-warn-soft/60' : ''
+        "
+        :data-stack-row="row.key"
+        :data-agreement="row.agreement ?? 'none'"
+      >
+        <div class="flex items-baseline justify-between gap-2">
+          <span class="font-medium">{{ row.label }}</span>
+          <span
+            class="text-sm font-semibold"
+            :class="row.agreement === 'disagree' ? 'text-warn' : 'text-muted'"
+            >{{ gapText(row.gap) }}</span
+          >
+        </div>
+        <dl class="m-0 grid gap-1">
+          <div
+            v-for="member in rated"
+            :key="member.memberId"
+            class="flex items-center justify-between gap-2"
+          >
+            <dt class="text-sm text-muted">{{ member.displayName }}</dt>
+            <dd class="m-0">
+              <span
+                class="inline-block min-w-24 rounded-lg px-2 py-0.5 text-center text-sm font-semibold"
+                :class="scoreToneClass(scoreOf(row, member.memberId))"
+                >{{ scoreChip(scoreOf(row, member.memberId)) }}</span
+              >
+            </dd>
+          </div>
+        </dl>
+        <p
+          v-if="rowNotes(row, summary)"
+          class="text-sm leading-snug text-muted"
+        >
+          {{ rowNotes(row, summary) }}
+        </p>
+      </li>
+    </ul>
+    <div class="hidden overflow-x-auto sm:block">
       <table class="w-full min-w-[42rem] border-collapse text-sm">
         <thead>
           <tr class="text-left text-xs text-muted">

@@ -13,6 +13,7 @@
     formatRate,
   } from '@/lib/format'
   import { TARGET_CRITERION_LABELS } from '@/lib/labels'
+  import ScrollTable from '@/components/ui/ScrollTable.vue'
   import CostBasisBadge from './CostBasisBadge.vue'
 
   /**
@@ -55,7 +56,8 @@
 </script>
 
 <template>
-  <div class="overflow-x-auto">
+  <!-- Lot 25 : le tableau défile dans son cadre, jamais la page. -->
+  <ScrollTable label="Prix maximal par critère">
     <table
       class="w-full min-w-[34rem] border-collapse text-sm tabular-nums"
       data-testid="target-criteria"
@@ -65,7 +67,12 @@
       </caption>
       <thead>
         <tr class="border-b border-line text-xs text-muted">
-          <th scope="col" class="px-2 py-2 text-left font-medium">Critère</th>
+          <th
+            scope="col"
+            class="sticky left-0 bg-surface px-2 py-2 text-left font-medium"
+          >
+            Critère
+          </th>
           <th scope="col" class="px-2 py-2 text-left font-medium">Exigence</th>
           <th scope="col" class="px-2 py-2 text-right font-medium">
             <span class="inline-flex items-center gap-1.5"
@@ -100,11 +107,11 @@
         >
           <th
             scope="row"
-            class="px-2 py-2.5 text-left"
+            class="sticky left-0 px-2 py-2.5 text-left"
             :class="
               c.criterion === targetPrice.bindingCriterion
-                ? 'font-semibold'
-                : 'font-normal'
+                ? 'bg-accent-soft font-semibold'
+                : 'bg-surface font-normal'
             "
           >
             {{ TARGET_CRITERION_LABELS[c.criterion] }}
@@ -136,5 +143,5 @@
         </tr>
       </tbody>
     </table>
-  </div>
+  </ScrollTable>
 </template>

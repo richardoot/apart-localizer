@@ -47,6 +47,8 @@
     item: EvaluatedListing
     members: Member[]
     meId: string | null
+    /** Lot 25 : « Planifier une visite » depuis la Synthèse ouvre le formulaire (compteur). */
+    openVisitForm?: number
   }>()
   const emit = defineEmits<{ setStatus: [status: ListingStatus] }>()
 
@@ -244,7 +246,8 @@
 
       <ul
         v-if="shown.length"
-        class="grid gap-2"
+        id="echanges"
+        class="grid scroll-mt-32 gap-2"
         aria-label="Ce qu’il reste à faire"
         data-testid="todo-list"
       >
@@ -392,11 +395,12 @@
           Mode visite
         </UiButton>
       </UiCard>
-      <UiCard as="div">
+      <UiCard id="visites" as="div" class="scroll-mt-32">
         <VisitsSection
           :listing-id="item.listing.id"
           :members="members"
           :me-id="meId"
+          :open-form="openVisitForm ?? 0"
           @set-status="status => emit('setStatus', status)"
         />
       </UiCard>

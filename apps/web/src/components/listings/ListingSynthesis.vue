@@ -15,11 +15,25 @@
   import {
     activityActorName,
     checkFreshness,
+    ficheNextAction,
+    listingAnswer,
+    listingChangesLine,
     listingHighlights,
     locationApproximation,
+    nextStepTarget,
     nextSteps,
   } from '@apart/domain'
-  import type { Highlight, HighlightTab, NextStep } from '@apart/domain'
+  import type {
+    AnswerTone,
+    FicheActionKind,
+    Highlight,
+    HighlightTab,
+    NextStep,
+    NextStepTarget,
+  } from '@apart/domain'
+  import type { IconName } from '@/lib/icons'
+  import { formatDate } from '@/lib/format'
+  import UiIcon from '@/components/ui/UiIcon.vue'
   import ListingChanges from '@/components/activity/ListingChanges.vue'
   import type { ListingTab } from '@/lib/listing-tabs'
   import { LISTING_TABS } from '@/lib/listing-tabs'
@@ -42,6 +56,12 @@
    * dernière vérification. Pendant une modification, les chiffres suivent
    * l'aperçu en direct. Lot 20 : nos avis critère par critère nourrissent
    * « Ce qui plaît », « À surveiller » (lien « Nos avis ») et « À rediscuter ».
+   *
+   * Lot 25 (ADR 0035) : la Synthèse répond d'abord. En tête, la réponse en une
+   * phrase (`listingAnswer` de `domain` : verdict, adéquation, prix cible ;
+   * ce qui manque est dit) et l'action de l'étape (`ficheNextAction`) ;
+   * « Depuis ta dernière ouverture » tient en une ligne, son détail à la
+   * demande ; chaque prochaine étape mène à son onglet (`nextStepTarget`).
    */
   const props = defineProps<{
     item: EvaluatedListing
@@ -64,6 +84,10 @@
   }>()
   const emit = defineEmits<{
     go: [tab: ListingTab]
+    /** Lot 25 : un onglet et un bloc (prochaine étape). */
+    goTo: [target: NextStepTarget]
+    /** Lot 25 : l'action de l'étape. */
+    action: [kind: FicheActionKind]
     precise: []
   }>()
 
@@ -160,12 +184,124 @@
     )
   })
 
+  // Lot 25 : la réponse et l'action, en tête.
+  const answer = computed(() => {
+    const evaluation = props.evaluation
+    if (!evaluation) return null
+    return listingAnswer({
+      price: evaluation.metrics.price,
+      hasRent: evaluation.metrics.rent > 0,
+      verdict: evaluation.metrics.verdict,
+      failures: evaluation.metrics.failures,
+      nearMisses: evaluation.metrics.nearMisses,
+      fit: props.item.criteriaFit,
+      targetPrice: props.targetPrice,
+    })
+  })
+  const answerRest = computed(() =>
+    answer.value ? answer.value.sentence.slice(answer.value.lead.length) : ''
+  )
+  const ANSWER_LOOK: Record<AnswerTone, { icon: IconName; ink: string }> = {
+    go: { icon: 'check', ink: 'text-good' },
+    maybe: { icon: 'alert', ink: 'text-warn' },
+    no: { icon: 'cross', ink: 'text-bad' },
+    unknown: { icon: 'info', ink: 'text-info' },
+  }
+  const action = computed(() =>
+    ficheNextAction({
+      status: listing.value.status,
+      decision: props.item.decision,
+      stage: props.item.stage,
+      offers: props.item.offers,
+      opinionSummary: props.item.opinionSummary,
+      now: new Date(),
+    })
+  )
+
+  // « Depuis ta dernière ouverture » : une ligne, le détail à la demande.
+  const changesLine = computed(() =>
+    props.changes ? listingChangesLine(props.changes) : null
+  )
+  const changesOpen = ref(false)
+
   const card = cardClasses()
 </script>
 
 <template>
   <div class="@container grid gap-4" data-testid="synthesis">
-    <ListingChanges v-if="changes" :changes="changes" />
+    <section
+      :class="[cardClasses('accent'), 'grid gap-3']"
+      aria-labelledby="answer-title"
+      data-testid="answer"
+      :data-tone="answer?.tone ?? 'unknown'"
+    >
+      <h2 id="answer-title" class="sr-only">La réponse</h2>
+      <p
+        v-if="answer"
+        class="flex items-start gap-2 text-base leading-snug sm:text-lg"
+        data-testid="answer-sentence"
+      >
+        <UiIcon
+          :name="ANSWER_LOOK[answer.tone].icon"
+          class="mt-1 size-5 flex-none"
+          :class="ANSWER_LOOK[answer.tone].ink"
+        />
+        <span
+          ><strong class="font-display font-bold">{{ answer.lead }}</strong
+          >{{ answerRest }}</span
+        >
+      </p>
+      <p v-else class="text-sm text-muted" data-testid="answer-sentence">
+        Pas encore de réponse : saisis un prix et un loyer visé pour que
+        l’application la calcule.
+      </p>
+      <div
+        v-if="action.kind !== 'none'"
+        class="flex flex-wrap items-center gap-x-3 gap-y-1.5"
+      >
+        <UiButton
+          variant="primary"
+          :data-action="action.kind"
+          data-testid="answer-action"
+          @click="emit('action', action.kind)"
+        >
+          {{ action.label }}
+        </UiButton>
+        <span v-if="action.hint" class="text-sm text-muted">{{
+          action.hint
+        }}</span>
+      </div>
+    </section>
+
+    <section
+      v-if="changes && changesLine"
+      class="grid gap-2 text-sm"
+      aria-labelledby="changes-line-title"
+      data-testid="changes-line"
+    >
+      <p class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <strong id="changes-line-title" class="font-semibold"
+          >Depuis ta dernière ouverture<template v-if="changes.since">
+            ({{ formatDate(changes.since) }})</template
+          >
+          :</strong
+        >
+        <span class="text-muted">{{ changesLine }}</span>
+        <UiButton
+          variant="link"
+          size="inline"
+          :aria-expanded="changesOpen"
+          aria-controls="changes-detail"
+          data-testid="changes-toggle"
+          @click="changesOpen = !changesOpen"
+        >
+          {{ changesOpen ? 'Masquer le détail' : 'Voir le détail' }}
+        </UiButton>
+      </p>
+      <div v-if="changesOpen" id="changes-detail">
+        <ListingChanges :changes="changes" />
+      </div>
+    </section>
 
     <section
       :class="[card, 'grid gap-3.5']"
@@ -327,7 +463,16 @@
             <UiBadge :tone="STEP_KINDS[step.kind].tone" class="flex-none">{{
               STEP_KINDS[step.kind].label
             }}</UiBadge>
-            <span class="min-w-0 break-words">{{ step.text }}</span>
+            <span class="min-w-0 flex-1 break-words">{{ step.text }}</span>
+            <UiButton
+              variant="link"
+              class="flex-none"
+              :aria-label="`${step.text} : ${nextStepTarget(step).label}`"
+              data-testid="step-link"
+              @click="emit('goTo', nextStepTarget(step))"
+            >
+              {{ nextStepTarget(step).label }}
+            </UiButton>
           </li>
         </ul>
         <p v-else class="text-sm text-muted">Rien à faire pour l’instant.</p>

@@ -1,7 +1,6 @@
 import {
   CRITERIA_FIT_LEVEL_LABELS,
   LISTING_STATUS_LABELS,
-  VERDICT_LABELS,
   WORKFLOW_STAGE_LABELS,
   missingListingFields,
 } from '@apart/contracts'
@@ -27,6 +26,8 @@ import {
   formatOpinionAverage,
   isAskableTask,
   isWithinRadius,
+  judgementsOfDraft,
+  judgementsOfListing,
   listingHighlights,
   listingRowKind,
   orderStageRows,
@@ -34,7 +35,7 @@ import {
   stageRowAction,
   stageRowPill,
 } from '@apart/domain'
-import type { StageRowAction, StageRowKind } from '@apart/domain'
+import type { Judgement, StageRowAction, StageRowKind } from '@apart/domain'
 import type { LocationQuery, LocationQueryRaw } from 'vue-router'
 import { draftFitReason, draftSourceLabel, pendingDuplicate } from './drafts'
 import {
@@ -64,6 +65,8 @@ export interface StageRowView {
   rowKind: StageRowKind
   pill: string
   pillTone: Tone
+  /** Lot 25 : les trois jugements étiquetés (rentabilité, recherche, location). */
+  judgements: Judgement[]
   detail: string
   action: StageRowAction
   decision: DecisionProposal | null
@@ -264,10 +267,10 @@ function stageStats(
         { label: 'Par', value: item.stage?.archivedBy ?? '—' },
       ]
     default:
+      // Lot 25 : la rentabilité est dans les jugements étiquetés de la ligne.
       return [
         { label: 'Prix', value: price },
         { label: 'Coût tout compris', value: formatEuros(m.totalCost) },
-        { label: 'Verdict', value: VERDICT_LABELS[m.verdict] },
       ]
   }
 }
@@ -331,6 +334,7 @@ export function listingRow(
     rowKind,
     pill: stageRowPill(rowKind, item.decision),
     pillTone: rowPillTone(rowKind),
+    judgements: judgementsOfListing(item),
     detail: listingDetail(
       stage,
       item,
@@ -385,11 +389,12 @@ export function draftRow(
         value: draft.listing.price ? formatEuros(draft.listing.price) : '—',
       },
       { label: 'Surface', value: formatSurface(draft.listing.surface) },
-      { label: 'Adéquation', value: draftFitText(draft) },
     ],
     rowKind,
     pill: stageRowPill(rowKind, draft.decision),
     pillTone: rowPillTone(rowKind),
+    // Lot 25 : l'adéquation est le jugement « Recherche », étiqueté avec les deux autres.
+    judgements: judgementsOfDraft(draft),
     detail: draft.decision
       ? decisionDetail(draft.decision, context.meId)
       : duplicate
@@ -655,6 +660,7 @@ export function dismissedDraftRow(
     rowKind: 'archived_discarded',
     pill: 'Écartée',
     pillTone: rowPillTone('archived_discarded'),
+    judgements: judgementsOfDraft(draft),
     detail: draft.dismissReason ?? 'Écartée à l’étape À valider',
     action: { kind: 'rescue', label: 'Repêcher' },
     decision: null,
@@ -725,10 +731,8 @@ export interface TriageCardView {
   rooms: string
   source: string
   url: string | null
-  verdict: string | null
-  verdictTone: Tone
-  fit: string | null
-  fitTone: Tone
+  /** Lot 25 : les trois jugements étiquetés, dans leur ordre. */
+  judgements: Judgement[]
   dpe: string
   figures: Array<{ label: string; value: string; note: string }>
   whyTitle: string
@@ -813,18 +817,6 @@ export function propertyFacts(
   )
 }
 
-const VERDICT_TONES: Record<string, Tone> = {
-  target: 'accent',
-  to_dig: 'warn',
-  off_target: 'bad',
-}
-const FIT_TONES: Record<string, Tone> = {
-  in: 'accent',
-  margin: 'warn',
-  to_confirm: 'info',
-  out: 'neutral',
-}
-
 function figuresOf(
   evaluation: EvaluatedListing['evaluation'],
   price: number,
@@ -875,7 +867,6 @@ export function draftTriageCard(draft: ListingDraft): TriageCardView {
   const l = draft.listing
   const evaluation = draft.evaluation
   const hasRent = (l.rentalPlan?.targetRent ?? 0) > 0
-  const fitLevel = draft.fit?.activeCriteria ? draft.fit.level : null
   const why = [
     ...(draft.fit?.level === 'in' && draft.fit.name
       ? [`Dans le critère « ${draft.fit.name} »`]
@@ -900,19 +891,8 @@ export function draftTriageCard(draft: ListingDraft): TriageCardView {
         ? `Claude · ${draftSourceLabel(draft)}`
         : 'Alerte e-mail',
     url: draft.url,
-    // Sans loyer visé, le verdict reste à confirmer (lot 16).
-    verdict: !hasRent
-      ? 'Verdict à confirmer'
-      : evaluation
-        ? VERDICT_LABELS[evaluation.metrics.verdict]
-        : null,
-    verdictTone: !hasRent
-      ? 'info'
-      : evaluation
-        ? (VERDICT_TONES[evaluation.metrics.verdict] ?? 'neutral')
-        : 'neutral',
-    fit: fitLevel ? CRITERIA_FIT_LEVEL_LABELS[fitLevel] : null,
-    fitTone: fitLevel ? (FIT_TONES[fitLevel] ?? 'neutral') : 'neutral',
+    // Sans loyer visé, la rentabilité reste à confirmer (lot 16).
+    judgements: judgementsOfDraft(draft),
     dpe: l.dpeClass ? `DPE ${l.dpeClass}` : 'DPE inconnu',
     facts: propertyFacts(l),
     description: l.description,
@@ -937,9 +917,6 @@ export function draftTriageCard(draft: ListingDraft): TriageCardView {
 /** La carte d'une annonce à étudier. */
 export function listingTriageCard(item: EvaluatedListing): TriageCardView {
   const l = item.listing
-  const fitLevel = item.criteriaFit.activeCriteria
-    ? item.criteriaFit.level
-    : null
   const highlights = listingHighlights({
     metrics: item.evaluation.metrics,
     rental: item.evaluation.rental,
@@ -961,10 +938,7 @@ export function listingTriageCard(item: EvaluatedListing): TriageCardView {
     rooms: roomsText(l.rooms, l.floorLabel),
     source: l.sourceLabel ?? l.source,
     url: l.url,
-    verdict: VERDICT_LABELS[item.evaluation.metrics.verdict],
-    verdictTone: VERDICT_TONES[item.evaluation.metrics.verdict] ?? 'neutral',
-    fit: fitLevel ? CRITERIA_FIT_LEVEL_LABELS[fitLevel] : null,
-    fitTone: fitLevel ? (FIT_TONES[fitLevel] ?? 'neutral') : 'neutral',
+    judgements: judgementsOfListing(item),
     dpe: l.dpeClass ? `DPE ${l.dpeClass}` : 'DPE inconnu',
     facts: propertyFacts(l),
     description: l.description,

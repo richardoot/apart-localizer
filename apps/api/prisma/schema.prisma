@@ -669,6 +669,11 @@ model Listing {
   criteriaFitChangedAt DateTime?         @map("criteria_fit_changed_at") @db.Timestamptz(6)
   criteriaFitOrigin    Json?             @map("criteria_fit_origin")
 
+  // Lot 25 (ADR 0035) : la photo de couverture choisie par un membre, une
+  // photo de visite de l'annonce (null : la première photo de la première
+  // visite). Jamais une image de portail ; lue par URL signée à durée courte.
+  coverPhotoId String? @map("cover_photo_id")
+
   createdById String?  @map("created_by_id")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -703,6 +708,8 @@ model Listing {
   links            ListingLink[]
   // Lot 21 : les décisions à plusieurs sur cette annonce.
   decisionProposals DecisionProposal[]
+  // Lot 25 : la photo de couverture choisie (photo supprimée : retour à la première).
+  coverPhoto        VisitPhoto?        @relation("ListingCover", fields: [coverPhotoId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, status])
   @@index([workspaceId, commune])
@@ -1059,6 +1066,8 @@ model VisitPhoto {
   visit      Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
   workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   uploadedBy Member?   @relation("VisitPhotoAuthor", fields: [uploadedById], references: [id], onDelete: SetNull)
+  /// Lot 25 : les annonces dont elle est la couverture choisie.
+  coverOf    Listing[] @relation("ListingCover")
 
   @@index([visitId])
   @@map("visit_photos")

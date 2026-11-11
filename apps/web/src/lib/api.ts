@@ -1,5 +1,6 @@
 import { listingFiltersToQuery } from '@apart/contracts'
 import type {
+  ListingCovers,
   DecisionCard,
   DecisionInput,
   DecisionRespond,
@@ -630,6 +631,22 @@ export const api = {
         `/listings/${listingId}/visits/${visitId}/photos/${photoId}`,
         { method: 'DELETE' }
       ),
+  },
+
+  /**
+   * Lot 25 : la photo de couverture des annonces (vignettes signées à durée
+   * courte, une seule lecture pour toute une liste) et son choix.
+   */
+  covers: {
+    list: (ids: readonly string[]) =>
+      apiFetch<ListingCovers>(
+        `/listing-covers${queryString({ ids: ids.join(',') })}`
+      ),
+    choose: (listingId: string, photoId: string | null) =>
+      apiFetch<ListingCovers>(`/listings/${listingId}/cover`, {
+        method: 'PUT',
+        json: { photoId },
+      }),
   },
 
   /** Lot 6 : journal d'activité. */

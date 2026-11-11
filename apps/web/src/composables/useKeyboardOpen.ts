@@ -78,3 +78,45 @@ export function useKeyboardOpen(): Ref<boolean> {
   })
   return open
 }
+
+/**
+ * Lot 25 : la hauteur cachée par le clavier sous la fenêtre visible (Safari
+ * iOS ne rétrécit pas la fenêtre de mise en page) ; zéro sans clavier ou
+ * sans `visualViewport`. Pur.
+ */
+export function keyboardInset(
+  innerHeight: number,
+  viewport: { height: number; offsetTop: number; scale?: number } | null
+): number {
+  if (!viewport) return 0
+  // Un zoom à deux doigts n'est pas un clavier.
+  if ((viewport.scale ?? 1) > 1.01) return 0
+  return Math.max(
+    0,
+    Math.round(innerHeight - viewport.height - viewport.offsetTop)
+  )
+}
+
+/**
+ * Lot 25 : ce qui est collé en bas d'une section en cours de saisie
+ * (« Enregistrer », « Annuler ») se pose au-dessus du clavier.
+ */
+export function useKeyboardInset(): Ref<number> {
+  const inset = ref(0)
+  const update = () => {
+    inset.value = keyboardInset(
+      window.innerHeight,
+      window.visualViewport ?? null
+    )
+  }
+  onMounted(() => {
+    update()
+    window.visualViewport?.addEventListener('resize', update)
+    window.visualViewport?.addEventListener('scroll', update)
+  })
+  onBeforeUnmount(() => {
+    window.visualViewport?.removeEventListener('resize', update)
+    window.visualViewport?.removeEventListener('scroll', update)
+  })
+  return inset
+}

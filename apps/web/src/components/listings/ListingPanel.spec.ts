@@ -49,6 +49,10 @@ const apiMock = vi.hoisted(() => ({
   visits: { list: vi.fn() },
   activity: { forListing: vi.fn() },
   agency: { exchanges: vi.fn(), settings: vi.fn() },
+  covers: {
+    list: vi.fn(() => Promise.resolve({ covers: [] })),
+    choose: vi.fn(),
+  },
 }))
 
 vi.mock('@/lib/api', async () => {
@@ -222,8 +226,12 @@ describe('ListingPanel (lot 19 : une fiche, sept questions)', () => {
     mountPanel()
     await flushPromises()
     expect(query('h1')?.textContent?.trim()).toBe('T2 fictif')
-    const facts = query('[data-testid="listing-facts"]')?.textContent ?? ''
-    expect(facts.replace(/[\u202f\u00a0]/g, ' ')).toContain('200 000 €')
+    // Lot 25 : le prix est dans la ligne d'identité collée, avec « Corriger ».
+    const price = query('[data-testid="header-price"]')?.textContent ?? ''
+    expect(price.replace(/[\u202f\u00a0]/g, ' ')).toContain('200 000 €')
+    expect(
+      query('[data-testid="listing-header"] [data-testid="judgements"]')
+    ).not.toBeNull()
     expect(query('[data-testid="listing-header"]')?.textContent).not.toContain(
       'Ajoutée le'
     )
@@ -451,11 +459,11 @@ describe('ListingPanel (lot 19 : une fiche, sept questions)', () => {
     wrapper
       .findComponent({ name: 'NegotiateTab' })
       .vm.$emit('updateOffer', offer.id, {
-        response: 'countered',
+        response: 'counter_offer',
         counterAmount: 190_000,
       })
     await flushPromises()
-    expect(text()).toContain('Réponse enregistrée.')
+    expect(text()).toContain('Réponse « Contre-proposition » enregistrée.')
     await click('[data-testid="feedback-action"]')
     await flushPromises()
     expect(apiMock.offers.update).toHaveBeenLastCalledWith(
@@ -669,8 +677,9 @@ describe('ListingPanel (lot 19 : une fiche, sept questions)', () => {
       notice: 'Annonce créée. Entre dans le critère « Talence fictif ».',
     })
     await flushPromises()
+    // Lot 25 : l'adéquation est le jugement « Recherche », étiqueté, dans la ligne d'identité.
     expect(
-      query('[data-testid="listing-pills"] [data-testid="fit-badge"]')
+      query('[data-testid="listing-header"] [data-judgement="search"]')
         ?.textContent
     ).toContain('Dans les critères')
     expect(text()).toContain('Entre dans le critère « Talence fictif »')
@@ -718,11 +727,63 @@ describe('ListingPanel (lot 19 : une fiche, sept questions)', () => {
     })
     await flushPromises()
     expect(apiMock.listings.markSeen).toHaveBeenCalledTimes(1)
+    // Lot 25 : une ligne, le détail à la demande.
+    expect(query('[data-testid="changes-line"]')?.textContent).toContain(
+      '1 changement, par Chloé : surface Carrez.'
+    )
+    expect(query('[data-testid="listing-changes"]')).toBeNull()
+    await click('[data-testid="changes-toggle"]')
     const box = query('[data-testid="listing-changes"]')
     expect(box?.textContent).toContain('Chloé')
     expect(box?.textContent).toContain('a modifié la fiche')
     await wrapper.setProps({ tab: 'bien' })
     await flushPromises()
     expect(query('[data-section="features"]')?.textContent).toContain('modifié')
+  })
+
+  it('lot 25 : sur ordinateur, une vraie page ; la ligne d’identité porte le statut', async () => {
+    mountPanel({ layout: 'page' })
+    await flushPromises()
+    expect(query('[data-testid="listing-page"]')).not.toBeNull()
+    expect(query('[role="dialog"]')).toBeNull()
+    expect(query('h1')?.textContent?.trim()).toBe('T2 fictif')
+    expect(
+      query(
+        '[data-testid="listing-identity"] select[aria-label="Changer le statut"]'
+      )
+    ).not.toBeNull()
+    expect(
+      document.body.querySelectorAll('select[aria-label="Changer le statut"]')
+    ).toHaveLength(1)
+  })
+
+  it('lot 25 : « Corriger le prix » de l’en-tête ouvre la section de l’annonce sur le prix', async () => {
+    mountPanel()
+    await flushPromises()
+    await click('[data-testid="edit-price"]')
+    await flushPromises()
+    expect(
+      query('[data-testid="tab-bien"]')?.getAttribute('aria-selected')
+    ).toBe('true')
+    expect(
+      query('[data-section="listing"]')?.getAttribute('data-editing')
+    ).toBe('true')
+    expect(document.activeElement?.id).toBe('f-price')
+  })
+
+  it('lot 25 : l’action de l’étape ouvre le bon travail (« Planifier une visite »)', async () => {
+    const toVisit = fakeEvaluated({ status: 'to_visit' })
+    apiMock.listings.get.mockResolvedValue(toVisit)
+    apiMock.listings.markSeen.mockResolvedValue(toVisit)
+    mountPanel()
+    await flushPromises()
+    const action = query('[data-testid="answer-action"]')
+    expect(action?.textContent?.trim()).toBe('Planifier une visite')
+    await click('[data-testid="answer-action"]')
+    await flushPromises()
+    expect(
+      query('[data-testid="tab-a-faire"]')?.getAttribute('aria-selected')
+    ).toBe('true')
+    expect(query('[data-testid="visit-form"]')).not.toBeNull()
   })
 })

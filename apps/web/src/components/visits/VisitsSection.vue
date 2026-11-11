@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, nextTick, ref } from 'vue'
+  import { computed, nextTick, ref, watch } from 'vue'
   import type { ListingStatus, Member, Visit } from '@apart/contracts'
   import { VISIT_STATUS_LABELS } from '@apart/contracts'
   import { VISIT_EDIT_REFUSAL, canEditVisit } from '@apart/domain'
@@ -12,6 +12,7 @@
   import UiField from '@/components/ui/UiField.vue'
   import UiIcon from '@/components/ui/UiIcon.vue'
   import { useAction } from '@/composables/useAction'
+  import { useChooseCover, useListingCover } from '@/composables/useCovers'
   import { useVisits } from '@/composables/useVisits'
   import { plural } from '@/lib/format'
   import { LISTING_STATUS_LABELS } from '@/lib/labels'
@@ -36,6 +37,8 @@
     listingId: string
     members: Member[]
     meId: string | null
+    /** Lot 25 : un compteur ; chaque hausse ouvre le formulaire d'ajout (« Planifier une visite »). */
+    openForm?: number
   }>()
   const emit = defineEmits<{ 'set-status': [status: ListingStatus] }>()
 
@@ -43,6 +46,18 @@
   const feedback = useFeedbackStore()
   const form = ref(emptyVisitForm(new Date(), props.meId))
   const adding = ref(false)
+  watch(
+    () => props.openForm ?? 0,
+    (next, previous) => {
+      if (next > (previous ?? 0)) {
+        adding.value = true
+        void nextTick(() =>
+          document.getElementById('visit-date')?.focus({ preventScroll: true })
+        )
+      }
+    },
+    { immediate: true }
+  )
   const formAction = useAction('L’enregistrement a échoué.')
   const cardAction = useAction('L’enregistrement a échoué.')
   /** La visite dont la carte montre la dernière erreur. */
@@ -146,6 +161,25 @@
    * par `window.confirm`.
    */
   const confirmingPhoto = ref<{ visitId: string; photoId: string } | null>(null)
+
+  /**
+   * Lot 25 (ADR 0035) : la photo de couverture de l'annonce. Par défaut la
+   * première photo de la première visite ; un membre peut en choisir une
+   * autre (« Annuler » remet la précédente). Jamais une image de portail.
+   */
+  const { cover } = useListingCover(computed(() => props.listingId))
+  const chooseCover = useChooseCover(computed(() => props.listingId))
+  async function pickCover(visitId: string, photoId: string): Promise<void> {
+    const before = cover.value?.chosen ? cover.value.photoId : null
+    await onVisit(visitId, () => chooseCover.mutateAsync(photoId))
+    if (!cardAction.error.value) {
+      feedback.success('Photo de couverture choisie.', {
+        undo: async () => {
+          await chooseCover.mutateAsync(before)
+        },
+      })
+    }
+  }
 
   async function removeVisit(visit: Visit): Promise<void> {
     await onVisit(visit.id, () => visits.remove.mutateAsync(visit.id))
@@ -463,6 +497,24 @@
                 class="grid aspect-square place-items-center rounded-lg bg-surface-2 text-xs text-muted"
                 >indisponible</span
               >
+              <span
+                v-if="cover?.photoId === photo.id"
+                class="absolute bottom-1 left-1 inline-flex items-center gap-1 rounded-full bg-surface/90 px-2 py-0.5 text-xs font-semibold text-fg shadow"
+                data-testid="photo-cover"
+                ><UiIcon name="star" class="size-3.5" />Couverture</span
+              >
+              <UiButton
+                v-else-if="photo.url"
+                size="sm"
+                class="absolute bottom-1 left-1 rounded-full bg-surface/90 shadow"
+                :aria-label="`Choisir comme photo de couverture${photo.caption ? ` : ${photo.caption}` : ''}`"
+                :loading="chooseCover.isPending.value"
+                data-testid="photo-cover-pick"
+                @click="pickCover(visit.id, photo.id)"
+              >
+                <UiIcon name="star" class="size-3.5" />
+                <span class="sr-only sm:not-sr-only">Couverture</span>
+              </UiButton>
               <UiButton
                 v-if="photo.uploadedById === meId"
                 size="icon"

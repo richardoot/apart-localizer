@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed } from 'vue'
+  import { computed, ref } from 'vue'
   import { OPEN_DATA_STATUS_LABELS } from '@apart/contracts'
   import type { OpenDataStatus } from '@apart/contracts'
   import { useListingContext } from '@/composables/useListingContext'
@@ -26,6 +26,8 @@
    * marché pour la surface de l'annonce, l'écart de son prix au m², la liste
    * des ventes datées, et le lien vers la carte du Quartier qui les montre.
    * Tout vient du serveur (DVF importées) ; rien n'est calculé ici.
+   * Lot 25 : les cinq plus récentes, puis « Voir les 65 ventes » ; au
+   * téléphone, une ligne empilée par vente au lieu du tableau.
    */
   const props = defineProps<{ listingId: string }>()
   const emit = defineEmits<{ go: [tab: ListingTab] }>()
@@ -44,6 +46,17 @@
   const since = computed(() =>
     market.value ? market.value.period.from.slice(0, 4) : null
   )
+  /** Les ventes montrées d'abord (la liste est de la plus récente à la plus ancienne). */
+  const SALES_SHOWN = 5
+  const allSales = ref(false)
+  const sales = computed(() => {
+    const list = market.value?.comparables ?? []
+    return allSales.value ? list : list.slice(0, SALES_SHOWN)
+  })
+  const hiddenCount = computed(
+    () => (market.value?.comparables.length ?? 0) - SALES_SHOWN
+  )
+
   /** La carte du Quartier montre les ventes retenues (couche « ventes comparables »). */
   const onMap = computed(
     () =>
@@ -118,55 +131,111 @@
           {{ formatDate(market.period.to) }}.
         </p>
 
-        <div
-          v-if="market.comparables.length"
-          class="max-w-full overflow-x-auto"
-        >
-          <table
-            class="w-full min-w-[30rem] border-collapse text-sm tabular-nums"
-            data-testid="market-sales"
+        <template v-if="market.comparables.length">
+          <ul
+            class="m-0 grid list-none gap-0 p-0 text-sm tabular-nums sm:hidden"
+            aria-label="Ventes comparables retenues, de la plus récente à la plus ancienne"
+            data-testid="market-sales-stack"
           >
-            <caption class="sr-only">
-              Ventes comparables retenues, de la plus récente à la plus ancienne
-            </caption>
-            <thead>
-              <tr class="text-left text-xs text-muted">
-                <th scope="col" class="py-1.5 font-medium">Distance</th>
-                <th scope="col" class="py-1.5 font-medium">Bien</th>
-                <th scope="col" class="py-1.5 font-medium">Date</th>
-                <th scope="col" class="py-1.5 text-right font-medium">Prix</th>
-                <th scope="col" class="py-1.5 text-right font-medium">€/m²</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="sale in market.comparables"
-                :key="sale.id"
-                class="border-t border-line align-top"
-              >
-                <td class="py-2 pr-2">
-                  {{ formatDistance(sale.distanceMeters) }}
-                </td>
-                <td class="py-2 pr-2">
+            <li
+              v-for="sale in sales"
+              :key="sale.id"
+              class="grid gap-0.5 border-t border-line py-2 first:border-t-0"
+              data-sale
+            >
+              <div class="flex items-baseline justify-between gap-3">
+                <span
+                  >{{ formatDistance(sale.distanceMeters) }} ·
                   {{ formatSurface(sale.surface)
                   }}<template v-if="sale.rooms !== null">
                     · {{ sale.rooms }} p.</template
-                  >
-                  <span v-if="sale.address" class="block text-xs text-muted">{{
-                    sale.address
-                  }}</span>
-                </td>
-                <td class="py-2 pr-2">{{ formatDate(sale.mutationDate) }}</td>
-                <td class="py-2 pr-2 text-right">
-                  {{ formatEuros(sale.price) }}
-                </td>
-                <td class="py-2 text-right">
-                  {{ formatEurosPerM2(sale.pricePerM2) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                  ></span
+                >
+                <strong class="font-semibold">{{
+                  formatEuros(sale.price)
+                }}</strong>
+              </div>
+              <span v-if="sale.address" class="text-xs text-muted">{{
+                sale.address
+              }}</span>
+              <div
+                class="flex items-baseline justify-between gap-3 text-xs text-muted"
+              >
+                <span>{{ formatDate(sale.mutationDate) }}</span>
+                <span>{{ formatEurosPerM2(sale.pricePerM2) }}</span>
+              </div>
+            </li>
+          </ul>
+          <div class="hidden max-w-full overflow-x-auto sm:block">
+            <table
+              class="w-full min-w-[30rem] border-collapse text-sm tabular-nums"
+              data-testid="market-sales"
+            >
+              <caption class="sr-only">
+                Ventes comparables retenues, de la plus récente à la plus
+                ancienne
+              </caption>
+              <thead>
+                <tr class="text-left text-xs text-muted">
+                  <th scope="col" class="py-1.5 font-medium">Distance</th>
+                  <th scope="col" class="py-1.5 font-medium">Bien</th>
+                  <th scope="col" class="py-1.5 font-medium">Date</th>
+                  <th scope="col" class="py-1.5 text-right font-medium">
+                    Prix
+                  </th>
+                  <th scope="col" class="py-1.5 text-right font-medium">
+                    €/m²
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="sale in sales"
+                  :key="sale.id"
+                  class="border-t border-line align-top"
+                >
+                  <td class="py-2 pr-2">
+                    {{ formatDistance(sale.distanceMeters) }}
+                  </td>
+                  <td class="py-2 pr-2">
+                    {{ formatSurface(sale.surface)
+                    }}<template v-if="sale.rooms !== null">
+                      · {{ sale.rooms }} p.</template
+                    >
+                    <span
+                      v-if="sale.address"
+                      class="block text-xs text-muted"
+                      >{{ sale.address }}</span
+                    >
+                  </td>
+                  <td class="py-2 pr-2">
+                    {{ formatDate(sale.mutationDate) }}
+                  </td>
+                  <td class="py-2 pr-2 text-right">
+                    {{ formatEuros(sale.price) }}
+                  </td>
+                  <td class="py-2 text-right">
+                    {{ formatEurosPerM2(sale.pricePerM2) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <UiButton
+            v-if="hiddenCount > 0"
+            variant="link"
+            class="justify-self-start"
+            :aria-expanded="allSales"
+            data-testid="market-sales-more"
+            @click="allSales = !allSales"
+          >
+            {{
+              allSales
+                ? `N’en montrer que ${SALES_SHOWN}`
+                : `Voir les ${plural(market.comparables.length, 'vente')}`
+            }}
+          </UiButton>
+        </template>
         <ul
           v-if="market.reasons.length"
           class="grid gap-0.5 text-xs text-muted"

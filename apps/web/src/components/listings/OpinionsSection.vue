@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+  import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
   import type {
     EvaluatedListing,
     Member,
@@ -141,6 +141,11 @@
     })
     onBeforeUnmount(unregister)
   }
+  // Lot 25 : « Donner mon avis » de la Synthèse ouvre la saisie par la garde
+  // de la fiche : le brouillon part de mon avis enregistré.
+  watch(editing, (now, before) => {
+    if (now && !before && !state.dirty.value) state.load()
+  })
   const compact = useMediaQuery('(max-width: 639px)')
   const formError = ref<string | null>(null)
 

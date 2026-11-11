@@ -36,7 +36,7 @@
     aria-modal="false"
     aria-labelledby="unsaved-title"
     aria-describedby="unsaved-text"
-    class="sticky top-14 z-10 mb-4 grid gap-2 rounded-2xl border border-warn bg-warn-soft px-4 py-3 text-sm text-fg shadow-panel sm:flex sm:items-center sm:justify-between"
+    class="sticky top-[var(--fiche-sticky,3.5rem)] z-10 mb-4 grid gap-2 rounded-2xl border border-warn bg-warn-soft px-4 py-3 text-sm text-fg shadow-panel sm:flex sm:items-center sm:justify-between"
     data-testid="unsaved-changes"
     @keydown.escape.stop.prevent="editor.stay()"
   >

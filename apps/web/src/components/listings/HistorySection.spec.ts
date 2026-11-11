@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { formatEuros } from '@/lib/format'
 import { fakeEvaluated, fakeOffer } from '@/test/fixtures'
 import HistorySection from './HistorySection.vue'
@@ -50,7 +50,19 @@ describe('HistorySection', () => {
     expect(form.get('[data-testid="field-error"]').text()).toContain('déjà')
     await form.get('input').setValue('185 000')
     await form.trigger('submit')
-    expect(wrapper.emitted('record')).toEqual([[185_000]])
+    const [value, done] = wrapper.emitted('record')?.[0] as [
+      number,
+      (ok: boolean) => void,
+    ]
+    expect(value).toBe(185_000)
+    // Lot 25 : la saisie reste jusqu'à la réponse du serveur ; un refus la garde.
+    done(false)
+    await flushPromises()
+    expect(form.get('input').element.value).toBe('185 000')
+    await form.trigger('submit')
+    ;(wrapper.emitted('record')?.[1]?.[1] as (ok: boolean) => void)(true)
+    await flushPromises()
+    expect(form.get('input').element.value).toBe('')
   })
 
   it('prépare une offre avec canal, date et commentaire', async () => {
@@ -91,13 +103,26 @@ describe('HistorySection', () => {
       .get('input[aria-label="Commentaire de l\'offre"]')
       .setValue('Offre écrite remise à l’agence')
     await form.trigger('submit')
-    const [input] = wrapper.emitted('addOffer')?.[0] as [
+    const [input, done] = wrapper.emitted('addOffer')?.[0] as [
       { amount: number; channel: string; notes: string; madeAt: string },
+      (ok: boolean) => void,
     ]
     expect(input.amount).toBe(150_000)
     expect(input.channel).toBe('agency')
     expect(input.notes).toBe('Offre écrite remise à l’agence')
     expect(input.madeAt).toMatch(/^2026-11-02T/)
+    // Lot 25 : rien ne se vide avant la réponse du serveur ; un refus garde tout.
+    const amountInput = () =>
+      form.get<HTMLInputElement>('input[aria-label="Montant de l\'offre"]')
+        .element
+    expect(amountInput().value).toBe('150 000')
+    done(false)
+    await flushPromises()
+    expect(amountInput().value).toBe('150 000')
+    await form.trigger('submit')
+    ;(wrapper.emitted('addOffer')?.[1]?.[1] as (ok: boolean) => void)(true)
+    await flushPromises()
+    expect(amountInput().value).toBe('')
   })
 
   it('met à jour la réponse du vendeur avec garde-fou, exige le montant d’une contre-proposition, propose le statut', async () => {
@@ -113,16 +138,24 @@ describe('HistorySection', () => {
     const select = wrapper.get(
       `select[aria-label="Réponse à l'offre de ${formatEuros(150_000)}"]`
     )
+    // Lot 25 : choisir ne fait que demander confirmation.
     await select.setValue('counter_offer')
     expect(wrapper.emitted('updateOffer')).toBeUndefined()
-    expect(wrapper.get('[role="alert"]').text()).toContain('contre-proposition')
-    await wrapper
-      .get(
-        `input[aria-label="Contre-proposition à l'offre de ${formatEuros(150_000)}"]`
-      )
-      .setValue('165000')
-    await select.setValue('counter_offer')
-    expect(wrapper.emitted('updateOffer')?.[0]).toEqual([
+    const confirm = () => wrapper.get('[data-testid="response-confirm"]')
+    expect(confirm().text()).toContain('Contre-proposition')
+    await confirm().trigger('submit')
+    expect(wrapper.emitted('updateOffer')).toBeUndefined()
+    expect(confirm().get('[data-testid="field-error"]').text()).toContain(
+      'contre-proposition'
+    )
+    await confirm().get('input').setValue('165000')
+    await confirm().trigger('submit')
+    const [offerId, update, done] = wrapper.emitted('updateOffer')?.[0] as [
+      string,
+      unknown,
+      (ok: boolean) => void,
+    ]
+    expect([offerId, update]).toEqual([
       offer.id,
       {
         response: 'counter_offer',
@@ -130,8 +163,25 @@ describe('HistorySection', () => {
         expectedResponse: 'pending',
       },
     ])
+    // Un refus du serveur garde la confirmation ouverte ; une réussite la ferme.
+    done(false)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="response-confirm"]').exists()).toBe(true)
+    done(true)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="response-confirm"]').exists()).toBe(
+      false
+    )
+    // « Annuler » remet le choix d'avant sans rien envoyer.
+    await select.setValue('refused')
+    await wrapper.get('[data-testid="response-cancel"]').trigger('click')
+    expect(wrapper.find('[data-testid="response-confirm"]').exists()).toBe(
+      false
+    )
+    expect((select.element as HTMLSelectElement).value).toBe('pending')
     await select.setValue('accepted')
-    expect(wrapper.emitted('updateOffer')?.[1]).toEqual([
+    await confirm().trigger('submit')
+    expect(wrapper.emitted('updateOffer')?.[1]?.slice(0, 2)).toEqual([
       offer.id,
       { response: 'accepted', expectedResponse: 'pending' },
     ])

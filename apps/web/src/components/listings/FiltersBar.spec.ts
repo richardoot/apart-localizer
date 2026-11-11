@@ -29,7 +29,7 @@ describe('FiltersBar', () => {
     ])
     await commune.setValue('Talence')
     expect(store.filters.commune).toEqual(['Talence'])
-    await wrapper.get('[aria-label="Verdicts"] button').trigger('click')
+    await wrapper.get('[aria-label="Rentabilité"] button').trigger('click')
     expect(store.filters.verdict).toEqual(['target'])
     await wrapper.get('[aria-label="Classes DPE"] button').trigger('click')
     expect(store.filters.dpe).toEqual(['A'])

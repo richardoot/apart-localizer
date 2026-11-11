@@ -46,7 +46,8 @@ describe('liste : la colonne et les cartes d’adéquation', () => {
 
   it('tableau : pastille, raison, mention « gardée » sous le titre ; « depuis » dans l’onglet hors critères', async () => {
     const wrapper = mount(ListingsTable, { props: { items: [inside, kept] } })
-    expect(wrapper.text()).toContain('Adéquation')
+    // Lot 25 : la colonne porte l'étiquette du jugement « Recherche ».
+    expect(wrapper.text()).toContain('Recherche')
     const rows = wrapper.findAll('tbody tr')
     const row = (id: string) => rows.find(r => r.attributes('data-id') === id)
     expect(row(inside.listing.id)?.get('[data-fit]').text()).toBe(
@@ -69,9 +70,14 @@ describe('liste : la colonne et les cartes d’adéquation', () => {
     expect(outRow?.find('[data-testid="fit-kept"]').exists()).toBe(false)
   })
 
-  it('cartes : pastille, raison et mention « gardée »', () => {
+  it('cartes : jugement « Recherche » étiqueté, raison et mention « gardée »', () => {
     const wrapper = mount(ListingCards, { props: { items: [kept] } })
-    expect(wrapper.get('[data-fit]').text()).toBe('Hors critères')
+    expect(wrapper.get('[data-judgement="search"]').text()).toContain(
+      'Recherche'
+    )
+    expect(wrapper.get('[data-judgement="search"]').text()).toContain(
+      'Hors critères'
+    )
     expect(wrapper.get('[data-testid="fit-reason"]').text()).toContain(
       'Prix +19 %'
     )

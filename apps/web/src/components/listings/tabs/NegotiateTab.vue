@@ -30,7 +30,12 @@
    * montant choisi, par `domain`), et la sensibilité repliée, demandée au
    * serveur seulement à son ouverture. Pendant une modification de la fiche,
    * l'aperçu en direct.
+   *
+   * Lot 25 (ADR 0035) : « Prix et offres » remonte sous le prix cible (c'est
+   * ce qu'on vient faire ici) ; les ventes comparables suivent, cinq d'abord.
    */
+  /** Lot 25 : la fiche dit si l'écriture a réussi ; la saisie n'est vidée qu'alors. */
+  type Done = (ok: boolean) => void
   const props = defineProps<{
     item: EvaluatedListing
     evaluation: ListingEvaluation | null
@@ -46,9 +51,9 @@
   }>()
   const emit = defineEmits<{
     go: [tab: ListingTab]
-    recordPrice: [newPrice: number]
-    addOffer: [input: OfferInputRaw]
-    updateOffer: [offerId: string, update: OfferUpdate]
+    recordPrice: [newPrice: number, done?: Done]
+    addOffer: [input: OfferInputRaw, done?: Done]
+    updateOffer: [offerId: string, update: OfferUpdate, done?: Done]
     setStatus: [status: ListingStatus]
   }>()
 
@@ -66,6 +71,8 @@
 
   // La sensibilité : axes au choix, recalculée côté serveur avec la ligne du
   // prix cible ; la requête ne part qu'à l'ouverture du dépli.
+  /** Lot 25 : « Préparer une offre » du prix cible ouvre le formulaire de « Prix et offres ». */
+  const history = ref<InstanceType<typeof HistorySection> | null>(null)
   const sensitivityOpen = ref(false)
   const rowAxis = ref<SensitivityAxis>('price')
   const colAxis = ref<SensitivityAxis>('rent')
@@ -93,7 +100,28 @@
       :assumptions="assumptions"
       :rent="evaluation?.metrics.rent ?? 0"
       :live="live"
+      @prepare-offer="amount => history?.prepare(amount)"
     />
+
+    <HistorySection
+      ref="history"
+      :events="item.priceEvents"
+      :offers="item.offers"
+      :current-price="item.listing.price"
+      :suggested-status="suggestedStatus ?? null"
+      :busy="busy"
+      :financials="financials"
+      :assumptions="assumptions"
+      :suggested-offer="negotiation?.suggestedOffer ?? null"
+      :target-price="targetPrice?.targetPrice ?? null"
+      @record="(newPrice, done) => emit('recordPrice', newPrice, done)"
+      @add-offer="(input, done) => emit('addOffer', input, done)"
+      @update-offer="
+        (offerId, update, done) => emit('updateOffer', offerId, update, done)
+      "
+      @set-status="status => emit('setStatus', status)"
+    />
+    <UiAlert v-if="error" data-testid="negotiate-error">{{ error }}</UiAlert>
 
     <div
       class="grid gap-4 @4xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] @4xl:items-start"
@@ -106,23 +134,6 @@
         :negotiation="negotiation"
       />
     </div>
-
-    <HistorySection
-      :events="item.priceEvents"
-      :offers="item.offers"
-      :current-price="item.listing.price"
-      :suggested-status="suggestedStatus ?? null"
-      :busy="busy"
-      :financials="financials"
-      :assumptions="assumptions"
-      :suggested-offer="negotiation?.suggestedOffer ?? null"
-      :target-price="targetPrice?.targetPrice ?? null"
-      @record="newPrice => emit('recordPrice', newPrice)"
-      @add-offer="input => emit('addOffer', input)"
-      @update-offer="(offerId, update) => emit('updateOffer', offerId, update)"
-      @set-status="status => emit('setStatus', status)"
-    />
-    <UiAlert v-if="error" data-testid="negotiate-error">{{ error }}</UiAlert>
 
     <details
       class="rounded-2xl border border-line bg-surface px-4 sm:px-5"

@@ -18,8 +18,10 @@
       since?: boolean
       /** Sans la mention « gardée » (déjà dite ailleurs). */
       hideKept?: boolean
+      /** Lot 25 : sans la pastille (les jugements étiquetés la montrent déjà). */
+      badge?: boolean
     }>(),
-    { since: false, hideKept: false }
+    { since: false, hideKept: false, badge: true }
   )
 
   const reason = computed(() =>
@@ -38,7 +40,7 @@
     class="grid w-60 max-w-full gap-0.5 whitespace-normal"
     data-testid="fit-summary"
   >
-    <FitBadge :level="fit.level" />
+    <FitBadge v-if="badge" :level="fit.level" />
     <span v-if="reason" class="text-xs text-muted" data-testid="fit-reason">{{
       reason
     }}</span>

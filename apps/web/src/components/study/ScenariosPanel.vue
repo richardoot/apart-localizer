@@ -285,7 +285,7 @@
       </thead>
       <tbody>
         <tr class="border-t border-line">
-          <td class="py-0.5">Verdict</td>
+          <td class="py-0.5">Rentabilité</td>
           <td class="text-right">
             {{ VERDICT_LABELS[comparison.base.verdict] }}
           </td>

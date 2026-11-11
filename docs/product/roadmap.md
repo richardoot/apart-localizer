@@ -1164,7 +1164,9 @@ avis se saisissent dans la fiche, pas dans le mode visite.
 
 ## Lot 25 : la fiche répond d'abord
 
-Statut : validé, à faire.
+Statut : livré le 11 novembre 2026 (code, tests, documentation ; ADR 0035), **avec une migration
+additive** (`20261112100000_lot25_listing_cover` : `listings.cover_photo_id`), sans variable
+nouvelle ni outil MCP nouveau ; à relire sur un vrai iPhone.
 
 - **Pourquoi** : la fiche est un tiroir de 1160 px sur un écran de 1440, donc une page déguisée ;
   titre, prix et verdict disparaissent au défilement. Le journal « Depuis votre dernière
@@ -1190,6 +1192,89 @@ Statut : validé, à faire.
 
 Fini quand : sur ordinateur comme au téléphone, le premier écran de chaque onglet donne la réponse
 et l'action suivante ; personne ne demande ce que veut dire « Cible » à côté de « Hors critères ».
+
+Livré :
+
+- **Pleine page sur ordinateur** (à partir de 1024 px) : la fiche reste la route `/annonces/:id`
+  (liens directs, `?onglet=`, anciens onglets, notifications inchangés) ; la liste reste montée,
+  cachée, et la fiche s'affiche en page sous l'en-tête de l'application. Une ligne d'identité
+  collée : retour, titre, prix (avec « Corriger »), les trois jugements étiquetés, le statut ; la
+  barre d'onglets se colle dessous. Au téléphone, le panneau plein écran garde une ligne collée
+  compacte (retour, titre sur deux lignes, prix) ; les jugements et le statut sont juste dessous.
+  Fermer revient par l'historique à la page d'origine, la liste comprise (même étape, mêmes
+  filtres, même position) ; le bouton retour du navigateur ferme la fiche sans la rouvrir ensuite
+  ; la garde des modifications passe par les mêmes chemins.
+- **Une phrase et une action** en tête de la Synthèse : « Oui », « Peut-être », « Pas à ce prix »,
+  « Plutôt non » ou « Pas encore de réponse », puis la rentabilité, le prix cible et la recherche
+  avec leurs raisons (`listingAnswer` de `domain`, qui dit ce qui manque) ; l'action de l'étape
+  (`ficheNextAction` : trier, répondre à une proposition, trancher, planifier une visite, mode
+  visite le jour même, préparer la visite, donner mon avis, voir nos désaccords, préparer une
+  offre, noter la réponse du vendeur, repêcher), les changements de statut passant toujours par
+  la proposition à plusieurs. « Depuis ta dernière ouverture » en une ligne (combien, qui, quels
+  champs), le détail à la demande ; chaque prochaine étape mène à son bloc.
+- **Trois jugements étiquetés** (« Rentabilité », « Recherche », « Location », toujours dans cet
+  ordre, formes courtes « Renta. », « Rech. », « Loc. » ; une seule source dans `contracts`, la
+  lecture dans `domain`), avec un symbole et un mot, jamais la couleur seule : lignes d'étape
+  (brouillons compris), cartes et accueil, fiche, tri, brouillons ; « Rentabilité » remplace
+  « Verdict » dans le tableau, la comparaison (qui gagne la ligne « Recherche »), les filtres, la
+  projection, la sensibilité et « Préparer une offre ».
+- **Négocier** : « Prix et offres » sous le prix cible, puis les ventes comparables, cinq d'abord
+  et « Voir les 65 ventes » ; « Préparer une offre à 162 000 € » dans la carte du prix cible ; la
+  réponse du vendeur se choisit puis se confirme (le montant d'une contre-proposition dans la
+  même confirmation) et se défait par « Annuler » ; l'offre et le nouveau prix gardent leur
+  saisie jusqu'à la réponse du serveur.
+- **Le bien** : « Nos notes » juste après les travaux, sans déplier (la description reste
+  repliée) ; « Corriger le prix » de l'en-tête ouvre la section de l'annonce sur le prix (même
+  charge utile, même garde-fou, même journal ; `legacy-listing-save.fixture.ts` inchangé).
+- **Édition par section** : le focus entre dans la section et revient sur « Modifier » ; au
+  téléphone, « Annuler » et « Enregistrer » restent collés en bas de la section, au-dessus du
+  clavier ; un conflit se dit en mots avec « Recharger en gardant ma saisie » (les champs changés
+  des deux côtés sont nommés) ; les flèches ne donnent plus le focus à un onglet refusé.
+- **Tableaux au téléphone** : détail des avis et ventes comparables en blocs empilés ;
+  projection, sensibilité et prix maximal par critère dans leur propre cadre qui défile (région
+  nommée, première colonne collée, « Fais glisser le tableau… ») ; la page ne défile jamais en
+  largeur.
+- **Photo de couverture** : la photo de visite choisie par un membre (« Couverture » sur une
+  photo, « Annuler » remet la précédente), sinon la première de la première visite ; rien avant ;
+  jamais une image de portail. Ligne d'identité (ordinateur), en-tête (téléphone), cartes,
+  accueil et lignes d'étape ; vignettes signées à durée courte en un seul appel au stockage par
+  liste, relues avant expiration ; ni le MCP ni l'export ne la portent.
+- **Glossaire** : « ? » sur TRI, VAN et cash-flow dans la projection (phrases courtes ajoutées).
+- **Mode visite** : « Pas de connexion au serveur… » dit une fois au-dessus des changements en
+  attente.
+
+Mesuré à la livraison (Chromium, jeu fictif ; hauteur de défilement de chaque onglet, la page
+entière sur ordinateur avec l'en-tête de l'application, le panneau au téléphone) :
+
+| Onglet     | 1440 × 900 avant | après | 390 × 844 avant | après | Premier écran (ordinateur / téléphone)                                     |
+| ---------- | ---------------- | ----- | --------------- | ----- | -------------------------------------------------------------------------- |
+| Synthèse   | 1192             | 1481  | 3059            | 2527  | la phrase et l'action (bas à 412 / 597 px)                                 |
+| Le bien    | 1647             | 1772  | 2975            | 3280  | les travaux, puis nos notes (en entier / commencées)                       |
+| Budget     | 1697             | 1687  | 3105            | 3174  | les hypothèses rappelées et l'achat (inchangé)                             |
+| Négocier   | 3178             | 2034  | 4270            | 3155  | prix cible, offre suggérée et « Préparer une offre » ; « Prix et offres » à 725 px sur ordinateur |
+| Quartier   | 1172             | 1245  | 1453            | 1582  | les six tuiles                                                             |
+| À faire    | 1694             | 1708  | 3830            | 4076  | la liste des tâches                                                        |
+| Historique | 2789             | 2813  | 4193            | 4238  | la chronologie                                                             |
+
+Sur ordinateur, les chiffres « après » comptent l'en-tête de l'application (60 px) et la ligne
+collée ; la Synthèse s'allonge de la phrase et de l'action, Négocier perd 36 %. Au téléphone,
+l'en-tête de la fiche porte maintenant les trois jugements en entier (deux lignes) : chaque
+onglet commence environ 40 px plus bas ; Le bien montre ses notes. À l'étape À valider, trois
+annonces restent visibles à 390 × 844 (la troisième sans ses boutons ; la ligne du prix et du lieu
+fusionne pour faire place aux jugements). Parcours à la main : ouvrir une annonce de la liste
+défilée (étape, filtre), modifier une section, retour arrière (bandeau), continuer, fermer,
+abandonner : retour à la même liste, même position (102 px au téléphone, 169 px sur ordinateur) ;
+lien direct `?onglet=negocier` ; ancien `?onglet=suivi` → À faire ; conflit entre deux sessions
+(`demo` et `demo2`) : message en mots, relecture, saisie gardée, enregistrement ; réponse du
+vendeur confirmée puis annulée. Photo de couverture vue avec une photo fictive envoyée par le
+mode d'ajout des visites (le jeu de démo n'a pas de photo : le stockage est hors de la base).
+
+Reste : une vérification sur un vrai iPhone (barre d'enregistrement au-dessus du clavier par
+`visualViewport`, défilement des cadres de tableaux, pastilles à la ligne, image de couverture
+dans l'application installée) ; l'onglet Budget n'a pas été repensé (il répond par ses chiffres,
+sans action) ; l'en-tête de la fiche au téléphone reste haut (environ 370 px avant le contenu de
+l'onglet, statut compris) ; le jeu de démo n'a pas de photo de couverture ; le glossaire et le MCP
+disent toujours « verdict » (aucun outil changé).
 
 ## Lot 26 : trouver, comparer, Claude
 

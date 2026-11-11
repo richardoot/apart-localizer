@@ -1,7 +1,7 @@
 <script setup lang="ts">
-  import { computed, nextTick, ref, watch } from 'vue'
+  import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+  import { useRouter } from 'vue-router'
   import { useQuery } from '@tanstack/vue-query'
-  import { DialogTitle } from 'reka-ui'
   import type {
     DecisionChoice,
     DecisionResult,
@@ -9,14 +9,17 @@
     OfferInputRaw,
     OfferUpdate,
   } from '@apart/contracts'
+  import { OFFER_RESPONSE_LABELS } from '@apart/contracts'
   import {
     proposedMessage,
+    stageOfStatus,
     todoPendingCount,
     waitingNames,
   } from '@apart/domain'
+  import type { FicheActionKind, NextStepTarget } from '@apart/domain'
   import QueryState from '@/components/ui/QueryState.vue'
-  import SidePanel from '@/components/ui/SidePanel.vue'
   import UiButton from '@/components/ui/UiButton.vue'
+  import { useListingCover } from '@/composables/useCovers'
   import { useLeaveGuard } from '@/composables/useLeaveGuard'
   import { useFeedbackStore } from '@/stores/feedback'
   import { errorMessage } from '@/lib/errors'
@@ -36,13 +39,16 @@
   import { api } from '@/lib/api'
   import { criteriaChangesMessage } from '@/lib/criteria'
   import { parseNumberInput } from '@/lib/format'
-  import { ADDRESS_FIELD_ID } from '@/lib/listing-sections'
+  import { ADDRESS_FIELD_ID, PRICE_FIELD_ID } from '@/lib/listing-sections'
   import type { OpinionActions } from '@/lib/opinions'
   import { DEFAULT_LISTING_TAB, listingTabQuestion } from '@/lib/listing-tabs'
   import type { ListingTab } from '@/lib/listing-tabs'
   import DecisionBanner from '@/components/workflow/DecisionBanner.vue'
   import { useDecisionActions } from '@/composables/useWorkflow'
+  import FicheShell from './FicheShell.vue'
+  import FicheTitle from './FicheTitle.vue'
   import ListingHeader from './ListingHeader.vue'
+  import ListingIdentity from './ListingIdentity.vue'
   import ListingSynthesis from './ListingSynthesis.vue'
   import ListingTabs from './ListingTabs.vue'
   import UnsavedChangesBar from './sections/UnsavedChangesBar.vue'
@@ -59,14 +65,25 @@
    * Négocier, Quartier, À faire, Historique). La fiche se modifie section par
    * section (`useListingEditor`) ; pendant une modification, les chiffres
    * suivent l'aperçu en direct calculé par `domain`.
+   *
+   * Lot 25 (ADR 0035) : sur ordinateur, une vraie page (`layout="page"`) ;
+   * au téléphone, le panneau plein écran. Une ligne d'identité collée (retour,
+   * titre, prix, trois jugements étiquetés, statut) puis les onglets collés ;
+   * la Synthèse répond d'abord (une phrase, une action) ; le prix se corrige
+   * depuis l'en-tête (la section du lot 19, même garde, même journal).
    */
-  const props = defineProps<{
-    id: string
-    /** Message à afficher à l'ouverture (critères dans lesquels l'annonce créée entre). */
-    notice?: string | null
-    /** Lot 23 : le libellé du retour (la page d'où la fiche a été ouverte). */
-    backLabel?: string | undefined
-  }>()
+  const props = withDefaults(
+    defineProps<{
+      id: string
+      /** Message à afficher à l'ouverture (critères dans lesquels l'annonce créée entre). */
+      notice?: string | null
+      /** Lot 23 : le libellé du retour (la page d'où la fiche a été ouverte). */
+      backLabel?: string | undefined
+      /** Lot 25 : pleine page (ordinateur) ou panneau (téléphone). */
+      layout?: 'page' | 'panel'
+    }>(),
+    { notice: null, backLabel: undefined, layout: 'panel' }
+  )
   const emit = defineEmits<{ close: [] }>()
   /**
    * L'onglet ouvert. La page des annonces le lie à l'URL (`?onglet=`) ; sans
@@ -75,7 +92,10 @@
   const tab = defineModel<ListingTab>('tab', { default: DEFAULT_LISTING_TAB })
 
   const id = computed(() => props.id)
+  const router = useRouter()
   const listingQuery = useListing(id)
+  // Lot 25 : la photo de couverture (photo de visite, URL signée courte).
+  const { cover, refresh: refreshCover } = useListingCover(id)
   const { data: item } = listingQuery
   const { values: assumptions } = useAssumptions()
   const { me, members } = useWorkspace()
@@ -157,6 +177,11 @@
           .filter(Boolean)
           .join(' ')
       )
+    },
+    // Lot 25 : après un conflit, la fiche relue (la saisie de la section est gardée).
+    reload: async () => {
+      const result = await listingQuery.refetch()
+      return result.data?.listing ?? item.value?.listing ?? null
     },
     focus: fieldId => {
       void nextTick(() => {
@@ -254,6 +279,149 @@
   }
   function go(next: ListingTab): void {
     tabModel.value = next
+  }
+
+  /**
+   * Lot 25 : la ligne d'identité et la barre d'onglets restent collées en
+   * haut ; la barre se pose sous la ligne, quelle que soit sa hauteur (titre
+   * sur deux lignes, jugements qui passent à la ligne).
+   */
+  const identityEl = ref<HTMLElement | null>(null)
+  const identityHeight = ref(0)
+  let observer: ResizeObserver | null = null
+  watch(identityEl, el => {
+    observer?.disconnect()
+    observer = null
+    if (!el) return
+    identityHeight.value = el.getBoundingClientRect().height
+    if (typeof ResizeObserver === 'undefined') return
+    observer = new ResizeObserver(() => {
+      identityHeight.value = el.getBoundingClientRect().height
+    })
+    observer.observe(el)
+  })
+  onBeforeUnmount(() => observer?.disconnect())
+  /** Sur ordinateur, sous l'en-tête de l'application (60 px). */
+  const stickyBase = computed(() => (props.layout === 'page' ? 60 : 0))
+  const tabsTop = computed(() => `${stickyBase.value + identityHeight.value}px`)
+  /** La hauteur de tout ce qui est collé : le bandeau des modifications et les ancres s'y posent. */
+  const stickyHeight = computed(
+    () => `${stickyBase.value + identityHeight.value + 46}px`
+  )
+
+  /** Ouvre l'onglet, puis amène le bloc (et le champ) à l'écran. */
+  function goTo(
+    target: { tab: ListingTab; anchor: NextStepTarget['anchor'] },
+    focus?: string
+  ): void {
+    const reach = () => {
+      void nextTick(() => {
+        const block = target.anchor
+          ? document.getElementById(target.anchor)
+          : null
+        block?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+        const field = focus ? document.getElementById(focus) : null
+        ;(field ?? block)?.focus?.({ preventScroll: true })
+      })
+    }
+    if (target.tab === tab.value) {
+      reach()
+      return
+    }
+    editor.guard(() => {
+      editor.cancel()
+      tab.value = target.tab
+      void nextTick(reach)
+    })
+  }
+
+  /** « Planifier une visite » : le formulaire des visites s'ouvre dans À faire. */
+  const planVisitRequest = ref(0)
+
+  /**
+   * Lot 25 : l'action de l'étape, en tête de la Synthèse (`ficheNextAction`
+   * de `domain`). Un changement de statut passe par le menu et la
+   * proposition habituels quand l'espace décide à plusieurs.
+   */
+  function runAction(kind: FicheActionKind): void {
+    const value = item.value
+    if (!value) return
+    const listingId = value.listing.id
+    switch (kind) {
+      case 'triage':
+        editor.guard(() => {
+          editor.cancel()
+          void router.push({
+            name: 'triage',
+            query: {
+              etape: stageOfStatus(value.listing.status),
+              carte: listingId,
+            },
+          })
+        })
+        return
+      case 'settle':
+        editor.guard(() => {
+          editor.cancel()
+          void router.push({ name: 'settle' })
+        })
+        return
+      case 'visit_mode':
+        editor.guard(() => {
+          editor.cancel()
+          void router.push({ name: 'visit-mode', params: { id: listingId } })
+        })
+        return
+      case 'decision':
+        goTo({ tab: tab.value, anchor: 'decision-banner' })
+        return
+      case 'plan_visit':
+        planVisitRequest.value = 0
+        goTo({ tab: 'a-faire', anchor: 'visites' })
+        void nextTick(() => {
+          planVisitRequest.value = 1
+          void nextTick(() => void nextTick(() => (planVisitRequest.value = 0)))
+        })
+        return
+      case 'prepare_visit':
+        goTo({ tab: 'a-faire', anchor: 'visites' })
+        return
+      case 'give_opinion':
+        editor.start('opinion')
+        goTo({ tab: 'synthese', anchor: 'nos-avis' })
+        return
+      case 'opinions':
+        goTo({ tab: 'synthese', anchor: 'nos-avis' })
+        return
+      case 'prepare_offer':
+        goTo({ tab: 'negocier', anchor: 'prix-et-offres' }, 'offer-amount')
+        return
+      case 'seller_answer':
+        goTo({ tab: 'negocier', anchor: 'prix-et-offres' })
+        return
+      case 'todo':
+        goTo({ tab: 'a-faire', anchor: null })
+        return
+      case 'rescue':
+        void changeStatus({ status: 'to_study', reason: null })
+        return
+      default:
+    }
+  }
+
+  /**
+   * Lot 25 : « Corriger le prix » depuis l'en-tête : Le bien, la section de
+   * l'annonce ouverte, le champ du prix atteint ; même section, même
+   * charge utile, même garde-fou et même journal qu'avant.
+   */
+  function editPrice(): void {
+    editor.guard(() => {
+      if (tab.value !== 'bien') {
+        editor.cancel()
+        tab.value = 'bien'
+      }
+      void nextTick(() => editor.start('listing', PRICE_FIELD_ID))
+    })
   }
 
   /** Fermer la fiche : confirmation si une section est modifiée. */
@@ -394,7 +562,9 @@
     }
   }
 
-  async function addOffer(input: OfferInputRaw): Promise<void> {
+  /** Lot 25 : le formulaire garde sa saisie jusqu'à la réponse (`done`). */
+  type Done = (ok: boolean) => void
+  async function addOffer(input: OfferInputRaw, done?: Done): Promise<void> {
     if (!item.value) return
     negotiateError.value = null
     try {
@@ -404,14 +574,17 @@
       })
       suggestedStatus.value = result.suggestedStatus
       feedback.success('Offre enregistrée.')
+      done?.(true)
     } catch (err) {
       negotiateError.value = errorMessage(err, 'L’enregistrement a échoué.')
+      done?.(false)
     }
   }
 
   async function updateOffer(
     offerId: string,
-    update: OfferUpdate
+    update: OfferUpdate,
+    done?: Done
   ): Promise<void> {
     if (!item.value) return
     negotiateError.value = null
@@ -429,8 +602,11 @@
         update,
       })
       suggestedStatus.value = result.suggestedStatus
+      done?.(true)
       feedback.success(
-        'Réponse enregistrée.',
+        update.response && update.response in OFFER_RESPONSE_LABELS
+          ? `Réponse « ${OFFER_RESPONSE_LABELS[update.response]} » enregistrée.`
+          : 'Réponse enregistrée.',
         restore
           ? {
               undo: async () => {
@@ -446,10 +622,11 @@
       )
     } catch (err) {
       negotiateError.value = errorMessage(err, 'L’enregistrement a échoué.')
+      done?.(false)
     }
   }
 
-  async function recordPrice(newPrice: number): Promise<void> {
+  async function recordPrice(newPrice: number, done?: Done): Promise<void> {
     if (!item.value) return
     negotiateError.value = null
     try {
@@ -462,8 +639,10 @@
         },
       })
       feedback.success('Nouveau prix enregistré.')
+      done?.(true)
     } catch (err) {
       negotiateError.value = errorMessage(err, 'L’enregistrement a échoué.')
+      done?.(false)
     }
   }
 
@@ -499,151 +678,185 @@
 </script>
 
 <template>
-  <SidePanel
+  <FicheShell
+    :layout="layout"
     :title="item?.listing.title ?? 'Annonce'"
-    wide
     @close="requestClose"
   >
     <template #top>
       <div class="contents">
-        <ListingHeader
-          v-if="item"
-          :item="item"
-          :evaluation="shownEvaluation"
-          :busy="busy"
-          :status-error="statusError"
-          :back-label="backLabel"
-          @back="requestClose"
-          @status="change => changeStatus(change, 'header')"
-        />
+        <template v-if="item">
+          <!-- Lot 25 : la ligne d'identité collée, puis l'en-tête qui défile, puis les onglets collés. -->
+          <div
+            ref="identityEl"
+            class="sticky z-[7]"
+            :class="layout === 'page' ? 'top-15' : 'top-0'"
+          >
+            <ListingIdentity
+              :item="item"
+              :evaluation="shownEvaluation"
+              :layout="layout"
+              :cover="cover"
+              :busy="busy"
+              :status-error="statusError"
+              :back-label="backLabel"
+              @back="requestClose"
+              @status="change => changeStatus(change, 'header')"
+              @edit-price="editPrice"
+              @cover-expired="refreshCover"
+            />
+          </div>
+          <ListingHeader
+            :item="item"
+            :evaluation="shownEvaluation"
+            :layout="layout"
+            :cover="cover"
+            :busy="busy"
+            :status-error="statusError"
+            @status="change => changeStatus(change, 'header')"
+            @cover-expired="refreshCover"
+          />
+        </template>
         <header
           v-else
           class="flex items-center justify-between gap-3 bg-surface px-4 py-3 sm:px-5"
         >
-          <DialogTitle as="h1" class="font-display text-lg font-bold">
+          <FicheTitle
+            :page="layout === 'page'"
+            class="font-display text-lg font-bold"
+          >
             Annonce
-          </DialogTitle>
+          </FicheTitle>
           <UiButton icon="close" @click="emit('close')">Fermer</UiButton>
         </header>
         <div
           v-if="item"
           ref="tabsBar"
-          class="sticky top-0 z-[6] border-b border-line bg-surface px-4 sm:px-5"
+          class="sticky z-[6] border-b border-line bg-surface px-4 sm:px-5"
+          :style="{ top: tabsTop }"
         >
           <ListingTabs v-model="tabModel" :todo-count="todoCount" />
         </div>
       </div>
     </template>
 
-    <QueryState
-      :query="listingQuery"
-      skeleton="cards"
-      :skeleton-count="2"
-      loading-label="l’annonce"
-      error-fallback="La lecture de l’annonce a échoué."
-    >
-      <template v-if="item">
-        <UnsavedChangesBar />
+    <div class="contents" :style="{ '--fiche-sticky': stickyHeight }">
+      <QueryState
+        :query="listingQuery"
+        skeleton="cards"
+        :skeleton-count="2"
+        loading-label="l’annonce"
+        error-fallback="La lecture de l’annonce a échoué."
+      >
+        <template v-if="item">
+          <UnsavedChangesBar />
 
-        <DecisionBanner
-          v-if="item.decision"
-          :decision="item.decision"
-          :busy="decisionBusy"
-          :error="decisionError"
-          @withdraw="withdrawDecision"
-          @decide-now="decideNow"
-          @agree="agreeDecision"
-          @disagree="disagreeDecision"
-        />
-
-        <div
-          :id="`listing-panel-${tab}`"
-          role="tabpanel"
-          :aria-labelledby="`listing-tab-${tab}`"
-          tabindex="0"
-          class="grid scroll-mt-14 gap-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
-          :data-panel="tab"
-        >
-          <p class="text-sm text-muted" data-testid="tab-question">
-            {{ listingTabQuestion(tab) }}
-          </p>
-
-          <ListingSynthesis
-            v-if="tab === 'synthese'"
-            :item="item"
-            :evaluation="shownEvaluation"
-            :target-price="shownTargetPrice"
-            :negotiation="shownNegotiation"
-            :assumptions="shownAssumptions"
-            :live="live"
-            :changes="changes"
-            :requests="agencyRequests"
-            :visits="visitList"
-            :members="members"
-            :me-id="me?.id ?? null"
-            :saving-opinion="mutations.upsertOpinion.isPending.value"
-            :opinion-actions="opinionActions"
-            @go="go"
-            @precise="preciseAddress"
+          <DecisionBanner
+            v-if="item.decision"
+            id="decision-banner"
+            tabindex="-1"
+            class="scroll-mt-[var(--fiche-sticky)]"
+            :decision="item.decision"
+            :busy="decisionBusy"
+            :error="decisionError"
+            @withdraw="withdrawDecision"
+            @decide-now="decideNow"
+            @agree="agreeDecision"
+            @disagree="disagreeDecision"
           />
 
-          <PropertyTab v-else-if="tab === 'bien'" :item="item" @go="go" />
+          <div
+            :id="`listing-panel-${tab}`"
+            role="tabpanel"
+            :aria-labelledby="`listing-tab-${tab}`"
+            tabindex="0"
+            class="grid scroll-mt-[var(--fiche-sticky)] gap-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+            :data-panel="tab"
+          >
+            <p class="text-sm text-muted" data-testid="tab-question">
+              {{ listingTabQuestion(tab) }}
+            </p>
 
-          <BudgetTab
-            v-else-if="tab === 'budget'"
-            :item="item"
-            :evaluation="shownEvaluation"
-            :target-price="shownTargetPrice"
-            :assumptions="shownAssumptions"
-            :live="live"
-            :busy="busy"
-            :error="budgetError"
-            @go="go"
-            @retain-market-rent="retainMarketRent"
-          />
+            <ListingSynthesis
+              v-if="tab === 'synthese'"
+              :item="item"
+              :evaluation="shownEvaluation"
+              :target-price="shownTargetPrice"
+              :negotiation="shownNegotiation"
+              :assumptions="shownAssumptions"
+              :live="live"
+              :changes="changes"
+              :requests="agencyRequests"
+              :visits="visitList"
+              :members="members"
+              :me-id="me?.id ?? null"
+              :saving-opinion="mutations.upsertOpinion.isPending.value"
+              :opinion-actions="opinionActions"
+              @go="go"
+              @go-to="target => goTo(target)"
+              @action="runAction"
+              @precise="preciseAddress"
+            />
 
-          <NegotiateTab
-            v-else-if="tab === 'negocier'"
-            :item="item"
-            :evaluation="shownEvaluation"
-            :target-price="shownTargetPrice"
-            :negotiation="shownNegotiation"
-            :rank="live ? null : (targetReport?.rank ?? null)"
-            :assumptions="shownAssumptions"
-            :live="live"
-            :busy="busy"
-            :suggested-status="suggestedStatus"
-            :error="negotiateError"
-            @go="go"
-            @record-price="recordPrice"
-            @add-offer="addOffer"
-            @update-offer="updateOffer"
-            @set-status="status => changeStatus({ status, reason: null })"
-          />
+            <PropertyTab v-else-if="tab === 'bien'" :item="item" @go="go" />
 
-          <NeighbourhoodTab
-            v-else-if="tab === 'quartier'"
-            :item="item"
-            @precise="preciseAddress"
-            @go="go"
-          />
+            <BudgetTab
+              v-else-if="tab === 'budget'"
+              :item="item"
+              :evaluation="shownEvaluation"
+              :target-price="shownTargetPrice"
+              :assumptions="shownAssumptions"
+              :live="live"
+              :busy="busy"
+              :error="budgetError"
+              @go="go"
+              @retain-market-rent="retainMarketRent"
+            />
 
-          <TodoTab
-            v-else-if="tab === 'a-faire'"
-            :item="item"
-            :members="members"
-            :me-id="me?.id ?? null"
-            @set-status="status => changeStatus({ status, reason: null })"
-          />
+            <NegotiateTab
+              v-else-if="tab === 'negocier'"
+              :item="item"
+              :evaluation="shownEvaluation"
+              :target-price="shownTargetPrice"
+              :negotiation="shownNegotiation"
+              :rank="live ? null : (targetReport?.rank ?? null)"
+              :assumptions="shownAssumptions"
+              :live="live"
+              :busy="busy"
+              :suggested-status="suggestedStatus"
+              :error="negotiateError"
+              @go="go"
+              @record-price="recordPrice"
+              @add-offer="addOffer"
+              @update-offer="updateOffer"
+              @set-status="status => changeStatus({ status, reason: null })"
+            />
 
-          <HistoryTab
-            v-else
-            :item="item"
-            :members="members"
-            @set-status="status => changeStatus({ status, reason: null })"
-          />
-        </div>
-      </template>
-    </QueryState>
-  </SidePanel>
+            <NeighbourhoodTab
+              v-else-if="tab === 'quartier'"
+              :item="item"
+              @precise="preciseAddress"
+              @go="go"
+            />
+
+            <TodoTab
+              v-else-if="tab === 'a-faire'"
+              :item="item"
+              :members="members"
+              :me-id="me?.id ?? null"
+              :open-visit-form="planVisitRequest"
+              @set-status="status => changeStatus({ status, reason: null })"
+            />
+
+            <HistoryTab
+              v-else
+              :item="item"
+              :members="members"
+              @set-status="status => changeStatus({ status, reason: null })"
+            />
+          </div>
+        </template>
+      </QueryState>
+    </div>
+  </FicheShell>
 </template>
