@@ -128,7 +128,7 @@ describe('Lot 20 : nos avis au connecteur MCP (e2e)', () => {
       description: string
       inputSchema: { required?: string[]; properties: Record<string, unknown> }
     }>
-    expect(tools).toHaveLength(42)
+    expect(tools).toHaveLength(49)
     const add = tools.find(t => t.name === 'add_opinion')
     expect(add?.inputSchema.required).toEqual(['listingId'])
     expect(Object.keys(add?.inputSchema.properties ?? {})).toEqual(

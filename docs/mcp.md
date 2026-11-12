@@ -6,7 +6,7 @@ HTTP complète, authentifiée par `McpAuthGuard` (jeton Supabase du membre), ser
 et un transport construits pour elle, avec une réponse JSON (pas de flux SSE). Rien n'est gardé
 entre deux appels, rien n'est perdu quand une fonction serverless redémarre.
 
-Code : `apps/api/src/mcp/`. Les quarante-deux outils, les cinq prompts et les deux ressources sont déclarés dans `mcp-tools.ts` (ceux du lot 15, vérification des annonces sur le portail, dans `mcp-checks.ts` ; ceux du lot 16, exploration par les critères, dans `mcp-exploration.ts` ; ceux du lot 17, questions aux agences, dans `mcp-agency.ts` ; celui du lot 18, liens des portails, dans `mcp-links.ts` ; lot 20, l'écriture et la lecture des avis par critère dans `mcp-opinions.ts` ; ceux du lot 27, annonces ressemblantes, fusion des doublons et autres agences, dans `mcp-merge.ts`), le garde
+Code : `apps/api/src/mcp/`. Les quarante-neuf outils, les cinq prompts et les deux ressources sont déclarés dans `mcp-tools.ts` (ceux du lot 15, vérification des annonces sur le portail, dans `mcp-checks.ts` ; ceux du lot 16, exploration par les critères, dans `mcp-exploration.ts` ; ceux du lot 17, questions aux agences, dans `mcp-agency.ts` ; celui du lot 18, liens des portails, dans `mcp-links.ts` ; lot 20, l'écriture et la lecture des avis par critère dans `mcp-opinions.ts` ; ceux du lot 27, annonces ressemblantes, fusion des doublons et autres agences, dans `mcp-merge.ts` ; ceux du lot 31, les brouillons, dans `mcp-drafts.ts`), le garde
 dans `mcp-auth.guard.ts`, la découverte OAuth dans `discovery.ts` et `well-known.controller.ts`,
 la forme des réponses dans `tool-results.ts`. Les schémas d'entrée viennent de
 `packages/contracts/src/mcp.ts` ; les calculs de `packages/domain` à travers les services ; le
@@ -85,6 +85,15 @@ posée dans l'application, lot 30), et qu'une fiche est elle-même fusionnée (�
 `list_listings` ne rend plus une fiche fusionnée. `add_listing_link` n'est plus refusé quand la
 page montre une des autres agences de la fiche. Ni annulation de fusion ni retrait d'agence par le
 connecteur.
+
+Lot 31 (ADR 0044) : sept outils de plus (`mcp-drafts.ts`) pour les brouillons, à valider ou non.
+`list_drafts`, `get_draft` et `find_similar_drafts` les lisent et les comparent entre eux,
+`find_similar_listings` accepte `draftId` pour comparer un brouillon aux annonces suivies ;
+`update_draft` corrige la fiche pré-remplie ; `set_draft_status` garde (l'annonce est créée), écarte ou
+repêche ; `merge_draft_into_listing` dit qu'un brouillon est une annonce suivie (« C'est la
+même ») ; `merge_drafts` fusionne deux brouillons du même bien. Chaque décision et chaque fusion
+demandent `confirmedInChat: true` ; garder ou écarter suit la décision à plusieurs (lot 21).
+L'e-mail de l'expéditeur d'une alerte n'est jamais rendu.
 
 ## Outils
 
@@ -430,7 +439,37 @@ garde-fou d'une fusion), `compared`, `summary`. Plus large que `find_duplicates`
 les doublons probables : une annonce « déjà vue » sans adresse et au prix changé y remonte. `q`
 filtre (titre, commune, quartier, adresse, agences, références, prix, surface) sans changer le
 classement. Les doublons déjà fusionnés ne sont pas proposés. Une ressemblance n'est jamais une
-preuve
+preuve. Lot 31 : `draftId` compare un brouillon (à valider, écarté…) aux annonces suivies
+
+#### `list_drafts`
+
+Entrée : `status` (`pending` « À valider » par défaut, `dismissed` écartés, `merged` reconnus,
+`accepted` validés), `explorationId`, `search` (titre, commune, quartier, adresse, agence,
+référence, lien, raison de l'écart ; sans accents ni casse), `limit` (50 par défaut, 200 au plus)
+
+Réponse : Lot 31. `total` et `items` : les brouillons les plus récents d'abord, chacun avec sa fiche
+pré-remplie, son lien, son origine et son portail, la raison de son écart, le brouillon qui l'a
+absorbé (`mergedIntoDraftId`), ses doublons probables parmi les annonces suivies, la proposition en
+cours et `updatedAt` ; un brouillon à valider porte aussi son adéquation aux critères et ses
+chiffres. Jamais l'e-mail de l'expéditeur d'une alerte (`emailFrom`)
+
+#### `get_draft`
+
+Entrée : `draftId`
+
+Réponse : Lot 31. Le brouillon complet (fiche et provenance par champ, extrait lu, avertissements,
+doublons, écart, fusion, proposition, adéquation et chiffres s'il est à valider), sans
+`emailFrom` ; `updatedAt` est le garde-fou de `update_draft` et `merge_drafts`
+
+#### `find_similar_drafts`
+
+Entrée : `draftId`, `statuses` (`pending` et `dismissed` par défaut), `limit` (8 par défaut, 20 au
+plus)
+
+Réponse : Lot 31. `items` (les brouillons qui lui ressemblent, du plus au moins ressemblant, avec la
+règle de `find_similar_listings` mais sans distance : niveau, note, ce qui concorde, ce qui
+diffère, statut, raison de l'écart), `compared`. Les brouillons déjà fusionnés dans un autre ne
+sont pas proposés. Une ressemblance n'est jamais une preuve
 
 ### Écriture (portée `listings:write`)
 
@@ -787,6 +826,57 @@ et cette référence est reconnue comme la même (doublon `certain`, rattachemen
 l'exploration) et `add_listing_link` accepte son lien. Journal `listing.seller_added` (canal `mcp`).
 Aucun retrait par le connecteur
 
+#### `update_draft`
+
+Entrée : `draftId`, `patch` (champs de la fiche pré-remplie ; un sous-objet fourni remplace
+l'existant), `expectedUpdatedAt` (obligatoire, lu avec `get_draft`), `provenance` (`ai` par défaut,
+`user` si le membre a dicté)
+
+Garde-fous et effets : Lot 31. Un brouillon à valider ou écarté seulement (refus lisible pour un
+brouillon validé ou reconnu) ; le statut ne change pas. Mêmes règles que `update_listing` (ADR 0040) : ni plafond, ni loyer de marché, ni sorties du géocodeur ; taxe foncière et part non
+récupérable `ai` gardées seulement avec leur extrait. Une localisation corrigée est replacée à la
+lecture, les doublons probables sont recalculés. Journal `draft.updated` (canal `mcp`)
+
+#### `set_draft_status`
+
+Entrée : `draftId`, `decision` (`keep` : ajouter à la liste ; `discard` : écarter ; `restore` :
+remettre « À valider »), `reason` (obligatoire pour écarter), `confirmedInChat` (obligatoire)
+
+Garde-fous et effets : Lot 31. Refusé en réponse sans `confirmedInChat: true`. `keep` crée
+l'annonce depuis la fiche pré-remplie, avec les liens des brouillons absorbés ; `discard` l'écarte
+(jamais reproposé à l'exploration) ; `restore` remet un brouillon écarté « À valider » (un brouillon
+absorbé redevient un brouillon à part). Lot 21 : dans un espace où « Décider à plusieurs » est
+activé, `keep` et `discard` créent une proposition au nom du membre connecté ; une proposition d'un
+autre membre déjà en cours bloque l'appel. Journal `draft.accepted`, `draft.dismissed`,
+`draft.restored` ou `decision.proposed` (canal `mcp`)
+
+#### `merge_draft_into_listing`
+
+Entrée : `draftId`, `listingId`, `confirmedInChat` (obligatoire), `expectedListingUpdatedAt`
+(obligatoire, lu avec `get_listing`)
+
+Garde-fous et effets : Lot 31. « C'est la même », comme dans l'application : le lien du brouillon
+rejoint la fiche (son prix devient celui de ce lien ; un lien déjà sur la fiche est vérifié), une
+autre agence lue est enregistrée avec sa référence, les faits lus s'appliquent par une vérification
+(ni statut ni autre champ) ; les liens des brouillons absorbés rejoignent aussi la fiche. Le
+brouillon passe « reconnu ». S'applique tout de suite, même à plusieurs. Refus lisible sans
+`confirmedInChat: true`, pour une annonce fusionnée ou un brouillon déjà traité. Journal
+`draft.merged` (canal `mcp`)
+
+#### `merge_drafts`
+
+Entrée : `keepDraftId`, `mergeDraftId`, `confirmedInChat` (obligatoire), `expectedKeepUpdatedAt`,
+`expectedMergeUpdatedAt` (obligatoires, lus avec `get_draft`)
+
+Garde-fous et effets : Lot 31. Deux brouillons à valider ou écartés du même bien : le gardé
+l'emporte, ses vides se complètent de l'autre (les champs du bien d'une fusion de fiches ; le prix,
+la localisation et le vendeur seulement s'ils manquent), il reprend son lien s'il n'en avait pas.
+L'autre est écarté (« Doublon du brouillon … »), lié au gardé (`mergedIntoDraftId`) : son lien
+rejoindra l'annonce créée depuis le gardé, ou la fiche suivie qui est la même. Rien n'est supprimé ;
+repêcher l'absorbé en refait un brouillon à part. Une proposition en cours sur l'absorbé devient
+caduque. Refus lisible sans `confirmedInChat: true`, pour un brouillon validé, reconnu ou déjà
+fusionné, ou si un brouillon a changé depuis la lecture. Journal `draft.absorbed` (canal `mcp`)
+
 ## Ressources
 
 | URI                      | Contenu                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -1068,6 +1158,9 @@ Si Chloé n'avait pas encore noté, `get_listing` ne lui aurait pas montré l'av
   `add_listing_seller` refusent sans `confirmedInChat: true` ; une fusion s'annule dans
   l'application pendant sept jours, puis l'application supprime le doublon (lot 30). Une annonce
   créée malgré un doublon probable laisse le membre trancher dans l'application.
+- **Accord du membre sur les brouillons** (lot 31) : `set_draft_status`, `merge_draft_into_listing` et
+  `merge_drafts` refusent sans `confirmedInChat: true` ; garder ou écarter suit la décision à
+  plusieurs ; l'e-mail de l'expéditeur d'une alerte n'est jamais rendu.
 - **Journal** : chaque écriture dans `ActivityLog`, canal `mcp`.
 - **Données encadrées** dans `<apart_listing_data>`.
 - **Membres en lecture seule** : `list_members` lit, aucun outil n'invite, n'annule, ne change de

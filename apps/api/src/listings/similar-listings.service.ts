@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { ListingInputSchema, PointSchema } from '@apart/contracts'
 import type {
+  ListingInput,
   LocationPrecision,
   Point,
   SimilarListingsResult,
@@ -171,30 +172,7 @@ export class SimilarListingsService {
       if (!draft) throw new NotFoundException('Brouillon introuvable')
       const parsed = ListingInputSchema.safeParse(draft.input)
       if (!parsed.success) return { probe: { url: draft.url }, point: null }
-      const input = parsed.data
-      const location = input.location
-      return {
-        probe: {
-          url: draft.url ?? input.url,
-          address: location.addressRaw,
-          commune: location.commune,
-          district: location.district,
-          price: input.price > 0 ? input.price : null,
-          surface: input.surface,
-          rooms: input.rooms,
-          floor: input.floor,
-          dpeClass: input.dpeClass,
-          constructionYear: input.constructionYear,
-          sellerType: input.sellerType,
-          sellerName: input.sellerName,
-          reference: input.sellerReference,
-          precision: location.precision,
-        },
-        point:
-          location.point && isPrecise(location.precision)
-            ? location.point
-            : null,
-      }
+      return draftProbe(parsed.data, draft.url)
     }
     return {
       probe: {
@@ -214,5 +192,37 @@ export class SimilarListingsService {
       },
       point: null,
     }
+  }
+}
+
+/**
+ * La sonde d'un brouillon : sa fiche pré-remplie et son lien ; le repère ne
+ * compte qu'à l'adresse. Lot 31 : partagée par la comparaison d'un brouillon
+ * aux annonces suivies et aux autres brouillons.
+ */
+export function draftProbe(
+  input: ListingInput,
+  url: string | null
+): { probe: SimilarProbe; point: Point | null } {
+  const location = input.location
+  return {
+    probe: {
+      url: url ?? input.url,
+      address: location.addressRaw,
+      commune: location.commune,
+      district: location.district,
+      price: input.price > 0 ? input.price : null,
+      surface: input.surface,
+      rooms: input.rooms,
+      floor: input.floor,
+      dpeClass: input.dpeClass,
+      constructionYear: input.constructionYear,
+      sellerType: input.sellerType,
+      sellerName: input.sellerName,
+      reference: input.sellerReference,
+      precision: location.precision,
+    },
+    point:
+      location.point && isPrecise(location.precision) ? location.point : null,
   }
 }

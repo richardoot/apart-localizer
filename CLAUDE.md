@@ -138,6 +138,8 @@ Schéma Postgres `app`. Les colonnes géo sont `Unsupported` avec latitude/longi
   cachée des listes, puis supprimée après sept jours (lot 30) ; `listing_merges.moved` garde ce
   qu'il faut pour annuler ; `listing_sellers` porte les autres agences, la principale reste dans
   `listings.seller_*`.
+- Brouillons (lot 31) : `listing_drafts.updated_at` (garde-fou) et `merged_into_draft_id` (le
+  brouillon gardé qui en a absorbé un autre ; son lien rejoint l'annonce créée depuis le gardé).
 - Doublons à confirmer (lot 30) : `duplicate_pairs`, une ligne par paire (`listing_a_id` <
   `listing_b_id`, `CHECK` écrit à la main), `pending` (question posée) ou `distinct` (un membre a
   dit non).
@@ -195,10 +197,10 @@ Règles :
 
 ### `apps/api/src/mcp` : connecteur MCP
 
-Orchestre les services, aucune logique métier. Quarante-deux outils, cinq prompts, deux ressources
+Orchestre les services, aucune logique métier. Quarante-neuf outils, cinq prompts, deux ressources
 (`apart://schema/listing`, `apart://glossaire`), décrits dans `docs/mcp.md` ; les outils par thème
 sont dans `mcp-checks.ts`, `mcp-exploration.ts`, `mcp-agency.ts`, `mcp-links.ts`, `mcp-opinions.ts`,
-`mcp-merge.ts`. Entrées = schémas de `contracts/src/mcp.ts`, refus rendus en réponse, données
+`mcp-merge.ts`, `mcp-drafts.ts`. Entrées = schémas de `contracts/src/mcp.ts`, refus rendus en réponse, données
 encadrées, journal canal `mcp`, portées `listings:read` / `listings:write` (seules celles-ci
 comptent dans le jeton ; la découverte annonce `email`, seule portée que GoTrue délivre, ADR 0017 ;
 consentement par la page web `/oauth/consent`), garde-fous optimistes (`expectedPrice`,
@@ -220,6 +222,11 @@ Règles :
   et l'application demande au membre si c'est le même bien ; un doublon certain bloque toujours.
 - Exploration : `record_exploration` ne crée que des brouillons « À valider », jamais une annonce ni
   une proposition ; le serveur retrie, `runKey` est idempotent.
+- Brouillons (lot 31) : lus et corrigés (`update_draft`, garde-fou `expectedUpdatedAt`, règles de
+  l'ADR 0040) ; garder, écarter, repêcher (`set_draft_status`), « C'est la même »
+  (`merge_draft_into_listing`) et fusionner deux brouillons (`merge_drafts`) seulement avec
+  `confirmedInChat: true` ; garder ou écarter suit la décision à plusieurs (une proposition au nom
+  du membre) ; l'e-mail de l'expéditeur d'une alerte n'est jamais rendu.
 - Liens : `add_listing_link` (origine `claude`) refuse si le vendeur, l'agence ou la référence lus
   contredisent la fiche, et accepte la page d'une autre agence de la fiche ; `review_listings` ne
   rattache que si l'agence et la référence sont les mêmes ; aucun contournement de captcha.
@@ -398,6 +405,7 @@ MCP et consentement OAuth : 0017.
 - Doublons jugés sur tous les faits (contradictions, blocage à la création) : 0041
 - Une adresse saisie recalcule la fiche (point saisi, règle unique des recalculs) : 0042
 - Lot 30, doublons confirmés dans l'application, fiche absorbée supprimée après sept jours : 0043
+- Lot 31, les brouillons au connecteur (lire, corriger, décider, fusionner deux brouillons) : 0044
 
 Identifiants de code en anglais ; textes d'interface, messages d'erreur métier et descriptions
 Zod en français.

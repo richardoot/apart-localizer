@@ -2,6 +2,11 @@ import { z } from 'zod'
 import { ExtractionRequestSchema } from './ai.js'
 import { AssumptionsOverrideSchema } from './assumptions.js'
 import { PriceEventInputSchema } from './collaboration.js'
+import {
+  DRAFT_DISMISS_REASON_MAX,
+  DraftUpdateSchema,
+  ListingDraftStatusSchema,
+} from './drafts.js'
 import { DuplicateProbeSchema } from './duplicates.js'
 import {
   ObservedSellerTypeSchema,
@@ -807,6 +812,13 @@ export const McpFindSimilarListingsInputSchema = z
       .describe(
         'Annonce enregistrée à comparer aux autres (exclue des résultats) ; ses caractéristiques complètent celles données ici'
       ),
+    draftId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe(
+        'Lot 31 : un brouillon (à valider, écarté…) à comparer aux annonces suivies (list_drafts)'
+      ),
     ...SimilarProbeFieldsSchema.shape,
     q: z
       .string()
@@ -826,6 +838,7 @@ export const McpFindSimilarListingsInputSchema = z
   .refine(
     input =>
       input.listingId !== undefined ||
+      input.draftId !== undefined ||
       Boolean(input.q) ||
       input.url !== undefined ||
       input.address !== undefined ||
@@ -927,4 +940,158 @@ export const McpAddListingSellerInputSchema = z
   )
 export type McpAddListingSellerInput = z.infer<
   typeof McpAddListingSellerInputSchema
+>
+
+// ---------------------------------------------------------------------------
+// Lot 31 (ADR 0044) : les brouillons au connecteur
+// ---------------------------------------------------------------------------
+
+const draftId = z
+  .string()
+  .uuid()
+  .describe('Identifiant du brouillon (uuid, voir list_drafts)')
+
+const confirmedInChat = (what: string) =>
+  z
+    .boolean()
+    .describe(
+      `Vrai seulement si le membre vient de confirmer dans la conversation ${what} ; sans cela l’appel est refusé et rien n’est écrit`
+    )
+
+/** list_drafts : les brouillons d'un statut, les plus récents d'abord. */
+export const McpListDraftsInputSchema = z.object({
+  status: ListingDraftStatusSchema.default('pending').describe(
+    'pending « À valider » (par défaut), dismissed écartés (archives), merged reconnus comme une annonce suivie, accepted validés (annonce créée)'
+  ),
+  explorationId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe('Seulement les brouillons de cette exploration (lot 16)'),
+  search: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe(
+      'Texte cherché dans le titre, la commune, le quartier, l’adresse, l’agence, la référence, le lien et la raison de l’écart'
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .default(50)
+    .describe('Nombre de brouillons rendus (200 au plus)'),
+})
+export type McpListDraftsInput = z.infer<typeof McpListDraftsInputSchema>
+
+export const McpGetDraftInputSchema = z.object({ draftId })
+export type McpGetDraftInput = z.infer<typeof McpGetDraftInputSchema>
+
+/** update_draft : corriger la fiche pré-remplie d'un brouillon. */
+export const McpUpdateDraftInputSchema = z.object({
+  draftId,
+  ...DraftUpdateSchema.shape,
+  provenance: McpProvenanceSchema,
+})
+export type McpUpdateDraftInput = z.infer<typeof McpUpdateDraftInputSchema>
+
+/** set_draft_status : garder (créer l'annonce), écarter, ou remettre « À valider ». */
+export const McpSetDraftStatusInputSchema = z
+  .object({
+    draftId,
+    decision: z
+      .enum(['keep', 'discard', 'restore'])
+      .describe(
+        'keep : ajouter à la liste (l’annonce est créée depuis la fiche pré-remplie) ; discard : écarter (raison obligatoire) ; restore : remettre « À valider » un brouillon écarté'
+      ),
+    reason: z
+      .string()
+      .trim()
+      .max(DRAFT_DISMISS_REASON_MAX)
+      .optional()
+      .describe('Pourquoi : obligatoire pour écarter'),
+    confirmedInChat: confirmedInChat('ce choix sur ce brouillon'),
+  })
+  .superRefine((value, ctx) => {
+    if (value.decision === 'discard' && !value.reason?.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['reason'],
+        message: 'Écarter un brouillon demande une raison',
+      })
+    }
+  })
+export type McpSetDraftStatusInput = z.infer<
+  typeof McpSetDraftStatusInputSchema
+>
+
+/** merge_draft_into_listing : « C'est la même » : le brouillon est une annonce suivie. */
+export const McpMergeDraftIntoListingInputSchema = z.object({
+  draftId,
+  listingId: z
+    .string()
+    .uuid()
+    .describe(
+      'L’annonce suivie qui est le même bien (list_listings, find_similar_listings)'
+    ),
+  confirmedInChat: confirmedInChat(
+    ', après avoir vu le brouillon et l’annonce, que c’est le même bien'
+  ),
+  expectedListingUpdatedAt: z
+    .string()
+    .datetime()
+    .describe('Garde-fou : `updatedAt` de l’annonce lu avec get_listing'),
+})
+export type McpMergeDraftIntoListingInput = z.infer<
+  typeof McpMergeDraftIntoListingInputSchema
+>
+
+/** merge_drafts : deux brouillons du même bien n'en font plus qu'un. */
+export const McpMergeDraftsInputSchema = z.object({
+  keepDraftId: z
+    .string()
+    .uuid()
+    .describe('Le brouillon gardé (à valider ou écarté)'),
+  mergeDraftId: z
+    .string()
+    .uuid()
+    .describe(
+      'Le brouillon en double : ses champs complètent les vides du gardé, son lien rejoindra l’annonce créée depuis le gardé ; il est écarté comme doublon'
+    ),
+  confirmedInChat: confirmedInChat(
+    ', après avoir vu les deux brouillons, que c’est le même bien'
+  ),
+  expectedKeepUpdatedAt: z
+    .string()
+    .datetime()
+    .describe('Garde-fou : `updatedAt` du brouillon gardé (get_draft)'),
+  expectedMergeUpdatedAt: z
+    .string()
+    .datetime()
+    .describe('Garde-fou : `updatedAt` du brouillon en double (get_draft)'),
+})
+export type McpMergeDraftsInput = z.infer<typeof McpMergeDraftsInputSchema>
+
+/** find_similar_drafts : les brouillons qui ressemblent à un brouillon. */
+export const McpFindSimilarDraftsInputSchema = z.object({
+  draftId,
+  statuses: z
+    .array(ListingDraftStatusSchema)
+    .min(1)
+    .default(['pending', 'dismissed'])
+    .describe(
+      'Statuts des brouillons comparés : à valider et écartés par défaut'
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(SIMILAR_LISTINGS_MAX)
+    .default(SIMILAR_LISTINGS_DEFAULT),
+})
+export type McpFindSimilarDraftsInput = z.infer<
+  typeof McpFindSimilarDraftsInputSchema
 >

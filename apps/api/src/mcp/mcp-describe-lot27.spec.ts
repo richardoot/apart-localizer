@@ -118,12 +118,13 @@ const similar = (over: Partial<SimilarListing> = {}): SimilarListing => ({
 
 describe('MCP lot 27 : fusion des doublons, autres agences, annonces ressemblantes', () => {
   it('trois outils de plus, aucun de suppression ni d’annulation', () => {
-    expect(MCP_TOOL_NAMES.slice(-3)).toEqual([
+    const start = MCP_TOOL_NAMES.indexOf('find_similar_listings')
+    expect(MCP_TOOL_NAMES.slice(start, start + 3)).toEqual([
       'find_similar_listings',
       'merge_listings',
       'add_listing_seller',
     ])
-    expect(MCP_TOOL_NAMES).toHaveLength(42)
+    expect(MCP_TOOL_NAMES).toHaveLength(49)
     expect(
       MCP_TOOL_NAMES.some(name => /delete|remove|undo|unmerge/.test(name))
     ).toBe(false)

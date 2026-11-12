@@ -630,6 +630,21 @@ export function describeActivity(
       return describe(
         `a reconnu une annonce déjà suivie dans une annonce ${draftOrigin(after)}${quoted(text(after, 'listingTitle'))}${text(after, 'summary') ? ` : ${text(after, 'summary')}` : ''}`
       )
+    // Lot 31 : brouillons corrigés et fusionnés par Claude ou un membre.
+    case 'draft.updated': {
+      const fields =
+        isRecord(after) && Array.isArray(after.fields)
+          ? after.fields.filter((f): f is string => typeof f === 'string')
+          : []
+      const labels = fields.map(f => listingFieldLabel(f))
+      return describe(
+        `a corrigé une annonce ${draftOrigin(after)}${quoted(text(after, 'title'))}${labels.length ? ` : ${labels.join(', ')}` : ''}`
+      )
+    }
+    case 'draft.absorbed':
+      return describe(
+        `a fusionné une annonce ${draftOrigin(after)}${quoted(text(after, 'absorbedTitle'))} dans le brouillon${quoted(text(after, 'keptTitle'))} (même bien)`
+      )
     case 'draft.distinct':
       return describe(
         `a jugé distincte une annonce ${draftOrigin(after)} (ce n’est pas un doublon)`

@@ -111,7 +111,7 @@ describe('MCP lot 18 : une annonce, plusieurs portails', () => {
   it('un outil de plus en fin de liste, aucun de suppression, prompts inchangés en nombre', () => {
     // Lot 27 : trois outils de plus à la suite.
     expect(MCP_TOOL_NAMES[38]).toBe('add_listing_link')
-    expect(MCP_TOOL_NAMES).toHaveLength(42)
+    expect(MCP_TOOL_NAMES).toHaveLength(49)
     expect(MCP_TOOL_NAMES.some(name => /delete|remove/.test(name))).toBe(false)
     expect(MCP_PROMPT_NAMES).toHaveLength(5)
   })

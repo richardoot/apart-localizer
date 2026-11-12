@@ -1269,6 +1269,11 @@ model ListingDraft {
   attachedLinkId    String?            @map("attached_link_id")
   attachedAt        DateTime?          @map("attached_at") @db.Timestamptz(6)
   detachedAt        DateTime?          @map("detached_at") @db.Timestamptz(6)
+  /// Lot 31 : dernière écriture sur le brouillon (garde-fou `expectedUpdatedAt`).
+  updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  /// Lot 31 : le brouillon gardé qui a absorbé celui-ci (deux brouillons du
+  /// même bien fusionnés) ; son lien rejoint l'annonce créée depuis le gardé.
+  mergedIntoDraftId String?            @map("merged_into_draft_id")
 
   workspace         Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   decidedBy         Member?                @relation("DraftDecider", fields: [decidedById], references: [id], onDelete: SetNull)
@@ -1276,12 +1281,15 @@ model ListingDraft {
   listing           Listing?               @relation(fields: [listingId], references: [id], onDelete: SetNull)
   exploration       Exploration?           @relation(fields: [explorationId], references: [id], onDelete: SetNull)
   mergedCheck       ListingCheck?          @relation(fields: [mergedCheckId], references: [id], onDelete: SetNull)
+  mergedIntoDraft   ListingDraft?          @relation("DraftMerged", fields: [mergedIntoDraftId], references: [id], onDelete: SetNull)
+  absorbedDrafts    ListingDraft[]         @relation("DraftMerged")
   lines             ExplorationCandidate[]
   /// Lot 21 : les décisions à plusieurs sur ce brouillon.
   decisionProposals DecisionProposal[]
 
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, url])
+  @@index([mergedIntoDraftId])
   @@map("listing_drafts")
   @@schema("app")
 }

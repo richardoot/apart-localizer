@@ -1530,3 +1530,24 @@ nouvelle, aucun outil MCP nouveau (42).
 
 Limites : la suppression attend une écriture (création ou fusion) dans l'espace ; une fiche
 supprimée ne se retrouve plus par son lien direct ni dans l'export.
+
+## Lot 31 : les brouillons au connecteur
+
+Statut : livré le 12 novembre 2026 (code, tests, documentation ; ADR 0044). Une migration
+additive (`listing_drafts.updated_at`, `merged_into_draft_id`), aucune variable nouvelle, sept
+outils MCP (49).
+
+- **Pourquoi** : Claude ne voyait pas les brouillons (« À valider » et archives) ; chercher des
+  doublons parmi les brouillons écartés, corriger une valeur mal lue ou garder un brouillon
+  demandait d'ouvrir l'application.
+- **Lire et comparer** : les brouillons par statut et par texte, un brouillon complet, les
+  brouillons qui se ressemblent, et un brouillon comparé aux annonces suivies. Jamais l'e-mail de
+  l'expéditeur d'une alerte.
+- **Corriger et décider** : la fiche pré-remplie se corrige ; un brouillon se garde (l'annonce est
+  créée), s'écarte, se repêche, ou se reconnaît comme une annonce suivie, toujours après l'accord
+  du membre dans la conversation ; à plusieurs, garder ou écarter devient une proposition.
+- **Fusionner deux brouillons** : le gardé l'emporte et se complète ; l'autre est écarté comme
+  doublon et son lien rejoindra l'annonce créée.
+
+Limites : la ressemblance entre brouillons ne mesure pas de distance ; la fusion de deux brouillons
+n'existe qu'au connecteur (dans l'application, on écarte l'un des deux).

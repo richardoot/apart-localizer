@@ -132,6 +132,7 @@ import type { WhatsNewService } from '../whats-new/whats-new.service'
 import type { ExplorationsService } from '../exploration/explorations.service'
 import type { ListingLinksService } from '../listings/listing-links.service'
 import type { DecisionsService } from '../decisions/decisions.service'
+import type { DraftsService } from '../inbound/drafts.service'
 import type { ListingMergeService } from '../listings/listing-merge.service'
 import type { ListingSellersService } from '../listings/listing-sellers.service'
 import type { SimilarListingsService } from '../listings/similar-listings.service'
@@ -179,6 +180,8 @@ export interface McpToolContext {
   similar: SimilarListingsService
   sellers: ListingSellersService
   merges: ListingMergeService
+  /** Lot 31 : les brouillons (lecture, correction, décision, fusion). */
+  drafts: DraftsService
 }
 
 const CHANNEL = 'mcp' as const
@@ -193,7 +196,8 @@ const CHANNEL = 'mcp' as const
  * (exploration des portails par les critères, `mcp-exploration.ts`), lot 17
  * (questions aux agences, `mcp-agency.ts`), lot 18 (une annonce, plusieurs
  * portails, `mcp-links.ts`), lot 27 (annonces ressemblantes, fusion des
- * doublons, autres agences, `mcp-merge.ts`).
+ * doublons, autres agences, `mcp-merge.ts`), lot 31 (les brouillons,
+ * `mcp-drafts.ts`).
  */
 export const MCP_TOOL_NAMES = [
   'list_listings',
@@ -238,6 +242,13 @@ export const MCP_TOOL_NAMES = [
   'find_similar_listings',
   'merge_listings',
   'add_listing_seller',
+  'list_drafts',
+  'get_draft',
+  'find_similar_drafts',
+  'update_draft',
+  'set_draft_status',
+  'merge_draft_into_listing',
+  'merge_drafts',
 ] as const
 
 /**

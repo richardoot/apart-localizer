@@ -142,15 +142,16 @@ export function registerMergeTools(
     {
       title: 'Annonces ressemblantes (déjà vue ?)',
       description:
-        "Les annonces de l'espace qui ressemblent le plus à une annonce enregistrée (`listingId`, exclue des résultats) ou à des caractéristiques lues sur une page (`commune`, `district`, `price`, `surface`, `rooms`, `floor`, `dpeClass`, `constructionYear`, `address`, `url`, `sellerName`, `reference`), de la plus ressemblante à la moins ressemblante, écartées comprises (une annonce « déjà vue » a souvent été écartée). `q` cherche un texte (titre, commune, quartier, adresse, agence, référence, prix, surface) ; les annonces trouvées restent classées par ressemblance. " +
+        "Les annonces de l'espace qui ressemblent le plus à une annonce enregistrée (`listingId`, exclue des résultats), à un brouillon (`draftId`, lot 31 : list_drafts) ou à des caractéristiques lues sur une page (`commune`, `district`, `price`, `surface`, `rooms`, `floor`, `dpeClass`, `constructionYear`, `address`, `url`, `sellerName`, `reference`), de la plus ressemblante à la moins ressemblante, écartées comprises (une annonce « déjà vue » a souvent été écartée). `q` cherche un texte (titre, commune, quartier, adresse, agence, référence, prix, surface) ; les annonces trouvées restent classées par ressemblance. " +
         'Chaque annonce porte un niveau (la même annonce, très proche, proche, peu ressemblante), une note de 0 à 1, ce qui concorde et ce qui diffère. Plus large que find_duplicates, qui ne rend que les doublons probables. Les doublons déjà fusionnés ne sont pas proposés. Lecture seule ; une ressemblance n’est jamais une preuve.',
       inputSchema: McpFindSimilarListingsInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ listingId, q, limit, ...fields }) =>
+    async ({ listingId, draftId, q, limit, ...fields }) =>
       answer(async () => {
         const result = await ctx.similar.find(ctx.member, {
           listingId,
+          draftId,
           q,
           limit,
           fields,

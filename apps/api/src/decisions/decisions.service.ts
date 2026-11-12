@@ -358,7 +358,7 @@ export class DecisionsService {
       })
     }
     if (input.choice === 'keep') {
-      const accepted = await this.drafts.accept(member, draft.id)
+      const accepted = await this.drafts.accept(member, draft.id, { channel })
       return this.result('applied', {
         message: appliedMessage('draft', 'keep', null),
         listingId: accepted.listingId,
@@ -367,10 +367,12 @@ export class DecisionsService {
         undoable: false,
       })
     }
-    await this.drafts.decide(member, draft.id, {
-      status: 'dismissed',
-      ...(reason ? { reason } : {}),
-    })
+    await this.drafts.decide(
+      member,
+      draft.id,
+      { status: 'dismissed', ...(reason ? { reason } : {}) },
+      { channel }
+    )
     return this.result('applied', {
       message: appliedMessage('draft', 'discard', null),
       draftId: draft.id,

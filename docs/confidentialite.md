@@ -53,7 +53,8 @@ Supabase>` ; la file d'un membre n'est jamais rejouée sous le compte d'un autre
   inactif sans configuration.
 - **Alertes e-mail entrantes** : le webhook n'accepte qu'un appel signé (HMAC, secret du
   serveur) ; l'e-mail n'est pas conservé : seuls son sujet, son expéditeur et les extraits des
-  annonces repérées vivent dans les brouillons.
+  annonces repérées vivent dans les brouillons. Le connecteur MCP lit les brouillons (lot 31) sans
+  jamais rendre l'adresse de l'expéditeur.
 - **IA** : seul le texte de l'annonce (ou de l'alerte) part au modèle, jamais de donnée de
   membre (docs/ia.md).
 - **Vérifications des annonces (lot 15, ADR 0025)** : la page d'un portail est lue par Claude

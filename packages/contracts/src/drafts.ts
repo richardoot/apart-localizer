@@ -4,7 +4,8 @@ import { DecisionProposalSchema } from './decisions.js'
 import { DuplicateCandidateSchema } from './duplicates.js'
 import { LocationPrecisionSchema } from './enums.js'
 import { PointSchema } from './geojson.js'
-import { ListingInputSchema } from './listing.js'
+import { ListingInputSchema, ListingUpdateSchema } from './listing.js'
+import { SimilarListingSchema } from './listing-merge.js'
 import { ListingEvaluationSchema } from './metrics.js'
 import { ExplorationPortalSchema, ListingPortalSchema } from './portals.js'
 
@@ -208,8 +209,58 @@ export const ListingDraftSchema = z.object({
     .describe(
       'Lot 21 : le repère du brouillon sur la carte et sa précision, recalculés hors ligne à la lecture ; null sinon'
     ),
+  // Lot 31 : les brouillons au connecteur MCP.
+  updatedAt: z
+    .string()
+    .datetime()
+    .optional()
+    .describe(
+      'Lot 31 : dernière écriture sur le brouillon ; à repasser en `expectedUpdatedAt` pour le corriger ou le fusionner'
+    ),
+  mergedIntoDraftId: z
+    .string()
+    .uuid()
+    .nullable()
+    .optional()
+    .describe(
+      'Lot 31 : le brouillon gardé qui a absorbé celui-ci (deux brouillons du même bien fusionnés) ; son lien rejoindra l’annonce créée depuis le gardé'
+    ),
 })
 export type ListingDraft = z.infer<typeof ListingDraftSchema>
+
+/**
+ * Lot 31 (ADR 0044) : corriger la fiche pré-remplie d'un brouillon à valider
+ * ou écarté. Seuls les champs donnés changent ; un sous-objet fourni
+ * (localisation, phase 2, travaux) remplace l'existant.
+ */
+export const DraftUpdateSchema = z.object({
+  patch: ListingUpdateSchema.describe(
+    'Champs de la fiche pré-remplie à corriger ; les sous-objets fournis remplacent les existants'
+  ),
+  expectedUpdatedAt: z
+    .string()
+    .datetime()
+    .describe('Garde-fou : `updatedAt` du brouillon lu juste avant'),
+})
+export type DraftUpdate = z.infer<typeof DraftUpdateSchema>
+
+/** Lot 31 : un brouillon qui ressemble à un autre brouillon. */
+export const SimilarDraftSchema = SimilarListingSchema.omit({
+  listingId: true,
+  status: true,
+  linkCount: true,
+}).extend({
+  draftId: z.string().uuid(),
+  status: ListingDraftStatusSchema,
+  dismissReason: z.string().nullable(),
+})
+export type SimilarDraft = z.infer<typeof SimilarDraftSchema>
+
+export const SimilarDraftsResultSchema = z.object({
+  items: z.array(SimilarDraftSchema),
+  compared: z.number().int().min(0).describe('Nombre de brouillons comparés'),
+})
+export type SimilarDraftsResult = z.infer<typeof SimilarDraftsResultSchema>
 
 export const ListingDraftQuerySchema = z.object({
   status: ListingDraftStatusSchema.default('pending'),
@@ -300,6 +351,15 @@ export const ListingDraftAcceptResultSchema = z.object({
       'L’annonce créée ; lot 21 : null tant que l’accord des membres n’est pas complet (le brouillon porte alors sa proposition)'
     ),
   title: z.string(),
+  links: z
+    .object({
+      added: z.array(z.string()),
+      skipped: z.array(z.object({ url: z.string(), why: z.string() })),
+    })
+    .optional()
+    .describe(
+      'Lot 31 : les liens des brouillons absorbés par celui-ci, ajoutés à l’annonce créée ou passés (avec pourquoi)'
+    ),
 })
 export type ListingDraftAcceptResult = z.infer<
   typeof ListingDraftAcceptResultSchema

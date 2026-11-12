@@ -14,7 +14,10 @@ import {
   ListingInputSchema,
 } from '@apart/contracts'
 import type {
+  ActivityChannel,
   DecisionProposal,
+  DraftUpdate,
+  FieldSource,
   ListingCriteriaFit,
   ListingDraft,
   ListingDraftAcceptResult,
@@ -26,15 +29,22 @@ import type {
   ListingEvaluation,
   ListingInput,
   ListingObserved,
+  ListingMergeField,
   LocationPrecision,
   Point,
+  SimilarDraftsResult,
 } from '@apart/contracts'
 import {
+  connectorListingUpdate,
   detectLinkPortal,
+  draftMergePlan,
   formatEuros,
   linkKey,
+  mergedDraftReason,
   mergedListingRefusal,
+  rankSimilarListings,
 } from '@apart/domain'
+import type { SimilarRow } from '@apart/domain'
 import type { DecisionJournal } from '@apart/domain'
 import { z } from 'zod'
 import { ActivityService } from '../activity/activity.service'
@@ -50,9 +60,12 @@ import { evaluateListing } from '../listings/evaluate'
 import { ListingChecksService } from '../listings/listing-checks.service'
 import { ListingLinksService } from '../listings/listing-links.service'
 import { ListingsService } from '../listings/listings.service'
+import { DuplicatesService } from '../listings/duplicates.service'
 import { placementOf } from '../listings/listing.mapper'
+import { provenanceAfterPatch } from '../listings/provenance'
+import { draftProbe } from '../listings/similar-listings.service'
 import { PrismaService } from '../prisma/prisma.service'
-import type { Prisma } from '../generated/prisma'
+import { Prisma } from '../generated/prisma'
 import type {
   ListingDraft as DraftRow,
   ListingPortal,
@@ -92,10 +105,39 @@ interface DraftReading {
   decision: DecisionProposal | null
 }
 
-/** Lot 21 : une écriture née d'une décision à plusieurs. */
+/** Lot 21 : une écriture née d'une décision à plusieurs ; lot 31 : son canal. */
 export interface DraftWriteOptions {
   decision?: DecisionJournal
+  /** Le canal du journal : l'application (par défaut) ou le connecteur. */
+  channel?: ActivityChannel
 }
+
+/** Lot 31 : une correction de la fiche pré-remplie. */
+export interface DraftUpdateOptions {
+  channel?: ActivityChannel
+  /** Provenance des champs écrits (`ai` : Claude a lu ; `user` : dicté). */
+  provenance?: FieldSource
+}
+
+/** Lot 31 : les liens des brouillons absorbés, ajoutés à l'annonce ou écartés. */
+export interface AbsorbedLinks {
+  added: string[]
+  skipped: { url: string; why: string }[]
+}
+
+/** Lot 31 : deux brouillons fusionnés. */
+export interface DraftsMergeResult {
+  kept: ListingDraft
+  absorbed: ListingDraft
+  fills: ListingMergeField[]
+  differences: ListingMergeField[]
+}
+
+/** Les brouillons qu'on peut encore corriger ou fusionner. */
+const OPEN_DRAFT_STATUSES: readonly ListingDraftStatus[] = [
+  'pending',
+  'dismissed',
+]
 
 type DraftRowWithCheck = Prisma.ListingDraftGetPayload<{
   include: typeof draftInclude
@@ -185,6 +227,8 @@ export function toDraftDto(
     decision: reading?.decision ?? null,
     evaluation: reading?.evaluation ?? null,
     located: reading?.located ?? null,
+    updatedAt: row.updatedAt.toISOString(),
+    mergedIntoDraftId: row.mergedIntoDraftId,
   })
 }
 
@@ -225,7 +269,8 @@ export class DraftsService {
     private readonly listings: ListingsService,
     private readonly checks: ListingChecksService,
     private readonly fit: CandidateFitService,
-    private readonly links: ListingLinksService
+    private readonly links: ListingLinksService,
+    private readonly duplicates: DuplicatesService
   ) {}
 
   async list(
@@ -323,7 +368,8 @@ export class DraftsService {
     options: DraftWriteOptions = {}
   ): Promise<ListingDraft> {
     const row = await this.row(member, id)
-    if (decision.status === 'pending') return this.restore(member, row)
+    const channel = options.channel ?? 'web'
+    if (decision.status === 'pending') return this.restore(member, row, channel)
     this.assertPending(row)
     const createdId =
       decision.status === 'accepted' ? (decision.listingId ?? null) : null
@@ -357,7 +403,7 @@ export class DraftsService {
           workspaceId: member.workspaceId,
           listingId: createdId,
           actorMemberId: member.id,
-          channel: 'web',
+          channel,
           action:
             decision.status === 'accepted'
               ? 'draft.accepted'
@@ -378,7 +424,7 @@ export class DraftsService {
           workspaceId: member.workspaceId,
           target: { draftId: id },
           actorMemberId: member.id,
-          channel: 'web',
+          channel,
           why: 'le brouillon a été traité',
         })
       }
@@ -393,7 +439,8 @@ export class DraftsService {
   /** « Annuler » un écart : le brouillon revient « à valider ». */
   private async restore(
     member: Member,
-    row: DraftRowWithCheck
+    row: DraftRowWithCheck,
+    channel: ActivityChannel = 'web'
   ): Promise<ListingDraft> {
     if (row.status !== 'dismissed') {
       throw new ConflictException(
@@ -408,6 +455,8 @@ export class DraftsService {
           decidedAt: null,
           decidedById: null,
           dismissReason: null,
+          // Lot 31 : un brouillon absorbé repêché redevient un brouillon à part.
+          mergedIntoDraftId: null,
         },
       })
       if (written.count === 0) throw this.alreadyDecided()
@@ -415,7 +464,7 @@ export class DraftsService {
         {
           workspaceId: member.workspaceId,
           actorMemberId: member.id,
-          channel: 'web',
+          channel,
           action: 'draft.restored',
           after: { draftId: row.id, url: row.url, origin: originOf(row) },
         },
@@ -439,6 +488,7 @@ export class DraftsService {
   ): Promise<ListingDraftAcceptResult> {
     const row = await this.row(member, id)
     this.assertPending(row)
+    const channel = options.channel ?? 'web'
     const claimed = await this.prisma.listingDraft.updateMany({
       where: { id, status: 'pending' },
       data: {
@@ -456,7 +506,7 @@ export class DraftsService {
     let created
     try {
       created = await this.listings.create(member, input, {
-        channel: 'web',
+        channel,
         provenance: row.extractedBy === 'ai' ? 'ai' : 'listing',
         ignoreDuplicates: duplicates.length > 0,
         viaDecision: options.decision !== undefined,
@@ -475,7 +525,7 @@ export class DraftsService {
           workspaceId: member.workspaceId,
           listingId,
           actorMemberId: member.id,
-          channel: 'web',
+          channel,
           action: 'draft.accepted',
           after: {
             draftId: id,
@@ -493,7 +543,7 @@ export class DraftsService {
           workspaceId: member.workspaceId,
           target: { draftId: id },
           actorMemberId: member.id,
-          channel: 'web',
+          channel,
           why: 'le brouillon a été traité',
         })
       }
@@ -503,10 +553,13 @@ export class DraftsService {
         include: draftInclude,
       })
     })
+    // Lot 31 : les liens des brouillons absorbés rejoignent l'annonce créée.
+    const links = await this.attachAbsorbedLinks(member, id, listingId, channel)
     return {
       draft: toDraftDto(saved),
       listingId,
       title: created.listing.title,
+      ...(links.added.length || links.skipped.length ? { links } : {}),
     }
   }
 
@@ -550,8 +603,10 @@ export class DraftsService {
   async merge(
     member: Member,
     id: string,
-    request: ListingDraftMerge
+    request: ListingDraftMerge,
+    options: { channel?: Extract<ActivityChannel, 'web' | 'mcp'> } = {}
   ): Promise<ListingDraft> {
+    const channel = options.channel ?? 'web'
     const row = await this.row(member, id)
     this.assertPending(row)
     // Lot 27 : l'annonce suivie est un doublon probable, ou une annonce que
@@ -597,7 +652,7 @@ export class DraftsService {
           expectedUpdatedAt,
         },
         {
-          channel: 'web',
+          channel,
           origin: row.origin === 'exploration' ? 'exploration' : 'email',
           draftId: id,
         }
@@ -615,7 +670,7 @@ export class DraftsService {
           ...(own ? { linkId: own.id, checkedUrl: row.url } : {}),
           expectedUpdatedAt,
         }),
-        'web'
+        channel
       )
     }
     const saved = await this.prisma.$transaction(async tx => {
@@ -635,7 +690,7 @@ export class DraftsService {
           workspaceId: member.workspaceId,
           listingId: request.listingId,
           actorMemberId: member.id,
-          channel: 'web',
+          channel,
           action: 'draft.merged',
           after: {
             draftId: id,
@@ -653,7 +708,7 @@ export class DraftsService {
         workspaceId: member.workspaceId,
         target: { draftId: id },
         actorMemberId: member.id,
-        channel: 'web',
+        channel,
         why: 'le brouillon a été reconnu comme une annonce suivie',
       })
       return tx.listingDraft.findUniqueOrThrow({
@@ -661,6 +716,8 @@ export class DraftsService {
         include: draftInclude,
       })
     })
+    // Lot 31 : les liens des brouillons absorbés rejoignent aussi la fiche.
+    await this.attachAbsorbedLinks(member, id, request.listingId, channel)
     return toDraftDto(saved)
   }
 
@@ -739,6 +796,371 @@ export class DraftsService {
       )
     })
     return this.get(member, id)
+  }
+
+  /**
+   * Lot 31 (ADR 0044) : corrige la fiche pré-remplie d'un brouillon à valider
+   * ou écarté. Garde-fou `expectedUpdatedAt` ; au connecteur, les règles de
+   * l'ADR 0040 (plafond, loyer de marché, sorties du géocodeur, estimations
+   * sans extrait). Une localisation corrigée est replacée à la lecture ; les
+   * doublons probables sont recalculés. Journalisé (`draft.updated`).
+   */
+  async update(
+    member: Member,
+    id: string,
+    input: DraftUpdate,
+    options: DraftUpdateOptions = {}
+  ): Promise<ListingDraft> {
+    const channel = options.channel ?? 'web'
+    const provenance = options.provenance ?? 'user'
+    const row = await this.row(member, id)
+    this.assertOpen(row)
+    this.checkUpdatedAt(row, input.expectedUpdatedAt)
+    const current = draftInput(row)
+    const { status: _status, ...raw } = input.patch as typeof input.patch & {
+      status?: unknown
+    }
+    const patch =
+      channel === 'mcp'
+        ? connectorListingUpdate(
+            raw,
+            {
+              location: current.location,
+              rentalPlan: current.rentalPlan,
+              fieldSources: current.fieldSources,
+            },
+            provenance
+          ).patch
+        : raw
+    const fields = Object.entries(patch)
+      .filter(([key, value]) => value !== undefined && key !== 'fieldSources')
+      .map(([key]) => key)
+    if (fields.length === 0) {
+      throw new BadRequestException('Rien à corriger : le patch est vide.')
+    }
+    const now = new Date()
+    const values = Object.fromEntries(
+      Object.entries(patch).filter(([, value]) => value !== undefined)
+    )
+    let fieldSources = provenanceAfterPatch(
+      current.fieldSources,
+      values,
+      provenance,
+      now
+    )
+    if (patch.location) {
+      for (const key of ['addressRaw', 'commune', 'district', 'point']) {
+        const value = (patch.location as Record<string, unknown>)[key]
+        if (value !== null && value !== undefined) {
+          fieldSources = {
+            ...fieldSources,
+            [key]: { source: provenance, recordedAt: now.toISOString() },
+          }
+        }
+      }
+    }
+    const next = ListingInputSchema.parse({
+      ...current,
+      ...values,
+      fieldSources,
+    })
+    const duplicates = await this.duplicates.findForInput(member, next)
+    const saved = await this.prisma.$transaction(async tx => {
+      const written = await tx.listingDraft.updateMany({
+        where: { id, updatedAt: row.updatedAt },
+        data: {
+          input: next as unknown as Prisma.InputJsonValue,
+          duplicates: duplicates as unknown as Prisma.InputJsonValue,
+          ...(patch.location ? { locationPlacement: Prisma.DbNull } : {}),
+          ...(patch.url !== undefined ? { url: next.url } : {}),
+          updatedAt: now,
+        },
+      })
+      if (written.count === 0) throw this.changedSinceRead()
+      await this.activity.record(
+        {
+          workspaceId: member.workspaceId,
+          actorMemberId: member.id,
+          channel,
+          action: 'draft.updated',
+          after: {
+            draftId: id,
+            url: row.url,
+            origin: originOf(row),
+            title: next.title,
+            fields,
+          },
+        },
+        tx
+      )
+      return tx.listingDraft.findUniqueOrThrow({
+        where: { id },
+        include: draftInclude,
+      })
+    })
+    return this.get(member, saved.id)
+  }
+
+  /**
+   * Lot 31 (ADR 0044) : deux brouillons du même bien n'en font plus qu'un. Le
+   * brouillon gardé l'emporte, ses vides se complètent de l'autre
+   * (`draftMergePlan`), il reprend son lien s'il n'en avait pas ; l'autre est
+   * écarté comme doublon, lié au gardé (son lien rejoindra l'annonce créée
+   * depuis le gardé, ou la fiche suivie qui est la même). Les deux doivent
+   * être à valider ou écartés. Une seule transaction, journalisée
+   * (`draft.absorbed`) ; une proposition en cours sur l'absorbé devient
+   * caduque. Un brouillon absorbé repêché redevient un brouillon à part.
+   */
+  async mergeDrafts(
+    member: Member,
+    keepId: string,
+    absorbId: string,
+    guards: { keepUpdatedAt: string; absorbUpdatedAt: string },
+    channel: ActivityChannel = 'web'
+  ): Promise<DraftsMergeResult> {
+    if (keepId === absorbId) {
+      throw new BadRequestException(
+        'Un brouillon ne se fusionne pas avec lui-même.'
+      )
+    }
+    const [keep, absorb] = await Promise.all([
+      this.row(member, keepId),
+      this.row(member, absorbId),
+    ])
+    this.assertOpen(keep)
+    this.assertOpen(absorb)
+    for (const row of [keep, absorb]) {
+      if (row.mergedIntoDraftId) {
+        throw new ConflictException(
+          `« ${draftInput(row).title} » a déjà été fusionné dans un autre brouillon : repêche-le d’abord, ou garde ce brouillon-là.`
+        )
+      }
+    }
+    this.checkUpdatedAt(keep, guards.keepUpdatedAt)
+    this.checkUpdatedAt(absorb, guards.absorbUpdatedAt)
+    const keptInput = draftInput(keep)
+    const absorbedInput = draftInput(absorb)
+    const plan = draftMergePlan(keptInput, absorbedInput)
+    const takesUrl = !keep.url && Boolean(absorb.url)
+    const nextInput = takesUrl ? { ...plan.input, url: absorb.url } : plan.input
+    const now = new Date()
+    await this.prisma.$transaction(async tx => {
+      const claimed = await tx.listingDraft.updateMany({
+        where: {
+          id: absorbId,
+          updatedAt: absorb.updatedAt,
+          mergedIntoDraftId: null,
+          status: { in: [...OPEN_DRAFT_STATUSES] },
+        },
+        data: {
+          status: 'dismissed',
+          dismissReason: mergedDraftReason(keptInput.title),
+          decidedAt: now,
+          decidedById: member.id,
+          mergedIntoDraftId: keepId,
+          // Son lien passe au gardé, qui n'en avait pas.
+          ...(takesUrl ? { url: null } : {}),
+          updatedAt: now,
+        },
+      })
+      if (claimed.count === 0) throw this.changedSinceRead()
+      const written = await tx.listingDraft.updateMany({
+        where: { id: keepId, updatedAt: keep.updatedAt },
+        data: {
+          input: nextInput as unknown as Prisma.InputJsonValue,
+          ...(takesUrl ? { url: absorb.url } : {}),
+          ...(nextInput.location !== keptInput.location
+            ? { locationPlacement: Prisma.DbNull }
+            : {}),
+          updatedAt: now,
+        },
+      })
+      if (written.count === 0) throw this.changedSinceRead()
+      // Les brouillons déjà absorbés par l'absorbé suivent le gardé.
+      await tx.listingDraft.updateMany({
+        where: { mergedIntoDraftId: absorbId },
+        data: { mergedIntoDraftId: keepId },
+      })
+      await this.activity.record(
+        {
+          workspaceId: member.workspaceId,
+          actorMemberId: member.id,
+          channel,
+          action: 'draft.absorbed',
+          after: {
+            draftId: absorbId,
+            keptDraftId: keepId,
+            url: absorb.url,
+            origin: originOf(absorb),
+            keptTitle: keptInput.title,
+            absorbedTitle: absorbedInput.title,
+            fields: plan.fills.map(fill => fill.field),
+          },
+        },
+        tx
+      )
+      await closeOpenDecisionsAsStale(tx, this.activity, {
+        workspaceId: member.workspaceId,
+        target: { draftId: absorbId },
+        actorMemberId: member.id,
+        channel,
+        why: `le brouillon a été fusionné dans « ${keptInput.title} »`,
+      })
+    })
+    const [kept, absorbed] = await Promise.all([
+      this.get(member, keepId),
+      this.get(member, absorbId),
+    ])
+    return {
+      kept,
+      absorbed,
+      fills: plan.fills,
+      differences: plan.differences,
+    }
+  }
+
+  /**
+   * Lot 31 : les brouillons qui ressemblent à un brouillon (ceux des statuts
+   * demandés, sauf les brouillons déjà absorbés), classés par la même règle
+   * que les annonces (`rankSimilarListings`), sans distance : le repère d'un
+   * brouillon n'est pas en base géographique. Lecture seule.
+   */
+  async similar(
+    member: Member,
+    id: string,
+    statuses: readonly ListingDraftStatus[],
+    limit: number
+  ): Promise<SimilarDraftsResult> {
+    const target = await this.row(member, id)
+    const { probe } = draftProbe(draftInput(target), target.url)
+    const rows = await this.prisma.listingDraft.findMany({
+      where: {
+        workspaceId: member.workspaceId,
+        id: { not: id },
+        status: { in: [...statuses] },
+        mergedIntoDraftId: null,
+      },
+      orderBy: { receivedAt: 'desc' },
+      take: 1000,
+    })
+    const byId = new Map(rows.map(row => [row.id, row]))
+    const similarRows: SimilarRow[] = rows.map(row => {
+      const input = draftInput(row)
+      return {
+        id: row.id,
+        title: input.title,
+        // Le statut d'une annonce n'a pas de sens ici : rendu à part.
+        status: 'to_study',
+        price: input.price,
+        surface: input.surface,
+        commune: input.location.commune,
+        url: row.url ?? input.url,
+        addressRaw: input.location.addressRaw,
+        addressNormalized: input.location.addressNormalized,
+        sellerType: input.sellerType,
+        sellerName: input.sellerName,
+        sellerReference: input.sellerReference,
+        rooms: input.rooms,
+        floor: input.floor,
+        dpeClass: input.dpeClass,
+        constructionYear: input.constructionYear,
+        locationPrecision: input.location.precision,
+        district: input.location.district,
+        updatedAt: row.updatedAt.toISOString(),
+      }
+    })
+    const ranked = rankSimilarListings(probe, similarRows, new Map(), {
+      limit,
+    })
+    return {
+      compared: ranked.compared,
+      items: ranked.items.map(item => {
+        const row = byId.get(item.listingId)
+        const { listingId, status: _status, linkCount: _links, ...rest } = item
+        return {
+          ...rest,
+          draftId: listingId,
+          status: row?.status ?? 'pending',
+          dismissReason: row?.dismissReason ?? null,
+        }
+      }),
+    }
+  }
+
+  /**
+   * Lot 31 : les liens des brouillons absorbés par `draftId` rejoignent
+   * l'annonce `listingId` (créée depuis le brouillon, ou la fiche suivie qui
+   * est la même). Un lien déjà sur la fiche, ou refusé (déjà sur une autre
+   * fiche, agence qui contredit), est passé et dit.
+   */
+  private async attachAbsorbedLinks(
+    member: Member,
+    draftId: string,
+    listingId: string,
+    channel: ActivityChannel
+  ): Promise<AbsorbedLinks> {
+    const absorbed = await this.prisma.listingDraft.findMany({
+      where: { mergedIntoDraftId: draftId, url: { not: null } },
+      orderBy: { receivedAt: 'asc' },
+    })
+    const result: AbsorbedLinks = { added: [], skipped: [] }
+    for (const row of absorbed) {
+      const url = row.url as string
+      const input = draftInput(row)
+      const { price, ...facts } = observedFromDraft(input)
+      try {
+        await this.links.add(
+          member,
+          listingId,
+          {
+            url,
+            portal: row.portal
+              ? EXPLORATION_LINK_PORTAL[row.portal]
+              : detectLinkPortal(url),
+            online: true,
+            ...(price !== undefined ? { price } : {}),
+            facts,
+            ...(input.sellerType !== 'unknown'
+              ? { sellerType: input.sellerType }
+              : {}),
+            ...(input.sellerName ? { sellerName: input.sellerName } : {}),
+            ...(input.sellerReference
+              ? { reference: input.sellerReference }
+              : {}),
+            evidence: 'Même bien : brouillon fusionné',
+          },
+          {
+            channel,
+            origin: row.origin === 'exploration' ? 'exploration' : 'email',
+            draftId: row.id,
+          }
+        )
+        result.added.push(url)
+      } catch (error) {
+        const why = error instanceof Error ? error.message : 'refusé'
+        result.skipped.push({ url, why })
+      }
+    }
+    return result
+  }
+
+  /** Lot 31 : un brouillon validé ou reconnu ne se corrige ni ne se fusionne plus. */
+  private assertOpen(row: DraftRow): void {
+    if (!OPEN_DRAFT_STATUSES.includes(row.status)) {
+      throw this.alreadyDecided(row.status)
+    }
+  }
+
+  private checkUpdatedAt(row: DraftRow, expected: string): void {
+    if (row.updatedAt.getTime() !== Date.parse(expected)) {
+      throw this.changedSinceRead()
+    }
+  }
+
+  private changedSinceRead(): ConflictException {
+    return new ConflictException(
+      'Le brouillon a changé depuis ta lecture : relis-le (get_draft) avant de réécrire. Rien n’a été modifié.'
+    )
   }
 
   private assertPending(row: DraftRow): void {

@@ -33,6 +33,8 @@ import { ListingLinksService } from '../listings/listing-links.service'
 import { registerLinkTools } from './mcp-links'
 import { registerMergeTools } from './mcp-merge'
 import { ListingMergeService } from '../listings/listing-merge.service'
+import { DraftsService } from '../inbound/drafts.service'
+import { registerDraftTools } from './mcp-drafts'
 import { ListingSellersService } from '../listings/listing-sellers.service'
 import { SimilarListingsService } from '../listings/similar-listings.service'
 import { ExplorationsService } from '../exploration/explorations.service'
@@ -86,7 +88,8 @@ export class McpController {
     private readonly decisions: DecisionsService,
     private readonly similar: SimilarListingsService,
     private readonly sellers: ListingSellersService,
-    private readonly merges: ListingMergeService
+    private readonly merges: ListingMergeService,
+    private readonly drafts: DraftsService
   ) {}
 
   @Post()
@@ -139,6 +142,7 @@ export class McpController {
       similar: this.similar,
       sellers: this.sellers,
       merges: this.merges,
+      drafts: this.drafts,
     }
     registerTools(server, context)
     // Lot 15 : vérification des annonces sur le portail.
@@ -151,6 +155,8 @@ export class McpController {
     registerLinkTools(server, context)
     // Lot 27 : annonces ressemblantes, fusion des doublons, autres agences.
     registerMergeTools(server, context)
+    // Lot 31 : les brouillons.
+    registerDraftTools(server, context)
     registerPrompts(server)
     registerCheckPrompts(server)
     registerExplorationPrompts(server)

@@ -108,8 +108,8 @@ describe('Lot 21 : décisions au connecteur MCP (e2e)', () => {
 
   it('reste à 42 outils (lot 27 compris)', async () => {
     const res = await rpc(richard, 'tools/list')
-    expect(res.body.result.tools).toHaveLength(42)
-    expect(MCP_TOOL_NAMES).toHaveLength(42)
+    expect(res.body.result.tools).toHaveLength(49)
+    expect(MCP_TOOL_NAMES).toHaveLength(49)
   })
 
   it('propose en son nom : l’annonce ne bouge pas tant que l’autre n’a pas confirmé', async () => {
