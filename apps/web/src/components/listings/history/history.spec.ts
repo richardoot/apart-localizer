@@ -245,7 +245,17 @@ const rows = (wrapper: ReturnType<typeof mountTab>) =>
   wrapper.findAll('[data-testid="timeline-entry"]')
 
 describe('onglet « Historique » (lot 19)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   beforeEach(() => {
+    // Horloge figée le lendemain de la dernière vérification fictive : la
+    // fraîcheur (DEFAULT_STALE_DAYS) ne dépend pas du jour où le test tourne.
+    vi.useFakeTimers({
+      toFake: ['Date'],
+      now: new Date('2026-11-06T10:00:00Z'),
+    })
     vi.clearAllMocks()
     apiMock.activity.forListing.mockResolvedValue(page(JOURNAL))
     apiMock.listings.checks.mockResolvedValue(CHECKS)
