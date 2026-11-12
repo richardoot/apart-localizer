@@ -14,7 +14,8 @@
    * depuis le téléphone) à la fiche existante. Un même lien est déjà sur
    * une fiche : « Créer quand même » n'est pas proposé (une URL ne va pas
    * sur deux fiches) ; une même agence et une même référence est un doublon
-   * certain, mis en avant.
+   * certain, mis en avant. ADR 0041 : ce qui diffère malgré les motifs
+   * (DPE voisin, prix éloigné) est dit sous les motifs.
    */
   const props = withDefaults(
     defineProps<{
@@ -87,6 +88,13 @@
                 .join(', ')
             }}
             (score {{ Math.round(candidate.score * 100) }} %)
+          </span>
+          <span
+            v-if="candidate.differences.length"
+            class="block text-sm text-muted"
+            data-testid="duplicate-differences"
+          >
+            Diffère : {{ candidate.differences.join(', ') }}
           </span>
         </span>
         <span class="flex flex-wrap gap-2">

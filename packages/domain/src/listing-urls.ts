@@ -110,6 +110,24 @@ export function linkKey(url: string | null | undefined): string | null {
   return normalizeListingUrl(trimmed) ?? trimmed
 }
 
+/**
+ * L'identité d'un lien, pour comparer (ADR 0041) : sa clé (`linkKey`), où
+ * les deux formes d'une page Bien'ici se rejoignent. La forme longue
+ * `/annonce/vente/<ville>/<type>/<pièces>/<identifiant>` et la courte
+ * `/annonce/<identifiant>` désignent la même annonce. Les clés enregistrées
+ * (`listing_links.normalized_url`) ne changent pas : la comparaison passe par
+ * ici des deux côtés.
+ */
+export function linkIdentity(url: string | null | undefined): string | null {
+  const key = linkKey(url)
+  if (!key) return null
+  const bienici =
+    /^https:\/\/(?:[a-z0-9-]+\.)?(?:bienici|bien-ici)\.com\/annonce\/(?:(?:vente|location|achat)\/(?:[^/]+\/)*)?([^/?]+)$/i.exec(
+      key
+    )
+  return bienici?.[1] ? `https://bienici.com/annonce/${bienici[1]}` : key
+}
+
 /** Le portail d'un lien (lot 18), s'il est reconnu d'après l'hôte ; null pour un autre site. */
 export function linkPortalFromUrl(
   url: string | null | undefined

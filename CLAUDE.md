@@ -64,6 +64,9 @@ Règles à ne pas casser :
 - Doublons et fusion : `same_reference` est certain, `same_reference_other_agency` probable ; la
   fiche gardée l'emporte, ses vides se complètent (`mergeFieldPlan`) ; une agence qui contredit est
   enregistrée comme autre agence quand un membre a tranché.
+- Doublon probable (`assessDuplicate`) : un fait contraire connu des deux côtés l'écarte
+  (`duplicateContradictions`) ; à partir de `DUPLICATE_SCORES.blocking`, il bloque la création
+  sauf `ignoreDuplicates` ; les liens se comparent par `linkIdentity`.
 - Une visite faite ne se corrige que par son auteur ou un participant, une planifiée par tout membre
   (`visitEditRefusal`).
 - `portalSearchUrls` construit les recherches sans réseau.
@@ -378,6 +381,7 @@ MCP et consentement OAuth : 0017.
 - Lot 28, loyers observés : 0038
 - Lot 29, tendance des prix de vente, ventes DVF depuis 2014 : 0039
 - Champs que le connecteur n'écrit pas (plafond, loyer de marché, géocodeur, estimations) : 0040
+- Doublons jugés sur tous les faits (contradictions, blocage à la création) : 0041
 - Une adresse saisie recalcule la fiche (point saisi, règle unique des recalculs) : 0042
 
 Identifiants de code en anglais ; textes d'interface, messages d'erreur métier et descriptions

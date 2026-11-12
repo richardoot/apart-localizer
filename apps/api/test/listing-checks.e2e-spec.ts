@@ -383,6 +383,7 @@ describe('Lot 15 : vérifications des annonces (e2e)', () => {
         title: 'T3 fictif ancien',
         url: null,
         publishedAt: null,
+        ignoreDuplicates: true,
       })
       .expect(201)
     const oldId = old.body.listing.id as string
@@ -394,6 +395,7 @@ describe('Lot 15 : vérifications des annonces (e2e)', () => {
         title: 'T1 fictif vérifié',
         url: null,
         publishedAt: null,
+        ignoreDuplicates: true,
       })
       .expect(201)
     const longAgoId = checkedLongAgo.body.listing.id as string
@@ -439,6 +441,7 @@ describe('Lot 15 : vérifications des annonces (e2e)', () => {
         price: 220_000,
         url: 'https://annonces.exemple.invalid/t2-talence-origine',
         publishedAt: '2026-08-02T00:00:00.000Z',
+        ignoreDuplicates: true,
       })
       .expect(201)
     const originId = origin.body.listing.id as string
@@ -511,7 +514,12 @@ describe('Lot 15 : vérifications des annonces (e2e)', () => {
     const third = await api()
       .post('/listings')
       .set(ctx.auth(richard))
-      .send({ ...LISTING, title: 'T2 fictif (troisième)', url: null })
+      .send({
+        ...LISTING,
+        title: 'T2 fictif (troisième)',
+        url: null,
+        ignoreDuplicates: true,
+      })
       .expect(201)
     const refused = await api()
       .post(`/listings/${third.body.listing.id}/checks`)

@@ -465,6 +465,7 @@ export function buildDemoExplorations(ctx: Context): {
     sellerName: chartrons.sellerName,
     sellerReference: chartrons.sellerReference,
     linkCount: chartrons.links.length,
+    differences: [],
   }
   const draftIds = {
     inside: demoId('exploration-draft:inside'),

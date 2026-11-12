@@ -195,6 +195,7 @@ const duplicate: DuplicateCandidate = {
   sellerName: null,
   sellerReference: null,
   linkCount: 1,
+  differences: [],
 }
 
 const changedCheck: ExplorationCheck = {

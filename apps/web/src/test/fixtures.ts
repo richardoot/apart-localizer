@@ -474,6 +474,7 @@ export function fakeDuplicate(
     sellerName: null,
     sellerReference: null,
     linkCount: 1,
+    differences: [],
     ...over,
   }
 }

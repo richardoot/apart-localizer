@@ -59,6 +59,14 @@ describe('duplicateReasons', () => {
         undefined
       )
     ).toEqual([])
+    // ADR 0041 : une rue sans numéro n'est pas une adresse.
+    expect(
+      duplicateReasons(
+        { address: 'rue du Forum', commune: 'Talence' },
+        row({ addressRaw: 'Rue du Forum', addressNormalized: null }),
+        undefined
+      )
+    ).toEqual([])
   })
 
   it('même commune, surface à ±3 % et prix à ±5 %', () => {
@@ -86,6 +94,24 @@ describe('duplicateReasons', () => {
   })
 
   it('voisinage à moins de 50 m avec surface proche', () => {
+    // ADR 0041 : seulement entre deux repères à l'adresse.
+    expect(
+      duplicateReasons({ surface: 44, precision: 'district' }, row(), 0)
+    ).toEqual([])
+    expect(
+      duplicateReasons(
+        { surface: 44 },
+        row({ locationPrecision: 'commune' }),
+        0
+      )
+    ).toEqual([])
+    expect(
+      duplicateReasons(
+        { surface: 44, precision: 'exact' },
+        row({ locationPrecision: 'exact' }),
+        12
+      ).map(r => r.kind)
+    ).toEqual(['nearby_similar'])
     expect(
       duplicateReasons(
         { surface: 44, point: { type: 'Point', coordinates: [0, 0] } },
@@ -148,7 +174,8 @@ describe('matchDuplicates', () => {
       'same_address',
       'same_commune_price_surface',
     ])
-    expect(candidates[1]?.score).toBe(0.8)
+    // ADR 0041 : 0,8 moins l'écart de surface (1,1 %) et de prix (1,6 %).
+    expect(candidates[1]?.score).toBe(0.73)
     expect(candidates[1]?.reasons.map(r => r.kind)).toEqual([
       'same_commune_price_surface',
       'nearby_similar',

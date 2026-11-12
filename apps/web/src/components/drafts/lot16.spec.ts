@@ -100,6 +100,7 @@ const duplicate = {
   sellerName: null,
   sellerReference: null,
   linkCount: 1,
+  differences: [],
 }
 
 function makeRouter() {

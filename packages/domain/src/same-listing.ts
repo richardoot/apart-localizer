@@ -1,19 +1,22 @@
 import {
   CERTAIN_DUPLICATE_REASONS,
+  DUPLICATE_SCORES,
   DUPLICATE_TOLERANCES,
   normalizeAddress,
   normalizeCommune,
   withinPercent,
 } from '@apart/contracts'
 import type {
+  DpeClass,
   DuplicateCandidate,
   DuplicateProbe,
   DuplicateReason,
   ListingStatus,
+  LocationPrecision,
   SellerType,
 } from '@apart/contracts'
 import { formatEuros } from './format.js'
-import { linkKey } from './listing-urls.js'
+import { linkIdentity } from './listing-urls.js'
 import { cleanReference, referenceKey, sameAgency } from './seller.js'
 
 /**
@@ -23,6 +26,15 @@ import { cleanReference, referenceKey, sameAgency } from './seller.js'
  * inconnue (probable, à trancher) ; même adresse ; même commune avec surface
  * et prix proches ; voisinage à 50 m. Pur : la distance vient du module geo,
  * passée en paramètre ; l'API lit les annonces et les liens.
+ *
+ * ADR 0041 : un motif probable ne suffit plus. Les faits connus des deux
+ * côtés le contredisent (autre nombre de pièces, autre étage, surface à plus
+ * de 5 %, DPE à deux classes, construction à plus de trois ans, même agence
+ * avec une autre référence) : ce n'est pas un doublon. Une petite différence
+ * (DPE voisin, prix éloigné, surface ou prix au bord de la tolérance) baisse
+ * le score ; sous `DUPLICATE_SCORES.minimum`, rien n'est rendu. Le voisinage
+ * ne compte qu'entre deux repères à l'adresse : deux annonces placées au
+ * centre du même quartier sont « à 0 m » sans être voisines.
  */
 
 /** Ce qu'une annonce enregistrée (ou un brouillon) offre à la comparaison. */
@@ -45,6 +57,13 @@ export interface DuplicateRow {
   sellerReferenceKey?: string | null
   /** Lot 27 : les autres agences qui vendent le même bien, chacune avec sa référence. */
   otherSellers?: readonly DuplicateRowSeller[]
+  /** ADR 0041 : les faits qui confirment ou contredisent un motif probable. */
+  rooms?: number | null
+  floor?: number | null
+  dpeClass?: DpeClass | null
+  constructionYear?: number | null
+  /** La précision du repère : le voisinage à 50 m ne vaut qu'à l'adresse. */
+  locationPrecision?: LocationPrecision | null
 }
 
 /** Un vendeur d'une annonce enregistrée, tel que la comparaison le lit. */
@@ -76,13 +95,18 @@ export function addressKey(
   return words.length > 0 ? words.join(' ') : null
 }
 
-/** Les clés de tous les liens d'une annonce, lien principal compris. */
+/**
+ * Les identités de tous les liens d'une annonce, lien principal compris
+ * (`linkIdentity` : les deux formes d'une page Bien'ici n'en font qu'une).
+ */
 export function rowLinkKeys(
   row: Pick<DuplicateRow, 'url' | 'links'>
 ): Set<string> {
-  const keys = new Set(row.links ?? [])
-  const main = linkKey(row.url)
-  if (main) keys.add(main)
+  const keys = new Set<string>()
+  for (const link of [row.url, ...(row.links ?? [])]) {
+    const key = linkIdentity(link)
+    if (key) keys.add(key)
+  }
   return keys
 }
 
@@ -135,6 +159,10 @@ function sellerReferenceReason(
       detail: `Même agence et même référence : ${reference} (« ${row.sellerName} »)`,
     }
   }
+  // ADR 0041 : une référence courte chez une autre agence est une coïncidence.
+  if (probeKey.length < DUPLICATE_TOLERANCES.otherAgencyReferenceMinLength) {
+    return null
+  }
   const agencies =
     probe.sellerName && row.sellerName
       ? `« ${probe.sellerName} » contre « ${row.sellerName} »`
@@ -146,21 +174,162 @@ function sellerReferenceReason(
   }
 }
 
+/** Les faits de la sonde qu'un motif probable doit respecter. */
+type ProbeFacts = Partial<DuplicateProbe>
+
+const DPE_ORDER: readonly DpeClass[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+
+function known<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined
+}
+
+function relativeGap(a: number, b: number): number {
+  const max = Math.max(Math.abs(a), Math.abs(b))
+  return max === 0 ? 0 : Math.abs(a - b) / max
+}
+
+function floorText(floor: number): string {
+  if (floor === 0) return 'rez-de-chaussée'
+  return floor === 1 ? '1er étage' : `${floor}e étage`
+}
+
+const rooms = (value: number): string => `${value} pièce${value > 1 ? 's' : ''}`
+
+/** Un repère approché (rue, centre du quartier, centre de la commune) ne dit pas qui est voisin. */
+function approximate(precision: LocationPrecision | null | undefined): boolean {
+  return (
+    precision === 'street' ||
+    precision === 'district' ||
+    precision === 'commune'
+  )
+}
+
 /**
- * Les motifs pour lesquels une annonce existante ressemble à la sonde, dans
- * l'ordre de force : même lien (1), même agence et même référence (1), même
- * référence autre agence (0,85), même adresse (0,9), même commune avec
- * surface à ±3 % et prix à ±5 % (0,8), à moins de 50 m avec surface à ±5 %
- * (0,7).
+ * Même agence, autre référence : deux mandats de la même agence, donc deux
+ * biens (les trois lots d'un même immeuble chez la même agence). Null si une
+ * agence de la fiche a la même référence, ou si rien n'est comparable.
  */
-export function duplicateReasons(
+function otherReferenceSameAgency(
+  probe: ProbeFacts,
+  row: DuplicateRow
+): string | null {
+  if (probe.sellerType === 'private') return null
+  const probeKey = referenceKey(probe.reference)
+  if (!probeKey || !probe.sellerName) return null
+  let contradiction: string | null = null
+  for (const seller of [row, ...(row.otherSellers ?? [])]) {
+    if (seller.sellerType === 'private') continue
+    if (!sameAgency(probe.sellerName, seller.sellerName)) continue
+    const rowKey =
+      seller.sellerReferenceKey ?? referenceKey(seller.sellerReference)
+    if (!rowKey) continue
+    if (rowKey === probeKey) return null
+    contradiction ??= `Même agence (« ${seller.sellerName} »), autre référence : ${cleanReference(seller.sellerReference) ?? rowKey} contre ${cleanReference(probe.reference) ?? probeKey}`
+  }
+  return contradiction
+}
+
+/**
+ * Ce qui contredit le doublon, fait par fait, connu des deux côtés : un autre
+ * nombre de pièces, un autre étage, une surface à plus de 5 %, un DPE à deux
+ * classes ou plus, une construction à plus de trois ans, la même agence avec
+ * une autre référence. Chaque phrase est écrite du point de vue de l'annonce
+ * suivie (« 4 pièces contre 3 » : elle en a 4).
+ */
+export function duplicateContradictions(
+  probe: ProbeFacts,
+  row: DuplicateRow
+): string[] {
+  const t = DUPLICATE_TOLERANCES
+  const found: string[] = []
+  if (known(probe.rooms) && known(row.rooms) && probe.rooms !== row.rooms) {
+    found.push(`${rooms(row.rooms)} contre ${probe.rooms}`)
+  }
+  if (known(probe.floor) && known(row.floor) && probe.floor !== row.floor) {
+    found.push(`Au ${floorText(row.floor)}, pas au ${floorText(probe.floor)}`)
+  }
+  if (
+    known(probe.surface) &&
+    known(row.surface) &&
+    probe.surface > 0 &&
+    row.surface > 0 &&
+    relativeGap(probe.surface, row.surface) > t.contradictionSurface
+  ) {
+    found.push(`${m2(row.surface)} contre ${m2(probe.surface)}`)
+  }
+  if (known(probe.dpeClass) && known(row.dpeClass)) {
+    const gap = Math.abs(
+      DPE_ORDER.indexOf(probe.dpeClass) - DPE_ORDER.indexOf(row.dpeClass)
+    )
+    if (gap >= t.contradictionDpeClasses) {
+      found.push(`DPE ${row.dpeClass} contre ${probe.dpeClass}`)
+    }
+  }
+  if (
+    known(probe.constructionYear) &&
+    known(row.constructionYear) &&
+    Math.abs(probe.constructionYear - row.constructionYear) >
+      t.contradictionYears
+  ) {
+    found.push(
+      `Construit en ${row.constructionYear}, pas en ${probe.constructionYear}`
+    )
+  }
+  const reference = otherReferenceSameAgency(probe, row)
+  if (reference) found.push(reference)
+  return found
+}
+
+/**
+ * Les petites différences qui rendent un doublon moins probable, chacune avec
+ * ce qu'elle retire au score : un DPE à une classe (0,15), un prix à plus de
+ * 5 % (0,15).
+ */
+export function duplicateDifferences(
+  probe: ProbeFacts,
+  row: DuplicateRow
+): { text: string; penalty: number }[] {
+  const found: { text: string; penalty: number }[] = []
+  if (known(probe.dpeClass) && known(row.dpeClass)) {
+    const gap = Math.abs(
+      DPE_ORDER.indexOf(probe.dpeClass) - DPE_ORDER.indexOf(row.dpeClass)
+    )
+    if (gap === 1) {
+      found.push({
+        text: `DPE ${row.dpeClass} contre ${probe.dpeClass}`,
+        penalty: 0.15,
+      })
+    }
+  }
+  if (
+    known(probe.price) &&
+    probe.price > 0 &&
+    row.price > 0 &&
+    relativeGap(probe.price, row.price) > DUPLICATE_TOLERANCES.price
+  ) {
+    found.push({
+      text: `${formatEuros(row.price)} contre ${formatEuros(probe.price)}`,
+      penalty: 0.15,
+    })
+  }
+  return found
+}
+
+/**
+ * Les motifs bruts, avant les contradictions, dans l'ordre de force : même
+ * lien (1), même agence et même référence (1), même référence autre agence
+ * (0,85), même adresse au numéro (0,9), même commune avec surface à ±3 % et
+ * prix à ±5 % (0,8, moins selon l'écart), deux repères à l'adresse à moins
+ * de 50 m avec surface à ±5 % (0,7).
+ */
+function rawDuplicateReasons(
   probe: DuplicateProbe,
   row: DuplicateRow,
   distanceMeters: number | undefined
 ): DuplicateReason[] {
   const reasons: DuplicateReason[] = []
 
-  const probeUrl = linkKey(probe.url)
+  const probeUrl = linkIdentity(probe.url)
   if (probeUrl && rowLinkKeys(row).has(probeUrl)) {
     reasons.push({
       kind: 'same_url',
@@ -177,8 +346,9 @@ export function duplicateReasons(
   const communesDiffer =
     probeCommune !== null && rowCommune !== null && probeCommune !== rowCommune
 
+  // Une rue sans numéro n'est pas une adresse : tout un immeuble, toute une rue.
   const probeAddress = addressKey(probe.address, probe.commune ?? row.commune)
-  if (probeAddress && !communesDiffer) {
+  if (probeAddress && hasNumber(probeAddress) && !communesDiffer) {
     const rowAddresses = [row.addressRaw, row.addressNormalized]
       .map(address => addressKey(address, row.commune))
       .filter((a): a is string => a !== null)
@@ -197,9 +367,15 @@ export function duplicateReasons(
     withinPercent(probe.surface, row.surface, DUPLICATE_TOLERANCES.surface) &&
     withinPercent(probe.price, row.price, DUPLICATE_TOLERANCES.price)
   ) {
+    // Au bord des tolérances, la ressemblance est moins forte (0,6 au pire).
+    const surfaceGap =
+      relativeGap(probe.surface ?? 0, row.surface ?? 0) /
+      DUPLICATE_TOLERANCES.surface
+    const priceGap =
+      relativeGap(probe.price ?? 0, row.price) / DUPLICATE_TOLERANCES.price
     reasons.push({
       kind: 'same_commune_price_surface',
-      score: 0.8,
+      score: round2(0.8 - 0.1 * surfaceGap - 0.1 * priceGap),
       detail: `${row.commune} : ${m2(row.surface)} contre ${m2(probe.surface ?? null)}, ${formatEuros(row.price)} contre ${formatEuros(probe.price ?? 0)}`,
     })
   }
@@ -207,6 +383,8 @@ export function duplicateReasons(
   if (
     distanceMeters !== undefined &&
     distanceMeters <= DUPLICATE_TOLERANCES.nearbyMeters &&
+    !approximate(probe.precision) &&
+    !approximate(row.locationPrecision) &&
     withinPercent(
       probe.surface,
       row.surface,
@@ -220,6 +398,75 @@ export function duplicateReasons(
     })
   }
   return reasons
+}
+
+const round2 = (value: number): number => Math.round(value * 100) / 100
+
+/** Une clé d'adresse qui porte un numéro (« 12 forum rue »). */
+function hasNumber(key: string): boolean {
+  return key.split(' ').some(word => /^\d+[a-z]?$/.test(word))
+}
+
+/** Les motifs, les contradictions et les différences d'une annonce face à la sonde. */
+export interface DuplicateAssessment {
+  reasons: DuplicateReason[]
+  /** Les faits qui disent que ce n'est pas le même bien. */
+  contradictions: string[]
+  /** Ce qui diffère encore (petites différences, contradictions d'un doublon certain). */
+  differences: string[]
+}
+
+/**
+ * Le jugement complet (ADR 0041) : un motif certain (même lien, même agence
+ * et même référence) le reste, ses contradictions sont dites ; sans motif
+ * certain, une contradiction écarte tout, et les petites différences
+ * baissent le score de chaque motif, gardé à partir de
+ * `DUPLICATE_SCORES.minimum`.
+ */
+export function assessDuplicate(
+  probe: DuplicateProbe,
+  row: DuplicateRow,
+  distanceMeters: number | undefined
+): DuplicateAssessment {
+  const raw = rawDuplicateReasons(probe, row, distanceMeters)
+  if (raw.length === 0)
+    return { reasons: [], contradictions: [], differences: [] }
+  const contradictions = duplicateContradictions(probe, row)
+  if (isCertainMatch(raw)) {
+    return {
+      reasons: raw,
+      contradictions,
+      differences: [
+        ...contradictions,
+        ...duplicateDifferences(probe, row).map(d => d.text),
+      ],
+    }
+  }
+  if (contradictions.length > 0) {
+    return { reasons: [], contradictions, differences: [] }
+  }
+  const differences = duplicateDifferences(probe, row)
+  const penalty = differences.reduce((sum, d) => sum + d.penalty, 0)
+  const reasons = raw
+    .map(reason => ({ ...reason, score: round2(reason.score - penalty) }))
+    .filter(reason => reason.score >= DUPLICATE_SCORES.minimum)
+  return {
+    reasons,
+    contradictions,
+    differences: reasons.length ? differences.map(d => d.text) : [],
+  }
+}
+
+/**
+ * Les motifs pour lesquels une annonce existante ressemble à la sonde, après
+ * les contradictions et les petites différences (`assessDuplicate`).
+ */
+export function duplicateReasons(
+  probe: DuplicateProbe,
+  row: DuplicateRow,
+  distanceMeters: number | undefined
+): DuplicateReason[] {
+  return assessDuplicate(probe, row, distanceMeters).reasons
 }
 
 /** Vrai si les motifs suffisent à dire que c'est la même annonce (même lien, ou même agence et même référence). */
@@ -238,7 +485,11 @@ export function matchDuplicates(
   const candidates: DuplicateCandidate[] = []
   for (const row of rows) {
     if (probe.listingId && row.id === probe.listingId) continue
-    const reasons = duplicateReasons(probe, row, distances.get(row.id))
+    const { reasons, differences } = assessDuplicate(
+      probe,
+      row,
+      distances.get(row.id)
+    )
     if (reasons.length === 0) continue
     candidates.push({
       listingId: row.id,
@@ -255,6 +506,7 @@ export function matchDuplicates(
       sellerName: row.sellerName ?? null,
       sellerReference: row.sellerReference ?? null,
       linkCount: rowLinkKeys(row).size,
+      differences,
     })
   }
   return candidates.sort(
@@ -271,6 +523,19 @@ export function referenceMatchOf<T extends Pick<DuplicateCandidate, 'reasons'>>(
 ): T | null {
   return (
     candidates.find(c => c.reasons.some(r => r.kind === 'same_reference')) ??
+    null
+  )
+}
+
+/**
+ * ADR 0041 : le premier doublon probable qui bloque la création (score à
+ * partir de `DUPLICATE_SCORES.blocking`, sans motif certain), ou null.
+ */
+export function blockingDuplicateOf<
+  T extends Pick<DuplicateCandidate, 'certain' | 'score'>,
+>(candidates: readonly T[]): T | null {
+  return (
+    candidates.find(c => !c.certain && c.score >= DUPLICATE_SCORES.blocking) ??
     null
   )
 }

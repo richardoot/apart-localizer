@@ -223,6 +223,7 @@ describe('Lot 20 : nos avis critère par critère (e2e, REST)', () => {
     const other = await post(richard, '/listings', {
       ...LISTING,
       title: '[Exemple] T2 Saint-Augustin',
+      ignoreDuplicates: true,
     }).expect(201)
     const compare = await post(richard, '/listings/compare', {
       listingIds: [id, other.body.listing.id],
@@ -594,8 +595,13 @@ describe('Lot 20 : nos avis critère par critère (e2e, REST)', () => {
 
   it('liste : « À rediscuter », « Avis en attente », tris par note commune et désaccord', async () => {
     const make = async (title: string) =>
-      (await post(richard, '/listings', { ...LISTING, title }).expect(201)).body
-        .listing.id as string
+      (
+        await post(richard, '/listings', {
+          ...LISTING,
+          title,
+          ignoreDuplicates: true,
+        }).expect(201)
+      ).body.listing.id as string
     const agreed = await make('[Exemple] T3 Chartrons, cour')
     const waiting = await make('[Exemple] T2 bis Saint-Augustin')
     // `id` : deux désaccords ; `agreed` : d'accord ; `waiting` : Chloé seule.

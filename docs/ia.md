@@ -105,7 +105,8 @@ evidence }`. `value` est `null` quand l'annonce ne dit rien ; `confidence` va de
 - conserve la provenance `ai` (confiance, extrait) des champs que le membre n'a pas touchés ; le
   web retire des `fieldSources` les champs modifiés, qui reçoivent alors `user` (daté) ;
 - géocode l'adresse si aucun point n'est donné ;
-- cherche les doublons probables et les renvoie dans `duplicates` **sans bloquer** la création ;
+- cherche les doublons probables et les renvoie dans `duplicates` ; ADR 0041 : un doublon probable
+  à partir de 0,7, sans fait contraire, bloque la création (409) comme la même référence ;
   `ignoreDuplicates: true` (le membre a vu l'alerte et confirme) est journalisé dans
   `listing.created` ; lot 18 : un lien déjà celui d'une autre annonce est refusé (409, avec son
   nom), même avec `ignoreDuplicates`, et une annonce de même agence et même référence aussi, sauf
@@ -191,14 +192,19 @@ annonce enregistrée qui est alors exclue) à toutes les annonces de l'espace, q
 statut (une annonce écartée est un doublon utile à connaître). Motifs, du plus fort au plus
 faible (`DUPLICATE_TOLERANCES` dans `contracts`) :
 
-| Motif                         | Règle                                                                                                                                                        | Score |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
-| `same_url`                    | Même URL normalisée (https, hôte sans `www.`, chemin sans barre finale, paramètres de suivi retirés), comparée à tous les liens de chaque annonce (lot 18)   | 1     |
-| `same_reference`              | Lot 18 : même agence (mots génériques retirés, deux mots d'écart au plus) et même référence (espaces, tirets et points ignorés) ; jamais pour un particulier | 1     |
-| `same_reference_other_agency` | Lot 18 : même référence, autre agence, agence inconnue d'un côté ou autre type de vendeur                                                                    | 0,85  |
-| `same_address`                | Même adresse normalisée (accents, ponctuation, abréviations, mots vides, code postal et commune retirés), communes compatibles                               | 0,9   |
-| `same_commune_price_surface`  | Même commune, surface à ±3 %, prix à ±5 %                                                                                                                    | 0,8   |
-| `nearby_similar`              | À moins de 50 m (PostGIS, module `geo`), surface à ±5 %                                                                                                      | 0,7   |
+| Motif                         | Règle                                                                                                                                                                                                                         | Score |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| `same_url`                    | Même URL normalisée (https, hôte sans `www.`, chemin sans barre finale, paramètres de suivi retirés), comparée à tous les liens de chaque annonce (lot 18) ; les deux formes d'une page Bien'ici sont le même lien (ADR 0041) | 1     |
+| `same_reference`              | Lot 18 : même agence (mots génériques retirés, deux mots d'écart au plus) et même référence (espaces, tirets et points ignorés) ; jamais pour un particulier                                                                  | 1     |
+| `same_reference_other_agency` | Lot 18 : même référence, autre agence, agence inconnue d'un côté ou autre type de vendeur ; quatre caractères au moins (ADR 0041)                                                                                             | 0,85  |
+| `same_address`                | Même adresse normalisée (accents, ponctuation, abréviations, mots vides, code postal et commune retirés), communes compatibles, avec un numéro (ADR 0041)                                                                     | 0,9   |
+| `same_commune_price_surface`  | Même commune, surface à ±3 %, prix à ±5 % ; 0,8 aux mêmes valeurs, 0,6 au bord des tolérances (ADR 0041)                                                                                                                      | 0,8   |
+| `nearby_similar`              | À moins de 50 m (PostGIS, module `geo`), surface à ±5 %, deux repères à l'adresse (ADR 0041)                                                                                                                                  | 0,7   |
+
+ADR 0041 : un fait contraire connu des deux côtés (autre nombre de pièces, autre étage, surface à
+plus de 5 %, DPE à deux classes ou plus, construction à plus de trois ans, même agence avec une
+autre référence) écarte un doublon probable ; un DPE à une classe ou un prix à plus de 5 % retirent
+0,15 au score ; sous 0,5, rien n'est rendu. `differences` dit ce qui diffère encore.
 
 Chaque candidat porte tous ses motifs et le meilleur score ; lot 18 : `certain` (même lien, ou
 même agence et même référence), le vendeur, la référence et le nombre de liens, les certains

@@ -240,6 +240,7 @@ describe('Phase 1 et phase 2 avancées (e2e)', () => {
       const other = await post('/listings', {
         ...EXAMPLE,
         title: 'Autre',
+        ignoreDuplicates: true,
       }).expect(201)
       await post(`/listings/${other.body.listing.id}/scenarios/evaluate`, {
         scenarioId: created.body.id,

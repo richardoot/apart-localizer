@@ -34,11 +34,12 @@ describe('Lot 23 : l’accueil (e2e)', () => {
 
   const api = () => request(ctx.server)
 
+  // Les annonces fictives se ressemblent exprès (ADR 0041 : un doublon probable bloque).
   async function listingWith(title = LISTING.title): Promise<string> {
     const res = await api()
       .post('/listings')
       .set(ctx.auth(richard))
-      .send({ ...LISTING, title })
+      .send({ ...LISTING, title, ignoreDuplicates: true })
       .expect(201)
     return res.body.listing.id as string
   }

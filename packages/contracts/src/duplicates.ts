@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import {
+  DpeClassSchema,
   ListingStatusSchema,
+  LocationPrecisionSchema,
   ObservedSellerTypeSchema,
   SellerTypeSchema,
 } from './enums.js'
@@ -15,12 +17,33 @@ import { PointSchema } from './geojson.js'
  * même annonce publiée sur un autre portail.
  */
 
-/** Tolérances : surface à ±3 %, prix à ±5 %, voisinage à 50 m avec surface à ±5 %. */
+/**
+ * Tolérances : surface à ±3 %, prix à ±5 %, voisinage à 50 m avec surface à
+ * ±5 %. Contradictions (ADR 0041) : au-delà de 5 % d'écart de surface, de
+ * deux classes de DPE ou de trois ans de construction, ce n'est plus le
+ * même bien ; une autre agence ne compte sa référence qu’à partir de quatre
+ * caractères (« 216 » chez deux agences n'est qu'une coïncidence).
+ */
 export const DUPLICATE_TOLERANCES = {
   surface: 0.03,
   price: 0.05,
   nearbyMeters: 50,
   nearbySurface: 0.05,
+  contradictionSurface: 0.05,
+  contradictionDpeClasses: 2,
+  contradictionYears: 3,
+  otherAgencyReferenceMinLength: 4,
+} as const
+
+/**
+ * Scores (ADR 0041) : un doublon probable n'est rendu qu'à partir de 0,5
+ * (une petite différence, comme un DPE voisin, baisse le score) ; à partir
+ * de 0,7, il bloque la création tant que le membre n'a pas confirmé que
+ * c'est une autre annonce (`ignoreDuplicates`).
+ */
+export const DUPLICATE_SCORES = {
+  minimum: 0.5,
+  blocking: 0.7,
 } as const
 
 export const DuplicateReasonKindSchema = z
@@ -99,6 +122,12 @@ export const DuplicateCandidateSchema = z.object({
     .min(0)
     .default(0)
     .describe('Nombre de liens (portails) de l’annonce existante'),
+  differences: z
+    .array(z.string().max(300))
+    .default([])
+    .describe(
+      'ADR 0041 : ce qui diffère malgré les motifs (DPE voisin, prix éloigné ; pour un doublon certain, même les faits contradictoires), en français'
+    ),
 })
 export type DuplicateCandidate = z.infer<typeof DuplicateCandidateSchema>
 
@@ -129,6 +158,32 @@ export const DuplicateProbeSchema = z
     point: PointSchema.optional().describe(
       'Point GeoJSON [lng, lat] pour la recherche à moins de 50 m'
     ),
+    precision: LocationPrecisionSchema.optional().describe(
+      'Précision du point : seul un point à l’adresse (exact) compte pour le voisinage à 50 m ; absent = exact'
+    ),
+    rooms: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe('Nombre de pièces : un autre nombre écarte le doublon'),
+    floor: z
+      .number()
+      .int()
+      .optional()
+      .describe(
+        'Étage (0 = rez-de-chaussée) : un autre étage écarte le doublon'
+      ),
+    dpeClass: DpeClassSchema.optional().describe(
+      'Classe DPE : deux classes d’écart écartent le doublon, une le rend moins probable'
+    ),
+    constructionYear: z
+      .number()
+      .int()
+      .optional()
+      .describe(
+        'Année de construction : plus de trois ans d’écart écartent le doublon'
+      ),
     sellerType: ObservedSellerTypeSchema.optional(),
     sellerName: z
       .string()

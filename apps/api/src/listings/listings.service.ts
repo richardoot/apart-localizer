@@ -7,6 +7,7 @@ import {
 import {
   ACTIVE_LISTING_STATUSES,
   DEFAULT_TASKS,
+  DUPLICATE_REASON_LABELS,
   EvaluatedListingSchema,
   HypotheticalListingSchema,
   LISTING_STATUS_LABELS,
@@ -66,6 +67,7 @@ import {
   priceTrigger,
   primaryLink,
   referenceKey,
+  blockingDuplicateOf,
   referenceMatchOf,
   restoreKeptProvenance,
   sameUrlMatchOf,
@@ -530,6 +532,17 @@ export class ListingsService {
     if (sameReference && !options.ignoreDuplicates) {
       throw new ConflictException(
         `Même agence et même référence que « ${sameReference.title} » [id ${sameReference.listingId}] : c’est la même annonce, publiée sur un autre portail. Ajoute ce lien à sa fiche (add_listing_link, ou « C’est la même : ajouter ce lien à la fiche »), ou confirmez qu’il s’agit d’une autre annonce (ignoreDuplicates).`
+      )
+    }
+    // ADR 0041 : un doublon probable fort, sans rien qui le contredise,
+    // attend la confirmation du membre comme un doublon certain.
+    const probable = blockingDuplicateOf(duplicates)
+    if (probable && !options.ignoreDuplicates) {
+      const why = probable.reasons
+        .map(r => DUPLICATE_REASON_LABELS[r.kind].toLowerCase())
+        .join(', ')
+      throw new ConflictException(
+        `Doublon probable de « ${probable.title} » [id ${probable.listingId}] (${why}, ${Math.round(probable.score * 100)} %) : c’est sans doute le même bien. Ajoute ce lien à sa fiche (add_listing_link, ou « C’est la même : ajouter ce lien à la fiche »), ou confirmez qu’il s’agit d’une autre annonce (ignoreDuplicates).`
       )
     }
     const seller = normalizeSeller(input)

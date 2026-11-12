@@ -190,11 +190,11 @@ describe('Extraction IA, géocodage, doublons (e2e)', () => {
         status: 'to_study',
         score: 1,
       })
+      // ADR 0041 : « rue du Forum » sans numéro n'est pas une adresse, et
+      // deux repères à la rue ne sont pas voisins.
       expect(result.duplicates[0]?.reasons.map(r => r.kind)).toEqual([
         'same_url',
-        'same_address',
         'same_commune_price_surface',
-        'nearby_similar',
       ])
     })
 
@@ -482,6 +482,8 @@ describe('Extraction IA, géocodage, doublons (e2e)', () => {
           title: 'Même adresse',
           price: 160_000,
           location: { addressRaw: '12 RUE du Forum', commune: 'Talence' },
+          // ADR 0041 : la même adresse est un doublon probable qui bloque.
+          ignoreDuplicates: true,
         })
         .expect(201)
       expect(ctx.geocoding.fetchImpl).toHaveBeenCalledTimes(1)

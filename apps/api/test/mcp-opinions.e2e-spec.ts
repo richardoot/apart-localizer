@@ -113,7 +113,11 @@ describe('Lot 20 : nos avis au connecteur MCP (e2e)', () => {
       await request(ctx.server)
         .post('/listings')
         .set(ctx.auth(richard))
-        .send({ ...LISTING, title: '[Exemple] T3 Chartrons, cour' })
+        .send({
+          ...LISTING,
+          title: '[Exemple] T3 Chartrons, cour',
+          ignoreDuplicates: true,
+        })
         .expect(201)
     ).body.listing.id
   })

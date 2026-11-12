@@ -106,6 +106,7 @@ const certain: DuplicateCandidate = {
   sellerName: '[Exemple] Immobilier des Chartrons',
   sellerReference: 'EX-2041',
   linkCount: 2,
+  differences: [],
 }
 
 const otherAgency: DuplicateCandidate = {

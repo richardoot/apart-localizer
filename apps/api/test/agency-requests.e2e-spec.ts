@@ -343,7 +343,12 @@ describe('Lot 17 : questions aux agences (e2e)', () => {
     const other = await api()
       .post('/listings')
       .set(ctx.auth(richard))
-      .send({ ...LISTING, title: 'T3 fictif Talence', url: null })
+      .send({
+        ...LISTING,
+        title: 'T3 fictif Talence',
+        url: null,
+        ignoreDuplicates: true,
+      })
       .expect(201)
     const a = (
       await api()

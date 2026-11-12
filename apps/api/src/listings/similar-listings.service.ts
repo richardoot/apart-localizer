@@ -93,6 +93,7 @@ export class SimilarListingsService {
       floor: row.floor,
       dpeClass: row.dpeClass,
       constructionYear: row.constructionYear,
+      locationPrecision: row.locationPrecision,
       district: row.district,
       updatedAt: row.updatedAt.toISOString(),
     }))
@@ -139,6 +140,7 @@ export class SimilarListingsService {
           sellerName: fields.sellerName ?? base.sellerName,
           reference: fields.reference ?? base.sellerReference,
           otherSellers: base.otherSellers,
+          precision: row.locationPrecision,
         },
         point:
           point.success && isPrecise(row.locationPrecision) ? point.data : null,
@@ -169,6 +171,7 @@ export class SimilarListingsService {
           sellerType: input.sellerType,
           sellerName: input.sellerName,
           reference: input.sellerReference,
+          precision: location.precision,
         },
         point:
           location.point && isPrecise(location.precision)

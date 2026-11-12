@@ -731,7 +731,7 @@ describe('Lot 6 : confort (e2e)', () => {
       const other = await api()
         .post('/listings')
         .set(ctx.auth(chloe))
-        .send({ ...EXAMPLE, title: 'Autre' })
+        .send({ ...EXAMPLE, title: 'Autre', ignoreDuplicates: true })
         .expect(201)
       const res = await api()
         .get('/export?format=json')

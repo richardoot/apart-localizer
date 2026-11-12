@@ -156,9 +156,14 @@ describe('Adéquation aux critères (e2e, lot 14)', () => {
     return JSON.parse(match?.[1] ?? '{}') as T
   }
 
+  // Les annonces fictives se ressemblent exprès (ADR 0041 : un doublon probable bloque).
   async function create(body: object, as: E2eIdentity = richard) {
     return (
-      await api().post('/listings').set(ctx.auth(as)).send(body).expect(201)
+      await api()
+        .post('/listings')
+        .set(ctx.auth(as))
+        .send({ ignoreDuplicates: true, ...body })
+        .expect(201)
     ).body
   }
 

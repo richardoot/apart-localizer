@@ -32,8 +32,12 @@ describe('Prix cible et négociation (e2e)', () => {
   const get = (path: string, identity = richard) =>
     request(ctx.server).get(path).set(ctx.auth(identity))
 
+  // Les annonces fictives se ressemblent exprès (ADR 0041 : un doublon probable bloque).
   async function createListing(body: Record<string, unknown>): Promise<string> {
-    const res = await post('/listings', body).expect(201)
+    const res = await post('/listings', {
+      ignoreDuplicates: true,
+      ...body,
+    }).expect(201)
     return res.body.listing.id as string
   }
 

@@ -107,6 +107,7 @@ describe('MCP lot 15 : suivi des mises à jour', () => {
           sellerName: null,
           sellerReference: null,
           linkCount: 0,
+          differences: [],
           reasons: [
             {
               kind: 'same_commune_price_surface',

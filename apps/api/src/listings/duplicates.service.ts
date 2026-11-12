@@ -30,6 +30,12 @@ export const DUPLICATE_ROW_SELECT = {
   sellerName: true,
   sellerReference: true,
   sellerReferenceKey: true,
+  // ADR 0041 : les faits qui confirment ou contredisent un motif probable.
+  rooms: true,
+  floor: true,
+  dpeClass: true,
+  constructionYear: true,
+  locationPrecision: true,
   links: { select: { normalizedUrl: true } },
   // Lot 27 : les autres agences qui vendent le même bien.
   sellers: {
@@ -59,6 +65,11 @@ export function duplicateRowOf(row: {
   sellerReferenceKey: string | null
   links: { normalizedUrl: string }[]
   sellers?: NonNullable<DuplicateRow['otherSellers']>[number][]
+  rooms?: number | null
+  floor?: number | null
+  dpeClass?: DuplicateRow['dpeClass']
+  constructionYear?: number | null
+  locationPrecision?: DuplicateRow['locationPrecision']
 }): DuplicateRow {
   return {
     id: row.id,
@@ -76,6 +87,11 @@ export function duplicateRowOf(row: {
     sellerReference: row.sellerReference,
     sellerReferenceKey: row.sellerReferenceKey,
     otherSellers: row.sellers ?? [],
+    rooms: row.rooms ?? null,
+    floor: row.floor ?? null,
+    dpeClass: row.dpeClass ?? null,
+    constructionYear: row.constructionYear ?? null,
+    locationPrecision: row.locationPrecision ?? null,
   }
 }
 
@@ -147,11 +163,43 @@ export class DuplicatesService {
       price: probe.price ?? Number(row.price),
       surface: probe.surface ?? num(row.surface) ?? undefined,
       point: probe.point ?? (point.success ? point.data : undefined),
+      // ADR 0041 : la précision vient avec le point de la fiche.
+      ...(probe.point
+        ? {}
+        : row.locationPrecision
+          ? { precision: row.locationPrecision }
+          : {}),
+      ...optional('rooms', probe.rooms ?? row.rooms),
+      ...optional('floor', probe.floor ?? row.floor),
+      ...optional('dpeClass', probe.dpeClass ?? row.dpeClass),
+      ...optional(
+        'constructionYear',
+        probe.constructionYear ?? row.constructionYear
+      ),
+      ...(probe.sellerName || !row.sellerName
+        ? {}
+        : { sellerName: row.sellerName }),
+      ...(probe.reference || !row.sellerReference
+        ? {}
+        : { reference: row.sellerReference }),
+      ...(probe.sellerType || row.sellerType === 'unknown'
+        ? {}
+        : { sellerType: row.sellerType }),
     }
   }
 }
 
-/** La sonde correspondant à une annonce à créer (lot 18 : vendeur et référence compris). */
+/** `{ [key]: value }` si la valeur est connue, `{}` sinon (sonde sans clé à `undefined`). */
+function optional<K extends string, V>(
+  key: K,
+  value: V | null | undefined
+): Partial<Record<K, V>> {
+  return value === null || value === undefined
+    ? {}
+    : ({ [key]: value } as Record<K, V>)
+}
+
+/** La sonde correspondant à une annonce à créer (lot 18 : vendeur et référence compris ; ADR 0041 : les faits qui contredisent). */
 export function probeFromInput(input: ListingInput): DuplicateProbe {
   const sellerType =
     input.sellerType === 'unknown' ? undefined : input.sellerType
@@ -164,6 +212,13 @@ export function probeFromInput(input: ListingInput): DuplicateProbe {
     price: input.price,
     ...(input.surface !== null ? { surface: input.surface } : {}),
     ...(input.location.point ? { point: input.location.point } : {}),
+    ...(input.location.point && input.location.precision
+      ? { precision: input.location.precision }
+      : {}),
+    ...optional('rooms', input.rooms),
+    ...optional('floor', input.floor),
+    ...optional('dpeClass', input.dpeClass),
+    ...optional('constructionYear', input.constructionYear),
     ...(sellerType ? { sellerType } : {}),
     ...(input.sellerName ? { sellerName: input.sellerName } : {}),
     ...(input.sellerReference ? { reference: input.sellerReference } : {}),

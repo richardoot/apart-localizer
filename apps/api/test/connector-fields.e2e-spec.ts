@@ -317,6 +317,8 @@ describe('Champs que le connecteur n’écrit pas (e2e)', () => {
           ...SENT_BY_CLAUDE,
           title: '[Exemple] T2 dicté',
           propertyTax: 700,
+          // Le même bien fictif que plus haut (ADR 0041 : sinon refusé).
+          ignoreDuplicates: true,
         },
         provenance: 'user',
       })

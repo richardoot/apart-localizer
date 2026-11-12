@@ -128,11 +128,12 @@ describe('Critères de recherche (e2e)', () => {
     return JSON.parse(match?.[1] ?? '{}') as Record<string, unknown>
   }
 
+  // Les annonces fictives se ressemblent exprès (ADR 0041 : un doublon probable bloque).
   async function create(body: object, as: E2eIdentity = richard) {
     const res = await request(ctx.server)
       .post('/listings')
       .set(ctx.auth(as))
-      .send(body)
+      .send({ ignoreDuplicates: true, ...body })
       .expect(201)
     return res.body
   }

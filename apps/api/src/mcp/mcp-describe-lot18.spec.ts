@@ -194,6 +194,7 @@ describe('MCP lot 18 : une annonce, plusieurs portails', () => {
         sellerName: null,
         sellerReference: 'EX-2041',
         linkCount: 1,
+        differences: [],
       },
     ])
     expect(text).toContain('Même agence, même référence')

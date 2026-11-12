@@ -201,9 +201,11 @@ Voir [ia.md](ia.md).
 
 #### `find_duplicates`
 
-Entrée : `DuplicateProbe` : `listingId` (annonce enregistrée, exclue des résultats), `url`,
-`address`, `point` (GeoJSON, 50 m), ou le trio `commune` + `price` + `surface`, ou (lot 18)
-`reference`, avec `sellerName` et `sellerType` ; au moins un
+Entrée : `DuplicateProbe` : `listingId` (annonce enregistrée, exclue des résultats ; ses faits
+complètent la sonde), `url`, `address`, `point` (GeoJSON, 50 m), ou le trio `commune` + `price` +
+`surface`, ou (lot 18) `reference`, avec `sellerName` et `sellerType` ; au moins un. ADR 0041 :
+`precision` du point, `rooms`, `floor`, `dpeClass`, `constructionYear`, qui confirment ou
+contredisent un motif probable
 
 Réponse : `{ duplicates }` : pour chaque candidat, `listingId`, `title`, `status`, `price`,
 `surface`, `commune`, `url`, `score` (0 à 1) et `reasons[]` (`same_url`, comparé à tous les liens de
@@ -211,7 +213,17 @@ chaque annonce depuis le lot 18 ; lot 18 : `same_reference`, même agence et mê
 et `same_reference_other_agency`, même référence avec une autre agence ou une agence inconnue,
 0,85 ; `same_address`, `same_commune_price_surface`, `nearby_similar`), toutes les étapes comprises
 (y compris écartées) ; lot 18 : `certain` (même lien, ou même agence et même référence : la même
-annonce ; les certains d'abord), `sellerType`, `sellerName`, `sellerReference`, `linkCount`
+annonce ; les certains d'abord), `sellerType`, `sellerName`, `sellerReference`, `linkCount`.
+
+ADR 0041 : un fait contraire connu des deux côtés écarte un doublon probable (autre nombre de
+pièces, autre étage, surface à plus de 5 %, DPE à deux classes ou plus, construction à plus de trois
+ans, même agence avec une autre référence) ; un DPE à une classe ou un prix à plus de 5 % retirent
+0,15 au score, et `same_commune_price_surface` vaut de 0,8 (mêmes valeurs) à 0,6 (au bord des
+tolérances) ; sous 0,5, rien n'est rendu. `same_address` demande un numéro, `nearby_similar` deux
+repères à l'adresse (deux annonces au centre du même quartier ne sont pas voisines),
+`same_reference_other_agency` une référence de quatre caractères au moins. Les deux formes d'une
+page Bien'ici (`/annonce/vente/…/<id>` et `/annonce/<id>`) sont le même lien. `differences` dit ce
+qui diffère encore (pour un doublon certain, même les faits contraires)
 
 #### `get_target_price`
 
@@ -430,9 +442,9 @@ sinon le quartier reconnu dans `location.district` (centre du quartier), sinon u
 centre de la commune — d'où la consigne de la description : l'adresse la plus précise dans
 `addressRaw`, le quartier cité du plus large au plus fin dans `district`, un point seulement s'il
 est sûr ; les champs fournis reçoivent la provenance (`ai` par défaut, `user` si le membre a dicté),
-sauf ceux que `fieldSources` décrit déjà. La réponse porte `duplicates` (la création n'est **pas**
-bloquée par un doublon probable ; `ignoreDuplicates: true` journalisé quand le membre a vu
-l'alerte ; lot 18 : refus si le lien est déjà celui d'une autre annonce, même avec
+sauf ceux que `fieldSources` décrit déjà. La réponse porte `duplicates` (ADR 0041 : refus si un
+doublon probable atteint 0,7 sans rien qui le contredise, sauf `ignoreDuplicates: true`, journalisé,
+quand le membre confirme que c'est une autre annonce ; lot 18 : refus si le lien est déjà celui d'une autre annonce, même avec
 `ignoreDuplicates`, ou si une annonce a la même agence et la même référence, sauf
 `ignoreDuplicates` : proposer `add_listing_link` sur cette fiche) et `createdTasks` (une tâche
 `missing_field` par champ indispensable manquant quand la fiche vient de l'IA, sans doublonner la

@@ -195,6 +195,7 @@ const item: CandidateTriage = {
       sellerName: null,
       sellerReference: null,
       linkCount: 0,
+      differences: [],
       reasons: [
         { kind: 'same_commune_price_surface', score: 0.8, detail: 'x' },
       ],

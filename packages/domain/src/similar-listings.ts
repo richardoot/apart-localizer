@@ -7,6 +7,7 @@ import type {
   DpeClass,
   DuplicateReason,
   ListingStatus,
+  LocationPrecision,
   SellerType,
   SimilarListing,
   SimilarReason,
@@ -55,6 +56,8 @@ export interface SimilarProbe {
   reference?: string | null | undefined
   /** Les autres agences de l'annonce comparée. */
   otherSellers?: readonly DuplicateRowSeller[] | undefined
+  /** ADR 0041 : la précision de son repère (le voisinage à 50 m ne vaut qu'à l'adresse). */
+  precision?: LocationPrecision | null | undefined
 }
 
 /** Ce qu'une annonce enregistrée offre à la comparaison. */
@@ -304,6 +307,14 @@ export function probeDuplicateReasons(
     ...(probe.commune ? { commune: probe.commune } : {}),
     ...(known(probe.price) ? { price: probe.price } : {}),
     ...(known(probe.surface) ? { surface: probe.surface } : {}),
+    // ADR 0041 : les faits qui contredisent un motif probable.
+    ...(known(probe.rooms) ? { rooms: probe.rooms } : {}),
+    ...(known(probe.floor) ? { floor: probe.floor } : {}),
+    ...(known(probe.dpeClass) ? { dpeClass: probe.dpeClass } : {}),
+    ...(known(probe.constructionYear)
+      ? { constructionYear: probe.constructionYear }
+      : {}),
+    ...(known(probe.precision) ? { precision: probe.precision } : {}),
   }
   const sellers: DuplicateRowSeller[] = [
     {

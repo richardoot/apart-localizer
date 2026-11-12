@@ -54,6 +54,30 @@ describe('DuplicatesBanner', () => {
     expect(wrapper.emitted('ignore')).toHaveLength(1)
   })
 
+  it('ADR 0041 : ce qui diffère est dit sous les motifs', () => {
+    const plain = mount(DuplicatesBanner, {
+      props: { duplicates: [similar] },
+      global: { stubs },
+    })
+    expect(plain.find('[data-testid="duplicate-differences"]').exists()).toBe(
+      false
+    )
+    const wrapper = mount(DuplicatesBanner, {
+      props: {
+        duplicates: [
+          {
+            ...similar,
+            differences: ['DPE D contre C', '199 000 € contre 179 000 €'],
+          },
+        ],
+      },
+      global: { stubs },
+    })
+    expect(wrapper.find('[data-testid="duplicate-differences"]').text()).toBe(
+      'Diffère : DPE D contre C, 199 000 € contre 179 000 €'
+    )
+  })
+
   it('lot 18 : même lien déjà suivi, jamais « créer quand même » ni d’ajout', () => {
     const wrapper = mount(DuplicatesBanner, {
       props: {

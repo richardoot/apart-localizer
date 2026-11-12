@@ -388,6 +388,8 @@ describe('Listings (e2e)', () => {
             point: { type: 'Point', coordinates: [-0.5906, 44.8083] },
             precision: 'exact',
           },
+          // Le même bien fictif que l'exemple du § 8 (ADR 0041).
+          ignoreDuplicates: true,
         })
         .expect(201)
       const res = await request(ctx.server)

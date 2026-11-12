@@ -216,6 +216,8 @@ describe('Placement des annonces (e2e)', () => {
         rooms: 2,
         constructionYear: 1900,
         location,
+        // Le même bien fictif à chaque fois (ADR 0041 : un doublon probable bloque).
+        ignoreDuplicates: true,
       })
       .expect(201)
     return res.body.listing

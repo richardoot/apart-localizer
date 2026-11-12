@@ -421,6 +421,7 @@ describe('Lot 18 : liens des portails et vendeur (e2e, REST)', () => {
         sellerType: 'private',
         sellerName: 'Mme [Exemple]',
         sellerReference: 'EX-1',
+        ignoreDuplicates: true,
       })
       .expect(201)
     expect(privateSeller.body.listing).toMatchObject({

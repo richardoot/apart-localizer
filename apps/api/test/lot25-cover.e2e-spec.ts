@@ -92,7 +92,11 @@ describe('Lot 25 : la photo de couverture (e2e)', () => {
       await api()
         .post('/listings')
         .set(ctx.auth(richard))
-        .send({ ...EXAMPLE, title: '[Exemple] T3 sans visite' })
+        .send({
+          ...EXAMPLE,
+          title: '[Exemple] T3 sans visite',
+          ignoreDuplicates: true,
+        })
         .expect(201)
     ).body.listing.id as string
   })
