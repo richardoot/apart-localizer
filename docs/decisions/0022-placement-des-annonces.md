@@ -76,6 +76,8 @@ de résidence ou de parc, « près de », « nord », plusieurs noms séparés p
    quel par le formulaire ne compte pas comme une saisie (sinon changer l'adresse ne replaçait
    rien). Le rattrapage ne remplace jamais un repère à l'adresse ni un point saisi, ni par une
    précision moindre (`placementImproves`).
+   Modifié par 0042 : un point saisi renvoyé tel quel cède à une adresse ou une commune changées
+   trouvées au numéro ou à la rue, sauf s'il est à l'adresse et à moins de 150 m.
 9. **Interface** : pastille « Adresse exacte », « À la rue », « Au quartier (X) », « Commune
    seulement » (liste, cartes, fiche, comparaison, export CSV) avec l'explication en infobulle et
    en clair dans l'onglet Quartier (zone retenue, texte reconnu, raisons, « Préciser

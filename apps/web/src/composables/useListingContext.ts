@@ -2,7 +2,7 @@ import { computed, unref } from 'vue'
 import type { MaybeRef } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { api } from '@/lib/api'
-import { listingKeys } from './useListings'
+import { invalidateListingReads } from './useListings'
 
 export const contextKeys = {
   detail: (id: string) => ['listings', 'context', id] as const,
@@ -20,13 +20,10 @@ export function useListingContext(id: MaybeRef<string | null | undefined>) {
 /** Recherche et validation du DPE, relance du géocodage. */
 export function useContextMutations() {
   const client = useQueryClient()
-  function settle(id: string): void {
-    void client.invalidateQueries({ queryKey: listingKeys.detail(id) })
-    void client.invalidateQueries({ queryKey: contextKeys.detail(id) })
-    void client.invalidateQueries({ queryKey: ['listings', 'list'] })
-    void client.invalidateQueries({ queryKey: listingKeys.targetPrice(id) })
-    void client.invalidateQueries({ queryKey: listingKeys.areas })
-  }
+  // Le géocodage relancé déplace le repère, un DPE retenu change la fiche :
+  // toutes les lectures qui en dépendent sont relues.
+  const settle = (id: string): void =>
+    invalidateListingReads(client, id, { detail: true })
   const searchDpe = useMutation({
     mutationFn: (id: string) => api.listings.searchDpe(id),
     onSuccess: (_context, id) => settle(id),

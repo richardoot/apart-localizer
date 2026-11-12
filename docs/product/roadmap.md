@@ -382,7 +382,8 @@ Statut : livré (à déployer : migration additive `20261105180000_lot12_listing
     quartier qui regroupe des secteurs), repère au point intérieur du contour ; sinon lieu-dit
     OpenStreetMap ; sinon centre de la commune. Le plus précis cohérent l'emporte ; « près de »,
     noms incompatibles ou ambigus rendent « à vérifier » ; rien d'inventé. Un point saisi prime,
-    un repère à l'adresse ne redescend jamais.
+    un repère à l'adresse ne redescend jamais ; une adresse saisie ensuite et trouvée au numéro ou
+    à la rue replace un point saisi, sauf s'il la précise à moins de 150 m (ADR 0042).
   - **Modèle** : `listings.location_placement` (méthode, zone retenue, texte reconnu, réserves),
     `listings.location_area` (contour retenu ou commune), table `places` (lieux-dits) ; script
     `import:places` ; rattrapage `relocate:listings` (`--dry-run`, idempotent, journal

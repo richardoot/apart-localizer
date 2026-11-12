@@ -542,6 +542,35 @@ describe('Données ouvertes (e2e)', () => {
     expect(logs).toHaveLength(1)
   })
 
+  it('une surface corrigée dans la fiche relance la recherche du DPE : le DPE à l’adresse est retrouvé', async () => {
+    // 60 m² saisis, 45 m² au DPE de l'adresse : trop loin pour l'appliquer.
+    const { listing } = await create({ ...LISTING, surface: 60 })
+    expect(listing.dpeClass).toBeNull()
+    expect(listing.openDataContext.dpe.status).toBe('single')
+    const fixed = await request(ctx.server)
+      .patch(`/listings/${listing.id}`)
+      .set(ctx.auth(richard))
+      .send({ surface: 45 })
+      .expect(200)
+    expect(fixed.body.listing.dpeClass).toBe('D')
+    expect(fixed.body.listing.dpeNumber).toBe('2633E9999999X')
+    expect(fixed.body.listing.openDataContext.dpe.status).toBe('verified')
+    // Le plafond suit la surface (13 €/m² × 45 m²).
+    expect(fixed.body.evaluation.metrics.rentCap).toBe(13 * 45)
+    // Une modification sans effet sur les données ouvertes ne les relance pas.
+    const enriched = () =>
+      ctx.prisma.activityLog.count({
+        where: { listingId: listing.id, action: 'listing.enriched' },
+      })
+    const before = await enriched()
+    await request(ctx.server)
+      .patch(`/listings/${listing.id}`)
+      .set(ctx.auth(richard))
+      .send({ surface: 45, title: 'T2 rue Fictive, lumineux' })
+      .expect(200)
+    expect(await enriched()).toBe(before)
+  })
+
   it('ADEME en panne : l’annonce est créée, la recherche est « indisponible »', async () => {
     ctx.dpe.fetchImpl = () => Promise.reject(new Error('réseau coupé'))
     const { listing } = await create()

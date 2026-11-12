@@ -3,7 +3,10 @@ import type { EvaluatedListing, OpenTasks } from '@apart/contracts'
 import { fakeEvaluated, fakeTask } from '@/test/fixtures'
 import { withQuery } from '@/test/with-query'
 
-const apiMock = vi.hoisted(() => ({ tasks: { update: vi.fn() } }))
+const apiMock = vi.hoisted(() => ({
+  tasks: { update: vi.fn() },
+  listings: { update: vi.fn() },
+}))
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return { ...actual, api: apiMock }
@@ -93,5 +96,39 @@ describe('Lot 24 : une tâche cochée s’affiche tout de suite', () => {
       client.getQueryData<EvaluatedListing>(listingKeys.detail(item.listing.id))
         ?.tasks[0]?.label
     ).toBe('Vérifier la cave')
+  })
+})
+
+describe('une fiche enregistrée : tout ce que le serveur recalcule est relu', () => {
+  it('repère, données ouvertes, adéquation, journal, ressemblances : marqués à relire ; la fiche reçue reste', async () => {
+    const { result, client, item } = seed()
+    const id = item.listing.id
+    const reads = [
+      ['listings', 'list', {}],
+      ['listings', 'context', id],
+      ['listings', 'compliance', id],
+      ['listings', 'rent-comparables', id],
+      ['listings', 'target-price', id],
+      ['listings', 'sensitivity', id, { rows: 'price' }],
+      ['listings', 'fit-history', id],
+      ['listings', 'activity', id, 'history', 1],
+      ['listings', 'similar', { listingId: id }],
+      ['listings', 'compare', [id, 'autre']],
+      ['listings', 'areas'],
+      ['decisions', 'overview'],
+    ] as const
+    for (const key of reads) client.setQueryData(key, { stale: false })
+    const saved = { ...item, listing: { ...item.listing, title: 'Relue' } }
+    apiMock.listings.update.mockResolvedValue(saved)
+    await result.update.mutateAsync({ id, patch: { title: 'Relue' } })
+    for (const key of reads) {
+      expect(client.getQueryState(key)?.isInvalidated, key.join('/')).toBe(true)
+    }
+    const detail = client.getQueryState(listingKeys.detail(id))
+    expect(detail?.isInvalidated).toBe(false)
+    expect(
+      client.getQueryData<EvaluatedListing>(listingKeys.detail(id))?.listing
+        .title
+    ).toBe('Relue')
   })
 })

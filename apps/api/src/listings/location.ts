@@ -71,19 +71,24 @@ export function manualLocationPlacement(
 
 /**
  * Faut-il replacer le repère après une modification de la localisation
- * (lot 12) ? Oui si l'adresse ou la commune change, ou si le quartier
- * change alors que le repère n'est pas à l'adresse (numéro ou rue) ; et le
- * point renvoyé tel quel par le formulaire (inchangé) ne compte pas comme
- * une saisie, sauf s'il avait été saisi à la main. Un point nouveau saisi
- * prime toujours.
+ * (lot 12) ? `relocate` si l'adresse ou la commune change, ou si le quartier
+ * change alors que le repère n'est pas à l'adresse (numéro ou rue) ; le point
+ * renvoyé tel quel par le formulaire (inchangé) ne compte pas comme une
+ * saisie. S'il avait été saisi (carte, formulaire, Claude), `if_address` :
+ * une adresse ou une commune changées le replacent seulement si le géocodeur
+ * les trouve à l'adresse (`addressOverridesManualPoint`) ; un quartier changé
+ * ne le touche pas. `none` sans changement, ou pour un point nouveau saisi,
+ * qui prime toujours.
  */
+export type RelocationNeed = 'none' | 'relocate' | 'if_address'
+
 export function relocationNeeded(
   before: {
     location: ListingLocationInput & { placement?: ListingPlacement | null }
     fieldSources: FieldProvenanceMap
   },
   patch: Partial<ListingLocationInput>
-): boolean {
+): RelocationNeed {
   const changed = (key: 'addressRaw' | 'commune' | 'district'): boolean =>
     patch[key] !== undefined &&
     (patch[key] ?? '').trim().toLowerCase() !==
@@ -91,16 +96,34 @@ export function relocationNeeded(
   const address = changed('addressRaw') || changed('commune')
   const district =
     changed('district') && !isAddressPrecision(before.location.precision)
-  if (!address && !district) return false
-  if (!patch.point) return true
-  if (!samePoint(patch.point, before.location.point)) return false
+  if (!address && !district) return 'none'
+  if (!patch.point) return 'relocate'
+  if (!samePoint(patch.point, before.location.point)) return 'none'
   // Le point renvoyé est l'ancien : replacé, sauf s'il avait été saisi.
   const manual =
     before.location.placement?.method === 'manual' ||
     (!before.location.placement &&
       before.fieldSources.point !== undefined &&
       before.fieldSources.point.source !== 'open_data')
-  return !manual
+  if (!manual) return 'relocate'
+  return address ? 'if_address' : 'none'
+}
+
+/**
+ * Le code INSEE à donner au géocodeur : celui du patch, sinon celui de la
+ * fiche tant que la commune ne change pas (l'ancien orienterait la recherche
+ * du quartier vers l'ancienne commune).
+ */
+export function inseeCodeForLocate(
+  before: Pick<ListingLocationInput, 'commune' | 'inseeCode'>,
+  patch: Partial<ListingLocationInput>
+): string | null {
+  if (patch.inseeCode) return patch.inseeCode
+  const communeChanged =
+    patch.commune !== undefined &&
+    (patch.commune ?? '').trim().toLowerCase() !==
+      (before.commune ?? '').trim().toLowerCase()
+  return communeChanged ? null : (before.inseeCode ?? null)
 }
 
 /** Marque les clés géocodées comme données ouvertes dans la carte de provenance. */

@@ -6,7 +6,10 @@
 import { describe, expect, it } from 'vitest'
 import { MANUAL_POINT_ADDRESS_TOLERANCE_METERS } from '@apart/contracts'
 import type { Point } from '@apart/contracts'
-import { addressFieldsForManualPoint } from '../src/index.js'
+import {
+  addressFieldsForManualPoint,
+  addressOverridesManualPoint,
+} from '../src/index.js'
 import type { GeocodedAddressFacts } from '../src/index.js'
 
 const at = (lng: number, lat: number): Point => ({
@@ -136,5 +139,74 @@ describe('addressFieldsForManualPoint', () => {
       located({ banId: null, addressNormalized: null, inseeCode: null })
     )
     expect(result.keys).toEqual([])
+  })
+})
+
+describe('addressOverridesManualPoint', () => {
+  const geocoded = (
+    precision: 'exact' | 'street' | 'district' | 'commune',
+    point: Point = at(-0.6, 44.85)
+  ) => ({ point, precision })
+
+  it('une adresse trouvée au numéro ou à la rue déplace un point approché', () => {
+    for (const precision of ['district', 'commune', null] as const) {
+      expect(
+        addressOverridesManualPoint(
+          { point: POINT, precision },
+          geocoded('exact')
+        )
+      ).toBe(true)
+    }
+    expect(
+      addressOverridesManualPoint(
+        { point: POINT, precision: 'district' },
+        geocoded('street')
+      )
+    ).toBe(true)
+    expect(
+      addressOverridesManualPoint(
+        { point: null, precision: null },
+        geocoded('exact')
+      )
+    ).toBe(true)
+  })
+
+  it('une adresse trouvée loin d’un point saisi à l’adresse le déplace', () => {
+    // ≈ 1,9 km plus loin.
+    expect(
+      addressOverridesManualPoint(
+        { point: POINT, precision: 'exact' },
+        geocoded('exact')
+      )
+    ).toBe(true)
+  })
+
+  it('un point saisi à l’adresse, tout près, la précise : il reste', () => {
+    expect(
+      addressOverridesManualPoint(
+        { point: POINT, precision: 'exact' },
+        geocoded('exact', at(-0.5801, 44.8401))
+      )
+    ).toBe(false)
+    // La tolérance se règle.
+    expect(
+      addressOverridesManualPoint(
+        { point: POINT, precision: 'street' },
+        geocoded('exact', at(-0.5801, 44.8401)),
+        5
+      )
+    ).toBe(true)
+    expect(MANUAL_POINT_ADDRESS_TOLERANCE_METERS).toBeGreaterThan(14)
+  })
+
+  it('une adresse trouvée seulement au quartier ou à la commune ne déplace pas un point saisi', () => {
+    for (const precision of ['district', 'commune'] as const) {
+      expect(
+        addressOverridesManualPoint(
+          { point: POINT, precision: 'commune' },
+          geocoded(precision)
+        )
+      ).toBe(false)
+    }
   })
 })

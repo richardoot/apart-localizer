@@ -4,6 +4,7 @@ import type { FieldProvenanceMap, ListingPlacement } from '@apart/contracts'
 import { addressPlacement, communePlacement } from '@apart/domain'
 import {
   applyLocated,
+  inseeCodeForLocate,
   manualLocationPlacement,
   needsGeocoding,
   relocationNeeded,
@@ -50,22 +51,24 @@ describe('relocationNeeded (lot 12)', () => {
 
   it('replace sur une adresse ou une commune changées, ou un quartier changé hors adresse', () => {
     expect(relocationNeeded(base('commune'), { addressRaw: '1 rue X' })).toBe(
-      true
+      'relocate'
     )
-    expect(relocationNeeded(base('exact'), { commune: 'Pessac' })).toBe(true)
+    expect(relocationNeeded(base('exact'), { commune: 'Pessac' })).toBe(
+      'relocate'
+    )
     expect(relocationNeeded(base('commune'), { district: 'Peixotto' })).toBe(
-      true
+      'relocate'
     )
     // Le quartier seul ne touche pas un repère à l'adresse.
     expect(relocationNeeded(base('exact'), { district: 'Peixotto' })).toBe(
-      false
+      'none'
     )
     expect(relocationNeeded(base('street'), { district: 'Peixotto' })).toBe(
-      false
+      'none'
     )
     // Rien de changé (casse et espaces ignorés).
     expect(relocationNeeded(base('commune'), { district: ' forum ' })).toBe(
-      false
+      'none'
     )
   })
 
@@ -80,7 +83,7 @@ describe('relocationNeeded (lot 12)', () => {
         district: 'Peixotto',
         point,
       })
-    ).toBe(true)
+    ).toBe('relocate')
     expect(
       relocationNeeded(
         base(
@@ -92,27 +95,48 @@ describe('relocationNeeded (lot 12)', () => {
           point,
         }
       )
-    ).toBe(false)
+    ).toBe('none')
     // Annonce antérieure au lot 12 : la provenance du point décide.
     expect(
       relocationNeeded(base('commune', null, 'user'), {
         district: 'Peixotto',
         point,
       })
-    ).toBe(false)
+    ).toBe('none')
     expect(
       relocationNeeded(base('commune', null, null), {
         district: 'Peixotto',
         point,
       })
-    ).toBe(true)
+    ).toBe('relocate')
     // Un point nouveau prime.
     expect(
       relocationNeeded(base('commune'), {
         district: 'Peixotto',
         point: { type: 'Point', coordinates: [-0.6, 44.8] },
       })
-    ).toBe(false)
+    ).toBe('none')
+  })
+
+  it('un point saisi renvoyé tel quel : une adresse ou une commune changées le replacent si elles sont trouvées à l’adresse', () => {
+    const manual = base(
+      'district',
+      manualLocationPlacement({ point, precision: 'district' })
+    )
+    expect(
+      relocationNeeded(manual, { addressRaw: '12 rue du Forum', point })
+    ).toBe('if_address')
+    expect(relocationNeeded(manual, { commune: 'Pessac', point })).toBe(
+      'if_address'
+    )
+    // Le quartier seul ne touche pas un point saisi.
+    expect(relocationNeeded(manual, { district: 'Peixotto', point })).toBe(
+      'none'
+    )
+    // Sans point dans le patch, l'adresse replace toujours.
+    expect(relocationNeeded(manual, { addressRaw: '12 rue du Forum' })).toBe(
+      'relocate'
+    )
   })
 
   it('un point saisi reçoit un placement « point saisi »', () => {
@@ -185,5 +209,22 @@ describe('needsGeocoding', () => {
         commune: null,
       })
     ).toBe(false)
+  })
+})
+
+describe('inseeCodeForLocate', () => {
+  const before = { commune: 'Talence', inseeCode: '33522' }
+  it('garde le code de la fiche tant que la commune ne change pas', () => {
+    expect(inseeCodeForLocate(before, { addressRaw: '1 rue X' })).toBe('33522')
+    expect(inseeCodeForLocate(before, { commune: ' talence ' })).toBe('33522')
+  })
+  it('l’oublie quand la commune change, sauf code donné par le patch', () => {
+    expect(inseeCodeForLocate(before, { commune: 'Pessac' })).toBeNull()
+    expect(
+      inseeCodeForLocate(before, { commune: 'Pessac', inseeCode: '33318' })
+    ).toBe('33318')
+    expect(
+      inseeCodeForLocate({ commune: null, inseeCode: null }, {})
+    ).toBeNull()
   })
 })

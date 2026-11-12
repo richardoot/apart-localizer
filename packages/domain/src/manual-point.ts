@@ -73,3 +73,28 @@ export function addressFieldsForManualPoint(
   }
   return { fields, keys }
 }
+
+/**
+ * Une adresse ou une commune changées l'emportent-elles sur le point saisi
+ * que le formulaire renvoie tel quel (lot 12, correctif) ? Oui quand le
+ * géocodeur trouve la nouvelle adresse au numéro ou à la rue : le repère suit
+ * l'adresse, et avec lui la desserte, le quartier, les équipements, le marché,
+ * l'encadrement et les critères. Sauf si le point saisi, lui-même à l'adresse,
+ * est à moins de la tolérance : il précise l'adresse (entrée, bâtiment), il
+ * reste. Trouvée seulement au quartier ou à la commune, l'adresse ne déplace
+ * pas un point saisi. Pur.
+ */
+export function addressOverridesManualPoint(
+  current: { point: Point | null; precision: LocationPrecision | null },
+  located: { point: Point; precision: LocationPrecision },
+  toleranceMeters: number = MANUAL_POINT_ADDRESS_TOLERANCE_METERS
+): boolean {
+  if (!isAddressPrecision(located.precision)) return false
+  if (!current.point || !isAddressPrecision(current.precision)) return true
+  const [longitude, latitude] = located.point.coordinates
+  return !isWithinRadius(current.point, {
+    longitude,
+    latitude,
+    radiusMeters: toleranceMeters,
+  })
+}

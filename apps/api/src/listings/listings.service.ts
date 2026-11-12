@@ -44,7 +44,10 @@ import type {
 } from '@apart/contracts'
 import {
   addressFieldsForManualPoint,
+  addressOverridesManualPoint,
   archivedByLabel,
+  changedKeys,
+  enrichmentNeeds,
   checkReference,
   CONNECTOR_IGNORED_LOCATION_KEYS,
   connectorListingCreate,
@@ -116,6 +119,7 @@ import {
 import type { ListingRow } from './listing.mapper'
 import {
   applyLocated,
+  inseeCodeForLocate,
   manualLocationPlacement,
   needsGeocoding,
   relocationNeeded,
@@ -166,16 +170,6 @@ const ARCHIVE_STATUSES: readonly ListingStatus[] = [
 function linkOriginOf(channel: ActivityChannel): ListingLinkOrigin {
   return channel === 'mcp' ? 'claude' : 'manual'
 }
-
-/** Les champs dont un changement relance le plafond, le marché et l'arrêt le plus proche. */
-const ENRICHMENT_KEYS = [
-  'surface',
-  'rooms',
-  'constructionYear',
-  'constructionPeriod',
-  'rentalPlan',
-  'floor',
-] as const
 
 /**
  * Les annonces : lecture filtrée, calculée et paginée ; création avec
@@ -735,7 +729,8 @@ export class ListingsService {
     // Lot 12 : le placement suit la localisation écrite. Un point nouveau
     // saisi prime ; une adresse, une commune ou (repère pas à l'adresse) un
     // quartier changés replacent le repère, même si le formulaire renvoie
-    // l'ancien point.
+    // l'ancien point. Un point saisi renvoyé tel quel cède à une adresse
+    // trouvée au numéro ou à la rue (`addressOverridesManualPoint`).
     let placement: ListingPlacement | null | undefined
     let area: ListingAreaRef | null = null
     /** Le point renvoyé tel quel : ni le point, ni le placement, ni la zone ne bougent. */
@@ -743,14 +738,21 @@ export class ListingsService {
     const target = location
       ? { ...before.location, ...location }
       : before.location
-    const located =
-      location && relocationNeeded(before, location)
+    const need = location ? relocationNeeded(before, location) : 'none'
+    const geocoded =
+      location && need !== 'none'
         ? await this.geocoding.locate({
             addressRaw: target.addressRaw,
             commune: target.commune,
             district: target.district,
-            inseeCode: target.inseeCode,
+            inseeCode: inseeCodeForLocate(before.location, location),
           })
+        : null
+    const located =
+      geocoded &&
+      (need === 'relocate' ||
+        addressOverridesManualPoint(before.location, geocoded))
+        ? geocoded
         : null
     if (location && located) {
       const merged: ListingLocationInput = {
@@ -771,6 +773,26 @@ export class ListingsService {
         location.point.coordinates.join(',') ===
           before.location.point.coordinates.join(',') &&
         (location.precision ?? null) === before.location.precision
+      if (pointUnchanged && addressChanged(before.location, location)) {
+        // Le point saisi reste, mais l'adresse a changé : l'identifiant BAN,
+        // l'adresse normalisée et le code INSEE suivent la nouvelle (ADR
+        // 0040), sans second appel quand le géocodeur vient de répondre.
+        // Géocodeur muet : rien de l'ancienne adresse n'est gardé.
+        const filled =
+          need === 'none'
+            ? await this.addressForManualPoint({
+                ...target,
+                point: location.point ?? null,
+              })
+            : addressFieldsForManualPoint(
+                { point: location.point ?? null, commune: target.commune },
+                geocoded
+              )
+        if (filled) {
+          location = { ...location, ...filled.fields }
+          fieldSources = withManualPointProvenance(fieldSources, filled.keys)
+        }
+      }
       if (!pointUnchanged) {
         placement = manualLocationPlacement({
           point: location.point ?? null,
@@ -901,11 +923,13 @@ export class ListingsService {
         area
       )
     }
-    if (locationChanged || ENRICHMENT_KEYS.some(key => key in patch)) {
-      await this.enrichment.enrich(member, id, {
-        dpe: locationChanged,
-        channel,
-      })
+    // Une seule règle pour toutes les écritures (`domain`) : ce qui change
+    // le repère, le plafond, le marché ou le DPE les recalcule.
+    const needs = enrichmentNeeds(changedKeys(before, patch), {
+      locationChanged,
+    })
+    if (needs.enrich) {
+      await this.enrichment.enrich(member, id, { dpe: needs.dpe, channel })
     }
     const trigger: CriteriaFitTrigger =
       patch.price !== undefined && patch.price !== before.price

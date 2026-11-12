@@ -144,6 +144,9 @@ projection, scénarios, comparables de loyer, conformité), `search-criteria`, `
 
 Règles :
 
+- Recalculs : toute écriture sur une annonce passe par `enrichmentNeeds` (`domain`) ; une adresse
+  trouvée au numéro ou à la rue replace un point saisi renvoyé tel quel
+  (`addressOverridesManualPoint`) ; le web relit par `invalidateListingReads`.
 - Hypothèses : toutes les annonces se calculent avec celles de l'espace
   (`AssumptionsService.currentValues`) ; changer l'année ou le type de location recalcule le plafond
   d'encadrement des annonces qui ont une phase 2, par le jeton `RENTAL_CONTEXT_REFRESHER`
@@ -375,6 +378,7 @@ MCP et consentement OAuth : 0017.
 - Lot 28, loyers observés : 0038
 - Lot 29, tendance des prix de vente, ventes DVF depuis 2014 : 0039
 - Champs que le connecteur n'écrit pas (plafond, loyer de marché, géocodeur, estimations) : 0040
+- Une adresse saisie recalcule la fiche (point saisi, règle unique des recalculs) : 0042
 
 Identifiants de code en anglais ; textes d'interface, messages d'erreur métier et descriptions
 Zod en français.

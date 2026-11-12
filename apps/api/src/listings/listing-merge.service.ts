@@ -32,6 +32,7 @@ import {
   suggestKeep,
   tasksToMove,
   withoutMergedNotes,
+  enrichmentNeeds,
 } from '@apart/domain'
 import type {
   FichePriceDecision,
@@ -55,15 +56,6 @@ import { linkStatesOf } from './listing-checks.service'
 import { toMergeRecord } from './listing.mapper'
 import { createListingSeller, sellersOf } from './listing-sellers.service'
 import { ListingsService } from './listings.service'
-
-/** Les champs dont un complément relance le plafond, le marché et l'arrêt le plus proche. */
-const ENRICHED_FIELDS: readonly string[] = [
-  'surface',
-  'rooms',
-  'constructionYear',
-  'constructionPeriod',
-  'floor',
-]
 
 const ids = z.array(z.string()).default([])
 
@@ -342,11 +334,12 @@ export class ListingMergeService {
       return merge.id
     })
 
-    if (
-      filled.some(field => ENRICHED_FIELDS.includes(field)) ||
-      plan.moved.rentalPlan
-    ) {
-      await this.enrichment.enrich(member, keep.id, { dpe: false, channel })
+    const needs = enrichmentNeeds([
+      ...filled,
+      ...(plan.moved.rentalPlan ? ['rentalPlan'] : []),
+    ])
+    if (needs.enrich) {
+      await this.enrichment.enrich(member, keep.id, { dpe: needs.dpe, channel })
     }
     return this.result(member, mergeId, channel, price, summary, absorb.id)
   }
@@ -494,9 +487,10 @@ export class ListingMergeService {
         tx
       )
     })
-    if (emptied.some(field => ENRICHED_FIELDS.includes(field))) {
+    const needs = enrichmentNeeds(emptied)
+    if (needs.enrich) {
       await this.enrichment.enrich(member, keptId, {
-        dpe: false,
+        dpe: needs.dpe,
         channel: 'web',
       })
     }

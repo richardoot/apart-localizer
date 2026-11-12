@@ -35,6 +35,7 @@ import {
   mergedListingRefusal,
   otherSellerText,
   sellerContradictionAmong,
+  enrichmentNeeds,
 } from '@apart/domain'
 import type { LinkState } from '@apart/domain'
 import { ActivityService } from '../activity/activity.service'
@@ -342,9 +343,10 @@ export class ListingLinksService {
       return created
     })
 
-    if (diff.patch.surface !== undefined || diff.patch.rooms !== undefined) {
+    const needs = enrichmentNeeds(Object.keys(diff.patch))
+    if (needs.enrich) {
       await this.enrichment.enrich(member, listingId, {
-        dpe: false,
+        dpe: needs.dpe,
         channel: options.channel,
       })
     }

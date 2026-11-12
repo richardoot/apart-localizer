@@ -269,6 +269,8 @@ intérieurs, recouvrements, table `places`, zone de l'annonce), `scripts/lib/pla
   l'adresse est quand même géocodée sans bouger le repère (ADR 0040) : code INSEE, et identifiant
   BAN et adresse normalisée si l'adresse trouvée (au numéro ou à la rue) est à moins de 150 m du
   point (`MANUAL_POINT_ADDRESS_TOLERANCE_METERS`) ; sinon vides.
+  Une adresse ou une commune changées ensuite, trouvées au numéro ou à la rue, replacent le point
+  saisi renvoyé tel quel, sauf s'il est à l'adresse et à moins de 150 m (ADR 0042).
 - **Calculs** : tous partent du repère ; au quartier ou à la commune, les distances (tram,
   équipements) se lisent « ≈ », le quartier est indicatif, les comparables DVF indicatifs (« à
   vérifier » au centre de la commune), la zone d'encadrement « probable » si tout le contour

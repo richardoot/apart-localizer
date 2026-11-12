@@ -1,6 +1,7 @@
 import { computed, unref } from 'vue'
 import type { MaybeRef } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import type { QueryClient } from '@tanstack/vue-query'
 import type {
   EvaluatedListing,
   ListingCreateRaw,
@@ -112,6 +113,58 @@ export function useListing(id: MaybeRef<string | null | undefined>) {
 }
 
 /**
+ * Tout ce qu'une écriture sur une annonce peut changer à côté de la fiche :
+ * le serveur recalcule après chaque enregistrement (repère, données
+ * ouvertes, plafond, DPE, adéquation aux critères), et chaque lecture qui en
+ * dépend est relue. Une seule liste pour toutes les écritures (fiche,
+ * contexte, géocodage, DPE).
+ */
+export function invalidateListingReads(
+  client: QueryClient,
+  listingId: string,
+  options: { detail?: boolean } = {}
+): void {
+  // La fiche rendue par l'écriture est déjà en cache : relue seulement quand
+  // l'écriture ne la rend pas (`detail`).
+  if (options.detail) {
+    void client.invalidateQueries({ queryKey: listingKeys.detail(listingId) })
+  }
+  void client.invalidateQueries({ queryKey: ['listings', 'list'] })
+  // Lot 21 : les compteurs des étapes et « Ce qui t'attend ».
+  void client.invalidateQueries({ queryKey: ['decisions'] })
+  // Le prix, le statut et l'historique nourrissent le rang et le brief.
+  void client.invalidateQueries({
+    queryKey: listingKeys.targetPrice(listingId),
+  })
+  void client.invalidateQueries({
+    queryKey: ['listings', 'sensitivity', listingId],
+  })
+  // La checklist, les risques Géorisques et le loyer de marché lisent la
+  // fiche et son repère (DPE, loyer visé, plafond, point).
+  void client.invalidateQueries({
+    queryKey: ['listings', 'compliance', listingId],
+  })
+  void client.invalidateQueries({
+    queryKey: ['listings', 'rent-comparables', listingId],
+  })
+  // Lot 12 : le repère a pu bouger (adresse, quartier) : contexte et contours.
+  void client.invalidateQueries({
+    queryKey: ['listings', 'context', listingId],
+  })
+  void client.invalidateQueries({ queryKey: listingKeys.areas })
+  // Lot 14 : l'adéquation recalculée entre dans son historique et au journal.
+  void client.invalidateQueries({
+    queryKey: listingKeys.fitHistory(listingId),
+  })
+  void client.invalidateQueries({
+    queryKey: ['listings', 'activity', listingId],
+  })
+  // Lot 27 et 26 : ressemblances (adresse, prix, surface) et comparaison.
+  void client.invalidateQueries({ queryKey: ['listings', 'similar'] })
+  void client.invalidateQueries({ queryKey: ['listings', 'compare'] })
+}
+
+/**
  * Les écritures. Chacune remplace la fiche dans le cache et invalide les
  * listes : la ligne du tableau et le marqueur de la carte se mettent à jour
  * sans rechargement.
@@ -121,28 +174,7 @@ export function useListingMutations() {
 
   function settle(item: EvaluatedListing): void {
     client.setQueryData(listingKeys.detail(item.listing.id), item)
-    void client.invalidateQueries({ queryKey: ['listings', 'list'] })
-    // Lot 21 : les compteurs des étapes et « Ce qui t'attend ».
-    void client.invalidateQueries({ queryKey: ['decisions'] })
-    // Le prix, le statut et l'historique nourrissent le rang et le brief.
-    void client.invalidateQueries({
-      queryKey: listingKeys.targetPrice(item.listing.id),
-    })
-    void client.invalidateQueries({
-      queryKey: ['listings', 'sensitivity', item.listing.id],
-    })
-    // La checklist et le loyer de marché lisent la fiche (DPE, loyer visé, plafond).
-    void client.invalidateQueries({
-      queryKey: ['listings', 'compliance', item.listing.id],
-    })
-    void client.invalidateQueries({
-      queryKey: ['listings', 'rent-comparables', item.listing.id],
-    })
-    // Lot 12 : le repère a pu bouger (adresse, quartier) : contexte et contours.
-    void client.invalidateQueries({
-      queryKey: ['listings', 'context', item.listing.id],
-    })
-    void client.invalidateQueries({ queryKey: listingKeys.areas })
+    invalidateListingReads(client, item.listing.id)
   }
 
   function refresh(listingId: string): void {

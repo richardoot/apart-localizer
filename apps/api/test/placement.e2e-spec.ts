@@ -478,6 +478,108 @@ describe('Placement des annonces (e2e)', () => {
     expect(manual.body.listing.location.placement.method).toBe('manual')
   })
 
+  it('un point saisi approché cède à l’adresse exacte saisie ensuite : repère, BAN, encadrement et instantané recalculés', async () => {
+    // Le repère posé à la main (ou par Claude) au nord, approché.
+    const listing = await create({
+      commune: 'Bordeaux',
+      district: 'Secteur fictif Nord',
+      point: { type: 'Point', coordinates: [-0.595, 44.855] },
+      precision: 'district',
+    })
+    expect(listing.location.placement.method).toBe('manual')
+    expect((await context(listing.id)).rentControl.zone?.zone).toBe(1)
+
+    // L'adresse exacte, au sud, saisie dans la fiche : le formulaire renvoie
+    // l'ancien point avec elle.
+    ctx.geocoding.fetchImpl = geocoder([-0.592, 44.842])
+    const exact = await request(ctx.server)
+      .patch(`/listings/${listing.id}`)
+      .set(ctx.auth(richard))
+      .send({
+        location: {
+          addressRaw: '1 rue Fictive',
+          commune: 'Bordeaux',
+          district: 'Secteur fictif Nord',
+          point: listing.location.point,
+          precision: 'district',
+        },
+      })
+      .expect(200)
+    expect(exact.body.listing.location).toMatchObject({
+      point: { coordinates: [-0.592, 44.842] },
+      precision: 'exact',
+      banId: '33063_9999_00001',
+      addressNormalized: '1 Rue Fictive 33000 Bordeaux',
+      placement: { method: 'address' },
+    })
+    expect(exact.body.listing.fieldSources.point.source).toBe('open_data')
+    const ctxt = await context(listing.id)
+    expect(ctxt.rentControl.status).toBe('ok')
+    expect(ctxt.rentControl.zone?.zone).toBe(2)
+    // L'instantané enregistré suit le nouveau repère.
+    const row = await ctx.prisma.listing.findUniqueOrThrow({
+      where: { id: listing.id },
+      select: { openDataContext: true },
+    })
+    expect(
+      (row.openDataContext as { rentControl: { zone: number } }).rentControl
+        .zone
+    ).toBe(2)
+
+    // Un point saisi à l'adresse, tout près : il la précise, il reste quand
+    // l'adresse est corrigée ; l'identifiant BAN suit la nouvelle adresse.
+    const pinned = await request(ctx.server)
+      .patch(`/listings/${listing.id}`)
+      .set(ctx.auth(richard))
+      .send({
+        location: {
+          addressRaw: '1 rue Fictive',
+          commune: 'Bordeaux',
+          point: { type: 'Point', coordinates: [-0.5921, 44.8421] },
+          precision: 'exact',
+        },
+      })
+      .expect(200)
+    expect(pinned.body.listing.location.placement.method).toBe('manual')
+    const corrected = await request(ctx.server)
+      .patch(`/listings/${listing.id}`)
+      .set(ctx.auth(richard))
+      .send({
+        location: {
+          addressRaw: '1, rue Fictive',
+          commune: 'Bordeaux',
+          point: pinned.body.listing.location.point,
+          precision: 'exact',
+        },
+      })
+      .expect(200)
+    expect(corrected.body.listing.location).toMatchObject({
+      point: { coordinates: [-0.5921, 44.8421] },
+      placement: { method: 'manual' },
+      banId: '33063_9999_00001',
+    })
+
+    // Une adresse trouvée loin du point saisi : l'adresse l'emporte.
+    ctx.geocoding.fetchImpl = geocoder([-0.595, 44.855])
+    const far = await request(ctx.server)
+      .patch(`/listings/${listing.id}`)
+      .set(ctx.auth(richard))
+      .send({
+        location: {
+          addressRaw: '3 rue Fictive',
+          commune: 'Bordeaux',
+          point: corrected.body.listing.location.point,
+          precision: 'exact',
+        },
+      })
+      .expect(200)
+    expect(far.body.listing.location).toMatchObject({
+      point: { coordinates: [-0.595, 44.855] },
+      placement: { method: 'address' },
+    })
+    expect((await context(listing.id)).rentControl.zone?.zone).toBe(1)
+  })
+
   it('lot 14 : au quartier, le contour est mesuré contre le périmètre, jamais seul le repère', async () => {
     const listing = await create({
       commune: 'Bordeaux',

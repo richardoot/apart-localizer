@@ -31,6 +31,7 @@ import {
   republicationProposal,
   resolveLinkCheckOutcome,
   sanitizeEvidence,
+  enrichmentNeeds,
 } from '@apart/domain'
 import type {
   CheckOutcomeResolution,
@@ -389,10 +390,14 @@ export class ListingChecksService {
       return check
     })
 
-    // Surface et pièces nourrissent le plafond d'encadrement et le marché.
+    // Surface, pièces, étage, DPE : la règle unique de `domain`.
     const patch = applyFacts ? plan.diff.patch : {}
-    if (patch.surface !== undefined || patch.rooms !== undefined) {
-      await this.enrichment.enrich(member, listingId, { dpe: false, channel })
+    const needs = enrichmentNeeds(Object.keys(patch))
+    if (needs.enrich) {
+      await this.enrichment.enrich(member, listingId, {
+        dpe: needs.dpe,
+        channel,
+      })
     }
     const listing = await this.listings.afterWrite(member, listingId, channel)
     return {

@@ -467,8 +467,9 @@ Entrée : `listingId`, `patch` (`ListingUpdate` partiel), `expectedUpdatedAt`, `
 Garde-fous et effets : Refus si `updatedAt` ou le prix ont changé depuis la lecture ; un sous-objet
 fourni (travaux, phase 2, localisation) remplace l'existant ; un nouveau prix ajoute une ligne à
 l'historique. Une nouvelle adresse, commune ou (repère pas à l'adresse) un nouveau quartier replace
-le repère et relance les enrichissements, même si `location.point` renvoie l'ancien point ; un point
-nouveau prime (placement « point saisi ») ; `criteriaChanges` dit les critères dans lesquels
+le repère et relance les enrichissements, même si `location.point` renvoie l'ancien point (un
+point saisi renvoyé tel quel cède à une adresse trouvée au numéro ou à la rue, sauf à moins de
+150 m, ADR 0042) ; un point nouveau prime (placement « point saisi ») ; `criteriaChanges` dit les critères dans lesquels
 l'annonce entre, dont elle sort (hors critères, avec la raison) ou dont le niveau change (`changed`,
 lot 14) ; aussi pour `set_listing_status` et `record_price_change`.
 

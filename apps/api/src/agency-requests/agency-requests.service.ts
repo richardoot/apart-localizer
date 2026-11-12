@@ -47,6 +47,7 @@ import {
   resolveSignature,
   sanitizeAnswerExcerpt,
   transitionProblem,
+  enrichmentNeeds,
 } from '@apart/domain'
 import type { AgencyAnswerPatch, AnswerableListing } from '@apart/domain'
 import { ActivityService } from '../activity/activity.service'
@@ -108,9 +109,6 @@ const CONTACT_KEYS = [
   'portalMessageUrl',
   'preferredChannel',
 ] as const
-
-/** Les valeurs de la fiche dont un changement relance le plafond, le marché et l'arrêt. */
-const ENRICHMENT_KEYS = ['surface', 'floor', 'constructionYear'] as const
 
 /**
  * Lot 17 : les questions aux agences (ADR 0027). Le contact de l'annonceur,
@@ -964,9 +962,11 @@ export class AgencyRequestsService {
         { channel, provenance: 'agency' }
       )
     }
-    if (ENRICHMENT_KEYS.some(key => key in patch)) {
+    // Le patch ne porte que des valeurs qui changent (`domain`).
+    const needs = enrichmentNeeds(Object.keys(patch))
+    if (needs.enrich) {
       await this.enrichment.enrich(member, item.listing.id, {
-        dpe: false,
+        dpe: needs.dpe,
         channel,
       })
     }
