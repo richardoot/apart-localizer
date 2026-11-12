@@ -204,6 +204,25 @@ function approximate(precision: LocationPrecision | null | undefined): boolean {
   )
 }
 
+/** « 700 m », « 2,4 km » (au mètre près ne voudrait rien dire entre deux contours). */
+function gapText(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters / 10) * 10} m`
+  return `${String(Math.round(meters / 100) / 10).replace('.', ',')} km`
+}
+
+/**
+ * Vrai si l'écart entre deux lieux se mesure de ce côté (ADR 0041) : une
+ * adresse ou une rue par son point, un quartier ou une commune par son
+ * contour seulement (un centre de quartier ne dit pas où est le bien).
+ */
+export function measurableZone(
+  precision: LocationPrecision | null | undefined,
+  hasArea: boolean
+): boolean {
+  if (precision === 'exact' || precision === 'street') return true
+  return (precision === 'district' || precision === 'commune') && hasArea
+}
+
 /**
  * Même agence, autre référence : deux mandats de la même agence, donc deux
  * biens (les trois lots d'un même immeuble chez la même agence). Null si une
@@ -233,12 +252,15 @@ function otherReferenceSameAgency(
  * Ce qui contredit le doublon, fait par fait, connu des deux côtés : un autre
  * nombre de pièces, un autre étage, une surface à plus de 5 %, un DPE à deux
  * classes ou plus, une construction à plus de trois ans, la même agence avec
- * une autre référence. Chaque phrase est écrite du point de vue de l'annonce
+ * une autre référence, deux lieux à plus de 500 m (`zoneGapMeters`, mesuré
+ * par PostGIS entre les contours ou les points, `measurableZone` des deux
+ * côtés). Chaque phrase est écrite du point de vue de l'annonce
  * suivie (« 4 pièces contre 3 » : elle en a 4).
  */
 export function duplicateContradictions(
   probe: ProbeFacts,
-  row: DuplicateRow
+  row: DuplicateRow,
+  zoneGapMeters?: number
 ): string[] {
   const t = DUPLICATE_TOLERANCES
   const found: string[] = []
@@ -277,6 +299,12 @@ export function duplicateContradictions(
   }
   const reference = otherReferenceSameAgency(probe, row)
   if (reference) found.push(reference)
+  if (
+    zoneGapMeters !== undefined &&
+    zoneGapMeters > t.contradictionZoneGapMeters
+  ) {
+    found.push(`Au moins ${gapText(zoneGapMeters)} entre les deux lieux`)
+  }
   return found
 }
 
@@ -426,12 +454,13 @@ export interface DuplicateAssessment {
 export function assessDuplicate(
   probe: DuplicateProbe,
   row: DuplicateRow,
-  distanceMeters: number | undefined
+  distanceMeters: number | undefined,
+  zoneGapMeters?: number
 ): DuplicateAssessment {
   const raw = rawDuplicateReasons(probe, row, distanceMeters)
   if (raw.length === 0)
     return { reasons: [], contradictions: [], differences: [] }
-  const contradictions = duplicateContradictions(probe, row)
+  const contradictions = duplicateContradictions(probe, row, zoneGapMeters)
   if (isCertainMatch(raw)) {
     return {
       reasons: raw,
@@ -464,9 +493,10 @@ export function assessDuplicate(
 export function duplicateReasons(
   probe: DuplicateProbe,
   row: DuplicateRow,
-  distanceMeters: number | undefined
+  distanceMeters: number | undefined,
+  zoneGapMeters?: number
 ): DuplicateReason[] {
-  return assessDuplicate(probe, row, distanceMeters).reasons
+  return assessDuplicate(probe, row, distanceMeters, zoneGapMeters).reasons
 }
 
 /** Vrai si les motifs suffisent à dire que c'est la même annonce (même lien, ou même agence et même référence). */
@@ -476,11 +506,16 @@ export function isCertainMatch(
   return reasons.some(r => CERTAIN_DUPLICATE_REASONS.includes(r.kind))
 }
 
-/** Les candidats, du plus vraisemblable au moins, un par annonce avec tous ses motifs ; les certains d'abord. */
+/**
+ * Les candidats, du plus vraisemblable au moins, un par annonce avec tous ses
+ * motifs ; les certains d'abord. `distances` : les annonces à 50 m ;
+ * `zoneGaps` : l'écart entre les lieux, pour les annonces où il se mesure.
+ */
 export function matchDuplicates(
   probe: DuplicateProbe,
   rows: readonly DuplicateRow[],
-  distances: ReadonlyMap<string, number> = new Map()
+  distances: ReadonlyMap<string, number> = new Map(),
+  zoneGaps: ReadonlyMap<string, number> = new Map()
 ): DuplicateCandidate[] {
   const candidates: DuplicateCandidate[] = []
   for (const row of rows) {
@@ -488,7 +523,8 @@ export function matchDuplicates(
     const { reasons, differences } = assessDuplicate(
       probe,
       row,
-      distances.get(row.id)
+      distances.get(row.id),
+      zoneGaps.get(row.id)
     )
     if (reasons.length === 0) continue
     candidates.push({

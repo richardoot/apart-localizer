@@ -5,10 +5,11 @@ import type {
   DuplicateProbe,
   ListingInput,
 } from '@apart/contracts'
-import { matchDuplicates } from '@apart/domain'
+import { matchDuplicates, measurableZone } from '@apart/domain'
 import type { DuplicateRow } from '@apart/domain'
 import { PrismaService } from '../prisma/prisma.service'
 import { GeoService } from '../geo/geo.service'
+import type { ListingAreaRef } from '../geo/geo.service'
 import type { Member } from '../generated/prisma'
 import { num } from './listing.mapper'
 
@@ -99,7 +100,9 @@ export function duplicateRowOf(row: {
  * Cherche, dans l'espace du membre, les annonces qui ressemblent à une sonde :
  * même lien (comparé à tous les liens de chaque annonce, lot 18), même
  * agence et même référence, même adresse, même commune avec prix et surface
- * proches, ou voisinage à 50 m (PostGIS, par le module geo). Quelques
+ * proches, ou voisinage à 50 m (PostGIS, par le module geo) ; deux lieux
+ * éloignés (écart entre contours ou points, ADR 0041) écartent un doublon
+ * probable. Quelques
  * centaines d'annonces au plus : la comparaison se fait en mémoire, par
  * `domain` (`matchDuplicates`).
  */
@@ -110,9 +113,11 @@ export class DuplicatesService {
     private readonly geo: GeoService
   ) {}
 
+  /** `area` : la zone retenue de l'annonce à créer, quand le placement l'a trouvée. */
   async find(
     member: WorkspaceScope,
-    probe: DuplicateProbe
+    probe: DuplicateProbe,
+    area: ListingAreaRef | null = null
   ): Promise<DuplicateCandidate[]> {
     const effective = probe.listingId
       ? await this.completeFromListing(member, probe)
@@ -133,15 +138,53 @@ export class DuplicatesService {
       })
       for (const row of nearby) distances.set(row.id, row.distance_meters)
     }
-    return matchDuplicates(effective, rows.map(duplicateRowOf), distances)
+    const zoneGaps = await this.zoneGaps(member, probe, effective, area)
+    return matchDuplicates(
+      effective,
+      rows.map(duplicateRowOf),
+      distances,
+      zoneGaps
+    )
   }
 
   /** Les doublons d'une annonce à créer : la sonde se lit dans l'entrée. */
   findForInput(
     member: WorkspaceScope,
-    input: ListingInput
+    input: ListingInput,
+    area: ListingAreaRef | null = null
   ): Promise<DuplicateCandidate[]> {
-    return this.find(member, probeFromInput(input))
+    return this.find(member, probeFromInput(input), area)
+  }
+
+  /**
+   * ADR 0041 : l'écart entre le lieu de la sonde et celui de chaque annonce,
+   * gardé seulement quand il se mesure des deux côtés (`measurableZone`).
+   */
+  private async zoneGaps(
+    member: WorkspaceScope,
+    probe: DuplicateProbe,
+    effective: DuplicateProbe,
+    area: ListingAreaRef | null
+  ): Promise<Map<string, number>> {
+    const gaps = new Map<string, number>()
+    const from =
+      probe.listingId && !probe.point
+        ? { listingId: probe.listingId }
+        : effective.point
+          ? { point: effective.point, area }
+          : null
+    if (!from) return gaps
+    const { originHasArea, rows } = await this.geo.listingZoneGaps(
+      member.workspaceId,
+      from
+    )
+    if (!measurableZone(effective.precision, originHasArea)) return gaps
+    for (const row of rows) {
+      if (measurableZone(row.precision, row.has_area)) {
+        gaps.set(row.id, row.gap_meters)
+      }
+    }
+    return gaps
   }
 
   /** Les champs manquants de la sonde se lisent dans l'annonce désignée, exclue des résultats. */

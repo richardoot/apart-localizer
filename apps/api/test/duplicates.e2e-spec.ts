@@ -2,13 +2,17 @@
  * ADR 0041 : la détection des doublons sur PostGIS réel. Un doublon probable
  * fort bloque la création (REST et MCP) tant que le membre n'a pas confirmé ;
  * un fait contraire (autre étage, même agence avec une autre référence) le
- * fait taire ; les deux formes d'une page Bien'ici sont le même lien.
- * Données fictives.
+ * fait taire ; deux lieux éloignés (contour du quartier, point de
+ * l'adresse) aussi, pas un quartier dans sa commune ; les deux formes d'une
+ * page Bien'ici sont le même lien. Données et contours fictifs.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import request from 'supertest'
+import { NEIGHBOURHOOD_TERRITORY } from '@apart/contracts'
 import { createE2eApp, e2eIdentity } from './e2e-app'
 import type { E2eContext, E2eIdentity } from './e2e-app'
+import { GeoService } from '../src/geo/geo.service'
+import type { NeighbourhoodRow } from '../src/geo/geo.service'
 
 const richard = e2eIdentity('richard')
 
@@ -25,6 +29,96 @@ const TRACKED = {
   sellerName: '[Exemple] Réseau Mandataires',
   sellerReference: '9900146',
   location: { commune: 'Mérignac', district: 'Arlac' },
+}
+
+const square = (west: number, south: number, size: number) => ({
+  type: 'Polygon' as const,
+  coordinates: [
+    [
+      [west, south],
+      [west + size, south],
+      [west + size, south + size],
+      [west, south + size],
+      [west, south],
+    ] as [number, number][],
+  ],
+})
+
+/** Deux quartiers fictifs à 1,6 km l'un de l'autre, et l'IRIS qui couvre la commune. */
+const NEIGHBOURHOODS: NeighbourhoodRow[] = [
+  {
+    kind: 'quartier',
+    code: 'Q-OUEST',
+    name: 'Quartier fictif Ouest',
+    parent: null,
+    commune: 'Bordeaux',
+    inseeCode: '33063',
+    source: 'Quartiers fictifs',
+    geometry: square(-0.63, 44.84, 0.01),
+  },
+  {
+    kind: 'quartier',
+    code: 'Q-EST',
+    name: 'Quartier fictif Est',
+    parent: null,
+    commune: 'Bordeaux',
+    inseeCode: '33063',
+    source: 'Quartiers fictifs',
+    geometry: square(-0.6, 44.84, 0.01),
+  },
+  {
+    kind: 'iris',
+    code: '330639901',
+    name: 'IRIS Témoin',
+    parent: null,
+    commune: 'Bordeaux',
+    inseeCode: '33063',
+    source: 'IRIS fictifs',
+    geometry: square(-0.64, 44.83, 0.06),
+  },
+]
+
+const json = (body: unknown) =>
+  Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) })
+
+/** Le géocodeur : la commune à son centre, l'adresse fictive dans le quartier Est. */
+function geocoder(url: string) {
+  const municipality = url.includes('type=municipality')
+  return json({
+    features: [
+      {
+        geometry: {
+          type: 'Point',
+          coordinates: municipality ? [-0.61, 44.86] : [-0.595, 44.845],
+        },
+        properties: municipality
+          ? {
+              label: 'Bordeaux',
+              score: 0.9,
+              type: 'municipality',
+              city: 'Bordeaux',
+              citycode: '33063',
+            }
+          : {
+              label: '1 Rue Fictive 33000 Bordeaux',
+              score: 0.95,
+              type: 'housenumber',
+              city: 'Bordeaux',
+              citycode: '33063',
+              id: '33063_9999_00001',
+            },
+      },
+    ],
+  })
+}
+
+/** Le même T3 fictif, placé ailleurs selon les tests. */
+const T3 = {
+  price: 199_000,
+  surface: 56,
+  rooms: 3,
+  floor: 1,
+  dpeClass: 'D',
 }
 
 interface ToolResult {
@@ -60,8 +154,11 @@ describe('Doublons : contradictions et blocage (e2e)', () => {
     return res.body.result as ToolResult
   }
 
+  let noGeocoder: E2eContext['geocoding']['fetchImpl']
+
   beforeAll(async () => {
     ctx = await createE2eApp([richard])
+    noGeocoder = ctx.geocoding.fetchImpl
   })
 
   afterAll(async () => {
@@ -69,6 +166,7 @@ describe('Doublons : contradictions et blocage (e2e)', () => {
   })
 
   beforeEach(async () => {
+    ctx.geocoding.fetchImpl = noGeocoder
     await ctx.db.truncateAll()
     await ctx.prisma.workspace.create({
       data: {
@@ -197,5 +295,53 @@ describe('Doublons : contradictions et blocage (e2e)', () => {
     })
     expect(created.isError).toBeUndefined()
     expect(created.content[0]?.text).toContain('1 doublon(s) probable(s)')
+  })
+
+  describe('deux lieux éloignés (contours et points, PostGIS)', () => {
+    let quarterWest: string
+
+    beforeEach(async () => {
+      await ctx.app
+        .get(GeoService)
+        .replaceNeighbourhoods(NEIGHBOURHOOD_TERRITORY, NEIGHBOURHOODS)
+      ctx.geocoding.fetchImpl = geocoder
+      const west = await post('/listings', {
+        ...T3,
+        title: '[Exemple] T3 Quartier Ouest',
+        location: { commune: 'Bordeaux', district: 'Quartier fictif Ouest' },
+      }).expect(201)
+      expect(west.body.listing.location.precision).toBe('district')
+      quarterWest = west.body.listing.id as string
+    })
+
+    it('une adresse à plus de 500 m du contour du quartier : pas un doublon', async () => {
+      const street = await post('/listings', {
+        ...T3,
+        title: '[Exemple] T3 rue Fictive',
+        location: { commune: 'Bordeaux', addressRaw: '1 rue Fictive' },
+      }).expect(201)
+      expect(street.body.listing.location.precision).toBe('exact')
+      expect(street.body.duplicates).toEqual([])
+      const result = await callTool(richard, 'find_duplicates', {
+        listingId: quarterWest,
+      })
+      expect(result.content[0]?.text).toContain('Aucun doublon probable.')
+    })
+
+    it('un autre quartier éloigné : pas un doublon ; la commune qui le contient : bloqué', async () => {
+      const east = await post('/listings', {
+        ...T3,
+        title: '[Exemple] T3 Quartier Est',
+        location: { commune: 'Bordeaux', district: 'Quartier fictif Est' },
+      }).expect(201)
+      expect(east.body.duplicates).toEqual([])
+
+      const refused = await post('/listings', {
+        ...T3,
+        title: '[Exemple] T3 Bordeaux',
+        location: { commune: 'Bordeaux' },
+      }).expect(409)
+      expect(refused.body.message).toContain('Doublon probable')
+    })
   })
 })

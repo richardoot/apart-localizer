@@ -1,7 +1,7 @@
 # 0041. Doublons jugés sur tous les faits : contradictions, score modulé, blocage à la création
 
-Statut : acceptée, 12 novembre 2026. Précise 0028 (une annonce, plusieurs portails) et 0037
-(fusion des doublons).
+Statut : acceptée, 12 novembre 2026 ; complétée le même jour (point 7, lieux éloignés). Précise
+0028 (une annonce, plusieurs portails) et 0037 (fusion des doublons).
 
 ## Contexte
 
@@ -52,21 +52,41 @@ paires d'un espace réel (41 annonces, dont deux fiches absorbées par une fusio
    `constructionYear` ; `probeFromInput` les lit dans l'annonce à créer, `listingId` dans la fiche
    (vendeur et référence compris). La même règle sert à l'extraction, à la création, aux alertes
    e-mail, à l'exploration et à « Déjà vue ».
+7. **Deux lieux à plus de 500 m ne sont pas le même bien** (`contradictionZoneGapMeters`). Après
+   les points 1 à 6, un membre a écarté une paire bloquée où tout concordait (pièces, étage, DPE,
+   surface et prix à 0,5 % près) : l'une placée au centre d'un quartier, l'autre dans une rue à
+   plus de 500 m de son contour. PostGIS mesure l'écart entre les deux lieux (`listingZoneGaps`,
+   module `geo`) : le contour retenu (`location_area`, quartier ou commune) s'il y en a un, sinon
+   le point ; deux contours qui se touchent ou se recouvrent sont à 0. L'écart ne compte que s'il
+   se mesure des deux côtés (`measurableZone`) : une adresse ou une rue par son point, un quartier
+   ou une commune par son contour, jamais un centre de quartier sans contour. Il passe par la
+   création (zone du placement), l'extraction, `find_duplicates` et la vérification sur le
+   portail ; les alertes e-mail par le seul point de l'adresse ; l'exploration et « Déjà vue » ne
+   le mesurent pas encore (sans écart, rien ne change).
+   Un doublon certain le reste, l'écart est dit dans `differences`.
 
-Écartée : une distance entre les zones des deux repères (contour du quartier). Les portails ne
-nomment pas le même quartier pour le même bien (dans l'espace rejoué, un même appartement était
-annoncé dans deux quartiers voisins) : la zone aurait écarté de vrais doublons.
+Écartée : comparer les noms de quartier. Les portails ne nomment pas le même quartier pour le même
+bien (dans l'espace rejoué, un même appartement était annoncé dans deux quartiers voisins, et au
+centre de la commune sur un troisième portail) : le nom aurait écarté de vrais doublons. L'écart
+entre contours n'a pas ce défaut : deux quartiers voisins, ou un quartier dans sa commune, sont à
+0 m.
 
 ## Conséquences
 
-- Rejouée sur le même espace, la règle signale 7 paires au lieu de 24 : les deux doublons fusionnés
-  à la main sont bloqués à la création (0,8), aucun des lots du même immeuble ni des T3 aux étages
-  différents n'est signalé ; deux paires restent des signaux faibles (0,63), une paire où tout
-  concorde (pièces, étage, DPE, surface et prix à 0,5 % près) bloque et sera tranchée par un membre.
+- Rejouée sur le même espace, la règle signale 7 paires au lieu de 24 (points 1 à 6) : les deux
+  doublons fusionnés à la main sont bloqués à la création (0,8), aucun des lots du même immeuble ni
+  des T3 aux étages différents n'est signalé ; deux paires restent des signaux faibles (0,63). Avec
+  le point 7 (écarts mesurés sur les contours ouverts des quartiers, en local), il en reste 4 : les
+  trois paires du bien fusionné à la main (0 m entre le quartier et sa commune) et une paire où
+  tout concorde à quelques centaines de mètres, sans contour mesurable ; la paire écartée par un
+  membre et les deux signaux faibles ne le sont plus.
+- Une rue longue est mesurée par son point : deux annonces aux deux bouts d'une avenue de plus d'un
+  kilomètre peuvent se contredire à tort ; « Déjà vue » reste là pour chercher plus large.
 - Une création par le connecteur peut être refusée là où elle passait : Claude montre le doublon au
   membre et ne repasse `ignoreDuplicates` qu'après son accord.
 - Les jeux d'essai e2e qui créent exprès des annonces fictives semblables passent
   `ignoreDuplicates: true`.
-- Code : `packages/domain/src/same-listing.ts` (`assessDuplicate`), `listing-urls.ts`
-  (`linkIdentity`), seuils dans `packages/contracts/src/duplicates.ts` ; tests
+- Code : `packages/domain/src/same-listing.ts` (`assessDuplicate`, `measurableZone`),
+  `listing-urls.ts` (`linkIdentity`), `apps/api/src/geo/geo.service.ts` (`listingZoneGaps`), seuils
+  dans `packages/contracts/src/duplicates.ts` ; tests
   `packages/domain/test/duplicate-contradictions.spec.ts` et `apps/api/test/duplicates.e2e-spec.ts`.

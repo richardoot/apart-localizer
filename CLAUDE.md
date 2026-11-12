@@ -65,7 +65,7 @@ Règles à ne pas casser :
   fiche gardée l'emporte, ses vides se complètent (`mergeFieldPlan`) ; une agence qui contredit est
   enregistrée comme autre agence quand un membre a tranché.
 - Doublon probable (`assessDuplicate`) : un fait contraire connu des deux côtés l'écarte
-  (`duplicateContradictions`) ; à partir de `DUPLICATE_SCORES.blocking`, il bloque la création
+  (`duplicateContradictions`, lieux à plus de 500 m compris, `measurableZone`) ; à partir de `DUPLICATE_SCORES.blocking`, il bloque la création
   sauf `ignoreDuplicates` ; les liens se comparent par `linkIdentity`.
 - Une visite faite ne se corrige que par son auteur ou un participant, une planifiée par tout membre
   (`visitEditRefusal`).
@@ -113,7 +113,8 @@ quartiers, contours d'une commune, zone `location_area` de l'annonce, lieux-dits
 validés par Zod. Les mesures de l'adéquation (`criteriaFitMeasures`) tiennent en une seule requête
 pour la liste, l'aperçu, les alertes et le rattrapage ; `criteriaFitMeasuresForPoints` rend les
 mêmes pour des annonces pas enregistrées, `criteriaZones` les zones d'un critère élargi de sa marge.
-La décision est dans `domain`. Pour la tendance des prix, le module rend les prix au m² par année
+La décision est dans `domain`. Doublons : `listingZoneGaps` mesure l'écart entre les lieux (contour
+retenu, sinon point). Pour la tendance des prix, le module rend les prix au m² par année
 (`dvfPricesByYearWithinRadius`) : les médianes sont dans `domain`.
 
 ### `apps/api/prisma/schema.prisma` + `prisma/migrations` : modèle de données

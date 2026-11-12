@@ -203,7 +203,8 @@ faible (`DUPLICATE_TOLERANCES` dans `contracts`) :
 
 ADR 0041 : un fait contraire connu des deux côtés (autre nombre de pièces, autre étage, surface à
 plus de 5 %, DPE à deux classes ou plus, construction à plus de trois ans, même agence avec une
-autre référence) écarte un doublon probable ; un DPE à une classe ou un prix à plus de 5 % retirent
+autre référence, deux lieux à plus de 500 m : adresse ou rue par leur point, quartier ou commune par
+leur contour, mesurés par PostGIS) écarte un doublon probable ; un DPE à une classe ou un prix à plus de 5 % retirent
 0,15 au score ; sous 0,5, rien n'est rendu. `differences` dit ce qui diffère encore.
 
 Chaque candidat porte tous ses motifs et le meilleur score ; lot 18 : `certain` (même lien, ou

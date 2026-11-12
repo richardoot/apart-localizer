@@ -21,8 +21,10 @@ import { PointSchema } from './geojson.js'
  * Tolérances : surface à ±3 %, prix à ±5 %, voisinage à 50 m avec surface à
  * ±5 %. Contradictions (ADR 0041) : au-delà de 5 % d'écart de surface, de
  * deux classes de DPE ou de trois ans de construction, ce n'est plus le
- * même bien ; une autre agence ne compte sa référence qu’à partir de quatre
- * caractères (« 216 » chez deux agences n'est qu'une coïncidence).
+ * même bien ; deux lieux (adresse, rue, ou contour du quartier ou de la
+ * commune) à plus de 500 m l'un de l'autre non plus ; une autre agence ne
+ * compte sa référence qu’à partir de quatre caractères (« 216 » chez deux
+ * agences n'est qu'une coïncidence).
  */
 export const DUPLICATE_TOLERANCES = {
   surface: 0.03,
@@ -32,6 +34,7 @@ export const DUPLICATE_TOLERANCES = {
   contradictionSurface: 0.05,
   contradictionDpeClasses: 2,
   contradictionYears: 3,
+  contradictionZoneGapMeters: 500,
   otherAgencyReferenceMinLength: 4,
 } as const
 

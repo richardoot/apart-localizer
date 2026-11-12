@@ -2,8 +2,8 @@
  * ADR 0041 : un doublon probable se juge sur tous les faits connus des deux
  * côtés. Les cas reprennent la forme de ceux vus dans un espace réel (trois
  * lots d'un même immeuble chez la même agence, deux annonces placées au
- * centre du même quartier, le même bien sur trois portails) ; les données
- * sont fictives.
+ * centre du même quartier, le même bien sur trois portails, deux T3 où tout
+ * concorde mais à 2 km l'un de l'autre) ; les données sont fictives.
  */
 import { describe, expect, it } from 'vitest'
 import { DUPLICATE_SCORES } from '@apart/contracts'
@@ -16,6 +16,7 @@ import {
   formatEuros,
   linkIdentity,
   matchDuplicates,
+  measurableZone,
   rowLinkKeys,
 } from '../src/index.js'
 import type { DuplicateRow } from '../src/index.js'
@@ -173,6 +174,61 @@ describe('duplicateContradictions', () => {
         { ...tracked, sellerType: 'private' }
       )
     ).toEqual([])
+  })
+})
+
+describe('lieux éloignés', () => {
+  it('measurableZone : une adresse ou une rue par son point, un quartier ou une commune par son contour', () => {
+    expect(measurableZone('exact', false)).toBe(true)
+    expect(measurableZone('street', false)).toBe(true)
+    expect(measurableZone('district', true)).toBe(true)
+    expect(measurableZone('commune', true)).toBe(true)
+    // Le centre d'un quartier sans contour ne dit pas où est le bien.
+    expect(measurableZone('district', false)).toBe(false)
+    expect(measurableZone('commune', false)).toBe(false)
+    expect(measurableZone(null, true)).toBe(false)
+    expect(measurableZone(undefined, false)).toBe(false)
+  })
+
+  it('plus de 500 m entre les deux lieux : ce n’est pas le même bien', () => {
+    expect(duplicateContradictions(probe, row(), 500)).toEqual([])
+    expect(duplicateContradictions(probe, row(), 0)).toEqual([])
+    expect(duplicateContradictions(probe, row(), 734)).toEqual([
+      'Au moins 730 m entre les deux lieux',
+    ])
+    expect(duplicateContradictions(probe, row(), 2_440)).toEqual([
+      'Au moins 2,4 km entre les deux lieux',
+    ])
+  })
+
+  it('matchDuplicates lit l’écart de chaque annonce ; sans écart mesuré, rien ne change', () => {
+    const near = row()
+    const far = row({ id: 'bbbbbbbb-0000-4000-8000-000000000002' })
+    const found = matchDuplicates(
+      probe,
+      [near, far],
+      new Map(),
+      new Map([
+        [near.id, 0],
+        [far.id, 1_800],
+      ])
+    )
+    expect(found.map(c => c.listingId)).toEqual([near.id])
+    expect(matchDuplicates(probe, [near, far])).toHaveLength(2)
+  })
+
+  it('un doublon certain (même lien) le reste, l’écart est dit', () => {
+    const url = 'https://www.leboncoin.fr/ad/ventes_immobilieres/3100000002'
+    const [candidate] = matchDuplicates(
+      { url },
+      [row({ url })],
+      new Map(),
+      new Map([[row().id, 900]])
+    )
+    expect(candidate?.certain).toBe(true)
+    expect(candidate?.differences).toEqual([
+      'Au moins 900 m entre les deux lieux',
+    ])
   })
 })
 
@@ -358,6 +414,50 @@ describe('les cas d’un espace réel, en données fictives', () => {
     expect(candidates[0]?.score).toBe(0.8)
     expect(candidates[0]?.certain).toBe(false)
     expect(blockingDuplicateOf(candidates)?.listingId).toBe(tracked.id)
+  })
+})
+
+describe('les cas d’un espace réel, en données fictives (suite)', () => {
+  it('deux T3 où tout concorde, l’un au centre d’un quartier, l’autre dans une rue à 2 km : aucun doublon', () => {
+    const district = row({
+      title: '[Exemple] T3 au centre d’un quartier',
+      price: 189_800,
+      surface: 58.4,
+      floor: 1,
+      constructionYear: null,
+      sellerType: 'agency',
+      sellerName: '[Exemple] Agence A',
+    })
+    const street = {
+      commune: 'Bordeaux',
+      price: 189_500,
+      surface: 58.2,
+      rooms: 3,
+      floor: 1,
+      dpeClass: 'D' as const,
+      constructionYear: 1955,
+      address: 'Rue de l’Exemple, 33000 Bordeaux',
+      point: {
+        type: 'Point' as const,
+        coordinates: [-0.59, 44.85] as [number, number],
+      },
+      precision: 'street' as const,
+      sellerType: 'agency' as const,
+      sellerName: '[Exemple] Agence B',
+      reference: 'EX-7731',
+    }
+    // Sans l'écart des lieux, tout concorde : bloqué.
+    expect(blockingDuplicateOf(matchDuplicates(street, [district]))).not.toBe(
+      null
+    )
+    expect(
+      matchDuplicates(
+        street,
+        [district],
+        new Map(),
+        new Map([[district.id, 2_100]])
+      )
+    ).toEqual([])
   })
 })
 

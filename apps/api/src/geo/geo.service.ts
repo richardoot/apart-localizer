@@ -95,6 +95,52 @@ export class GeoService {
     return ListingDistanceRows.parse(rows)
   }
 
+  /**
+   * ADR 0041 : l'écart, en mètres, entre le lieu d'une sonde et celui de
+   * chaque annonce de l'espace (non fusionnée, avec un repère). Un lieu est
+   * le contour retenu (`location_area`, quartier ou commune) s'il y en a un,
+   * sinon le point : 0 quand les deux contours se touchent ou se recouvrent.
+   * La sonde est une annonce enregistrée (son lieu, elle exclue) ou un point
+   * avec sa zone éventuelle. La décision (`measurableZone`, seuil) est dans
+   * `domain`.
+   */
+  async listingZoneGaps(
+    workspaceId: string,
+    from: { listingId: string } | { point: Point; area: ListingAreaRef | null }
+  ): Promise<{ originHasArea: boolean; rows: ListingZoneGap[] }> {
+    const [area, point, exclude] =
+      'listingId' in from
+        ? [
+            Prisma.sql`(SELECT x."location_area" FROM "app"."listings" x WHERE x."id" = ${from.listingId})`,
+            Prisma.sql`(SELECT x."geom" FROM "app"."listings" x WHERE x."id" = ${from.listingId})`,
+            Prisma.sql`AND l."id" <> ${from.listingId}`,
+          ]
+        : [
+            areaSql(from.area),
+            Prisma.sql`ST_SetSRID(ST_MakePoint(${from.point.coordinates[0]}, ${from.point.coordinates[1]}), 4326)::geography`,
+            Prisma.empty,
+          ]
+    const rows = await this.prisma.$queryRaw`
+      WITH a AS (SELECT ${area}::geography AS "area", ${point}::geography AS "point"),
+           o AS (SELECT COALESCE(a."area", a."point") AS "g", a."area" IS NOT NULL AS "has_area" FROM a)
+      SELECT l."id",
+             ST_Distance(o."g", COALESCE(l."location_area", l."geom")) AS "gap_meters",
+             l."location_precision" AS "precision",
+             l."location_area" IS NOT NULL AS "has_area",
+             o."has_area" AS "origin_has_area"
+      FROM "app"."listings" l, o
+      WHERE l."workspace_id" = ${workspaceId}
+        AND l."geom" IS NOT NULL
+        AND l."merged_into_id" IS NULL
+        AND o."g" IS NOT NULL
+        ${exclude}`
+    const parsed = ListingZoneGapRows.parse(rows)
+    return {
+      originHasArea: parsed[0]?.origin_has_area ?? false,
+      rows: parsed.map(({ origin_has_area: _, ...row }) => row),
+    }
+  }
+
   /** Annonces de l'espace dont le point tombe dans un polygone GeoJSON. */
   async listingsWithinPolygon(
     workspaceId: string,
@@ -1240,6 +1286,20 @@ const ListingDistanceRows = z.array(
 export type ListingDistance = z.infer<typeof ListingDistanceRows>[number]
 
 const IdRows = z.array(z.object({ id: z.string() }))
+
+const ListingZoneGapRows = z.array(
+  z.object({
+    id: z.string(),
+    gap_meters: z.number(),
+    precision: LocationPrecisionSchema.nullable(),
+    has_area: z.boolean(),
+    origin_has_area: z.boolean(),
+  })
+)
+export type ListingZoneGap = Omit<
+  z.infer<typeof ListingZoneGapRows>[number],
+  'origin_has_area'
+>
 
 const NearestStopRows = z.array(
   z.object({

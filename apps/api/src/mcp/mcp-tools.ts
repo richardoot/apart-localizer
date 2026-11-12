@@ -1084,7 +1084,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       title: 'Chercher des doublons',
       description:
         "Annonces de l'espace qui ressemblent à une annonce donnée par son lien (`url`), son adresse au numéro (`address`), son point GeoJSON (`point`, à moins de 50 m, seulement entre deux repères à l'adresse), le trio `commune` + `price` + `surface` (surface à ±3 %, prix à ±5 %), ou par l'identifiant d'une annonce enregistrée (`listingId`, exclue des résultats ; ses faits complètent la sonde). " +
-        'Donnez aussi ce que la page dit (`rooms`, `floor`, `dpeClass`, `constructionYear`, agence et référence) : un fait contraire (autre nombre de pièces, autre étage, surface à plus de 5 %, DPE à deux classes, construction à plus de trois ans, même agence avec une autre référence) écarte un doublon probable ; un DPE voisin ou un prix à plus de 5 % baissent le score (`differences`). ' +
+        'Donnez aussi ce que la page dit (`rooms`, `floor`, `dpeClass`, `constructionYear`, agence et référence) : un fait contraire (autre nombre de pièces, autre étage, surface à plus de 5 %, DPE à deux classes, construction à plus de trois ans, même agence avec une autre référence, deux lieux à plus de 500 m) écarte un doublon probable ; un DPE voisin ou un prix à plus de 5 % baissent le score (`differences`). ' +
         'Chaque candidat porte ses motifs et un score de 0 à 1. Toutes les étapes sont comparées, y compris les annonces écartées.',
       inputSchema: McpFindDuplicatesInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },

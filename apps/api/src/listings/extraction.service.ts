@@ -10,6 +10,7 @@ import { AiService } from '../ai/ai.service'
 import { extractionToListing } from '../ai/extraction.mapper'
 import { GeocodingService } from '../opendata/geocoding.service'
 import type { Member } from '../generated/prisma'
+import type { ListingAreaRef } from '../geo/geo.service'
 import { DuplicatesService } from './duplicates.service'
 import { applyLocated, withOpenDataProvenance } from './location'
 
@@ -46,10 +47,13 @@ export class ExtractionService {
     })
     let listing = mapped.listing
     let geocoded = false
+    let area: ListingAreaRef | null = null
     if (listing.location.addressRaw || listing.location.commune) {
       const located = await this.geocoding.locate(listing.location)
       if (located) {
-        const { location, keys } = applyLocated(listing.location, located)
+        const applied = applyLocated(listing.location, located)
+        const { location, keys } = applied
+        area = applied.area
         listing = {
           ...listing,
           location,
@@ -58,7 +62,7 @@ export class ExtractionService {
         geocoded = true
       }
     }
-    const duplicates = await this.duplicates.findForInput(member, listing)
+    const duplicates = await this.duplicates.findForInput(member, listing, area)
     const missingFields = missingListingFields(listing)
     await this.activity.record({
       workspaceId: member.workspaceId,

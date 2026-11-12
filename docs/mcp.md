@@ -217,7 +217,8 @@ annonce ; les certains d'abord), `sellerType`, `sellerName`, `sellerReference`, 
 
 ADR 0041 : un fait contraire connu des deux côtés écarte un doublon probable (autre nombre de
 pièces, autre étage, surface à plus de 5 %, DPE à deux classes ou plus, construction à plus de trois
-ans, même agence avec une autre référence) ; un DPE à une classe ou un prix à plus de 5 % retirent
+ans, même agence avec une autre référence, deux lieux à plus de 500 m : l'adresse ou la rue par son
+point, le quartier ou la commune par son contour, jamais un centre de quartier sans contour) ; un DPE à une classe ou un prix à plus de 5 % retirent
 0,15 au score, et `same_commune_price_surface` vaut de 0,8 (mêmes valeurs) à 0,6 (au bord des
 tolérances) ; sous 0,5, rien n'est rendu. `same_address` demande un numéro, `nearby_similar` deux
 repères à l'adresse (deux annonces au centre du même quartier ne sont pas voisines),

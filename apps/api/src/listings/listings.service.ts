@@ -519,7 +519,7 @@ export class ListingsService {
       }
     }
     const listing: ListingInput = { ...input, location, fieldSources }
-    const duplicates = await this.duplicates.findForInput(member, listing)
+    const duplicates = await this.duplicates.findForInput(member, listing, area)
     // Lot 18 : un lien n'est que sur une fiche ; même agence et même
     // référence, c'est la même annonce : on propose d'y ajouter le lien.
     const sameUrl = sameUrlMatchOf(duplicates)
