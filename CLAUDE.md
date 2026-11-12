@@ -65,8 +65,12 @@ Règles à ne pas casser :
   fiche gardée l'emporte, ses vides se complètent (`mergeFieldPlan`) ; une agence qui contredit est
   enregistrée comme autre agence quand un membre a tranché.
 - Doublon probable (`assessDuplicate`) : un fait contraire connu des deux côtés l'écarte
-  (`duplicateContradictions`, lieux à plus de 500 m compris, `measurableZone`) ; à partir de `DUPLICATE_SCORES.blocking`, il bloque la création
-  sauf `ignoreDuplicates` ; les liens se comparent par `linkIdentity`.
+  (`duplicateContradictions`, lieux à plus de 500 m compris, `measurableZone`) ; à partir de
+  `DUPLICATE_SCORES.blocking`, il bloque la création dans l'application sauf `ignoreDuplicates`, et
+  devient au connecteur une question posée sur les deux fiches (`duplicatesToAsk`, lot 30) ; les
+  liens se comparent par `linkIdentity`.
+- Fusion (lot 30) : une fusion s'annule pendant `MERGED_LISTING_RETENTION_DAYS` (7) jours
+  (`mergeUndoRefusal`), puis la fiche absorbée est supprimée.
 - Une visite faite ne se corrige que par son auteur ou un participant, une planifiée par tout membre
   (`visitEditRefusal`).
 - `portalSearchUrls` construit les recherches sans réseau.
@@ -131,8 +135,12 @@ Schéma Postgres `app`. Les colonnes géo sont `Unsupported` avec latitude/longi
 - Couverture (lot 25) : `listings.cover_photo_id` (`ON DELETE SET NULL`) ; null = la première photo
   de la première visite.
 - Fusion (lot 27) : une fiche fusionnée (`listings.merged_into_id`, `merged_at`) est écartée et
-  cachée des listes, jamais supprimée ; `listing_merges.moved` garde ce qu'il faut pour annuler ;
-  `listing_sellers` porte les autres agences, la principale reste dans `listings.seller_*`.
+  cachée des listes, puis supprimée après sept jours (lot 30) ; `listing_merges.moved` garde ce
+  qu'il faut pour annuler ; `listing_sellers` porte les autres agences, la principale reste dans
+  `listings.seller_*`.
+- Doublons à confirmer (lot 30) : `duplicate_pairs`, une ligne par paire (`listing_a_id` <
+  `listing_b_id`, `CHECK` écrit à la main), `pending` (question posée) ou `distinct` (un membre a
+  dit non).
 
 ### `apps/api/src/<module>` : modules Nest (un par contexte)
 
@@ -175,7 +183,10 @@ Règles :
 - Fusion : une transaction, journal des deux côtés ; `listing-merge.controller.ts` est déclaré avant
   `ListingsController` ; une fiche fusionnée est exclue de `ListingsService.list`, des doublons, du
   tri de l'exploration et des compteurs des étapes, et refuse statut, modification et lien
-  (`assertNotMerged`).
+  (`assertNotMerged`). Lot 30 : les fiches absorbées depuis plus de sept jours sont supprimées à la
+  création d'une annonce et à chaque fusion (`purgeExpiredMerges`, sans tâche planifiée) ; la fusion
+  tranche la question de la paire ; `POST /listings/:id/duplicate-distinct` la déclare distincte,
+  ce qui la sort des doublons et des suggestions sans recherche.
 - `GET /activity/claude` lit les écritures du canal `mcp` ; une lecture par Claude ne laisse pas de
   trace.
 - `GET /decisions/overview` lit aussi les demandes aux agences, les visites et les tâches
@@ -205,6 +216,8 @@ Règles :
 - Accord dans la conversation : `record_request_sent` est refusé sans validation dans l'application
   ni `approvedInChat: true`, `merge_listings` et `add_listing_seller` sans `confirmedInChat: true`.
   Le serveur n'envoie jamais de message.
+- Doublons (lot 30) : `create_listing` crée une annonce malgré un doublon probable (`askDuplicates`)
+  et l'application demande au membre si c'est le même bien ; un doublon certain bloque toujours.
 - Exploration : `record_exploration` ne crée que des brouillons « À valider », jamais une annonce ni
   une proposition ; le serveur retrie, `runKey` est idempotent.
 - Liens : `add_listing_link` (origine `claude`) refuse si le vendeur, l'agence ou la référence lus
@@ -384,6 +397,7 @@ MCP et consentement OAuth : 0017.
 - Champs que le connecteur n'écrit pas (plafond, loyer de marché, géocodeur, estimations) : 0040
 - Doublons jugés sur tous les faits (contradictions, blocage à la création) : 0041
 - Une adresse saisie recalcule la fiche (point saisi, règle unique des recalculs) : 0042
+- Lot 30, doublons confirmés dans l'application, fiche absorbée supprimée après sept jours : 0043
 
 Identifiants de code en anglais ; textes d'interface, messages d'erreur métier et descriptions
 Zod en français.
@@ -395,10 +409,10 @@ Zod en français.
 - Aucun secret dans le dépôt : `.env` ignorés, `.env.example` sans valeur sensible.
 - Aucun appel réseau ni clé API dans les tests.
 - Pas de suppression par le MCP ; les écritures sont journalisées.
-- Fusion des doublons (lot 27) : une fusion ne supprime jamais une fiche (la fiche absorbée est
-  gardée, cachée des listes, et la fusion s'annule dans l'application) ; par le MCP, une fusion ou
-  une autre agence ne s'enregistre qu'après l'accord du membre ; ni annulation de fusion ni retrait
-  d'agence par le MCP.
+- Fusion des doublons (lots 27 et 30) : la fiche absorbée est cachée des listes, la fusion s'annule
+  dans l'application pendant sept jours, puis l'application supprime la fiche absorbée (jamais
+  avant, jamais par le MCP) ; par le MCP, une fusion ou une autre agence ne s'enregistre qu'après
+  l'accord du membre ; ni annulation de fusion ni retrait d'agence par le MCP.
 - Le partage mobile et les alertes e-mail n'utilisent que ce que le téléphone ou l'e-mail
   transmet : aucune page de portail n'est téléchargée, aucun lien n'est suivi.
 - Photos de visite privées : jamais d'URL publique, jamais de politique d'accès ouverte sur le

@@ -47,6 +47,7 @@
   import type { ListingTab } from '@/lib/listing-tabs'
   import DecisionBanner from '@/components/workflow/DecisionBanner.vue'
   import { useDecisionActions } from '@/composables/useWorkflow'
+  import DuplicateQuestions from '@/components/merge/DuplicateQuestions.vue'
   import FicheShell from './FicheShell.vue'
   import FicheTitle from './FicheTitle.vue'
   import ListingHeader from './ListingHeader.vue'
@@ -767,6 +768,9 @@
               >
             </template>
           </UiAlert>
+
+          <!-- Lot 30 : Claude a créé la fiche malgré un doublon probable. -->
+          <DuplicateQuestions :item="item" />
 
           <DecisionBanner
             v-if="item.decision"

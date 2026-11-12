@@ -2,6 +2,7 @@ import {
   LISTING_FIELD_LABELS,
   LISTING_LINKS_MAX,
   LISTING_SELLERS_MAX,
+  MERGED_LISTING_RETENTION_DAYS,
 } from '@apart/contracts'
 import type {
   FieldProvenanceMap,
@@ -26,8 +27,9 @@ import type { NormalizedSeller, SellerFacts } from './seller.js'
  * visites, offres, avis, tâches et questions aux agences rejoignent la fiche
  * gardée ; ses champs complètent ceux qui étaient vides (jamais un champ déjà
  * rempli : la fiche gardée l'emporte) ; ses notes sont recopiées à la suite.
- * La fiche absorbée n'est pas supprimée : écartée comme doublon, cachée des
- * listes, et la fusion s'annule. Ici les règles pures ; l'API écrit.
+ * La fiche absorbée est écartée comme doublon, cachée des listes, et la
+ * fusion s'annule pendant sept jours, puis la fiche est supprimée (lot 30).
+ * Ici les règles pures ; l'API écrit.
  */
 
 /**
@@ -443,7 +445,7 @@ export function mergeLeftBehindLines(input: {
   hasAddress: boolean
 }): string[] {
   const lines = [
-    'Son historique des prix et son journal restent lisibles sur la fiche fusionnée.',
+    `La fiche fusionnée est supprimée ${MERGED_LISTING_RETENTION_DAYS} jours après la fusion, avec son historique des prix et son journal ; d’ici là, la fusion s’annule.`,
   ]
   if (input.opinionsKept) {
     lines.push(
@@ -466,4 +468,46 @@ export function mergeLeftBehindLines(input: {
     )
   }
   return lines
+}
+
+const DAY_MS = 86_400_000
+
+/**
+ * Lot 30 (ADR 0043) : la date jusqu'à laquelle une fusion s'annule ; ensuite
+ * la fiche absorbée est supprimée.
+ */
+export function mergeUndoUntil(
+  mergedAt: string | Date,
+  days: number = MERGED_LISTING_RETENTION_DAYS
+): string {
+  return new Date(new Date(mergedAt).getTime() + days * DAY_MS).toISOString()
+}
+
+/** La date avant laquelle une fusion ne s'annule plus (fiches absorbées à supprimer). */
+export function mergePurgeBefore(
+  now: Date,
+  days: number = MERGED_LISTING_RETENTION_DAYS
+): Date {
+  return new Date(now.getTime() - days * DAY_MS)
+}
+
+/** Le refus d'annuler une fusion trop ancienne, ou null. */
+export function mergeUndoRefusal(
+  mergedAt: string | Date,
+  now: Date,
+  days: number = MERGED_LISTING_RETENTION_DAYS
+): string | null {
+  return now.getTime() >= Date.parse(mergeUndoUntil(mergedAt, days))
+    ? `Cette fusion date de plus de ${days} jours : elle ne s’annule plus, la fiche fusionnée est supprimée.`
+    : null
+}
+
+/** « Annulable jusqu'au 19 novembre », dit sous une fusion. */
+export function mergeUndoText(undoUntil: string): string {
+  const day = new Date(undoUntil).toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'Europe/Paris',
+  })
+  return `Annulable jusqu’au ${day} ; ensuite la fiche fusionnée est supprimée.`
 }

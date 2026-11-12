@@ -576,6 +576,41 @@ export function blockingDuplicateOf<
   )
 }
 
+/**
+ * Lot 30 (ADR 0043) : les doublons probables forts sur lesquels l'application
+ * interroge le membre quand Claude crée l'annonce quand même (ceux qui
+ * bloqueraient la création, `blockingDuplicateOf`).
+ */
+export function duplicatesToAsk<
+  T extends Pick<DuplicateCandidate, 'certain' | 'score'>,
+>(candidates: readonly T[]): T[] {
+  return candidates.filter(
+    c => !c.certain && c.score >= DUPLICATE_SCORES.blocking
+  )
+}
+
+/** Une paire de fiches, dans l'ordre des identifiants (une ligne par paire). */
+export function duplicatePairOf(
+  first: string,
+  second: string
+): { listingAId: string; listingBId: string } {
+  return first < second
+    ? { listingAId: first, listingBId: second }
+    : { listingAId: second, listingBId: first }
+}
+
+/** La question posée sur une fiche créée malgré un doublon probable. */
+export function duplicateQuestionText(
+  otherTitle: string,
+  askedChannel: 'web' | 'mcp' | 'import' | 'system'
+): string {
+  const who =
+    askedChannel === 'mcp'
+      ? 'Claude a enregistré cette annonce alors qu’elle'
+      : 'Cette annonce'
+  return `${who} ressemble beaucoup à « ${otherTitle} ». Est-ce le même bien ?`
+}
+
 /** La première annonce au même lien, ou null. */
 export function sameUrlMatchOf<T extends Pick<DuplicateCandidate, 'reasons'>>(
   candidates: readonly T[]

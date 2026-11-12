@@ -2,7 +2,7 @@
   import { computed, ref } from 'vue'
   import { useRouter } from 'vue-router'
   import type { EvaluatedListing, ListingMergeResult } from '@apart/contracts'
-  import { mergedBannerText } from '@apart/domain'
+  import { mergeUndoText, mergedBannerText } from '@apart/domain'
   import UiAlert from '@/components/ui/UiAlert.vue'
   import UiBadge from '@/components/ui/UiBadge.vue'
   import UiButton from '@/components/ui/UiButton.vue'
@@ -49,6 +49,10 @@
     )
   )
 
+  /** Lot 30 : une fusion s'annule pendant sept jours, puis le doublon est supprimé. */
+  const undoable = (undoUntil: string): boolean =>
+    Date.now() < Date.parse(undoUntil)
+
   const dialog = ref<{ otherId: string | null } | null>(null)
   const undoing = ref<string | null>(null)
 
@@ -86,6 +90,9 @@
       <p class="text-sm" data-testid="merged-into">
         {{ mergedBannerText(merged.title) }}
       </p>
+      <p class="text-xs text-muted" data-testid="merged-undo-until">
+        {{ mergeUndoText(merged.undoUntil) }}
+      </p>
       <div class="flex flex-wrap items-center gap-2">
         <UiButton
           :to="{ name: 'listing', params: { id: merged.id } }"
@@ -95,6 +102,7 @@
           >Ouvrir la fiche gardée</UiButton
         >
         <UiConfirm
+          v-if="undoable(merged.undoUntil)"
           label="Annuler la fusion"
           question="Annuler la fusion ?"
           confirm-label="Oui, annuler la fusion"
@@ -170,9 +178,10 @@
             >
             <span class="text-xs text-muted"
               >Fusionnée le {{ formatDate(merge.mergedAt)
-              }}{{ merge.channel === 'mcp' ? ' par Claude' : '' }}</span
+              }}{{ merge.channel === 'mcp' ? ' par Claude' : '' }}.
+              {{ mergeUndoText(merge.undoUntil) }}</span
             >
-            <span>
+            <span v-if="undoable(merge.undoUntil)">
               <UiConfirm
                 label="Annuler la fusion"
                 question="Annuler cette fusion ?"

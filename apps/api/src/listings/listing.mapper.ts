@@ -31,6 +31,7 @@ import type {
   LinkedListing,
   ListingLink as ListingLinkDto,
   ListingMergeRecord,
+  DuplicateQuestion,
   ListingMergedInto,
   ListingSeller as ListingSellerDto,
   ListingCheck as ListingCheckDto,
@@ -43,7 +44,12 @@ import type {
   PriceEvent as PriceEventDto,
   Task as TaskDto,
 } from '@apart/contracts'
-import { listingCriteriaFit, orderLinks, primaryLink } from '@apart/domain'
+import {
+  listingCriteriaFit,
+  mergeUndoUntil,
+  orderLinks,
+  primaryLink,
+} from '@apart/domain'
 import type { LinkState } from '@apart/domain'
 import type {
   ListingCheck,
@@ -119,6 +125,27 @@ export const listingInclude = {
     include: {
       kept: { select: { title: true } },
       absorbed: { select: { title: true } },
+    },
+  },
+  // Lot 30 : les questions de doublon en attente (l'autre fiche suivie).
+  duplicatePairsA: {
+    where: { verdict: 'pending', listingB: { mergedIntoId: null } },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      createdAt: true,
+      askedChannel: true,
+      listingB: { select: { id: true, title: true } },
+    },
+  },
+  duplicatePairsB: {
+    where: { verdict: 'pending', listingA: { mergedIntoId: null } },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      createdAt: true,
+      askedChannel: true,
+      listingA: { select: { id: true, title: true } },
     },
   },
 } satisfies Prisma.ListingInclude
@@ -412,7 +439,34 @@ export function toMergeRecord(
     channel: merge.channel,
     summary: merge.summary,
     counts: counts.success ? counts.data : EMPTY_MERGE_COUNTS,
+    undoUntil: mergeUndoUntil(merge.mergedAt),
   })
+}
+
+/** Lot 30 : les questions de doublon en attente, la plus ancienne d'abord. */
+export function toDuplicateQuestions(
+  row: Pick<ListingRow, 'mergedIntoId' | 'duplicatePairsA' | 'duplicatePairsB'>
+): DuplicateQuestion[] {
+  // Une fiche fusionnée n'est plus suivie : plus rien à lui demander.
+  if (row.mergedIntoId) return []
+  const asked = (
+    pair: {
+      id: string
+      createdAt: Date
+      askedChannel: DuplicateQuestion['askedChannel']
+    },
+    other: { id: string; title: string }
+  ): DuplicateQuestion => ({
+    id: pair.id,
+    otherId: other.id,
+    otherTitle: other.title,
+    askedAt: pair.createdAt.toISOString(),
+    askedChannel: pair.askedChannel,
+  })
+  return [
+    ...row.duplicatePairsA.map(pair => asked(pair, pair.listingB)),
+    ...row.duplicatePairsB.map(pair => asked(pair, pair.listingA)),
+  ].sort((a, b) => a.askedAt.localeCompare(b.askedAt))
 }
 
 /** Lot 27 : la fiche qui a absorbé celle-ci ; null pour une fiche ordinaire. */
@@ -424,6 +478,7 @@ export function toMergedInto(row: ListingRow): ListingMergedInto | null {
     id: row.mergedInto.id,
     title: row.mergedInto.title,
     mergedAt: row.mergedAt.toISOString(),
+    undoUntil: mergeUndoUntil(row.mergedAt),
   }
 }
 

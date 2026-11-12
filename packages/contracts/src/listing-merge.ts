@@ -10,8 +10,9 @@ import {
 /**
  * Lot 27 (ADR 0037) : fusionner deux fiches du même bien, enregistrer chaque
  * agence qui le vend avec sa référence, et retrouver une annonce « déjà vue »
- * par ressemblance. Une fusion ne supprime rien : la fiche absorbée est
- * gardée, cachée des listes, et la fusion s'annule dans l'application. Les
+ * par ressemblance. La fiche absorbée est cachée des listes, la fusion
+ * s'annule dans l'application pendant sept jours, puis la fiche absorbée est
+ * supprimée (lot 30). Les
  * règles (ressemblance, ce qui passe d'une fiche à l'autre, agences) sont
  * dans `domain` (`similar-listings.ts`, `listing-merge.ts`, `seller.ts`).
  */
@@ -270,7 +271,7 @@ export const ListingMergeInputSchema = z.object({
     .string()
     .uuid()
     .describe(
-      'La fiche en double : ses liens, ses agences et son suivi rejoignent la fiche gardée ; elle est cachée des listes, jamais supprimée'
+      'La fiche en double : ses liens, ses agences et son suivi rejoignent la fiche gardée ; elle est cachée des listes, puis supprimée sept jours après (la fusion s’annule d’ici là)'
     ),
   expectedUpdatedAt: z
     .string()
@@ -311,6 +312,12 @@ export const EMPTY_MERGE_COUNTS: ListingMergeCounts = {
   notes: false,
 }
 
+/**
+ * Lot 30 (ADR 0043) : une fiche absorbée est supprimée définitivement sept
+ * jours après la fusion ; d'ici là, la fusion s'annule dans l'application.
+ */
+export const MERGED_LISTING_RETENTION_DAYS = 7
+
 /** Une fusion enregistrée, telle que la fiche la montre. */
 export const ListingMergeRecordSchema = z.object({
   id: z.string().uuid(),
@@ -325,6 +332,12 @@ export const ListingMergeRecordSchema = z.object({
   ),
   summary: z.string().describe('Ce qui a rejoint la fiche gardée, en clair'),
   counts: ListingMergeCountsSchema,
+  undoUntil: z
+    .string()
+    .datetime()
+    .describe(
+      'Lot 30 : la fusion s’annule jusqu’à cette date ; ensuite la fiche absorbée est supprimée'
+    ),
 })
 export type ListingMergeRecord = z.infer<typeof ListingMergeRecordSchema>
 
@@ -334,6 +347,12 @@ export const ListingMergedIntoSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
   mergedAt: z.string().datetime(),
+  undoUntil: z
+    .string()
+    .datetime()
+    .describe(
+      'Lot 30 : la fusion s’annule jusqu’à cette date ; ensuite cette fiche est supprimée'
+    ),
 })
 export type ListingMergedInto = z.infer<typeof ListingMergedIntoSchema>
 

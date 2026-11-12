@@ -844,8 +844,9 @@ export type McpFindSimilarListingsInput = z.infer<
 
 /**
  * Lot 27 : merge_listings. Deux fiches du même bien n'en font plus qu'une :
- * `keepId` reste, `mergeId` est absorbée (cachée, jamais supprimée ; la fusion
- * s'annule dans l'application). Seulement après l'accord du membre.
+ * `keepId` reste, `mergeId` est absorbée (cachée ; la fusion s'annule dans
+ * l'application pendant sept jours, puis l'application la supprime : lot 30).
+ * Seulement après l'accord du membre.
  */
 export const McpMergeListingsInputSchema = z.object({
   keepId: z

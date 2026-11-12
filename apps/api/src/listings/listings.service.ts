@@ -68,6 +68,8 @@ import {
   primaryLink,
   referenceKey,
   blockingDuplicateOf,
+  duplicatePairOf,
+  duplicatesToAsk,
   referenceMatchOf,
   restoreKeptProvenance,
   sameUrlMatchOf,
@@ -96,6 +98,7 @@ import {
 } from './enrichment.service'
 import { evaluateListing } from './evaluate'
 import { assertLinkFree, priceEventData, syncPrimaryLink } from './link-writes'
+import { purgeExpiredMerges } from './merge-purge'
 import {
   closeOpenDecisionsAsStale,
   decisionViewOf,
@@ -113,6 +116,7 @@ import {
   toRepublication,
   toListingLinkDtos,
   toListingSellerDto,
+  toDuplicateQuestions,
   toMergeRecord,
   toMergedInto,
   toStageFacts,
@@ -150,6 +154,12 @@ export interface WriteOptions {
 export interface CreateOptions extends WriteOptions {
   /** Le membre a vu les doublons probables et crée quand même (journalisé). */
   ignoreDuplicates?: boolean
+  /**
+   * Lot 30 (ADR 0043) : un doublon probable fort ne bloque pas la création ;
+   * l'annonce est créée et l'application demande au membre s'il s'agit du
+   * même bien (le connecteur). Un doublon certain bloque toujours.
+   */
+  askDuplicates?: boolean
   /** Lot 18 : l'origine du lien de l'annonce (« original » par défaut). */
   linkOrigin?: ListingLinkOrigin
   /** Lot 21 : un brouillon gardé à plusieurs : la décision a sa notification. */
@@ -537,7 +547,7 @@ export class ListingsService {
     // ADR 0041 : un doublon probable fort, sans rien qui le contredise,
     // attend la confirmation du membre comme un doublon certain.
     const probable = blockingDuplicateOf(duplicates)
-    if (probable && !options.ignoreDuplicates) {
+    if (probable && !options.ignoreDuplicates && !options.askDuplicates) {
       const why = probable.reasons
         .map(r => DUPLICATE_REASON_LABELS[r.kind].toLowerCase())
         .join(', ')
@@ -556,7 +566,16 @@ export class ListingsService {
         )
       : []
 
+    // Lot 30 : au connecteur, les doublons probables forts deviennent des
+    // questions posées dans l'application. « Créer quand même » ne tranche
+    // rien : seul le « Non » d'un membre déclare deux fiches distinctes.
+    const asked =
+      options.askDuplicates && !options.ignoreDuplicates
+        ? duplicatesToAsk(duplicates)
+        : []
+
     const id = await this.prisma.$transaction(async tx => {
+      await purgeExpiredMerges(tx, member.workspaceId)
       const created = await tx.listing.create({
         data: {
           ...scalarData({ ...listing, fieldSources }),
@@ -617,12 +636,27 @@ export class ListingsService {
             placement: placementDigest(placement),
             duplicates: duplicates.map(d => d.listingId),
             ignoreDuplicates: options.ignoreDuplicates ?? false,
+            ...(asked.length
+              ? { duplicateQuestions: asked.map(d => d.listingId) }
+              : {}),
             missingFieldTasks: missingTaskLabels,
             ...(options.viaDecision ? { viaDecision: true } : {}),
           },
         },
         tx
       )
+      if (asked.length) {
+        await tx.duplicatePair.createMany({
+          data: asked.map(other => ({
+            workspaceId: member.workspaceId,
+            ...duplicatePairOf(created.id, other.listingId),
+            verdict: 'pending' as const,
+            askedById: member.id,
+            askedChannel: channel,
+          })),
+          skipDuplicates: true,
+        })
+      }
       // Lot 18 : le lien de l'annonce devient son lien d'origine.
       if (input.url) {
         const normalizedUrl = linkKey(input.url) as string
@@ -1225,6 +1259,7 @@ export class ListingsService {
       sellers: row.sellers.map(toListingSellerDto),
       mergedInto: toMergedInto(row),
       absorbed: row.mergesAsKept.map(toMergeRecord),
+      duplicateQuestions: toDuplicateQuestions(row),
       // Lot 21 : la proposition en cours et les faits des lignes de l'étape.
       decision: row.decisionProposals[0]
         ? decisionViewOf(row.decisionProposals[0], member, {

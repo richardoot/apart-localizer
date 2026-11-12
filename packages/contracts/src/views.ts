@@ -7,7 +7,10 @@ import {
   TaskSchema,
 } from './collaboration.js'
 import { DecisionProposalSchema, ListingStageFactsSchema } from './decisions.js'
-import { DuplicateCandidateSchema } from './duplicates.js'
+import {
+  DuplicateCandidateSchema,
+  DuplicateQuestionSchema,
+} from './duplicates.js'
 import { ListingStatusSchema } from './enums.js'
 import { LISTING_PAGE_MAX } from './filters.js'
 import { ListingInputSchema, ListingSchema } from './listing.js'
@@ -126,7 +129,13 @@ export const EvaluatedListingSchema = z.object({
     .array(ListingMergeRecordSchema)
     .default([])
     .describe(
-      'Lot 27 : les fiches en double fusionnées dans celle-ci, la plus récente d’abord ; chaque fusion s’annule dans l’application'
+      'Lot 27 : les fiches en double fusionnées dans celle-ci, la plus récente d’abord ; chaque fusion s’annule dans l’application pendant sept jours (lot 30)'
+    ),
+  duplicateQuestions: z
+    .array(DuplicateQuestionSchema)
+    .default([])
+    .describe(
+      'Lot 30 : les fiches qui sont peut-être le même bien, créées malgré la ressemblance : l’application demande au membre de confirmer (fusionner) ou de dire que ce sont deux biens différents'
     ),
   decision: DecisionProposalSchema.nullable()
     .default(null)

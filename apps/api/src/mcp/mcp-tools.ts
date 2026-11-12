@@ -364,6 +364,20 @@ export function describeDuplicates(duplicates: DuplicateCandidate[]): string {
   ].join('\n')
 }
 
+/**
+ * Lot 30 : les questions « même bien ? » que l'application posera au membre
+ * sur la fiche créée malgré un doublon probable ; null sans question.
+ */
+export function describeDuplicateQuestions(
+  item: Pick<EvaluatedListing, 'duplicateQuestions'>
+): string | null {
+  if (item.duplicateQuestions.length === 0) return null
+  const titles = item.duplicateQuestions
+    .map(question => `« ${question.otherTitle} » [id ${question.otherId}]`)
+    .join(', ')
+  return `Créée malgré la ressemblance avec ${titles} : l’application demandera au membre, sur les deux fiches, si c’est le même bien (oui : il les fusionne ; non : la paire n’est plus signalée). Dites-le au membre.`
+}
+
 /** Les champs indispensables manquants ou douteux, en une ligne. */
 export function describeMissing(missing: MissingField[]): string {
   if (missing.length === 0) return 'Aucun champ indispensable manquant.'
@@ -1108,7 +1122,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         'Placement du repère (lot 12) : mettez dans `location.addressRaw` l’adresse la plus précise que l’annonce ou le membre donne (numéro et rue : repère « exact ») ; et dans `location.district` le quartier ou secteur cité, du plus large au plus fin (« Bordeaux Sud, Victoire »), sans la commune ni les mentions de tram : sans numéro, le repère est placé au centre du quartier reconnu (précision `district`), sinon au centre de la commune (`commune`) ; les distances sont alors approchées. Ne passez un point que s’il est sûr (lu sur une carte de l’annonce) : il prime sur le géocodage. ' +
         'Passez la fiche rendue par extract_listing telle quelle (fieldSources : provenance, confiance et extrait par champ ; mettez `user` sur les champs que le membre a corrigés). ' +
         'La réponse liste les doublons probables (avec ce qui diffère), les tâches créées pour les champs indispensables manquants, ' +
-        'Refus rendu en réponse si un doublon probable atteint 70 % sans rien qui le contredise (pièces, étage, surface, DPE, année, référence de la même agence) : montrez-le au membre ; si c’est le même bien, ajoutez ce lien à sa fiche (add_listing_link) ; `ignoreDuplicates: true` seulement si le membre confirme que c’est une autre annonce. ' +
+        'Lot 30 : un doublon probable à 70 % ou plus sans rien qui le contredise (pièces, étage, surface, DPE, année, lieux à plus de 500 m, référence de la même agence) ne bloque pas : l’annonce est créée et l’application demande au membre, sur les deux fiches, si c’est le même bien (oui : il les fusionne ; non : la paire n’est plus signalée). Dites-le au membre. `ignoreDuplicates: true` seulement s’il a déjà dit que c’est une autre annonce (aucune question n’est alors posée). ' +
         'Lot 18 : vendeur (`sellerType`, `sellerName`, `sellerReference`) comme l’annonce le dit. Refus rendu en réponse si le lien est déjà celui d’une autre annonce (son nom est donné : ouvrez-la), ou si une annonce a la même agence et la même référence (c’est la même annonce sur un autre portail : ajoutez ce lien à sa fiche avec add_listing_link ; `ignoreDuplicates: true` seulement si le membre confirme que c’est une autre annonce). ' +
         'les critères de recherche dans lesquels l’annonce entre (`criteriaChanges`), et les enrichissements open data faits côté serveur (arrêt de tram, plafond d’encadrement, prix médian DVF, DPE vérifié à l’ADEME). ' +
         '`provenance` : « ai » si Claude a lu la page, « user » si le membre a dicté les valeurs. Portée listings:write.',
@@ -1135,12 +1149,15 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           channel: CHANNEL,
           provenance,
           ignoreDuplicates,
+          // Lot 30 : un doublon probable devient une question dans l'application.
+          askDuplicates: true,
           connector: true,
         })
         const lines = [
           `Annonce créée : ${describeListing(item)} [id ${item.listing.id}]`,
           describeCriteriaChanges(item.criteriaChanges),
           describeDuplicates(item.duplicates),
+          describeDuplicateQuestions(item),
           describeUnsupportedEstimates(ignored),
           item.createdTasks.length
             ? `Tâches créées pour les champs manquants : ${item.createdTasks.map(t => t.label).join(' ; ')}.`
@@ -1997,7 +2014,7 @@ export function analyzeListingPrompt(args: {
     '',
     `1. Appelle l'outil extract_listing avec le texte ci-dessous dans \`text\`${args.url ? `, l'URL \`${args.url}\` dans \`url\`` : ''} et, si des captures d'écran sont jointes à la conversation, chacune dans \`images\` (base64, type MIME). N'invente aucune valeur toi-même : c'est le modèle d'extraction côté serveur qui lit.`,
     "2. Présente la fiche rendue au membre en français : prix, surface, pièces, étage, DPE, charges, taxe foncière, adresse et commune, travaux évoqués, vendeur (agence, mandataire ou particulier, jamais deviné), agence ou réseau et référence de l'annonce ; pour chaque valeur, sa confiance et l'extrait justificatif (listing.fieldSources) ; la liste des champs indispensables manquants ou douteux ; les doublons probables avec leur motif.",
-    "3. S'il y a un doublon `certain` (même lien, ou même agence et même référence : la même annonce sur un autre portail), ne crée rien : propose au membre d'ajouter ce lien à la fiche existante avec add_listing_link (prix affiché, vendeur et référence lus). S'il y a un doublon probable, demande au membre s'il s'agit de la même annonce (dans ce cas n'enregistre rien et propose add_listing_link ou update_listing sur l'existante ; si c'est le même bien vendu par une autre agence, enregistre d'abord cette agence et sa référence avec add_listing_seller, après son accord, puis ajoute le lien) ou s'il veut créer quand même (ignoreDuplicates: true). Pour retrouver une annonce « déjà vue » sans motif de doublon, find_similar_listings classe les annonces de l'espace par ressemblance.",
+    "3. S'il y a un doublon `certain` (même lien, ou même agence et même référence : la même annonce sur un autre portail), ne crée rien : propose au membre d'ajouter ce lien à la fiche existante avec add_listing_link (prix affiché, vendeur et référence lus). S'il y a un doublon probable, signale-le au membre : s'il dit tout de suite que c'est la même annonce, n'enregistre rien et propose add_listing_link ou update_listing sur l'existante (si c'est le même bien vendu par une autre agence, enregistre d'abord cette agence et sa référence avec add_listing_seller, après son accord, puis ajoute le lien) ; s'il dit que c'est une autre annonce, crée-la avec ignoreDuplicates: true ; s'il ne sait pas, crée-la normalement : l'application lui demandera, sur les deux fiches, si c'est le même bien, et il pourra les fusionner en un clic. Pour retrouver une annonce « déjà vue » sans motif de doublon, find_similar_listings classe les annonces de l'espace par ressemblance.",
     "4. Attends la confirmation explicite du membre avant d'écrire. Applique ses corrections dans la fiche et marque chaque champ corrigé avec la provenance « user » dans fieldSources.",
     "5. Après confirmation seulement, appelle create_listing avec « listing » = la fiche rendue par extract_listing (corrections comprises, fieldSources conservé, sourceText conservé) et « provenance: ai ». Rapporte l'identifiant, les indicateurs (coût tout compris, mensualité, rendement brut, effort, verdict), le verdict de louabilité et les tâches créées pour les champs manquants.",
     '',

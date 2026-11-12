@@ -124,8 +124,22 @@ export class DuplicatesService {
       : probe
     const rows = await this.prisma.listing.findMany({
       // Lot 27 : un doublon fusionné ne se propose plus (ses liens et ses
-      // agences sont sur la fiche qui l'a absorbé).
-      where: { workspaceId: member.workspaceId, mergedIntoId: null },
+      // agences sont sur la fiche qui l'a absorbé). Lot 30 : une fiche qu'un
+      // membre a dite distincte de celle-ci non plus.
+      where: {
+        workspaceId: member.workspaceId,
+        mergedIntoId: null,
+        ...(probe.listingId
+          ? {
+              duplicatePairsA: {
+                none: { verdict: 'distinct', listingBId: probe.listingId },
+              },
+              duplicatePairsB: {
+                none: { verdict: 'distinct', listingAId: probe.listingId },
+              },
+            }
+          : {}),
+      },
       select: DUPLICATE_ROW_SELECT,
     })
     const distances = new Map<string, number>()

@@ -76,11 +76,12 @@ l'application (onglet « Journal » de la fiche, page « Activité »).
 
 Lot 27 (ADR 0037) : trois outils de plus (`mcp-merge.ts`). `find_similar_listings` classe les
 annonces de l'espace par ressemblance (« déjà vue ? ») ; `merge_listings` fusionne deux fiches du
-même bien sans rien supprimer (le doublon est gardé, caché des listes, et la fusion s'annule dans
-l'application) ; `add_listing_seller` enregistre une autre agence qui vend le même bien, avec sa
+même bien (le doublon est caché des listes, la fusion s'annule dans l'application pendant sept
+jours, puis l'application supprime le doublon : lot 30, ADR 0043) ; `add_listing_seller` enregistre une autre agence qui vend le même bien, avec sa
 référence. Les deux écritures demandent l'accord du membre, donné dans la conversation
 (`confirmedInChat`). `get_listing` dit les autres agences de la fiche, les doublons fusionnés dans
-elle, et qu'une fiche est elle-même fusionnée (« FICHE FUSIONNÉE : doublon de … ») ;
+elle (et jusqu'à quand la fusion s'annule), les fiches qui sont peut-être le même bien (question
+posée dans l'application, lot 30), et qu'une fiche est elle-même fusionnée (« FICHE FUSIONNÉE : doublon de … ») ;
 `list_listings` ne rend plus une fiche fusionnée. `add_listing_link` n'est plus refusé quand la
 page montre une des autres agences de la fiche. Ni annulation de fusion ni retrait d'agence par le
 connecteur.
@@ -224,7 +225,9 @@ tolérances) ; sous 0,5, rien n'est rendu. `same_address` demande un numéro, `n
 repères à l'adresse (deux annonces au centre du même quartier ne sont pas voisines),
 `same_reference_other_agency` une référence de quatre caractères au moins. Les deux formes d'une
 page Bien'ici (`/annonce/vente/…/<id>` et `/annonce/<id>`) sont le même lien. `differences` dit ce
-qui diffère encore (pour un doublon certain, même les faits contraires)
+qui diffère encore (pour un doublon certain, même les faits contraires). Lot 30 : pour une fiche
+enregistrée (`listingId`), une fiche qu'un membre a dite « autre bien » dans l'application n'est
+plus rendue.
 
 #### `get_target_price`
 
@@ -443,9 +446,11 @@ sinon le quartier reconnu dans `location.district` (centre du quartier), sinon u
 centre de la commune — d'où la consigne de la description : l'adresse la plus précise dans
 `addressRaw`, le quartier cité du plus large au plus fin dans `district`, un point seulement s'il
 est sûr ; les champs fournis reçoivent la provenance (`ai` par défaut, `user` si le membre a dicté),
-sauf ceux que `fieldSources` décrit déjà. La réponse porte `duplicates` (ADR 0041 : refus si un
-doublon probable atteint 0,7 sans rien qui le contredise, sauf `ignoreDuplicates: true`, journalisé,
-quand le membre confirme que c'est une autre annonce ; lot 18 : refus si le lien est déjà celui d'une autre annonce, même avec
+sauf ceux que `fieldSources` décrit déjà. La réponse porte `duplicates` (lot 30, ADR 0043 : un
+doublon probable à 0,7 ou plus sans rien qui le contredise ne bloque pas ; l'annonce est créée,
+`duplicateQuestions` le dit et l'application demande au membre, sur les deux fiches, si c'est le
+même bien : oui, il les fusionne ; non, la paire n'est plus signalée ; `ignoreDuplicates: true`,
+journalisé, quand le membre a déjà dit que c'est une autre annonce, ne pose aucune question ; lot 18 : refus si le lien est déjà celui d'une autre annonce, même avec
 `ignoreDuplicates`, ou si une annonce a la même agence et la même référence, sauf
 `ignoreDuplicates` : proposer `add_listing_link` sur cette fiche) et `createdTasks` (une tâche
 `missing_field` par champ indispensable manquant quand la fiche vient de l'IA, sans doublonner la
@@ -758,9 +763,10 @@ l'accord du membre » : montrer les deux fiches, attendre). En une transaction :
 (avec leurs vérifications), ses agences et leurs références, ses visites, offres, avis, tâches et
 questions aux agences rejoignent la fiche gardée ; ses champs complètent ceux qui étaient vides (un
 champ déjà rempli n'est jamais écrasé) ; ses notes sont recopiées à la suite ; le prix de la fiche
-gardée devient le plus bas des liens en ligne (jamais à la place d'un prix saisi à la main). **Rien
-n'est supprimé** : le doublon est écarté (« Doublon de … »), lié à la fiche gardée et caché des
-listes ; la fusion s'annule dans l'application, jamais par le connecteur. Journal `listing.merged`
+gardée devient le plus bas des liens en ligne (jamais à la place d'un prix saisi à la main). Le
+doublon est écarté (« Doublon de … »), lié à la fiche gardée et caché des listes ; la fusion
+s'annule dans l'application, jamais par le connecteur, pendant sept jours ; ensuite l'application
+supprime le doublon (lot 30). La fusion tranche la question « même bien ? » de la paire. Journal `listing.merged`
 et `listing.absorbed` (canal `mcp`) ; l'autre membre est prévenu (« Fiches fusionnées : … »). Refus
 rendus : une des deux fiches déjà fusionnée, plus de vingt liens à elles deux, garde-fous, portée.
 Réponse : `merge` (résumé, compteurs), `listing` (la fiche gardée à jour), `summary`
@@ -1059,8 +1065,9 @@ Si Chloé n'avait pas encore noté, `get_listing` ne lui aurait pas montré l'av
 - **Refus en réponse**, jamais en exception ; message en français avec le champ ou la valeur en
   cause.
 - **Accord du membre avant de réunir deux fiches** (lot 27) : `merge_listings` et
-  `add_listing_seller` refusent sans `confirmedInChat: true` ; une fusion ne supprime rien et
-  s'annule dans l'application.
+  `add_listing_seller` refusent sans `confirmedInChat: true` ; une fusion s'annule dans
+  l'application pendant sept jours, puis l'application supprime le doublon (lot 30). Une annonce
+  créée malgré un doublon probable laisse le membre trancher dans l'application.
 - **Journal** : chaque écriture dans `ActivityLog`, canal `mcp`.
 - **Données encadrées** dans `<apart_listing_data>`.
 - **Membres en lecture seule** : `list_members` lit, aucun outil n'invite, n'annule, ne change de

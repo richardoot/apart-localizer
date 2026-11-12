@@ -5,7 +5,10 @@
     ListingMergeResult,
     ListingMergeSide,
   } from '@apart/contracts'
-  import { LISTING_STATUS_LABELS } from '@apart/contracts'
+  import {
+    LISTING_STATUS_LABELS,
+    MERGED_LISTING_RETENTION_DAYS,
+  } from '@apart/contracts'
   import QueryState from '@/components/ui/QueryState.vue'
   import SidePanel from '@/components/ui/SidePanel.vue'
   import UiAlert from '@/components/ui/UiAlert.vue'
@@ -25,9 +28,9 @@
    * par ressemblance), puis lire ce que la fusion fera — laquelle est gardée
    * (la plus avancée est proposée, le choix reste au membre), ce qui la
    * rejoint, les champs complétés, ceux qui diffèrent, les agences, ce qui
-   * reste — avant de confirmer. Rien n'est supprimé : le doublon est caché
-   * des listes et la fusion s'annule. Aucune règle ici : l'aperçu vient de
-   * l'API.
+   * reste — avant de confirmer. Le doublon est caché des listes, la fusion
+   * s'annule pendant sept jours, puis le doublon est supprimé (lot 30).
+   * Aucune règle ici : l'aperçu vient de l'API.
    */
   const props = defineProps<{
     item: EvaluatedListing
@@ -232,8 +235,10 @@
           <section class="grid gap-1.5 text-sm text-muted">
             <p v-for="line in data.leftBehind" :key="line">{{ line }}</p>
             <p>
-              Rien n’est supprimé : « {{ data.absorb.title }} » est retirée des
-              listes, et la fusion s’annule depuis la fiche gardée.
+              « {{ data.absorb.title }} » est retirée des listes ; la fusion
+              s’annule depuis la fiche gardée pendant
+              {{ MERGED_LISTING_RETENTION_DAYS }} jours, puis cette fiche est
+              supprimée.
             </p>
           </section>
         </template>

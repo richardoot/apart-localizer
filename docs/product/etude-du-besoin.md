@@ -408,9 +408,14 @@ l'annonce. Huit au plus ; chaque référence sert à reconnaître l'annonce sur 
 
 **ListingMerge** (lot 27) : fiche gardée, fiche absorbée (le doublon), membre et canal, date,
 résumé, ce qui est passé de l'une à l'autre (identifiants, champs complétés, état d'avant) pour
-l'annuler, date de l'annulation. Sur l'annonce absorbée : la fiche qui l'a absorbée. Une fusion
-ne supprime rien : la fiche absorbée est écartée et cachée des listes ; l'annulation rend ce qui
-était venu.
+l'annuler, date de l'annulation. Sur l'annonce absorbée : la fiche qui l'a absorbée. La fiche
+absorbée est écartée et cachée des listes ; la fusion s'annule pendant sept jours (l'annulation
+rend ce qui était venu), puis la fiche absorbée est supprimée (lot 30).
+
+**DuplicatePair** (lot 30) : deux fiches qui sont peut-être le même bien, une fois par paire.
+« À confirmer » quand Claude a créé l'annonce malgré la ressemblance (l'application pose la
+question sur les deux fiches) ; « distinctes » quand un membre a dit que ce sont deux biens
+différents (la paire n'est plus signalée). Une fusion efface la paire.
 
 **Offer** : annonce, date, montant, canal (e-mail, téléphone, agence, en personne, courrier), réponse (en attente, acceptée, refusée, contre-proposition), contre-proposition, date de la réponse, auteur, notes. Une offre ne se supprime pas ; sa réponse propose un statut à l'annonce sans le changer d'office (ADR 0009).
 

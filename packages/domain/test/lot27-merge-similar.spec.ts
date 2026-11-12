@@ -1041,7 +1041,7 @@ describe('Lot 27 : journal, notifications, « ce qui a changé »', () => {
     describeMergeActivity(action, before, after, noChanges)?.summary
 
   it('raconte une fusion des deux côtés, son annulation et les agences', () => {
-    expect(MERGE_ACTIONS).toHaveLength(6)
+    expect(MERGE_ACTIONS).toHaveLength(7)
     expect(
       summaryOf('listing.merged', null, {
         absorbedTitle: 'B',

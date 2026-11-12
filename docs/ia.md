@@ -108,7 +108,9 @@ evidence }`. `value` est `null` quand l'annonce ne dit rien ; `confidence` va de
 - cherche les doublons probables et les renvoie dans `duplicates` ; ADR 0041 : un doublon probable
   à partir de 0,7, sans fait contraire, bloque la création (409) comme la même référence ;
   `ignoreDuplicates: true` (le membre a vu l'alerte et confirme) est journalisé dans
-  `listing.created` ; lot 18 : un lien déjà celui d'une autre annonce est refusé (409, avec son
+  `listing.created` ; lot 30 (ADR 0043) : par le connecteur (`create_listing`), ce doublon ne
+  bloque pas, l'annonce est créée et l'application demande au membre, sur les deux fiches, si
+  c'est le même bien ; lot 18 : un lien déjà celui d'une autre annonce est refusé (409, avec son
   nom), même avec `ignoreDuplicates`, et une annonce de même agence et même référence aussi, sauf
   `ignoreDuplicates` : c'est la même annonce sur un autre portail, son lien s'ajoute à la fiche
   existante (« C'est la même : ajouter ce lien à la fiche », `add_listing_link`) ;

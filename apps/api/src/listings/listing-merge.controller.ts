@@ -15,7 +15,9 @@ import { ZodResponse } from 'nestjs-zod'
 import { CurrentMember } from '../auth/decorators/current-member.decorator'
 import { SupabaseGuard } from '../auth/guards/supabase.guard'
 import type { Member } from '../generated/prisma'
+import { EvaluatedListingDto } from './dto/listing.dto'
 import {
+  DuplicateDistinctInputDto,
   ListingMergeInputDto,
   ListingMergePreviewDto,
   ListingMergePreviewQueryDto,
@@ -31,8 +33,9 @@ import { SimilarListingsService } from './similar-listings.service'
 
 /**
  * Lot 27 (ADR 0037) : retrouver une annonce « déjà vue » par ressemblance,
- * fusionner deux fiches du même bien (rien n'est supprimé, la fusion
- * s'annule), enregistrer chaque agence qui vend le bien avec sa référence. Le
+ * fusionner deux fiches du même bien (la fusion s'annule pendant sept jours,
+ * puis la fiche absorbée est supprimée : lot 30), dire que deux fiches qui se
+ * ressemblent sont deux biens différents, enregistrer chaque agence qui vend le bien avec sa référence. Le
  * MCP passe par les mêmes services (`find_similar_listings`,
  * `merge_listings`, `add_listing_seller`) ; l'annulation d'une fusion et le
  * retrait d'une agence n'existent qu'ici. Déclaré avant `ListingsController`
@@ -80,7 +83,7 @@ export class ListingMergeController {
   @HttpCode(200)
   @ApiOperation({
     summary:
-      'Fusionne la fiche `absorbedId` (doublon) dans la fiche `:id` : liens, agences et références, visites, offres, avis, tâches et questions la rejoignent, ses champs vides sont complétés, son prix suit ses liens ; le doublon est écarté et caché des listes, jamais supprimé ; journalisé des deux côtés ; refusé (409) si une des deux est déjà fusionnée',
+      'Fusionne la fiche `absorbedId` (doublon) dans la fiche `:id` : liens, agences et références, visites, offres, avis, tâches et questions la rejoignent, ses champs vides sont complétés, son prix suit ses liens ; le doublon est écarté et caché des listes, puis supprimé sept jours après (la fusion s’annule d’ici là) ; la question « même bien ? » de la paire est tranchée ; journalisé des deux côtés ; refusé (409) si une des deux est déjà fusionnée',
   })
   @ZodResponse({ status: 200, type: ListingMergeResultDto })
   merge(
@@ -95,7 +98,7 @@ export class ListingMergeController {
   @HttpCode(200)
   @ApiOperation({
     summary:
-      'Annule une fusion : ce qui était venu du doublon y retourne, les champs complétés non retouchés se vident, le doublon retrouve son statut et sa place dans les listes ; journalisé',
+      'Annule une fusion : ce qui était venu du doublon y retourne, les champs complétés non retouchés se vident, le doublon retrouve son statut et sa place dans les listes ; journalisé ; refusé (409) après sept jours',
   })
   @ZodResponse({ status: 200, type: ListingMergeResultDto })
   undo(
@@ -103,6 +106,21 @@ export class ListingMergeController {
     @Param('mergeId', ParseUUIDPipe) mergeId: string
   ): Promise<ListingMergeResultDto> {
     return this.merges.undo(member, mergeId)
+  }
+
+  @Post('listings/:id/duplicate-distinct')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Lot 30 : la fiche `otherId` n’est pas le même bien que la fiche `:id` ; la question « même bien ? » de la paire est tranchée et la paire n’est plus signalée comme doublon ; journalisé des deux côtés',
+  })
+  @ZodResponse({ status: 200, type: EvaluatedListingDto })
+  distinct(
+    @CurrentMember() member: Member,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: DuplicateDistinctInputDto
+  ): Promise<EvaluatedListingDto> {
+    return this.merges.declareDistinct(member, id, body.otherId)
   }
 
   @Post('listings/:id/sellers')

@@ -1424,7 +1424,8 @@ Statut : livré le 11 novembre 2026 (code, tests, documentation ; ADR 0037). Une
   comme doublon probable.
 - **Fusionner deux fiches** : l'une est gardée, l'autre absorbée ; liens, agences, visites,
   offres, avis, tâches et questions rejoignent la fiche gardée ; ses champs vides sont complétés ;
-  rien n'est supprimé, la fiche absorbée est cachée des listes, et la fusion s'annule.
+  la fiche absorbée est cachée des listes, et la fusion s'annule (pendant sept jours depuis le
+  lot 30, puis la fiche absorbée est supprimée).
 - **Plusieurs agences** : chaque agence qui vend le bien est enregistrée avec sa référence ;
   chaque référence reconnaît ensuite l'annonce sur les portails.
 - **« Déjà vue » dans le tri** : une recherche des annonces suivies, écartées comprises, classées
@@ -1507,3 +1508,25 @@ aucune variable nouvelle, aucun outil MCP nouveau (42).
 
 Limites : médiane brute, sensible à ce qui se vend chaque année ; euros courants ; avant 2021, des
 ventes repérées à la parcelle ; l'API du Cerema n'a pas de fichier figé à rejouer.
+
+## Lot 30 : doublons confirmés dans l'application, fiche absorbée supprimée
+
+Statut : livré le 12 novembre 2026 (code, tests, documentation ; ADR 0043). Une migration
+additive (`duplicate_pairs`), une route (`POST /listings/:id/duplicate-distinct`), aucune variable
+nouvelle, aucun outil MCP nouveau (42).
+
+- **Pourquoi** : quand Claude lisait une annonce qui ressemblait fort à une fiche suivie, il devait
+  demander dans la conversation si c'était le même bien ; le membre répondait sans voir les deux
+  fiches, et une réponse remise à plus tard se perdait. Une fiche absorbée par une fusion restait
+  en base pour toujours.
+- **La question dans l'application** : Claude crée l'annonce malgré le doublon probable ; les deux
+  fiches portent en haut « Est-ce le même bien ? ». « Oui, comparer et fusionner » ouvre l'aperçu
+  de la fusion ; « Non, deux biens différents » la tranche : la paire n'est plus signalée comme
+  doublon ni suggérée pour une fusion. Un doublon certain (même lien, même agence et même
+  référence) n'est jamais créé ; le formulaire de l'application bloque toujours, le membre est là.
+- **Sept jours pour annuler** : la fiche gardée dit jusqu'à quand la fusion s'annule ; ensuite la
+  fiche absorbée est supprimée, à la création d'une annonce ou à la fusion suivante. Ce qu'elle
+  avait donné reste sur la fiche gardée.
+
+Limites : la suppression attend une écriture (création ou fusion) dans l'espace ; une fiche
+supprimée ne se retrouve plus par son lien direct ni dans l'export.

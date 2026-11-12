@@ -16,6 +16,7 @@ import type {
 } from '@apart/contracts'
 import {
   formatEuros,
+  formatParisDay,
   otherSellerText,
   sellersCountText,
   similarityPercent,
@@ -27,9 +28,10 @@ import { answer, dataResult, refusal, writeRefusal } from './tool-results'
 /**
  * Lot 27 (ADR 0037) au connecteur : retrouver les annonces qui se
  * ressemblent, fusionner deux fiches du même bien, enregistrer une autre
- * agence et sa référence. Une fusion ne supprime rien (le doublon est gardé,
- * caché des listes) et s'annule dans l'application ; elle demande l'accord
- * du membre, donné dans la conversation. Aucune logique métier ici :
+ * agence et sa référence. Le doublon fusionné est caché des listes, la fusion
+ * s'annule dans l'application pendant sept jours, puis le doublon est
+ * supprimé (lot 30) ; elle demande l'accord du membre, donné dans la
+ * conversation. Aucune logique métier ici :
  * `domain` décide, les services écrivent.
  */
 
@@ -57,9 +59,18 @@ export function describeSellersAndMerges(
   }
   if (item.absorbed.length) {
     lines.push(
-      'Doublons fusionnés dans cette fiche (annulables dans l’application) :',
+      'Doublons fusionnés dans cette fiche (annulables dans l’application, puis supprimés) :',
       ...item.absorbed.map(
-        merge => `- « ${merge.absorbedTitle} » [id ${merge.absorbedId}]`
+        merge =>
+          `- « ${merge.absorbedTitle} » [id ${merge.absorbedId}], annulable jusqu’au ${formatParisDay(merge.undoUntil)}`
+      )
+    )
+  }
+  if (item.duplicateQuestions.length) {
+    lines.push(
+      'Peut-être le même bien (l’application demande au membre de confirmer, ou de dire que ce sont deux biens différents) :',
+      ...item.duplicateQuestions.map(
+        question => `- « ${question.otherTitle} » [id ${question.otherId}]`
       )
     )
   }
@@ -154,7 +165,7 @@ export function registerMergeTools(
       title: 'Fusionner deux fiches du même bien',
       description:
         'Deux fiches de l’espace décrivent le même bien (souvent publié par deux agences, ou sur deux portails) : `keepId` reste, `mergeId` (le doublon) y est fusionnée. Ses liens (avec leurs prix et vérifications), ses agences et leurs références, ses visites, offres, avis, tâches et questions aux agences rejoignent la fiche gardée ; ses champs complètent ceux qui étaient vides (un champ déjà rempli n’est jamais écrasé) ; ses notes sont recopiées à la suite ; le prix de la fiche gardée devient le plus bas des liens en ligne (jamais à la place d’un prix saisi à la main). L’agence du doublon devient une autre agence de la fiche, avec sa référence. ' +
-        "RIEN N'EST SUPPRIMÉ : le doublon est écarté, caché des listes, et la fusion s’annule dans l’application (jamais par le connecteur). " +
+        'Le doublon est écarté et caché des listes ; la fusion s’annule dans l’application (jamais par le connecteur) pendant sept jours, puis le doublon est supprimé définitivement. Pour une fiche que vous venez de créer malgré un doublon probable, laissez plutôt le membre trancher dans l’application (elle lui pose la question). ' +
         'AVANT d’appeler : lisez les deux fiches (get_listing), montrez-les côte à côte au membre (prix, surface, étage, adresse, agences, références) et attendez qu’il confirme que c’est le même bien ; passez alors `confirmedInChat: true`. Sans cet accord, la fusion est refusée. Gardez la fiche la plus avancée (visites, avis, offres) ; à égalité, la plus ancienne. Garde-fous : `expectedKeepUpdatedAt` et `expectedMergeUpdatedAt` (lus avec get_listing). Refusé (réponse lisible) si une des deux fiches est déjà fusionnée. Portée listings:write.',
       inputSchema: McpMergeListingsInputSchema,
       annotations: {

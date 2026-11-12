@@ -68,8 +68,25 @@ export class SimilarListingsService {
     request: SimilarRequest
   ): Promise<SimilarListingsResult> {
     const { probe, point } = await this.probe(member, request)
+    // Lot 30 : sans recherche, une fiche qu'un membre a dite distincte de
+    // celle-ci n'est plus suggérée (elle se retrouve en la cherchant).
+    const distinctOf =
+      request.listingId && !request.q?.trim() ? request.listingId : null
     const rows = await this.prisma.listing.findMany({
-      where: { workspaceId: member.workspaceId, mergedIntoId: null },
+      where: {
+        workspaceId: member.workspaceId,
+        mergedIntoId: null,
+        ...(distinctOf
+          ? {
+              duplicatePairsA: {
+                none: { verdict: 'distinct', listingBId: distinctOf },
+              },
+              duplicatePairsB: {
+                none: { verdict: 'distinct', listingAId: distinctOf },
+              },
+            }
+          : {}),
+      },
       select: SIMILAR_ROW_SELECT,
     })
     const precise = new Set(

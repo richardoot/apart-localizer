@@ -146,6 +146,8 @@ const preview = (
   ...over,
 })
 
+const UNDO_UNTIL = new Date(Date.now() + 6 * 86_400_000).toISOString()
+
 const record = (
   over: Partial<ListingMergeRecord> = {}
 ): ListingMergeRecord => ({
@@ -159,6 +161,8 @@ const record = (
   channel: 'web',
   summary:
     'Fusionnée avec « [Exemple] Appartement 3 pièces Caudéran » : 1 lien',
+  // Lot 30 : la fusion s'annule encore (relatif à l'horloge du test).
+  undoUntil: UNDO_UNTIL,
   counts: {
     links: 1,
     sellers: 0,
@@ -406,8 +410,8 @@ describe('lot 27 : le dialogue de fusion', () => {
     expect(wrapper.get('[data-testid="merge-sellers"]').text()).toContain(
       'réf. EX-2041'
     )
-    expect(wrapper.get('[data-testid="merge-preview"]').text()).toContain(
-      'Rien n’est supprimé'
+    expect(n(wrapper.get('[data-testid="merge-preview"]').text())).toContain(
+      'pendant 7 jours, puis cette fiche est supprimée'
     )
   })
 
@@ -625,6 +629,7 @@ describe('lot 27 : « Même bien, autre fiche ? »', () => {
           id: DOUBLE,
           title: '[Exemple] Fiche gardée',
           mergedAt: AT,
+          undoUntil: UNDO_UNTIL,
         },
       })
     )

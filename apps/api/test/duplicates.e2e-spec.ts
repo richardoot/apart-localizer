@@ -1,6 +1,7 @@
 /**
  * ADR 0041 : la détection des doublons sur PostGIS réel. Un doublon probable
- * fort bloque la création (REST et MCP) tant que le membre n'a pas confirmé ;
+ * fort bloque la création dans l'application tant que le membre n'a pas
+ * confirmé (au connecteur, il devient une question : lot 30) ;
  * un fait contraire (autre étage, même agence avec une autre référence) le
  * fait taire ; deux lieux éloignés (contour du quartier, point de
  * l'adresse) aussi, pas un quartier dans sa commune ; les deux formes d'une
@@ -273,7 +274,7 @@ describe('Doublons : contradictions et blocage (e2e)', () => {
     expect(result.content[0]?.text).toContain('Aucun doublon probable.')
   })
 
-  it('create_listing (MCP) : le refus est rendu en réponse, ignoreDuplicates passe outre', async () => {
+  it('create_listing (MCP) : un doublon probable devient une question (lot 30), ignoreDuplicates la déclare distincte', async () => {
     const listing = {
       title: '[Exemple] T3 Mérignac 61 m²',
       price: 204_000,
@@ -281,20 +282,24 @@ describe('Doublons : contradictions et blocage (e2e)', () => {
       rooms: 3,
       location: { commune: 'Mérignac' },
     }
-    const refused = await callTool(richard, 'create_listing', {
+    const asked = await callTool(richard, 'create_listing', {
       listing,
       provenance: 'user',
     })
-    expect(refused.isError).toBe(true)
-    expect(refused.content[0]?.text).toContain('Doublon probable')
-    expect(refused.content[0]?.text).toContain('ignoreDuplicates')
+    expect(asked.isError).toBeUndefined()
+    expect(asked.content[0]?.text).toContain('1 doublon(s) probable(s)')
+    expect(asked.content[0]?.text).toContain('l’application demandera')
 
     const created = await callTool(richard, 'create_listing', {
-      listing: { ...listing, ignoreDuplicates: true },
+      listing: {
+        ...listing,
+        title: '[Exemple] T3 bis',
+        ignoreDuplicates: true,
+      },
       provenance: 'user',
     })
     expect(created.isError).toBeUndefined()
-    expect(created.content[0]?.text).toContain('1 doublon(s) probable(s)')
+    expect(created.content[0]?.text).not.toContain('l’application demandera')
   })
 
   describe('deux lieux éloignés (contours et points, PostGIS)', () => {

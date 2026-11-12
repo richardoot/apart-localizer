@@ -29,6 +29,7 @@ export const MERGE_ACTIONS = [
   'listing.unabsorbed',
   'listing.seller_added',
   'listing.seller_removed',
+  'listing.duplicate_denied',
 ] as const
 
 /**
@@ -71,6 +72,11 @@ export function describeMergeActivity(
     case 'listing.seller_added':
       return {
         summary: `a ajouté une autre agence qui vend le même bien : ${text(after, 'seller') ?? 'agence'}`,
+        changes: [],
+      }
+    case 'listing.duplicate_denied':
+      return {
+        summary: `a confirmé que ce n’est pas le même bien que ${quoted(text(after, 'otherTitle'))}`,
         changes: [],
       }
     case 'listing.seller_removed':

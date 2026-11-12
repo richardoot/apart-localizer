@@ -247,6 +247,7 @@ export function fakeEvaluated(
     sellers: [],
     mergedInto: null,
     absorbed: [],
+    duplicateQuestions: [],
     ...over,
   }
 }

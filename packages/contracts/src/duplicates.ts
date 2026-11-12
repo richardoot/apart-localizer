@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  ActivityChannelSchema,
   DpeClassSchema,
   ListingStatusSchema,
   LocationPrecisionSchema,
@@ -217,3 +218,31 @@ export const DuplicateProbeSchema = z
     }
   )
 export type DuplicateProbe = z.infer<typeof DuplicateProbeSchema>
+
+/**
+ * Lot 30 (ADR 0043) : Claude crée une annonce malgré un doublon probable et
+ * l'application demande au membre s'il s'agit du même bien. « Oui » fusionne
+ * les deux fiches ; « Non » les déclare distinctes : la paire n'est plus
+ * signalée.
+ */
+export const DuplicateQuestionSchema = z.object({
+  id: z.string().uuid().describe('La paire de fiches'),
+  otherId: z.string().uuid().describe('L’autre fiche, peut-être le même bien'),
+  otherTitle: z.string(),
+  askedAt: z.string().datetime(),
+  askedChannel: ActivityChannelSchema.describe(
+    'Qui a créé la fiche malgré la ressemblance : Claude (mcp) ou l’application (web)'
+  ),
+})
+export type DuplicateQuestion = z.infer<typeof DuplicateQuestionSchema>
+
+/** Le membre répond « ce sont deux biens différents ». */
+export const DuplicateDistinctInputSchema = z.object({
+  otherId: z
+    .string()
+    .uuid()
+    .describe('L’autre fiche de la paire, que le membre déclare distincte'),
+})
+export type DuplicateDistinctInput = z.infer<
+  typeof DuplicateDistinctInputSchema
+>

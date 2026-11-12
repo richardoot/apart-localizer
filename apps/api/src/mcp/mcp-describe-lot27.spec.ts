@@ -48,6 +48,7 @@ const merge = (over: Partial<ListingMergeRecord> = {}): ListingMergeRecord => ({
   mergedById: null,
   channel: 'mcp',
   summary: 'Fusionnée avec « [Exemple] Doublon » : 1 lien',
+  undoUntil: '2026-11-17T09:00:00.000Z',
   counts: {
     links: 1,
     sellers: 0,
@@ -86,6 +87,7 @@ const item = (over: Partial<EvaluatedListing> = {}): EvaluatedListing =>
     links: [],
     sellers: [],
     absorbed: [],
+    duplicateQuestions: [],
     mergedInto: null,
     ...over,
   }) as unknown as EvaluatedListing
@@ -155,6 +157,7 @@ describe('MCP lot 27 : fusion des doublons, autres agences, annonces ressemblant
           id: ID2,
           title: '[Exemple] Gardée',
           mergedAt: AT,
+          undoUntil: '2026-11-17T09:00:00.000Z',
         },
       })
     )

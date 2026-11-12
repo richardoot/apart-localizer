@@ -24,6 +24,8 @@ import {
   mergeRefusal,
   mergeSellersPlan,
   mergeSummaryText,
+  mergeUndoRefusal,
+  duplicatePairOf,
   mergedDiscardReason,
   mergedFieldSources,
   mergedNotes,
@@ -56,6 +58,7 @@ import { linkStatesOf } from './listing-checks.service'
 import { toMergeRecord } from './listing.mapper'
 import { createListingSeller, sellersOf } from './listing-sellers.service'
 import { ListingsService } from './listings.service'
+import { purgeExpiredMerges } from './merge-purge'
 
 const ids = z.array(z.string()).default([])
 
@@ -125,9 +128,10 @@ interface MergePlan {
  * reçoit les liens (avec leurs vérifications), les agences et leurs
  * références, les visites, offres, avis, tâches et questions aux agences de
  * la fiche absorbée ; ses champs vides sont complétés ; son prix suit ses
- * liens (lot 18). La fiche absorbée n'est pas supprimée : écartée comme
- * doublon, liée à la fiche gardée, cachée des listes. Tout est écrit dans une
- * transaction, journalisé des deux côtés, et s'annule (`undo`) : ce qui était
+ * liens (lot 18). La fiche absorbée est écartée comme doublon, liée à la
+ * fiche gardée, cachée des listes, puis supprimée après sept jours (lot 30,
+ * `purgeExpiredMerges`). Tout est écrit dans une transaction, journalisé des
+ * deux côtés, et s'annule pendant ces sept jours (`undo`) : ce qui était
  * venu repart, la fiche absorbée retrouve son statut. Par un membre dans
  * l'application, ou par Claude après son accord ; l'annulation, dans
  * l'application seulement.
@@ -182,6 +186,8 @@ export class ListingMergeService {
     input: ListingMergeInput,
     channel: ActivityChannel = 'web'
   ): Promise<ListingMergeResult> {
+    // Lot 30 : les fiches absorbées depuis plus de sept jours partent d'abord.
+    await purgeExpiredMerges(this.prisma, member.workspaceId)
     const plan = await this.plan(member, keepId, input.absorbedId)
     if (plan.refusal) throw new ConflictException(plan.refusal)
     if (input.expectedUpdatedAt !== undefined) {
@@ -225,6 +231,10 @@ export class ListingMergeService {
         )
       }
       const sellerIds = await this.moveIn(tx, member, plan)
+      // Lot 30 : la question « même bien ? » de cette paire est tranchée.
+      await tx.duplicatePair.deleteMany({
+        where: duplicatePairOf(keep.id, absorb.id),
+      })
       const source = await tx.listing.findUniqueOrThrow({
         where: { id: absorb.id },
       })
@@ -363,6 +373,8 @@ export class ListingMergeService {
     if (merge.undoneAt || merge.absorbed.mergedIntoId !== merge.keptId) {
       throw new ConflictException('Cette fusion a déjà été annulée.')
     }
+    const tooOld = mergeUndoRefusal(merge.mergedAt, new Date())
+    if (tooOld) throw new ConflictException(tooOld)
     if (merge.kept.mergedIntoId) {
       throw new ConflictException(
         `« ${merge.kept.title} » a elle-même été fusionnée dans une autre fiche : annule d’abord cette fusion-là.`
@@ -502,6 +514,62 @@ export class ListingMergeService {
       `Fusion annulée : « ${merge.absorbed.title} » redevient une fiche à part`,
       absorbedId
     )
+  }
+
+  /**
+   * Lot 30 (ADR 0043) : un membre dit que deux fiches qui se ressemblent sont
+   * deux biens différents. La question en attente est tranchée (ou la paire
+   * créée) ; la paire ne revient plus dans les doublons ni dans les
+   * suggestions de fusion. Journalisé des deux côtés. Rend la fiche `:id`.
+   */
+  async declareDistinct(
+    member: Member,
+    listingId: string,
+    otherId: string
+  ): Promise<EvaluatedListing> {
+    if (listingId === otherId) {
+      throw new BadRequestException(
+        'Une fiche ne se compare pas avec elle-même.'
+      )
+    }
+    const [item, other] = await Promise.all([
+      this.listings.get(member, listingId),
+      this.listings.get(member, otherId),
+    ])
+    const pair = duplicatePairOf(listingId, otherId)
+    const now = new Date()
+    await this.prisma.$transaction(async tx => {
+      await tx.duplicatePair.upsert({
+        where: { listingAId_listingBId: pair },
+        create: {
+          workspaceId: member.workspaceId,
+          ...pair,
+          verdict: 'distinct',
+          askedById: member.id,
+          askedChannel: 'web',
+          decidedById: member.id,
+          decidedAt: now,
+        },
+        update: { verdict: 'distinct', decidedById: member.id, decidedAt: now },
+      })
+      for (const [self, that] of [
+        [item, other],
+        [other, item],
+      ] as const) {
+        await this.activity.record(
+          {
+            workspaceId: member.workspaceId,
+            listingId: self.listing.id,
+            actorMemberId: member.id,
+            channel: 'web',
+            action: 'listing.duplicate_denied',
+            after: { otherId: that.listing.id, otherTitle: that.listing.title },
+          },
+          tx
+        )
+      }
+    })
+    return this.listings.get(member, listingId)
   }
 
   /** Les deux fiches à jour après l'écriture (adéquation aux critères comprise), et la fusion. */

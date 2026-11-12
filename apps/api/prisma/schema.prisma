@@ -438,6 +438,7 @@ model Workspace {
   // Lot 27 : autres agences d'une annonce, fusions de fiches.
   listingSellers  ListingSeller[]
   listingMerges   ListingMerge[]
+  duplicatePairs  DuplicatePair[]
 
   /// Lot 20 : avis à l'aveugle (l'avis des autres masqué tant qu'on n'a pas
   /// noté) ; vrai par défaut.
@@ -530,6 +531,8 @@ model Member {
   addedSellers           ListingSeller[]    @relation("ListingSellerAuthor")
   listingMerges          ListingMerge[]     @relation("ListingMergeAuthor")
   undoneListingMerges    ListingMerge[]     @relation("ListingMergeUndoer")
+  askedDuplicatePairs    DuplicatePair[]    @relation("DuplicatePairAsker")
+  decidedDuplicatePairs  DuplicatePair[]    @relation("DuplicatePairDecider")
   // Lot 21 : les décisions à plusieurs.
   authoredDecisions      DecisionProposal[] @relation("DecisionAuthor")
   closedDecisions        DecisionProposal[] @relation("DecisionCloser")
@@ -739,6 +742,8 @@ model Listing {
   mergedListings    Listing[]              @relation("ListingMerged")
   mergesAsKept      ListingMerge[]         @relation("ListingMergeKept")
   mergesAsAbsorbed  ListingMerge[]         @relation("ListingMergeAbsorbed")
+  duplicatePairsA   DuplicatePair[]        @relation("DuplicatePairA")
+  duplicatePairsB   DuplicatePair[]        @relation("DuplicatePairB")
 
   @@index([workspaceId, status])
   @@index([workspaceId, commune])
@@ -1936,5 +1941,42 @@ model ListingMerge {
   @@index([keptId, mergedAt])
   @@index([absorbedId])
   @@map("listing_merges")
+  @@schema("app")
+}
+
+/// Lot 30 (ADR 0043) : une paire de fiches qui se ressemblent assez pour être
+/// le même bien. `pending` : Claude a créé la fiche malgré un doublon probable,
+/// l'application demande au membre ; `distinct` : un membre a dit que ce sont
+/// deux biens différents (la paire n'est plus signalée). « Oui » fusionne les
+/// deux fiches et efface la paire. `listing_a_id` < `listing_b_id` (CHECK).
+enum DuplicatePairVerdict {
+  pending
+  distinct
+
+  @@schema("app")
+}
+
+model DuplicatePair {
+  id           String               @id @default(uuid())
+  workspaceId  String               @map("workspace_id")
+  listingAId   String               @map("listing_a_id")
+  listingBId   String               @map("listing_b_id")
+  verdict      DuplicatePairVerdict
+  askedById    String?              @map("asked_by_id")
+  askedChannel ActivityChannel      @map("asked_channel")
+  decidedById  String?              @map("decided_by_id")
+  decidedAt    DateTime?            @map("decided_at") @db.Timestamptz(6)
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  listingA  Listing   @relation("DuplicatePairA", fields: [listingAId], references: [id], onDelete: Cascade)
+  listingB  Listing   @relation("DuplicatePairB", fields: [listingBId], references: [id], onDelete: Cascade)
+  askedBy   Member?   @relation("DuplicatePairAsker", fields: [askedById], references: [id], onDelete: SetNull)
+  decidedBy Member?   @relation("DuplicatePairDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@unique([listingAId, listingBId])
+  @@index([listingBId])
+  @@index([workspaceId, verdict])
+  @@map("duplicate_pairs")
   @@schema("app")
 }

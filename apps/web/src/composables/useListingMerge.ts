@@ -79,7 +79,7 @@ export function useMergePreview(
 
 /**
  * Lot 27 : fusionner deux fiches, annuler une fusion, ajouter ou retirer une
- * autre agence. Chaque écriture remplace la fiche gardée dans le cache et
+ * autre agence ; lot 30, dire que deux fiches sont deux biens différents. Chaque écriture remplace la fiche gardée dans le cache et
  * rafraîchit les listes, les compteurs des étapes et les brouillons (une
  * fiche a pu disparaître des listes, ou y revenir).
  */
@@ -132,5 +132,16 @@ export function useListingMerge() {
     }) => api.merges.removeSeller(listingId, sellerId),
     onSuccess: settle,
   })
-  return { merge, undo, addSeller, removeSeller }
+  // Lot 30 : « Non, deux biens différents » ; la question disparaît des deux fiches.
+  const distinct = useMutation({
+    mutationFn: ({
+      listingId,
+      otherId,
+    }: {
+      listingId: string
+      otherId: string
+    }) => api.merges.distinct(listingId, otherId),
+    onSuccess: (listing: EvaluatedListing) => settle({ listing }),
+  })
+  return { merge, undo, addSeller, removeSeller, distinct }
 }

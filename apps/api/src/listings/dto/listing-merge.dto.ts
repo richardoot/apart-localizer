@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod'
 import {
+  DuplicateDistinctInputSchema,
   ListingMergeInputSchema,
   ListingMergePreviewQuerySchema,
   ListingMergePreviewSchema,
@@ -34,4 +35,9 @@ export class ListingSellerInputDto extends createZodDto(
 ) {}
 export class ListingSellerWriteResultDto extends createZodDto(
   ListingSellerWriteResultSchema
+) {}
+
+/** Lot 30 : « ce sont deux biens différents ». */
+export class DuplicateDistinctInputDto extends createZodDto(
+  DuplicateDistinctInputSchema
 ) {}

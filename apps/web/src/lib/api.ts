@@ -497,6 +497,12 @@ export const api = {
       apiFetch<ListingMergeResult>(`/listing-merges/${mergeId}/undo`, {
         method: 'POST',
       }),
+    /** Lot 30 : « ce sont deux biens différents » ; rend la fiche `listingId`. */
+    distinct: (listingId: string, otherId: string) =>
+      apiFetch<EvaluatedListing>(`/listings/${listingId}/duplicate-distinct`, {
+        method: 'POST',
+        json: { otherId },
+      }),
     /** Une autre agence qui vend le même bien, avec sa référence. */
     addSeller: (listingId: string, input: ListingSellerInputRaw) =>
       apiFetch<ListingSellerWriteResult>(`/listings/${listingId}/sellers`, {

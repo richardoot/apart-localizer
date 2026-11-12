@@ -130,6 +130,8 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     mergedInto: null,
     mergesAsAbsorbed: [],
     mergesAsKept: [],
+    duplicatePairsA: [],
+    duplicatePairsB: [],
     ...over,
   }
 }
