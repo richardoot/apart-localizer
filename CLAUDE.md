@@ -138,8 +138,9 @@ Schéma Postgres `app`. Les colonnes géo sont `Unsupported` avec latitude/longi
   cachée des listes, puis supprimée après sept jours (lot 30) ; `listing_merges.moved` garde ce
   qu'il faut pour annuler ; `listing_sellers` porte les autres agences, la principale reste dans
   `listings.seller_*`.
-- Brouillons (lot 31) : `listing_drafts.updated_at` (garde-fou) et `merged_into_draft_id` (le
-  brouillon gardé qui en a absorbé un autre ; son lien rejoint l'annonce créée depuis le gardé).
+- Brouillons (lot 31) : `listing_drafts.updated_at` (garde-fou), `merged_into_draft_id` et
+  `merged_at` (un brouillon absorbé est caché, puis supprimé après sept jours, ADR 0045),
+  `merged_links` (sur le gardé, les liens des absorbés : annonce créée, exploration, alertes).
 - Doublons à confirmer (lot 30) : `duplicate_pairs`, une ligne par paire (`listing_a_id` <
   `listing_b_id`, `CHECK` écrit à la main), `pending` (question posée) ou `distinct` (un membre a
   dit non).
@@ -405,7 +406,8 @@ MCP et consentement OAuth : 0017.
 - Doublons jugés sur tous les faits (contradictions, blocage à la création) : 0041
 - Une adresse saisie recalcule la fiche (point saisi, règle unique des recalculs) : 0042
 - Lot 30, doublons confirmés dans l'application, fiche absorbée supprimée après sept jours : 0043
-- Lot 31, les brouillons au connecteur (lire, corriger, décider, fusionner deux brouillons) : 0044
+- Lot 31, les brouillons au connecteur (lire, corriger, décider, fusionner deux brouillons) : 0044,
+  brouillons absorbés supprimés après sept jours : 0045
 
 Identifiants de code en anglais ; textes d'interface, messages d'erreur métier et descriptions
 Zod en français.
@@ -419,7 +421,7 @@ Zod en français.
 - Pas de suppression par le MCP ; les écritures sont journalisées.
 - Fusion des doublons (lots 27 et 30) : la fiche absorbée est cachée des listes, la fusion s'annule
   dans l'application pendant sept jours, puis l'application supprime la fiche absorbée (jamais
-  avant, jamais par le MCP) ; par le MCP, une fusion ou une autre agence ne s'enregistre qu'après
+  avant, jamais par le MCP), de même pour un brouillon absorbé (lot 31) ; par le MCP, une fusion ou une autre agence ne s'enregistre qu'après
   l'accord du membre ; ni annulation de fusion ni retrait d'agence par le MCP.
 - Le partage mobile et les alertes e-mail n'utilisent que ce que le téléphone ou l'e-mail
   transmet : aucune page de portail n'est téléchargée, aucun lien n'est suivi.

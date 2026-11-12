@@ -24,6 +24,7 @@ import { DuplicatesService } from '../listings/duplicates.service'
 import { ExtractionService } from '../listings/extraction.service'
 import { ListingLinksService } from '../listings/listing-links.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { mergedLinksOf } from './draft-merged-links'
 import type { Prisma } from '../generated/prisma'
 
 interface DraftCandidate {
@@ -106,9 +107,15 @@ export class InboundEmailService {
         status: { in: ['pending', 'merged'] },
         url: { not: null },
       },
-      select: { url: true },
+      select: { url: true, mergedLinks: true },
     })
-    const known = new Set(pending.map(d => normalizeUrl(d.url)))
+    // Lot 31 : les liens des brouillons absorbés comptent pour le gardé.
+    const known = new Set(
+      pending.flatMap(d => [
+        normalizeUrl(d.url),
+        ...mergedLinksOf(d).map(link => normalizeUrl(link.url)),
+      ])
+    )
     const fresh = candidates.filter(c => !known.has(normalizeUrl(c.url)))
     const extractedBy: DraftExtractor = this.ai.enabled ? 'ai' : 'parser'
     const drafts: DraftCandidate[] = []

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common'
 import {
   AUTO_ATTACH_REVIEW_DAYS,
+  DraftMergedLinkSchema,
   DuplicateCandidateSchema,
   EXPLORATION_LINK_PORTAL,
   EXPLORATION_PORTAL_LABELS,
@@ -16,6 +17,7 @@ import {
 import type {
   ActivityChannel,
   DecisionProposal,
+  DraftMergedLink,
   DraftUpdate,
   FieldSource,
   ListingCriteriaFit,
@@ -42,6 +44,7 @@ import {
   linkKey,
   mergedDraftReason,
   mergedListingRefusal,
+  mergeUndoRefusal,
   rankSimilarListings,
 } from '@apart/domain'
 import type { SimilarRow } from '@apart/domain'
@@ -63,6 +66,8 @@ import { ListingsService } from '../listings/listings.service'
 import { DuplicatesService } from '../listings/duplicates.service'
 import { placementOf } from '../listings/listing.mapper'
 import { provenanceAfterPatch } from '../listings/provenance'
+import { purgeExpiredMerges } from '../listings/merge-purge'
+import { mergedLinksOf } from './draft-merged-links'
 import { draftProbe } from '../listings/similar-listings.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { Prisma } from '../generated/prisma'
@@ -229,6 +234,8 @@ export function toDraftDto(
     located: reading?.located ?? null,
     updatedAt: row.updatedAt.toISOString(),
     mergedIntoDraftId: row.mergedIntoDraftId,
+    mergedAt: row.mergedAt?.toISOString() ?? null,
+    mergedLinks: mergedLinksOf(row),
   })
 }
 
@@ -284,6 +291,8 @@ export class DraftsService {
       where: {
         workspaceId: member.workspaceId,
         status: attached ? 'merged' : status,
+        // Lot 31 : un brouillon absorbé est caché (son lien est sur le gardé).
+        mergedIntoDraftId: null,
         ...(explorationId ? { explorationId } : {}),
         // Lot 18 : les liens rattachés d'office des derniers jours.
         ...(attached ? { attachedAt: { gte: since } } : {}),
@@ -447,6 +456,12 @@ export class DraftsService {
         'Seul un brouillon écarté peut revenir « à valider ».'
       )
     }
+    // Lot 31 : un brouillon absorbé se repêche pendant sept jours.
+    const tooOld =
+      row.mergedIntoDraftId && row.mergedAt
+        ? mergeUndoRefusal(row.mergedAt, new Date())
+        : null
+    if (tooOld) throw new ConflictException(tooOld)
     await this.prisma.$transaction(async tx => {
       const written = await tx.listingDraft.updateMany({
         where: { id: row.id, status: 'dismissed' },
@@ -457,9 +472,27 @@ export class DraftsService {
           dismissReason: null,
           // Lot 31 : un brouillon absorbé repêché redevient un brouillon à part.
           mergedIntoDraftId: null,
+          mergedAt: null,
         },
       })
       if (written.count === 0) throw this.alreadyDecided()
+      // Son lien quitte le brouillon gardé.
+      if (row.mergedIntoDraftId) {
+        const kept = await tx.listingDraft.findUnique({
+          where: { id: row.mergedIntoDraftId },
+          select: { mergedLinks: true },
+        })
+        if (kept) {
+          await tx.listingDraft.update({
+            where: { id: row.mergedIntoDraftId },
+            data: {
+              mergedLinks: mergedLinksOf(kept).filter(
+                link => link.draftId !== row.id
+              ) as unknown as Prisma.InputJsonValue,
+            },
+          })
+        }
+      }
       await this.activity.record(
         {
           workspaceId: member.workspaceId,
@@ -909,7 +942,8 @@ export class DraftsService {
    * depuis le gardé, ou la fiche suivie qui est la même). Les deux doivent
    * être à valider ou écartés. Une seule transaction, journalisée
    * (`draft.absorbed`) ; une proposition en cours sur l'absorbé devient
-   * caduque. Un brouillon absorbé repêché redevient un brouillon à part.
+   * caduque. L'absorbé est caché des listes et supprimé sept jours après
+   * (ADR 0045) ; repêché d'ici là, il redevient un brouillon à part.
    */
   async mergeDrafts(
     member: Member,
@@ -923,6 +957,8 @@ export class DraftsService {
         'Un brouillon ne se fusionne pas avec lui-même.'
       )
     }
+    // Les brouillons absorbés depuis plus de sept jours partent d'abord.
+    await purgeExpiredMerges(this.prisma, member.workspaceId)
     const [keep, absorb] = await Promise.all([
       this.row(member, keepId),
       this.row(member, absorbId),
@@ -944,6 +980,31 @@ export class DraftsService {
     const takesUrl = !keep.url && Boolean(absorb.url)
     const nextInput = takesUrl ? { ...plan.input, url: absorb.url } : plan.input
     const now = new Date()
+    // Lot 31 (ADR 0045) : le lien de l'absorbé, ses faits lus et sa raison
+    // d'écart passent sur le gardé, avec ceux qu'il avait lui-même absorbés :
+    // ils survivent à sa suppression, sept jours après.
+    const entry: DraftMergedLink | null =
+      absorb.url && !takesUrl
+        ? DraftMergedLinkSchema.parse({
+            draftId: absorb.id,
+            url: absorb.url,
+            portal: absorb.portal,
+            origin: absorb.origin,
+            title: absorbedInput.title,
+            price: absorbedInput.price > 0 ? absorbedInput.price : 0,
+            sellerType: absorbedInput.sellerType,
+            sellerName: absorbedInput.sellerName,
+            sellerReference: absorbedInput.sellerReference,
+            observed: observedFromDraft(absorbedInput),
+            reason: absorb.status === 'dismissed' ? absorb.dismissReason : null,
+            mergedAt: now.toISOString(),
+          })
+        : null
+    const mergedLinks = [
+      ...mergedLinksOf(keep),
+      ...(entry ? [entry] : []),
+      ...mergedLinksOf(absorb),
+    ]
     await this.prisma.$transaction(async tx => {
       const claimed = await tx.listingDraft.updateMany({
         where: {
@@ -958,6 +1019,8 @@ export class DraftsService {
           decidedAt: now,
           decidedById: member.id,
           mergedIntoDraftId: keepId,
+          mergedAt: now,
+          mergedLinks: [],
           // Son lien passe au gardé, qui n'en avait pas.
           ...(takesUrl ? { url: null } : {}),
           updatedAt: now,
@@ -968,6 +1031,7 @@ export class DraftsService {
         where: { id: keepId, updatedAt: keep.updatedAt },
         data: {
           input: nextInput as unknown as Prisma.InputJsonValue,
+          mergedLinks: mergedLinks as unknown as Prisma.InputJsonValue,
           ...(takesUrl ? { url: absorb.url } : {}),
           ...(nextInput.location !== keptInput.location
             ? { locationPlacement: Prisma.DbNull }
@@ -976,7 +1040,8 @@ export class DraftsService {
         },
       })
       if (written.count === 0) throw this.changedSinceRead()
-      // Les brouillons déjà absorbés par l'absorbé suivent le gardé.
+      // Les brouillons déjà absorbés par l'absorbé suivent le gardé (leur
+      // délai de suppression ne change pas).
       await tx.listingDraft.updateMany({
         where: { mergedIntoDraftId: absorbId },
         data: { mergedIntoDraftId: keepId },
@@ -1099,40 +1164,40 @@ export class DraftsService {
     listingId: string,
     channel: ActivityChannel
   ): Promise<AbsorbedLinks> {
-    const absorbed = await this.prisma.listingDraft.findMany({
-      where: { mergedIntoDraftId: draftId, url: { not: null } },
-      orderBy: { receivedAt: 'asc' },
+    const kept = await this.prisma.listingDraft.findUnique({
+      where: { id: draftId },
+      select: { mergedLinks: true },
     })
     const result: AbsorbedLinks = { added: [], skipped: [] }
-    for (const row of absorbed) {
-      const url = row.url as string
-      const input = draftInput(row)
-      const { price, ...facts } = observedFromDraft(input)
+    for (const link of kept ? mergedLinksOf(kept) : []) {
+      const url = link.url
+      const { price: _read, ...facts } = link.observed
+      const price = link.price > 0 ? link.price : undefined
       try {
         await this.links.add(
           member,
           listingId,
           {
             url,
-            portal: row.portal
-              ? EXPLORATION_LINK_PORTAL[row.portal]
+            portal: link.portal
+              ? EXPLORATION_LINK_PORTAL[link.portal]
               : detectLinkPortal(url),
             online: true,
             ...(price !== undefined ? { price } : {}),
             facts,
-            ...(input.sellerType !== 'unknown'
-              ? { sellerType: input.sellerType }
+            ...(link.sellerType !== 'unknown'
+              ? { sellerType: link.sellerType }
               : {}),
-            ...(input.sellerName ? { sellerName: input.sellerName } : {}),
-            ...(input.sellerReference
-              ? { reference: input.sellerReference }
+            ...(link.sellerName ? { sellerName: link.sellerName } : {}),
+            ...(link.sellerReference
+              ? { reference: link.sellerReference }
               : {}),
             evidence: 'Même bien : brouillon fusionné',
           },
           {
             channel,
-            origin: row.origin === 'exploration' ? 'exploration' : 'email',
-            draftId: row.id,
+            origin: link.origin === 'exploration' ? 'exploration' : 'email',
+            draftId: link.draftId,
           }
         )
         result.added.push(url)

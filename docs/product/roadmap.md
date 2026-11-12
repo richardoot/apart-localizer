@@ -1546,8 +1546,9 @@ outils MCP (49).
 - **Corriger et décider** : la fiche pré-remplie se corrige ; un brouillon se garde (l'annonce est
   créée), s'écarte, se repêche, ou se reconnaît comme une annonce suivie, toujours après l'accord
   du membre dans la conversation ; à plusieurs, garder ou écarter devient une proposition.
-- **Fusionner deux brouillons** : le gardé l'emporte et se complète ; l'autre est écarté comme
-  doublon et son lien rejoindra l'annonce créée.
+- **Fusionner deux brouillons** : le gardé l'emporte et se complète ; l'autre disparaît des
+  archives (supprimé sept jours après, repêchable d'ici là, ADR 0045), son lien et sa raison
+  d'écart passent sur le gardé et rejoindront l'annonce créée.
 
 Limites : la ressemblance entre brouillons ne mesure pas de distance ; la fusion de deux brouillons
 n'existe qu'au connecteur (dans l'application, on écarte l'un des deux).

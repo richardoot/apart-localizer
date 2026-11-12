@@ -2,9 +2,10 @@ import { z } from 'zod'
 import { ListingCriteriaFitSchema } from './criteria-fit.js'
 import { DecisionProposalSchema } from './decisions.js'
 import { DuplicateCandidateSchema } from './duplicates.js'
-import { LocationPrecisionSchema } from './enums.js'
+import { LocationPrecisionSchema, SellerTypeSchema } from './enums.js'
 import { PointSchema } from './geojson.js'
 import { ListingInputSchema, ListingUpdateSchema } from './listing.js'
+import { ListingObservedSchema } from './listing-checks.js'
 import { SimilarListingSchema } from './listing-merge.js'
 import { ListingEvaluationSchema } from './metrics.js'
 import { ExplorationPortalSchema, ListingPortalSchema } from './portals.js'
@@ -78,6 +79,41 @@ export type DraftExtractor = z.infer<typeof DraftExtractorSchema>
 
 /** Longueur maximale de la raison d'un écart. */
 export const DRAFT_DISMISS_REASON_MAX = 500
+
+/**
+ * Lot 31 (ADR 0045) : le lien d'un brouillon absorbé par une fusion de
+ * brouillons, gardé sur le brouillon gardé : il rejoint l'annonce créée et
+ * reste reconnu par l'exploration et les alertes après la suppression de
+ * l'absorbé (sept jours après la fusion).
+ */
+export const DraftMergedLinkSchema = z.object({
+  draftId: z
+    .string()
+    .uuid()
+    .describe('Le brouillon absorbé (supprimé sept jours après la fusion)'),
+  url: z.string(),
+  portal: ExplorationPortalSchema.nullable().default(null),
+  origin: z.enum(['email', 'exploration']).default('exploration'),
+  title: z.string().nullable().default(null),
+  price: z
+    .number()
+    .min(0)
+    .default(0)
+    .describe('Prix lu, en euros ; 0 = non lu'),
+  sellerType: SellerTypeSchema.default('unknown'),
+  sellerName: z.string().nullable().default(null),
+  sellerReference: z.string().nullable().default(null),
+  observed: ListingObservedSchema.default({}).describe(
+    'Les faits lus sur la page (surface, pièces, DPE, charges, taxe foncière)'
+  ),
+  reason: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe('La raison de l’écart du brouillon absorbé, avant la fusion'),
+  mergedAt: z.string().datetime(),
+})
+export type DraftMergedLink = z.infer<typeof DraftMergedLinkSchema>
 
 /** Lot 18 : le lien d'un brouillon rattaché d'office à une annonce suivie. */
 export const DraftAttachmentSchema = z.object({
@@ -224,6 +260,20 @@ export const ListingDraftSchema = z.object({
     .optional()
     .describe(
       'Lot 31 : le brouillon gardé qui a absorbé celui-ci (deux brouillons du même bien fusionnés) ; son lien rejoindra l’annonce créée depuis le gardé'
+    ),
+  mergedAt: z
+    .string()
+    .datetime()
+    .nullable()
+    .optional()
+    .describe(
+      'Lot 31 : date de la fusion d’un brouillon absorbé ; il est caché des listes et supprimé sept jours après (repêchable d’ici là)'
+    ),
+  mergedLinks: z
+    .array(DraftMergedLinkSchema)
+    .optional()
+    .describe(
+      'Lot 31 : les liens des brouillons absorbés par celui-ci (portail, faits lus, vendeur, ancienne raison d’écart)'
     ),
 })
 export type ListingDraft = z.infer<typeof ListingDraftSchema>

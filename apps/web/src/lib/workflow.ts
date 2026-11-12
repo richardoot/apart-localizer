@@ -1,4 +1,5 @@
 import {
+  EXPLORATION_PORTAL_LABELS,
   CRITERIA_FIT_LEVEL_LABELS,
   LISTING_STATUS_LABELS,
   WORKFLOW_STAGE_LABELS,
@@ -635,6 +636,34 @@ export function sortDrafts(
   })
 }
 
+/**
+ * Lot 31 (ADR 0045) : les liens des brouillons fusionnés dans celui-ci, dits
+ * sur sa ligne (« + 2 liens fusionnés : Leboncoin, SeLoger ») ; null sans
+ * fusion. Les brouillons absorbés ne sont plus listés.
+ */
+export function mergedLinksText(draft: ListingDraft): string | null {
+  const links = draft.mergedLinks ?? []
+  if (links.length === 0) return null
+  const portals = links.map(link =>
+    link.portal ? EXPLORATION_PORTAL_LABELS[link.portal] : 'autre site'
+  )
+  return `+ ${links.length} ${links.length > 1 ? 'liens fusionnés' : 'lien fusionné'} : ${portals.join(', ')}`
+}
+
+/** Les raisons d'écart des brouillons fusionnés qui disent autre chose que celle du gardé. */
+function mergedReasons(draft: ListingDraft): string[] {
+  const own = draft.dismissReason?.trim().toLowerCase() ?? ''
+  const seen = new Set<string>([own])
+  const reasons: string[] = []
+  for (const link of draft.mergedLinks ?? []) {
+    const reason = link.reason?.trim()
+    if (!reason || seen.has(reason.toLowerCase())) continue
+    seen.add(reason.toLowerCase())
+    reasons.push(reason)
+  }
+  return reasons
+}
+
 /** La ligne « Archives » d'un brouillon écarté : il n'a jamais été une annonce suivie. */
 export function dismissedDraftRow(
   draft: ListingDraft,
@@ -645,7 +674,9 @@ export function dismissedDraftRow(
     id: draft.id,
     kind: 'draft',
     title: draft.listing.title,
-    meta: draftMeta(draft),
+    meta: [draftMeta(draft), mergedLinksText(draft)]
+      .filter(Boolean)
+      .join(' · '),
     stats: [
       {
         label: 'Prix',
@@ -661,7 +692,10 @@ export function dismissedDraftRow(
     pill: 'Écartée',
     pillTone: rowPillTone('archived_discarded'),
     judgements: judgementsOfDraft(draft),
-    detail: draft.dismissReason ?? 'Écartée à l’étape À valider',
+    detail: [
+      draft.dismissReason ?? 'Écartée à l’étape À valider',
+      ...mergedReasons(draft).map(reason => `« ${reason} »`),
+    ].join(' · '),
     action: { kind: 'rescue', label: 'Repêcher' },
     decision: null,
     nextVisitAt: null,

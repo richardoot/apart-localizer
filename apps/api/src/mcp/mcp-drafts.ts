@@ -32,9 +32,11 @@ import { answer, dataResult, refusal, writeRefusal } from './tool-results'
  * même ») ou fusionner deux brouillons du même bien. Chaque décision et
  * chaque fusion demandent l'accord du membre dans la conversation
  * (`confirmedInChat`) ; garder ou écarter suit la décision à plusieurs du
- * lot 21 (une proposition en son nom). Rien n'est supprimé. L'adresse
- * e-mail de l'expéditeur d'une alerte n'est jamais rendue. Aucune logique
- * métier ici : les services écrivent, `domain` décide.
+ * lot 21 (une proposition en son nom). Le connecteur ne supprime rien : un
+ * brouillon absorbé est supprimé par l'application sept jours après la
+ * fusion (ADR 0045). L'adresse e-mail de l'expéditeur d'une alerte n'est
+ * jamais rendue. Aucune logique métier ici : les services écrivent,
+ * `domain` décide.
  */
 
 const CHANNEL = 'mcp' as const
@@ -79,6 +81,14 @@ export function describeDraft(draft: ListingDraft): string {
     draft.mergedIntoDraftId
       ? `fusionné dans le brouillon [id ${draft.mergedIntoDraftId}]`
       : null,
+    draft.mergedLinks?.length
+      ? `${draft.mergedLinks.length} lien(s) de brouillons fusionnés : ${draft.mergedLinks
+          .map(
+            link =>
+              `${link.portal ? EXPLORATION_PORTAL_LABELS[link.portal] : link.url}${link.reason ? ` (écarté : « ${link.reason} »)` : ''}`
+          )
+          .join(', ')}`
+      : null,
     draft.duplicates.length && !draft.distinct
       ? `${draft.duplicates.length} doublon(s) probable(s) parmi les annonces suivies`
       : null,
@@ -116,7 +126,7 @@ export function registerDraftTools(
     {
       title: 'Lister les brouillons',
       description:
-        'Les brouillons de l’espace, les plus récents d’abord : annonces reçues par alerte e-mail ou trouvées par Claude en explorant les portails, qui attendent qu’un membre les ajoute à la liste. `status` : pending « À valider » (par défaut), dismissed écartés (les archives), merged reconnus comme une annonce suivie, accepted validés (annonce créée). `search` cherche un texte (titre, commune, quartier, adresse, agence, référence, lien, raison de l’écart), `explorationId` les brouillons d’une exploration. Chaque brouillon : sa fiche pré-remplie, son lien, son origine, la raison de son écart, ses doublons probables parmi les annonces suivies, la proposition en cours, `updatedAt` (garde-fou des écritures) ; un brouillon à valider porte aussi son adéquation aux critères et ses chiffres. Lecture seule ; l’e-mail de l’expéditeur d’une alerte n’est jamais rendu. Pour repérer des doublons entre brouillons : find_similar_drafts.',
+        'Les brouillons de l’espace, les plus récents d’abord : annonces reçues par alerte e-mail ou trouvées par Claude en explorant les portails, qui attendent qu’un membre les ajoute à la liste. `status` : pending « À valider » (par défaut), dismissed écartés (les archives), merged reconnus comme une annonce suivie, accepted validés (annonce créée). `search` cherche un texte (titre, commune, quartier, adresse, agence, référence, lien, raison de l’écart), `explorationId` les brouillons d’une exploration. Chaque brouillon : sa fiche pré-remplie, son lien, son origine, la raison de son écart, ses doublons probables parmi les annonces suivies, la proposition en cours, `updatedAt` (garde-fou des écritures) ; un brouillon à valider porte aussi son adéquation aux critères et ses chiffres. Lecture seule ; l’e-mail de l’expéditeur d’une alerte n’est jamais rendu. Les brouillons absorbés par une fusion de brouillons ne sont pas listés : leurs liens sont sur le brouillon gardé (`mergedLinks`). Pour repérer des doublons entre brouillons : find_similar_drafts.',
       inputSchema: McpListDraftsInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -221,7 +231,7 @@ export function registerDraftTools(
     {
       title: 'Garder, écarter ou repêcher un brouillon',
       description:
-        '`decision` : keep ajoute le brouillon à la liste (l’annonce est créée depuis la fiche pré-remplie, avec les liens des brouillons qu’il a absorbés) ; discard l’écarte (`reason` obligatoire, jamais reproposé à l’exploration) ; restore remet « À valider » un brouillon écarté (un brouillon absorbé redevient un brouillon à part). ' +
+        '`decision` : keep ajoute le brouillon à la liste (l’annonce est créée depuis la fiche pré-remplie, avec les liens des brouillons qu’il a absorbés) ; discard l’écarte (`reason` obligatoire, jamais reproposé à l’exploration) ; restore remet « À valider » un brouillon écarté (un brouillon absorbé redevient un brouillon à part pendant les sept jours qui suivent la fusion). ' +
         'AVANT d’appeler : montrez le brouillon au membre et attendez son choix explicite ; passez alors `confirmedInChat: true`, sans quoi l’appel est refusé. Lot 21 : dans un espace où « Décider à plusieurs » est activé, keep et discard ne changent rien tout de suite : l’appel crée une proposition au nom du membre connecté, que les autres confirment dans l’application ; une proposition d’un autre membre déjà en cours bloque l’appel (Claude ne confirme jamais à sa place). Doublon probable d’une annonce suivie : préférez merge_draft_into_listing. Journalisé. Portée listings:write.',
       inputSchema: McpSetDraftStatusInputSchema,
       annotations: {
@@ -318,7 +328,7 @@ export function registerDraftTools(
     {
       title: 'Fusionner deux brouillons du même bien',
       description:
-        'Deux brouillons (à valider ou écartés) décrivent le même bien, souvent lu sur deux portails : `keepDraftId` reste, `mergeDraftId` y est fusionné. Le brouillon gardé l’emporte ; ses champs vides se complètent de l’autre (un champ déjà rempli n’est jamais écrasé ; le prix, la localisation et le vendeur seulement s’ils manquent), il reprend son lien s’il n’en avait pas. L’autre est écarté comme doublon (« Doublon du brouillon … »), lié au gardé : son lien rejoindra l’annonce créée quand le gardé sera ajouté à la liste (set_draft_status keep), ou la fiche suivie qui est la même (merge_draft_into_listing). Rien n’est supprimé ; repêcher l’absorbé (set_draft_status restore) en refait un brouillon à part. ' +
+        'Deux brouillons (à valider ou écartés) décrivent le même bien, souvent lu sur deux portails : `keepDraftId` reste, `mergeDraftId` y est fusionné. Le brouillon gardé l’emporte ; ses champs vides se complètent de l’autre (un champ déjà rempli n’est jamais écrasé ; le prix, la localisation et le vendeur seulement s’ils manquent), il reprend son lien s’il n’en avait pas. L’autre est écarté comme doublon (« Doublon du brouillon … »), lié au gardé : son lien rejoindra l’annonce créée quand le gardé sera ajouté à la liste (set_draft_status keep), ou la fiche suivie qui est la même (merge_draft_into_listing). L’absorbé est caché des listes et supprimé sept jours après par l’application (jamais par le connecteur) ; son lien, ses faits lus et sa raison d’écart restent sur le gardé (`mergedLinks`), l’exploration ne le repropose pas. D’ici là, repêcher l’absorbé (set_draft_status restore) en refait un brouillon à part. ' +
         'AVANT d’appeler : montrez les deux brouillons côte à côte au membre (get_draft, find_similar_drafts) et attendez qu’il confirme que c’est le même bien ; passez alors `confirmedInChat: true`, sans quoi l’appel est refusé. Gardez le brouillon le plus complet, ou celui à valider. Garde-fous : `expectedKeepUpdatedAt` et `expectedMergeUpdatedAt` (lus avec get_draft). Refusé (réponse lisible) pour un brouillon validé, reconnu ou déjà fusionné. Journalisé. Portée listings:write.',
       inputSchema: McpMergeDraftsInputSchema,
       annotations: {

@@ -13,6 +13,7 @@ import {
   draftFitText,
   draftMapItem,
   dismissedDraftRow,
+  mergedLinksText,
   draftMatchesFilters,
   isDraftSortApplied,
   propertyFacts,
@@ -491,6 +492,43 @@ describe('les lignes d’un brouillon', () => {
     expect(row.action).toEqual({ kind: 'rescue', label: 'Repêcher' })
     expect(row.archivedAt).toBe('2026-11-08T10:00:00.000Z')
     expect(row.stats.at(-1)).toEqual({ label: 'Par', value: 'Richard' })
+  })
+
+  it('lot 31 : un brouillon gardé dit ses liens fusionnés et les autres raisons d’écart', () => {
+    const link = (
+      portal: 'leboncoin' | 'seloger' | null,
+      reason: string | null
+    ) => ({
+      draftId: '99999999-9999-4999-8999-999999999999',
+      url: 'https://exemple.invalid/annonce-9900301',
+      portal,
+      origin: 'exploration' as const,
+      title: '[Exemple] T3',
+      price: 210_000,
+      sellerType: 'agency' as const,
+      sellerName: null,
+      sellerReference: null,
+      observed: {},
+      reason,
+      mergedAt: '2026-11-12T10:00:00.000Z',
+    })
+    const row = dismissedDraftRow(
+      draft({
+        status: 'dismissed',
+        dismissReason: 'Déjà vue',
+        mergedLinks: [
+          link('leboncoin', 'Vendu loué'),
+          link('seloger', 'déjà vue'),
+          link(null, null),
+        ],
+      }),
+      { members: [] }
+    )
+    expect(row.meta).toContain(
+      '+ 3 liens fusionnés : Leboncoin, SeLoger, autre site'
+    )
+    expect(row.detail).toBe('Déjà vue · « Vendu loué »')
+    expect(mergedLinksText(draft())).toBeNull()
   })
 
   it('les données du bien : seulement ce qui est connu', () => {

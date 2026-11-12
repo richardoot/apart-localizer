@@ -1274,6 +1274,12 @@ model ListingDraft {
   /// Lot 31 : le brouillon gardé qui a absorbé celui-ci (deux brouillons du
   /// même bien fusionnés) ; son lien rejoint l'annonce créée depuis le gardé.
   mergedIntoDraftId String?            @map("merged_into_draft_id")
+  /// Lot 31 : date de la fusion dans le brouillon gardé ; le brouillon absorbé
+  /// est caché des listes, puis supprimé sept jours après.
+  mergedAt          DateTime?          @map("merged_at") @db.Timestamptz(6)
+  /// Lot 31 : les liens des brouillons absorbés par celui-ci (JSON validé par
+  /// DraftMergedLinkSchema) : ils survivent à la suppression des absorbés.
+  mergedLinks       Json               @default("[]") @map("merged_links")
 
   workspace         Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   decidedBy         Member?                @relation("DraftDecider", fields: [decidedById], references: [id], onDelete: SetNull)

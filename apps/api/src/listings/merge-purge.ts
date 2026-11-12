@@ -12,23 +12,36 @@ type Client = PrismaClient | Prisma.TransactionClient
  * elle, par les clés étrangères (`ON DELETE CASCADE`), comme la ligne de la
  * fusion : le journal de la fiche gardée garde la phrase de la fusion.
  *
- * Appelée à chaque création d'annonce et à chaque fusion de l'espace, sans
- * tâche planifiée : une fiche absorbée est cachée partout, la supprimer un peu
- * plus tard ne change rien de visible. Une fiche fusionnée dans une fiche
- * elle-même absorbée l'a été avant elle : elle part au même moment ou avant.
- * Rend le nombre de fiches supprimées.
+ * Lot 31 (ADR 0045) : de même, les brouillons absorbés par une fusion de
+ * brouillons ; leur lien, leurs faits lus et leur raison d'écart sont déjà
+ * sur le brouillon gardé (`merged_links`).
+ *
+ * Appelée à chaque création d'annonce, à chaque fusion de fiches et à chaque
+ * fusion de brouillons de l'espace, sans tâche planifiée : ce qui est absorbé
+ * est déjà caché partout, le supprimer un peu plus tard ne change rien de
+ * visible. Une fiche fusionnée dans une fiche elle-même absorbée l'a été avant
+ * elle : elle part au même moment ou avant. Rend le nombre de fiches et de
+ * brouillons supprimés.
  */
 export async function purgeExpiredMerges(
   db: Client,
   workspaceId: string,
   now: Date = new Date()
 ): Promise<number> {
-  const deleted = await db.listing.deleteMany({
+  const before = mergePurgeBefore(now)
+  const listings = await db.listing.deleteMany({
     where: {
       workspaceId,
       mergedIntoId: { not: null },
-      mergedAt: { lt: mergePurgeBefore(now) },
+      mergedAt: { lt: before },
     },
   })
-  return deleted.count
+  const drafts = await db.listingDraft.deleteMany({
+    where: {
+      workspaceId,
+      mergedIntoDraftId: { not: null },
+      mergedAt: { lt: before },
+    },
+  })
+  return listings.count + drafts.count
 }

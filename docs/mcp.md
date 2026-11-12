@@ -451,7 +451,8 @@ Réponse : Lot 31. `total` et `items` : les brouillons les plus récents d'abord
 pré-remplie, son lien, son origine et son portail, la raison de son écart, le brouillon qui l'a
 absorbé (`mergedIntoDraftId`), ses doublons probables parmi les annonces suivies, la proposition en
 cours et `updatedAt` ; un brouillon à valider porte aussi son adéquation aux critères et ses
-chiffres. Jamais l'e-mail de l'expéditeur d'une alerte (`emailFrom`)
+chiffres. Jamais l'e-mail de l'expéditeur d'une alerte (`emailFrom`). Un brouillon absorbé par une
+fusion de brouillons n'est pas listé : ses liens sont sur le gardé (`mergedLinks`)
 
 #### `get_draft`
 
@@ -871,9 +872,11 @@ Entrée : `keepDraftId`, `mergeDraftId`, `confirmedInChat` (obligatoire), `expec
 Garde-fous et effets : Lot 31. Deux brouillons à valider ou écartés du même bien : le gardé
 l'emporte, ses vides se complètent de l'autre (les champs du bien d'une fusion de fiches ; le prix,
 la localisation et le vendeur seulement s'ils manquent), il reprend son lien s'il n'en avait pas.
-L'autre est écarté (« Doublon du brouillon … »), lié au gardé (`mergedIntoDraftId`) : son lien
-rejoindra l'annonce créée depuis le gardé, ou la fiche suivie qui est la même. Rien n'est supprimé ;
-repêcher l'absorbé en refait un brouillon à part. Une proposition en cours sur l'absorbé devient
+L'autre est écarté (« Doublon du brouillon … »), lié au gardé (`mergedIntoDraftId`), caché des
+listes ; son lien, ses faits lus et sa raison d'écart passent sur le gardé (`mergedLinks`) : ils
+rejoindront l'annonce créée depuis le gardé, ou la fiche suivie qui est la même, et l'exploration
+ne repropose pas ce lien. ADR 0045 : l'application supprime l'absorbé sept jours après la fusion
+(jamais le connecteur) ; d'ici là, le repêcher en refait un brouillon à part. Une proposition en cours sur l'absorbé devient
 caduque. Refus lisible sans `confirmedInChat: true`, pour un brouillon validé, reconnu ou déjà
 fusionné, ou si un brouillon a changé depuis la lecture. Journal `draft.absorbed` (canal `mcp`)
 

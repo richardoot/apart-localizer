@@ -145,7 +145,8 @@ export class ExplorationsService {
           where: { workspaceId, status: 'discarded', mergedIntoId: null },
         }),
         this.prisma.listingDraft.count({
-          where: { workspaceId, status: 'dismissed' },
+          // Lot 31 : un brouillon absorbé ne compte pas à part.
+          where: { workspaceId, status: 'dismissed', mergedIntoDraftId: null },
         }),
         this.prisma.listingDraft.count({
           where: { workspaceId, status: 'pending' },

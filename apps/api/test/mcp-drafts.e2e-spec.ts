@@ -315,6 +315,119 @@ describe('Lot 31 : les brouillons au connecteur MCP (e2e)', () => {
     expect(accepted.channel).toBe('mcp')
   })
 
+  it('ADR 0045 : l’absorbé est caché, supprimé après sept jours ; son lien reste reconnu et rejoint l’annonce', async () => {
+    const keepId = await draft()
+    const twinId = await draft(
+      { title: '[Exemple] Appartement 3 pièces' },
+      {
+        status: 'dismissed',
+        dismissReason: 'Vendu loué',
+        portal: 'leboncoin',
+        url: 'https://www.leboncoin.fr/ad/ventes_immobilieres/3100000211',
+      }
+    )
+    const keep = await read(keepId)
+    const twin = await read(twinId)
+    await callTool('merge_drafts', {
+      keepDraftId: keepId,
+      mergeDraftId: twinId,
+      confirmedInChat: true,
+      expectedKeepUpdatedAt: keep.updatedAt,
+      expectedMergeUpdatedAt: twin.updatedAt,
+    })
+    // Caché des archives ; le gardé porte son lien et sa raison d'écart.
+    const archives = payload<{ items: { id: string }[] }>(
+      await callTool('list_drafts', { status: 'dismissed' })
+    )
+    expect(archives.items.map(i => i.id)).not.toContain(twinId)
+    const kept = payload<{
+      mergedLinks: { url: string; reason: string | null; portal: string }[]
+    }>(await callTool('get_draft', { draftId: keepId }))
+    expect(kept.mergedLinks).toEqual([
+      expect.objectContaining({
+        url: 'https://www.leboncoin.fr/ad/ventes_immobilieres/3100000211',
+        reason: 'Vendu loué',
+        portal: 'leboncoin',
+      }),
+    ])
+
+    // Sept jours plus tard : le repêchage est refusé, la fusion suivante le supprime.
+    const old = new Date(Date.now() - 8 * 86_400_000)
+    await ctx.prisma.listingDraft.update({
+      where: { id: twinId },
+      data: { mergedAt: old },
+    })
+    const late = await callTool('set_draft_status', {
+      draftId: twinId,
+      decision: 'restore',
+      confirmedInChat: true,
+    })
+    expect(late.isError).toBe(true)
+    expect(late.content[0]?.text).toContain('plus de 7 jours')
+    const other = await draft(
+      {
+        title: '[Exemple] Studio Talence',
+        price: 89_000,
+        surface: 18,
+        rooms: 1,
+        location: { commune: 'Talence' },
+      },
+      { url: 'https://www.bienici.com/annonce/exemple-9900212' }
+    )
+    const third = await draft(
+      {
+        title: '[Exemple] Studio Talence bis',
+        price: 89_000,
+        surface: 18,
+        rooms: 1,
+        location: { commune: 'Talence' },
+      },
+      { url: 'https://www.bienici.com/annonce/exemple-9900213' }
+    )
+    await callTool('merge_drafts', {
+      keepDraftId: other,
+      mergeDraftId: third,
+      confirmedInChat: true,
+      expectedKeepUpdatedAt: (await read(other)).updatedAt,
+      expectedMergeUpdatedAt: (await read(third)).updatedAt,
+    })
+    expect(
+      await ctx.prisma.listingDraft.findUnique({ where: { id: twinId } })
+    ).toBeNull()
+
+    // L'exploration ne repropose pas le lien de l'absorbé supprimé.
+    const triage = await callTool('triage_candidates', {
+      candidates: [
+        {
+          url: 'https://www.leboncoin.fr/ad/ventes_immobilieres/3100000211',
+          portal: 'leboncoin',
+          title: '[Exemple] Appartement 3 pièces',
+          price: 172_000,
+          surface: 62,
+          commune: 'Bordeaux',
+        },
+      ],
+    })
+    expect(triage.content[0]?.text).toContain('dismissed')
+
+    // Garder le brouillon : l'annonce reçoit aussi le lien de l'absorbé supprimé.
+    await ctx.prisma.listingDraft.update({
+      where: { id: keepId },
+      data: { status: 'pending', dismissReason: null },
+    })
+    await callTool('set_draft_status', {
+      draftId: keepId,
+      decision: 'keep',
+      confirmedInChat: true,
+    })
+    const listing = await ctx.prisma.listing.findFirstOrThrow({
+      include: { links: true },
+    })
+    expect(listing.links.map(link => link.url)).toContain(
+      'https://www.leboncoin.fr/ad/ventes_immobilieres/3100000211'
+    )
+  })
+
   it('set_draft_status : écarter demande une raison et l’accord ; repêcher défait la fusion', async () => {
     const id = await draft()
     const noConsent = await callTool('set_draft_status', {

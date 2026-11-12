@@ -41,6 +41,7 @@ import { ListingChecksService } from '../listings/listing-checks.service'
 import { applyLocated, withOpenDataProvenance } from '../listings/location'
 import { GeocodingService } from '../opendata/geocoding.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { mergedLinksOf } from '../inbound/draft-merged-links'
 import type { Member } from '../generated/prisma'
 import { CandidateFitService } from './candidate-fit.service'
 import type { CandidateFitContext } from './candidate-fit.service'
@@ -159,6 +160,7 @@ export class ExplorationTriageService {
           dismissReason: true,
           decidedAt: true,
           decidedById: true,
+          mergedLinks: true,
         },
       }),
       this.prisma.member.findMany({
@@ -200,22 +202,31 @@ export class ExplorationTriageService {
     const ordered = [...drafts].sort(
       (a, b) => draftPriority(a.status) - draftPriority(b.status)
     )
+    // Lot 31 : un brouillon se reconnaît aussi aux liens des brouillons qu'il
+    // a absorbés (ils survivent à leur suppression).
+    const draftKeys = (d: (typeof drafts)[number]): string[] =>
+      [d.url, ...mergedLinksOf(d).map(link => link.url)]
+        .map(url => normalizeListingUrl(url))
+        .filter((key): key is string => Boolean(key))
     for (const d of ordered) {
-      const key = normalizeListingUrl(d.url)
-      if (!key || sameUrl.has(key)) continue
-      const linked = d.listingId ? byId.get(d.listingId) : undefined
-      if ((d.status === 'accepted' || d.status === 'merged') && linked) {
-        sameUrl.set(key, listingRef(linked))
-      } else if (d.status === 'pending' || d.status === 'dismissed') {
-        sameUrl.set(key, {
-          kind: 'draft',
-          draftId: d.id,
-          status: d.status,
-          title: titleOf(d.input),
-          reason: d.dismissReason,
-          decidedAt: d.decidedAt?.toISOString() ?? null,
-          decidedBy: d.decidedById ? (names.get(d.decidedById) ?? null) : null,
-        })
+      for (const key of draftKeys(d)) {
+        if (sameUrl.has(key)) continue
+        const linked = d.listingId ? byId.get(d.listingId) : undefined
+        if ((d.status === 'accepted' || d.status === 'merged') && linked) {
+          sameUrl.set(key, listingRef(linked))
+        } else if (d.status === 'pending' || d.status === 'dismissed') {
+          sameUrl.set(key, {
+            kind: 'draft',
+            draftId: d.id,
+            status: d.status,
+            title: titleOf(d.input),
+            reason: d.dismissReason,
+            decidedAt: d.decidedAt?.toISOString() ?? null,
+            decidedBy: d.decidedById
+              ? (names.get(d.decidedById) ?? null)
+              : null,
+          })
+        }
       }
     }
     const listingRows: DuplicateRow[] = listings.map(duplicateRowOf)
@@ -235,7 +246,9 @@ export class ExplorationTriageService {
           url: d.url,
           addressRaw: input.location.addressRaw,
           addressNormalized: input.location.addressNormalized,
-          links: [linkKey(d.url)].filter((k): k is string => k !== null),
+          links: [d.url, ...mergedLinksOf(d).map(link => link.url)]
+            .map(url => linkKey(url))
+            .filter((k): k is string => k !== null),
           sellerType: input.sellerType,
           sellerName: input.sellerName,
           sellerReference: input.sellerReference,
