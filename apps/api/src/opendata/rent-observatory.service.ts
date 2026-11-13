@@ -31,8 +31,9 @@ export interface RentObservatoryTarget {
  * Lot 28 (ADR 0038) : le loyer médian observé par l'observatoire local des
  * loyers dans la zone d'une annonce. La table vient de `ReferenceData`
  * (import `import:rent-observatory`), l'IRIS du repère des contours importés
- * au lot 11 (module geo), le calcul de `domain`. Un indicateur : rien n'est
- * écrit sur l'annonce, aucun calcul n'en dépend.
+ * au lot 11 (module geo), le calcul de `domain`. Un indicateur, jamais un
+ * plafond ; seule exception, il estime le loyer visé d'une annonce qui n'en
+ * a pas (ADR 0046, `ListingEnrichmentService`).
  */
 @Injectable()
 export class RentObservatoryService {

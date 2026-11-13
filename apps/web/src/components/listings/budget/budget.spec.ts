@@ -299,7 +299,7 @@ describe('onglet Budget (lot 19)', () => {
     )
     expect(observed).toContain('un indicateur, pas un plafond')
     expect(observed).toContain(
-      'Indicatif : n’entre dans aucun calcul. Source : Observatoire fictif des loyers.'
+      'Indicatif, jamais un plafond ; il sert seulement à estimer un loyer visé que personne n’a donné. Source : Observatoire fictif des loyers.'
     )
     expect(phase.find('[data-testid="rent-observatory-above"]').exists()).toBe(
       false
@@ -308,6 +308,37 @@ describe('onglet Budget (lot 19)', () => {
     // Loyers comparables et conformité, repliés.
     expect(phase.text()).toContain('Loyers comparables')
     expect(phase.text()).toContain('Conformité réglementaire')
+  })
+
+  it('ADR 0046 : un loyer visé estimé par l’application est dit « estimé », avec sa source', async () => {
+    const evidence =
+      'Observatoire des loyers 2030, zone 2, appartements 2 pièces : médiane 15,0 €/m² × 45 m² = 675 € par mois hors charges ; loyers de tous les locataires en place, à confirmer'
+    const estimated = fakeEvaluated({
+      renovation: null,
+      fieldSources: {
+        'rentalPlan.targetRent': {
+          source: 'estimated',
+          recordedAt: '2030-11-13T10:00:00.000Z',
+          evidence,
+        },
+      },
+    })
+    const { wrapper } = mountTab({ item: estimated })
+    await flushPromises()
+    const phase = wrapper.get('[data-testid="rental-phase"]')
+    expect(
+      phase.get('[data-testid="target-rent"]').element.parentElement
+        ?.textContent
+    ).toContain('estimé')
+    expect(n(phase.get('[data-testid="target-rent-estimated"]').text())).toBe(
+      `Loyer visé estimé par l’application : ${n(evidence)}. Modifie la section pour mettre le loyer que tu vises.`
+    )
+    // Un loyer donné : ni pastille ni note.
+    const given = mountTab({ item: fakeEvaluated({ renovation: null }) })
+    await flushPromises()
+    expect(
+      given.wrapper.find('[data-testid="target-rent-estimated"]').exists()
+    ).toBe(false)
   })
 
   it('lot 28 : loyer visé au-dessus du 3e quartile signalé ; sans médiane, la raison seule', async () => {

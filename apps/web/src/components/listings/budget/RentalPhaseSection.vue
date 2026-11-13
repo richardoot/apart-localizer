@@ -7,7 +7,7 @@
     ListingEvaluation,
     OpenDataStatus,
   } from '@apart/contracts'
-  import { rentGauge } from '@apart/domain'
+  import { TARGET_RENT_KEY, rentGauge } from '@apart/domain'
   import CompliancePanel from '@/components/study/CompliancePanel.vue'
   import RentMarketPanel from '@/components/study/RentMarketPanel.vue'
   import UiBadge from '@/components/ui/UiBadge.vue'
@@ -58,6 +58,16 @@
   const { data: comparables } = useRentComparables(listingId)
 
   const plan = computed(() => props.item.listing.rentalPlan)
+  /**
+   * ADR 0046 : le loyer visé estimé d'après l'observatoire des loyers (vide
+   * ou estimé, l'application le pose) ; d'où vient le chiffre, ou null.
+   */
+  const estimatedRent = computed(() => {
+    const provenance = props.item.listing.fieldSources[TARGET_RENT_KEY]
+    return plan.value?.targetRent && provenance?.source === 'estimated'
+      ? (provenance.evidence ?? 'd’après l’observatoire des loyers')
+      : null
+  })
   const metrics = computed(() => props.evaluation?.metrics ?? null)
   const year = computed(
     () =>
@@ -138,7 +148,9 @@
   } {
     const key = path === 'furnitureValue' ? path : `rentalPlan.${path}`
     return {
+      // Une clé propre au champ d'abord (plafond, loyer visé estimé).
       provenance:
+        editor.fieldSources.value?.[key] ??
         provenanceOf(editor.fieldSources.value, key) ??
         provenanceOf(editor.fieldSources.value, 'rentalPlan'),
       changed: editor.changedFields.value.includes(key),
@@ -196,6 +208,9 @@
                 ? formatEurosPerMonth(plan.targetRent)
                 : 'à renseigner'
             }}</span>
+            <UiBadge v-if="estimatedRent" tone="info" class="ml-1.5 align-[3px]"
+              >estimé</UiBadge
+            >
           </ReadItem>
         </dl>
         <p class="pb-1 text-sm text-muted" data-testid="rent-references">
@@ -243,6 +258,14 @@
       >
         Loyer visé au-dessus du plafond : les calculs retiennent
         {{ formatEurosPerMonth(metrics.rentCap) }}.
+      </p>
+      <p
+        v-if="estimatedRent"
+        class="text-xs text-muted"
+        data-testid="target-rent-estimated"
+      >
+        Loyer visé estimé par l’application : {{ estimatedRent }}. Modifie la
+        section pour mettre le loyer que tu vises.
       </p>
     </div>
 
@@ -396,7 +419,8 @@
           </li>
         </ul>
         <p class="text-xs text-muted">
-          Indicatif : n’entre dans aucun calcul. Source :
+          Indicatif, jamais un plafond ; il sert seulement à estimer un loyer
+          visé que personne n’a donné. Source :
           {{ rentObservatory.attribution }}.
         </p>
       </div>

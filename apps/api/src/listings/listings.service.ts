@@ -95,6 +95,7 @@ import { DuplicatesService } from './duplicates.service'
 import {
   ListingEnrichmentService,
   REFERENCE_RENT_KEY,
+  TARGET_RENT_KEY,
 } from './enrichment.service'
 import { evaluateListing } from './evaluate'
 import { assertLinkFree, priceEventData, syncPrimaryLink } from './link-writes'
@@ -762,6 +763,25 @@ export class ListingsService {
             },
           }
         }
+      }
+    }
+    // ADR 0046 : un loyer visé changé n'est plus l'estimation ; renvoyé tel
+    // quel (formulaire de la phase 2, connecteur), il le reste.
+    if (patch.rentalPlan !== undefined) {
+      const next = patch.rentalPlan?.targetRent ?? null
+      const previous = before.rentalPlan?.targetRent ?? null
+      if (next !== previous) {
+        const { [TARGET_RENT_KEY]: _dropped, ...rest } = fieldSources
+        fieldSources =
+          next === null
+            ? rest
+            : {
+                ...rest,
+                [TARGET_RENT_KEY]: {
+                  source: provenance,
+                  recordedAt: new Date().toISOString(),
+                },
+              }
       }
     }
     fieldSources = restoreKeptProvenance(

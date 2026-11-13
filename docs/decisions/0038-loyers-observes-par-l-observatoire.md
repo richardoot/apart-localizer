@@ -1,7 +1,7 @@
 # 0038. Loyers observés hors de Bordeaux : les médianes de l'observatoire local des loyers, un indicateur qui n'entre dans aucun calcul
 
 Statut : acceptée, 11 novembre 2026. Complète 0011 (données ouvertes : encadrement, DVF, DPE,
-TBM) : l'encadrement ne dit rien hors de la commune de Bordeaux.
+TBM) : l'encadrement ne dit rien hors de la commune de Bordeaux. Amendée par 0046 (13 novembre 2026) : la médiane estime le loyer visé d'une annonce qui n'en a pas, marqué « estimé ».
 
 ## Contexte
 

@@ -469,10 +469,21 @@ export function describeActivity(
         )
       )
     }
-    case 'listing.enriched':
-      return describe(
+    case 'listing.enriched': {
+      // ADR 0046 : le loyer visé estimé d'après l'observatoire des loyers.
+      const estimated = isRecord(after) ? after.targetRentEstimated : null
+      const head =
         'données ouvertes mises à jour (tram, plafond, marché, quartier, équipements)'
+      return describe(
+        typeof estimated === 'number'
+          ? `${head} ; loyer visé estimé à ${formatEuros(estimated)} par mois (observatoire des loyers, à confirmer)`
+          : estimated === null &&
+              isRecord(after) &&
+              'targetRentEstimated' in after
+            ? `${head} ; loyer visé estimé retiré (plus d’estimation sûre)`
+            : head
       )
+    }
     case 'listing.dpe_verified':
       return describe(
         'a retenu le DPE vérifié auprès de l’ADEME',

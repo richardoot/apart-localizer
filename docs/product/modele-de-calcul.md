@@ -553,9 +553,20 @@ loyerObservé  = médiane(loyerM2 de la ligne) × S          fourchette : 1er et
 position      = sous le 1er quartile | entre les quartiles | au-dessus du 3e quartile   (loyerVisé / S)
 ```
 
-Un **indicateur** : il n'entre ni dans `L`, ni dans les rendements, ni dans le prix cible, ni dans
-la louabilité, et n'est jamais un plafond. Il n'est pas écrit sur l'annonce. Un loyer visé
-au-dessus du 3e quartile est signalé. Adresse à la rue : « ≈ » ; repère au quartier ou au centre
+Un **indicateur** : il n'est jamais un plafond et n'est pas écrit sur l'annonce. Un loyer visé
+au-dessus du 3e quartile est signalé.
+
+**Loyer visé estimé (ADR 0046).** Une annonce sans loyer visé reçoit `L_v` estimé, et donc des
+rendements, un prix cible et un verdict :
+
+```
+L_v estimé = arrondi aux 5 € (médiane(loyerM2 de la ligne du même nombre de pièces) × S)
+```
+
+seulement si la zone est sûre (adresse au numéro ou à la rue) et que la ligne du même nombre de
+pièces existe ; sans majoration (meublé, mise en location récente). Provenance `estimated`,
+affichée « estimé » ; jamais à la place d'un loyer donné par un membre, par Claude ou lu dans
+l'annonce. Le plafond borne `L` comme pour tout loyer visé. Adresse à la rue : « ≈ » ; repère au quartier ou au centre
 de la commune : « à vérifier » ; repère en limite de deux zones : aucune valeur. Les loyers sont
 ceux de tous les locataires en place à la date de l'enquête, pas des seules mises en location.
 

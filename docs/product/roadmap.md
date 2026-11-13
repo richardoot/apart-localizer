@@ -1552,3 +1552,18 @@ outils MCP (49).
 
 Limites : la ressemblance entre brouillons ne mesure pas de distance ; la fusion de deux brouillons
 n'existe qu'au connecteur (dans l'application, on écarte l'un des deux).
+
+## Loyer visé estimé d'après l'observatoire des loyers
+
+Statut : livré le 13 novembre 2026 (code, tests, documentation ; ADR 0046). Aucune migration,
+aucune variable nouvelle ; un script de rattrapage (`pnpm refresh:target-rent`).
+
+- **Pourquoi** : une annonce créée par Claude n'a presque jamais de loyer visé ; sans lui, ni
+  rentabilité, ni prix cible, ni verdict.
+- **Ce qui change** : sans loyer visé, l'application pose la médiane observée de la zone et du
+  nombre de pièces × la surface, marquée « estimé » avec sa source, quand l'adresse est au numéro
+  ou à la rue. Un loyer donné (membre, Claude, annonce) n'est jamais remplacé ; une fusion reprend
+  le loyer donné de la fiche absorbée.
+
+Limites : les brouillons « À valider » ne sont pas estimés ; un repère au quartier ou au centre de
+la commune ne donne pas d'estimation ; l'observatoire ne distingue pas le vide du meublé.

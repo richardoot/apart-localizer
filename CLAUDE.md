@@ -74,7 +74,10 @@ Règles à ne pas casser :
 - Une visite faite ne se corrige que par son auteur ou un participant, une planifiée par tout membre
   (`visitEditRefusal`).
 - `portalSearchUrls` construit les recherches sans réseau.
-- Le loyer observé est un indicateur, jamais un plafond, hors de tout calcul.
+- Le loyer observé est un indicateur, jamais un plafond ; seule exception (ADR 0046), il estime le
+  loyer visé d'une annonce qui n'en a pas (`estimatedTargetRent`, zone sûre et ligne du même
+  nombre de pièces), provenance `estimated` sur `TARGET_RENT_KEY`, et `targetRentAction` ne
+  remplace jamais un loyer donné.
 - La tendance des prix (`marketTrend`) est un indicateur, hors de tout calcul : une année de moins
   de dix ventes n'a pas de médiane, une année incomplète ne porte aucun écart, rien n'est extrapolé.
 
@@ -408,6 +411,7 @@ MCP et consentement OAuth : 0017.
 - Lot 30, doublons confirmés dans l'application, fiche absorbée supprimée après sept jours : 0043
 - Lot 31, les brouillons au connecteur (lire, corriger, décider, fusionner deux brouillons) : 0044,
   brouillons absorbés supprimés après sept jours : 0045
+- Loyer visé estimé d'après l'observatoire des loyers, quand personne ne l'a donné : 0046
 
 Identifiants de code en anglais ; textes d'interface, messages d'erreur métier et descriptions
 Zod en français.
@@ -465,6 +469,7 @@ pnpm import:sports-facilities          # pistes d'athlétisme (Data ES + OSM) et
 pnpm import:supermarkets               # supermarchés avec drive (OSM, Overpass)
 pnpm refresh:surroundings -- --dry-run # quartier et équipements des annonces existantes, après un import
 pnpm refresh:criteria-fit -- --dry-run # lot 14 : adéquation des annonces aux critères (après tram, contours)
+pnpm refresh:target-rent -- --dry-run  # ADR 0046 : loyer visé estimé des annonces qui n'en ont pas (observatoire des loyers)
 pnpm --filter @apart/api exec web-push generate-vapid-keys   # clés VAPID du web push (une fois, hors dépôt)
 ```
 

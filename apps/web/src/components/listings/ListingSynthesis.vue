@@ -22,6 +22,7 @@
     locationApproximation,
     nextStepTarget,
     nextSteps,
+    targetRentIsEstimated,
   } from '@apart/domain'
   import type {
     AnswerTone,
@@ -191,6 +192,7 @@
     return listingAnswer({
       price: evaluation.metrics.price,
       hasRent: evaluation.metrics.rent > 0,
+      rentEstimated: targetRentIsEstimated(listing.value.fieldSources),
       verdict: evaluation.metrics.verdict,
       failures: evaluation.metrics.failures,
       nearMisses: evaluation.metrics.nearMisses,

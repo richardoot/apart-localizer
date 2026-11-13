@@ -12,6 +12,8 @@ import type {
   LocationPrecision,
 } from '@apart/contracts'
 import { formatActivityValue } from './activity.js'
+import { formatEuros } from './format.js'
+import { TARGET_RENT_KEY, targetRentIsEstimated } from './rent-observatory.js'
 import {
   isEmptySeller,
   knownSellers,
@@ -163,6 +165,39 @@ export function mergeFieldPlan(
     }
   }
   return { fills, differences, values }
+}
+
+/** Ce qu'une fusion lit du loyer visé d'une fiche (ADR 0046). */
+export interface MergeRentSide {
+  rentalPlan: { targetRent: number | null } | null
+  fieldSources: FieldProvenanceMap
+}
+
+/**
+ * ADR 0046 : un loyer visé donné sur la fiche absorbée (par un membre, par
+ * Claude, lu dans l'annonce) remplace le loyer vide ou estimé de la fiche
+ * gardée ; un loyer estimé de l'absorbée n'apporte rien. Sans phase 2 sur la
+ * fiche gardée, c'est la phase 2 entière qui passe : null ici.
+ */
+export function mergeTargetRentFill(
+  keep: MergeRentSide,
+  absorb: MergeRentSide
+): { targetRent: number; line: ListingMergeField } | null {
+  if (!keep.rentalPlan) return null
+  const other = absorb.rentalPlan?.targetRent ?? null
+  if (other === null || !(other > 0)) return null
+  if (targetRentIsEstimated(absorb.fieldSources)) return null
+  const kept = keep.rentalPlan.targetRent
+  if (kept !== null && !targetRentIsEstimated(keep.fieldSources)) return null
+  return {
+    targetRent: other,
+    line: {
+      field: TARGET_RENT_KEY,
+      label: 'Loyer visé',
+      kept: kept === null ? null : `${formatEuros(kept)} (estimé)`,
+      other: formatEuros(other),
+    },
+  }
 }
 
 /** La provenance des champs complétés : celle de la fiche absorbée, gardée telle quelle. */

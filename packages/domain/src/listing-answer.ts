@@ -227,6 +227,11 @@ export interface ListingAnswerInput {
   price: number
   /** Le loyer visé est saisi : sans lui, la rentabilité n'est pas jugée. */
   hasRent: boolean
+  /**
+   * ADR 0046 : le loyer visé est l'estimation de l'application (observatoire
+   * des loyers) ; la raison de rentabilité le dit.
+   */
+  rentEstimated?: boolean
   verdict: Verdict
   failures: readonly VerdictFailure[]
   nearMisses: readonly VerdictNearMiss[]
@@ -303,6 +308,13 @@ function dpeWord(dpeClass: string | null | undefined): string {
 }
 
 function profitabilityReason(input: ListingAnswerInput): string {
+  const text = verdictReason(input)
+  return input.rentEstimated
+    ? `${text.replace(/\.$/, '')}, avec un loyer visé estimé.`
+    : text
+}
+
+function verdictReason(input: ListingAnswerInput): string {
   switch (input.verdict) {
     case 'target':
       return 'Dans la cible de rentabilité au prix affiché.'

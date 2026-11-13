@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { RENT_EPOCH_LABELS } from '@apart/contracts'
 import type {
   ActivityChannel,
+  Assumptions,
   DpeCandidate,
   DpeSearchResult,
   FieldProvenanceMap,
@@ -19,7 +20,11 @@ import type {
 } from '@apart/contracts'
 import {
   REFERENCE_RENT_KEY,
+  TARGET_RENT_KEY,
   dpeValidity,
+  estimatedTargetRent,
+  targetRentAction,
+  targetRentIsEstimated,
   locationApproximation,
   surroundingsDigest,
 } from '@apart/domain'
@@ -39,7 +44,7 @@ import type { Member } from '../generated/prisma'
 import { listingInclude, toListingDto } from './listing.mapper'
 
 /** Clé de provenance du loyer de référence majoré de la phase 2 (définie dans `domain`). */
-export { REFERENCE_RENT_KEY }
+export { REFERENCE_RENT_KEY, TARGET_RENT_KEY }
 /** Les champs du DPE renseignés par un DPE vérifié. */
 export const DPE_KEYS = [
   'dpeClass',
@@ -58,6 +63,11 @@ export interface EnrichOptions {
 export interface EnrichResult {
   snapshot: ListingOpenDataContext
   referenceRentApplied: number | null
+  /**
+   * ADR 0046 : le loyer visé estimé posé par ce recalcul (null : retiré),
+   * undefined s'il n'a pas bougé.
+   */
+  targetRentEstimated?: number | null
   dpeApplied: DpeCandidate | null
 }
 
@@ -73,6 +83,8 @@ function inCoOwnership(listing: ListingDto): boolean | null {
  * tram le plus proche, quartier et équipements proches (lot 11), plafond
  * d'encadrement (appliqué à la phase 2 avec la
  * provenance `open_data` tant que le membre ne l'a pas saisi lui-même),
+ * loyer visé estimé d'après l'observatoire des loyers tant que personne ne
+ * l'a donné (provenance `estimated`, ADR 0046 ; la phase 2 est alors créée),
  * prix médian DVF (nourrit le critère « marché » du prix cible), DPE vérifié
  * auprès de l'ADEME. Rien n'est calculé ici : tout vient de `domain` à
  * travers les services open data ; le SQL est dans le module geo.
@@ -103,12 +115,19 @@ export class ListingEnrichmentService {
     return toListingDto(row)
   }
 
+  /**
+   * Les hypothèses de l'espace, lues une fois avant les lectures en
+   * parallèle : la première lecture d'un espace crée sa version par défaut.
+   */
+  private values(member: Member): Promise<Assumptions> {
+    return this.assumptions.currentValues(member.workspaceId)
+  }
+
   private async rentFor(
-    member: Member,
+    values: Assumptions,
     listing: ListingDto,
     at: Date
   ): Promise<RentControlLookup> {
-    const values = await this.assumptions.currentValues(member.workspaceId)
     return this.rentControl.lookup(
       {
         point: listing.location.point,
@@ -132,20 +151,22 @@ export class ListingEnrichmentService {
 
   /**
    * Lot 28 : le loyer médian observé dans la zone de l'annonce (indicatif,
-   * calculé à la lecture, jamais enregistré sur l'annonce).
+   * calculé à la lecture, jamais enregistré sur l'annonce). Un loyer visé
+   * estimé d'après lui (ADR 0046) n'est pas comparé à lui-même.
    */
   private async observedRentFor(
-    member: Member,
+    values: Assumptions,
     listing: ListingDto
   ): Promise<RentObservatoryLookup> {
-    const values = await this.assumptions.currentValues(member.workspaceId)
     return this.rentObservatory.lookup({
       point: listing.location.point,
       precision: listing.location.precision,
       inseeCode: listing.location.inseeCode,
       rooms: listing.rooms,
       surface: listing.surface,
-      targetRent: listing.rentalPlan?.targetRent ?? null,
+      targetRent: targetRentIsEstimated(listing.fieldSources)
+        ? null
+        : (listing.rentalPlan?.targetRent ?? null),
       leaseType: values.leaseType,
     })
   }
@@ -205,13 +226,16 @@ export class ListingEnrichmentService {
     const now = new Date()
     const computedAt = now.toISOString()
     const listing = await this.load(member, id)
+    const values = await this.values(member)
     const point = listing.location.point
-    const [transit, rent, market, surroundings] = await Promise.all([
+    const [transit, rent, market, surroundings, observed] = await Promise.all([
       this.transit.at(point, locationApproximation(listing.location)),
-      this.rentFor(member, listing, now),
+      this.rentFor(values, listing, now),
       this.marketFor(listing, now),
       this.surroundingsFor(listing, now),
+      this.observedRentFor(values, listing),
     ])
+    const estimate = estimatedTargetRent(observed, listing.surface)
     let dpeResult: DpeSearchResult | null = listing.openDataContext?.dpe ?? null
     let dpeApplied: DpeCandidate | null = null
     if (options.dpe) {
@@ -260,7 +284,9 @@ export class ListingEnrichmentService {
         select: {
           fieldSources: true,
           dpeClass: true,
-          rentalPlan: { select: { id: true, referenceRentPerM2: true } },
+          rentalPlan: {
+            select: { id: true, referenceRentPerM2: true, targetRent: true },
+          },
         },
       })
       const fieldSources: FieldProvenanceMap = {
@@ -270,16 +296,46 @@ export class ListingEnrichmentService {
         openDataContext: snapshot as unknown as Prisma.InputJsonValue,
       }
 
+      // ADR 0046 : le loyer visé estimé, tant que personne ne l'a donné ; une
+      // fiche sans phase 2 la reçoit avec lui.
+      const targetAction = targetRentAction({
+        current: fresh.rentalPlan?.targetRent?.toNumber() ?? null,
+        fieldSources,
+        estimate,
+      })
+      const plan: Prisma.RentalPlanUpdateWithoutListingInput = {}
+      let targetRentEstimated: number | null | undefined
+      if (targetAction.kind === 'set') {
+        fieldSources[TARGET_RENT_KEY] = {
+          source: 'estimated',
+          recordedAt: computedAt,
+          evidence: targetAction.evidence,
+        }
+        if (
+          (fresh.rentalPlan?.targetRent?.toNumber() ?? null) !==
+          targetAction.targetRent
+        ) {
+          plan.targetRent = new Prisma.Decimal(targetAction.targetRent)
+          targetRentEstimated = targetAction.targetRent
+        }
+      } else if (targetAction.kind === 'clear') {
+        delete fieldSources[TARGET_RENT_KEY]
+        plan.targetRent = null
+        targetRentEstimated = null
+      }
+      const hasPlan = Boolean(fresh.rentalPlan) || targetAction.kind === 'set'
+
       // Plafond d'encadrement : rempli d'office tant que le membre n'a rien saisi.
       let referenceRentApplied: number | null = null
       const current = fresh.rentalPlan?.referenceRentPerM2?.toNumber() ?? null
       const automatic =
         current === null ||
         fieldSources[REFERENCE_RENT_KEY]?.source === 'open_data'
-      // Sans phase 2, rien n'est créé d'office : le plafond reste dans
-      // l'instantané et le contexte, la phase 2 le recevra à sa saisie.
+      // Sans phase 2 ni loyer visé estimé, rien n'est créé d'office : le
+      // plafond reste dans l'instantané et le contexte, la phase 2 le recevra
+      // à sa saisie ; créée pour l'estimation, elle le reçoit avec elle.
       if (
-        fresh.rentalPlan &&
+        hasPlan &&
         rent.status === 'ok' &&
         rent.referenceRentPerM2 !== null &&
         rent.row &&
@@ -293,17 +349,24 @@ export class ListingEnrichmentService {
           evidence: `Arrêté du ${rent.decree?.decreeDate ?? '?'}, zone ${rent.zone?.zone ?? '?'}, ${rent.row.rooms === 4 ? '4 pièces et plus' : `${rent.row.rooms} pièce${rent.row.rooms > 1 ? 's' : ''}`}, ${RENT_EPOCH_LABELS[rent.row.epoch].toLowerCase()}, ${rent.row.furnished ? 'meublé' : 'vide'} : loyer de référence majoré ${rent.row.upperRent} €/m²`,
         }
         if (current !== rent.referenceRentPerM2) {
-          data.rentalPlan = {
-            update: {
-              referenceRentPerM2: new Prisma.Decimal(rent.referenceRentPerM2),
-            },
-          }
+          plan.referenceRentPerM2 = new Prisma.Decimal(rent.referenceRentPerM2)
         }
       } else if (fresh.rentalPlan && current !== null && automatic) {
         // Le plafond posé d'office ne vaut plus pour cette annonce (adresse,
         // phase 2 ou arrêté) : retiré plutôt que gardé périmé, « à vérifier ».
         delete fieldSources[REFERENCE_RENT_KEY]
-        data.rentalPlan = { update: { referenceRentPerM2: null } }
+        plan.referenceRentPerM2 = null
+      }
+      if (Object.keys(plan).length > 0) {
+        data.rentalPlan = fresh.rentalPlan
+          ? { update: plan }
+          : {
+              create: {
+                targetRent: plan.targetRent as Prisma.Decimal,
+                referenceRentPerM2: plan.referenceRentPerM2 as
+                  Prisma.Decimal | null | undefined,
+              },
+            }
       }
 
       // DPE vérifié : un seul candidat de l'ADEME, clair et cohérent, et une
@@ -348,6 +411,9 @@ export class ListingEnrichmentService {
               referenceRentPerM2: rent.referenceRentPerM2,
               applied: referenceRentApplied !== null,
             },
+            ...(targetRentEstimated !== undefined
+              ? { targetRentEstimated }
+              : {}),
             market: {
               medianPricePerM2: snapshot.market?.medianPricePerM2 ?? null,
               count: snapshot.market?.count ?? 0,
@@ -365,12 +431,15 @@ export class ListingEnrichmentService {
         },
         tx
       )
-      return { referenceRentApplied, dpeWritten }
+      return { referenceRentApplied, dpeWritten, targetRentEstimated }
     })
     return {
       snapshot,
       referenceRentApplied: outcome.referenceRentApplied,
       dpeApplied: outcome.dpeWritten,
+      ...(outcome.targetRentEstimated !== undefined
+        ? { targetRentEstimated: outcome.targetRentEstimated }
+        : {}),
     }
   }
 
@@ -378,14 +447,15 @@ export class ListingEnrichmentService {
   async context(member: Member, id: string): Promise<ListingContext> {
     const now = new Date()
     const listing = await this.load(member, id)
+    const values = await this.values(member)
     const approximation = locationApproximation(listing.location)
     const [transit, rentControl, market, surroundings, rentObservatory] =
       await Promise.all([
         this.transit.at(listing.location.point, approximation),
-        this.rentFor(member, listing, now),
+        this.rentFor(values, listing, now),
         this.marketFor(listing, now),
         this.surroundingsFor(listing, now),
-        this.observedRentFor(member, listing),
+        this.observedRentFor(values, listing),
       ])
     return {
       listingId: listing.id,

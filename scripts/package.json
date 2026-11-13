@@ -24,6 +24,7 @@
     "import:places": "tsx import-places.ts",
     "relocate:listings": "tsx relocate-listings.ts",
     "refresh:criteria-fit": "tsx refresh-criteria-fit.ts",
+    "refresh:target-rent": "tsx refresh-target-rent.ts",
     "stack": "tsx stack.ts",
     "seed:demo": "tsx seed-demo.ts",
     "link:identities": "tsx link-local-identities.ts",

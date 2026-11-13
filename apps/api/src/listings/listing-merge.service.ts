@@ -19,6 +19,7 @@ import {
   MERGE_FILL_FIELDS,
   fichePriceDecision,
   mergeFieldPlan,
+  mergeTargetRentFill,
   mergeLeftBehindLines,
   mergeMoveLines,
   mergeRefusal,
@@ -46,7 +47,7 @@ import { closeOpenDecisionsAsStale } from '../decisions/decision-context'
 import { Prisma } from '../generated/prisma'
 import type { Member } from '../generated/prisma'
 import { PrismaService } from '../prisma/prisma.service'
-import { ListingEnrichmentService } from './enrichment.service'
+import { ListingEnrichmentService, TARGET_RENT_KEY } from './enrichment.service'
 import {
   priceEventData,
   sellerData,
@@ -88,6 +89,8 @@ const MergeMovedSchema = z.object({
   contact: z.boolean().default(false),
   renovation: z.boolean().default(false),
   rentalPlan: z.boolean().default(false),
+  /** ADR 0046 : le loyer visé de l'absorbée posé sur la phase 2 de la gardée. */
+  targetRent: z.number().nullable().default(null),
   draftIds: ids,
   explorationLineIds: ids,
   /** Les champs vides de la fiche gardée, avec la valeur reçue. */
@@ -116,6 +119,7 @@ interface MergePlan {
   refusal: string | null
   facts: { keep: MergeListingFacts; absorb: MergeListingFacts }
   fieldPlan: ReturnType<typeof mergeFieldPlan>
+  rentFill: ReturnType<typeof mergeTargetRentFill>
   sellersPlan: ReturnType<typeof mergeSellersPlan>
   notes: ReturnType<typeof mergedNotes>
   moved: Omit<MergeMoved, 'sellerIds' | 'absorbedBefore'>
@@ -160,7 +164,9 @@ export class ListingMergeService {
       suggestedKeepId: suggestion.id,
       suggestionReason: suggestion.reason,
       moves: mergeMoveLines(plan.counts),
-      fills: plan.fieldPlan.fills,
+      fills: plan.rentFill
+        ? [...plan.fieldPlan.fills, plan.rentFill.line]
+        : plan.fieldPlan.fills,
       differences: plan.fieldPlan.differences,
       sellers: mergedSellerLines({
         keep: principal,
@@ -253,6 +259,20 @@ export class ListingMergeService {
         absorb.fieldSources,
         [...filled, ...sellerKeys]
       )
+      if (plan.rentFill) {
+        await tx.rentalPlan.update({
+          where: { listingId: keep.id },
+          data: { targetRent: new Prisma.Decimal(plan.rentFill.targetRent) },
+        })
+        fieldSources = {
+          ...fieldSources,
+          [TARGET_RENT_KEY]: absorb.fieldSources[TARGET_RENT_KEY] ??
+            absorb.fieldSources.rentalPlan ?? {
+              source: 'user',
+              recordedAt: now.toISOString(),
+            },
+        }
+      }
       if (price.kind === 'apply') {
         fieldSources = withListingProvenance(fieldSources, ['price'], now)
       }
@@ -346,7 +366,7 @@ export class ListingMergeService {
 
     const needs = enrichmentNeeds([
       ...filled,
-      ...(plan.moved.rentalPlan ? ['rentalPlan'] : []),
+      ...(plan.moved.rentalPlan || plan.rentFill ? ['rentalPlan'] : []),
     ])
     if (needs.enrich) {
       await this.enrichment.enrich(member, keep.id, { dpe: needs.dpe, channel })
@@ -412,8 +432,14 @@ export class ListingMergeService {
     const notes = moved.notesAppended
       ? withoutMergedNotes(keep.notes, moved.notesAppended)
       : keep.notes
+    // ADR 0046 : le loyer visé venu de l'absorbée repart s'il n'a pas été
+    // retouché ; le recalcul qui suit pose de nouveau l'estimation.
+    const rentBack =
+      moved.targetRent !== null &&
+      (keep.rentalPlan?.targetRent ?? null) === moved.targetRent
     const fieldSources = { ...keep.fieldSources }
     for (const field of [...emptied, ...sellerKeys]) delete fieldSources[field]
+    if (rentBack) delete fieldSources[TARGET_RENT_KEY]
     const provenance =
       price.kind === 'apply'
         ? withListingProvenance(fieldSources, ['price'], now)
@@ -428,6 +454,12 @@ export class ListingMergeService {
         throw new ConflictException('Cette fusion a déjà été annulée.')
       }
       await this.moveBack(tx, keptId, absorbedId, moved)
+      if (rentBack) {
+        await tx.rentalPlan.updateMany({
+          where: { listingId: keptId },
+          data: { targetRent: null },
+        })
+      }
       await tx.listing.update({
         where: { id: keptId },
         data: {
@@ -499,7 +531,10 @@ export class ListingMergeService {
         tx
       )
     })
-    const needs = enrichmentNeeds(emptied)
+    const needs = enrichmentNeeds([
+      ...emptied,
+      ...(rentBack || moved.rentalPlan ? ['rentalPlan'] : []),
+    ])
     if (needs.enrich) {
       await this.enrichment.enrich(member, keptId, {
         dpe: needs.dpe,
@@ -694,6 +729,7 @@ export class ListingMergeService {
       ),
     }
     const fieldPlan = mergeFieldPlan(fieldValues(keep), fieldValues(absorb))
+    const rentFill = mergeTargetRentFill(keep.listing, absorb.listing)
     const keepSellers = sellersOf(keep)
     const absorbSellers = sellersOf(absorb)
     const sellersPlan = mergeSellersPlan({
@@ -727,6 +763,7 @@ export class ListingMergeService {
         absorb.listing.renovation !== null && keep.listing.renovation === null,
       rentalPlan:
         absorb.listing.rentalPlan !== null && keep.listing.rentalPlan === null,
+      targetRent: rentFill?.targetRent ?? null,
       draftIds: drafts.map(draft => draft.id),
       explorationLineIds: lines.map(line => line.id),
       fields: fieldPlan.values,
@@ -741,7 +778,7 @@ export class ListingMergeService {
       opinions: moved.opinionIds.length,
       tasks: moved.taskIds.length,
       agencyRequests: moved.agencyRequestIds.length,
-      fields: fieldPlan.fills.length,
+      fields: fieldPlan.fills.length + (rentFill ? 1 : 0),
       notes: notes !== null,
     }
     return {
@@ -750,6 +787,7 @@ export class ListingMergeService {
       refusal: mergeRefusal(facts.keep, facts.absorb),
       facts,
       fieldPlan,
+      rentFill,
       sellersPlan,
       notes,
       moved,

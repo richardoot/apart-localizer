@@ -4,8 +4,8 @@ import { OpenDataStatusSchema } from './enums.js'
 /**
  * Lot 28 : loyers observés par l'Observatoire local des loyers (OLL) de
  * l'agglomération de Bordeaux, par zone de calcul et nombre de pièces. Un
- * indicateur hors charges, jamais un plafond : il n'entre dans aucun calcul
- * (ADR 0038).
+ * indicateur hors charges, jamais un plafond (ADR 0038) ; il estime le loyer
+ * visé d'une annonce qui n'en a pas, marqué « estimé » (ADR 0046).
  */
 
 /** Mention de la source, à afficher avec chaque valeur. */

@@ -292,7 +292,8 @@ Lot 28 :
 `rentObservatory`, le loyer médian observé par l'observatoire local des loyers dans la zone (hors
 charges, par nombre de pièces, quartiles, loyer mensuel pour la surface, place du loyer visé) ; un
 indicateur à présenter comme tel, jamais un plafond ni un loyer de référence ; « à vérifier » depuis
-un repère approché, « sans objet » hors du périmètre
+un repère approché, « sans objet » hors du périmètre. Il sert seulement à estimer le loyer visé d'une
+annonce qui n'en a pas (ADR 0046) ; un loyer visé estimé n'est pas placé dans les quartiles
 
 #### `get_projection`
 
@@ -495,7 +496,10 @@ journalisé, quand le membre a déjà dit que c'est une autre annonce, ne pose a
 `ignoreDuplicates` : proposer `add_listing_link` sur cette fiche) et `createdTasks` (une tâche
 `missing_field` par champ indispensable manquant quand la fiche vient de l'IA, sans doublonner la
 checklist). Enrichie côté serveur (arrêt de tram, plafond d'encadrement, médiane DVF, DPE vérifié à
-l'ADEME quand il est sans ambiguïté) ; `criteriaChanges` liste les critères dans lesquels elle entre
+l'ADEME quand il est sans ambiguïté, et, sans `rentalPlan.targetRent`, le loyer visé estimé d'après
+l'observatoire des loyers : ADR 0046, provenance `estimated`, dit « estimé d'après l'observatoire
+des loyers, à confirmer avec le membre » dans le texte ; à n'envoyer que si l'annonce ou le membre
+le donne) ; `criteriaChanges` liste les critères dans lesquels elle entre
 et à quel niveau (« Entre dans le critère X (à confirmer : …) » dans le texte, journal
 `criteria.matched`, alerte), et `criteriaFit` son adéquation. Nouvelle pour les autres membres.
 

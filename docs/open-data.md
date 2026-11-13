@@ -227,8 +227,13 @@ m² » ; le fichier ne distingue pas la location vide de la location meublée.
   hors du périmètre, « indisponible » sans import (de la table, ou des contours du lot 11 pour
   une commune partagée). La ligne du même nombre de pièces, sinon
   toutes tailles.
-- **Usage** : affiché dans l'onglet Budget et rendu par le connecteur ; **jamais un plafond**,
-  aucun calcul n'en dépend, rien n'est écrit sur l'annonce.
+- **Usage** : affiché dans l'onglet Budget et rendu par le connecteur ; **jamais un plafond**.
+  Seule exception (ADR 0046) : une annonce sans loyer visé reçoit une estimation, la médiane de
+  la ligne du même nombre de pièces × la surface, arrondie aux 5 euros, provenance `estimated`,
+  seulement quand la zone est sûre (statut « ok » : adresse au numéro ou à la rue) et qu'une
+  ligne existe pour ce nombre de pièces. Aucune majoration n'est ajoutée (meublé, mise en
+  location récente) ; un loyer donné par un membre, par Claude ou lu dans l'annonce n'est jamais
+  remplacé. Rattrapage des annonces existantes : `pnpm refresh:target-rent -- --dry-run`.
 
 Médianes relevées en €/m² hors charges (appartements, enquête 2025) : zone 1 : 19,1 / 15,5 /
 13,1 / 12,4 (1, 2, 3, 4 pièces et plus) ; zone 2 : 18,4 / 14,4 / 12,4 / 11,9 ; zone 3 : 18,2 /

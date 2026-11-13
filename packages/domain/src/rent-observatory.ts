@@ -1,4 +1,5 @@
 import type {
+  FieldProvenanceMap,
   LocationPrecision,
   OpenDataStatus,
   RentObservatoryLookup,
@@ -14,8 +15,9 @@ import { formatEuros, formatPercent, plural, pluralWord } from './format.js'
  * annonce. La zone vient de la commune quand elle est entière dans une zone,
  * sinon de l'IRIS du repère ; la médiane et les quartiles sont ceux des
  * appartements du même nombre de pièces. Un indicateur : il n'est jamais un
- * plafond et n'entre dans aucun calcul (ADR 0038). Pure : la table vient de
- * la base, l'IRIS du module geo.
+ * plafond (ADR 0038) ; seule exception, il estime le loyer visé d'une annonce
+ * qui n'en a pas (`estimatedTargetRent`, ADR 0046), marqué « estimé ». Pure :
+ * la table vient de la base, l'IRIS du module geo.
  */
 
 export interface RentObservatoryInput {
@@ -378,4 +380,91 @@ export function rentObservatoryLine(lookup: RentObservatoryLookup): string {
     ...lookup.reasons,
     ...lookup.notes,
   ].join(' ')
+}
+
+// ---------------------------------------------------------------------------
+// ADR 0046 : le loyer visé estimé
+// ---------------------------------------------------------------------------
+
+/** Clé de provenance du loyer visé (comme `REFERENCE_RENT_KEY` pour le plafond). */
+export const TARGET_RENT_KEY = 'rentalPlan.targetRent'
+
+/** Un loyer visé estimé s'arrondit aux 5 euros. */
+export const ESTIMATED_TARGET_RENT_STEP = 5
+
+export interface TargetRentEstimate {
+  /** Loyer visé hors charges, euros par mois, arrondi aux 5 euros. */
+  targetRent: number
+  /** D'où vient le chiffre, pour la provenance (`evidence`). */
+  evidence: string
+}
+
+/**
+ * ADR 0046 : le loyer visé qu'on estime pour une annonce qui n'en a pas, la
+ * médiane observée au m² des appartements du même nombre de pièces × la
+ * surface. Rien sans zone sûre (adresse au numéro ou à la rue : statut
+ * « ok »), sans ligne pour ce nombre de pièces (la médiane de toutes tailles
+ * ne vaut pas pour un T1 ou un T4) ni sans surface : la fiche reste alors
+ * sans loyer visé, comme avant. Aucune majoration (meublé, mise en location
+ * récente) n'est inventée.
+ */
+export function estimatedTargetRent(
+  lookup: RentObservatoryLookup,
+  surface: number | null
+): TargetRentEstimate | null {
+  if (
+    lookup.status !== 'ok' ||
+    lookup.zone === null ||
+    lookup.rooms === null ||
+    lookup.medianPerM2 === null ||
+    surface === null ||
+    !(surface > 0)
+  ) {
+    return null
+  }
+  const raw = lookup.medianPerM2 * surface
+  const targetRent =
+    Math.round(raw / ESTIMATED_TARGET_RENT_STEP) * ESTIMATED_TARGET_RENT_STEP
+  if (!(targetRent > 0)) return null
+  const area = surface.toLocaleString('fr-FR', { maximumFractionDigits: 2 })
+  return {
+    targetRent,
+    evidence: `Observatoire des loyers ${lookup.year ?? ''}, ${lookup.zone.label.toLowerCase()}${lookup.approximate ? ' (lue à la rue)' : ''}, appartements ${roomsLabel(lookup.rooms)} : médiane ${perM2(lookup.medianPerM2)} × ${area} m² = ${formatEuros(targetRent)} par mois hors charges ; loyers de tous les locataires en place, à confirmer`,
+  }
+}
+
+/** Vrai si le loyer visé de la fiche est l'estimation de l'application (ADR 0046). */
+export function targetRentIsEstimated(
+  fieldSources: FieldProvenanceMap | null | undefined
+): boolean {
+  return fieldSources?.[TARGET_RENT_KEY]?.source === 'estimated'
+}
+
+/** Ce que le recalcul fait du loyer visé d'une fiche. */
+export type TargetRentAction =
+  | { kind: 'keep' }
+  | { kind: 'set'; targetRent: number; evidence: string }
+  | { kind: 'clear' }
+
+/**
+ * ADR 0046 : la règle du recalcul. Un loyer visé saisi (par un membre, par
+ * Claude, lu dans l'annonce) n'est jamais touché ; un loyer vide ou estimé
+ * reçoit l'estimation du moment ; une estimation qui ne vaut plus (adresse
+ * moins précise, surface effacée) est retirée plutôt que gardée périmée.
+ */
+export function targetRentAction(input: {
+  current: number | null
+  fieldSources: FieldProvenanceMap | null | undefined
+  estimate: TargetRentEstimate | null
+}): TargetRentAction {
+  const estimated = targetRentIsEstimated(input.fieldSources)
+  if (input.current !== null && !estimated) return { kind: 'keep' }
+  if (input.estimate) {
+    return {
+      kind: 'set',
+      targetRent: input.estimate.targetRent,
+      evidence: input.estimate.evidence,
+    }
+  }
+  return input.current !== null ? { kind: 'clear' } : { kind: 'keep' }
 }

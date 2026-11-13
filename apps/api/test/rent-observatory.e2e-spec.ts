@@ -285,6 +285,182 @@ describe('Loyers observés par l’observatoire (e2e)', () => {
     expect(rentObservatory.medianPerM2).toBeNull()
   })
 
+  describe('ADR 0046 : le loyer visé estimé', () => {
+    const NO_RENT = { ...LISTING, rentalPlan: undefined }
+    const KEY = 'rentalPlan.targetRent'
+
+    async function post(path: string, body: object, status: number) {
+      return request(ctx.server)
+        .post(path)
+        .set(ctx.auth(richard))
+        .send(body)
+        .expect(status)
+    }
+
+    async function patch(id: string, body: object) {
+      return request(ctx.server)
+        .patch(`/listings/${id}`)
+        .set(ctx.auth(richard))
+        .send(body)
+        .expect(200)
+    }
+
+    async function read(id: string) {
+      const res = await request(ctx.server)
+        .get(`/listings/${id}`)
+        .set(ctx.auth(richard))
+        .expect(200)
+      return (res.body.listing ?? res.body) as {
+        surface: number
+        rentalPlan: {
+          targetRent: number | null
+          demand: string | null
+        } | null
+        fieldSources: Record<string, { source: string; evidence?: string }>
+      }
+    }
+
+    it('à la création sans loyer visé : la médiane × surface, « estimé », la tâche reste', async () => {
+      await importAll()
+      // Une annonce lue par l'IA (comme par Claude) : les tâches des champs manquants.
+      const res = await post(
+        '/listings',
+        {
+          ...NO_RENT,
+          fieldSources: {
+            surface: {
+              source: 'ai',
+              confidence: 0.9,
+              recordedAt: '2030-11-13T10:00:00.000Z',
+            },
+          },
+        },
+        201
+      )
+      const { listing } = res.body
+      // 15 €/m² × 40 m².
+      expect(listing.rentalPlan.targetRent).toBe(600)
+      expect(listing.fieldSources[KEY]).toMatchObject({ source: 'estimated' })
+      expect(listing.fieldSources[KEY].evidence).toContain(
+        'Observatoire des loyers 2030, zone 2, appartements 2 pièces'
+      )
+      // Les calculs se font, la tâche « Fixer le loyer visé » attend le membre.
+      expect(res.body.evaluation.metrics.rent).toBe(600)
+      expect(
+        res.body.createdTasks.map((t: { label: string }) => t.label)
+      ).toContain('Fixer le loyer visé (phase 2) à partir du marché locatif')
+      // Le loyer observé ne se compare pas à sa propre estimation.
+      const { rentObservatory } = await contextOf(listing.id)
+      expect(rentObservatory.targetRent).toBeNull()
+      expect(rentObservatory.position).toBeNull()
+      // Le journal le dit.
+      const log = await ctx.prisma.activityLog.findFirst({
+        where: { listingId: listing.id, action: 'listing.enriched' },
+        orderBy: { createdAt: 'desc' },
+      })
+      expect(log?.after).toMatchObject({ targetRentEstimated: 600 })
+    })
+
+    it('un loyer visé donné n’est jamais touché', async () => {
+      await importAll()
+      const listing = await create()
+      const read1 = await read(listing.id)
+      expect(read1.rentalPlan?.targetRent).toBe(700)
+      expect(read1.fieldSources[KEY]).toBeUndefined()
+      await patch(listing.id, { surface: 50 })
+      expect((await read(listing.id)).rentalPlan?.targetRent).toBe(700)
+    })
+
+    it('l’estimation suit la surface ; renvoyée telle quelle, elle reste estimée ; changée, elle ne l’est plus', async () => {
+      await importAll()
+      const { body } = await post('/listings', NO_RENT, 201)
+      const id = body.listing.id as string
+      await patch(id, { surface: 50 })
+      let now = await read(id)
+      expect(now.rentalPlan?.targetRent).toBe(750)
+      expect(now.fieldSources[KEY]?.source).toBe('estimated')
+      // Le formulaire de la phase 2 renvoie tout : le loyer estimé reste estimé.
+      await patch(id, {
+        rentalPlan: { targetRent: 750, demand: 'strong' },
+      })
+      now = await read(id)
+      expect(now.rentalPlan).toMatchObject({
+        targetRent: 750,
+        demand: 'strong',
+      })
+      expect(now.fieldSources[KEY]?.source).toBe('estimated')
+      // Le membre met son loyer : il est à lui, la surface ne le change plus.
+      await patch(id, {
+        rentalPlan: { targetRent: 720, demand: 'strong' },
+      })
+      now = await read(id)
+      expect(now.fieldSources[KEY]?.source).toBe('user')
+      await patch(id, { surface: 45 })
+      expect((await read(id)).rentalPlan?.targetRent).toBe(720)
+    })
+
+    it('rien d’estimé sans ligne pour ce nombre de pièces ni sans zone sûre', async () => {
+      await importAll()
+      ctx.geocoding.fetchImpl = geocoderAt(IN_BOURG, 'housenumber', '33998')
+      const threeRooms = await post('/listings', { ...NO_RENT, rooms: 3 }, 201)
+      expect(threeRooms.body.listing.rentalPlan).toBeNull()
+      ctx.geocoding.fetchImpl = geocoderAt(NOWHERE, 'housenumber', '33997')
+      const outside = await post(
+        '/listings',
+        { ...NO_RENT, title: 'T2 fictif hors périmètre' },
+        201
+      )
+      expect(outside.body.listing.rentalPlan).toBeNull()
+    })
+
+    it('une adresse à la rue : estimé, zone « lue à la rue »', async () => {
+      await importAll()
+      ctx.geocoding.fetchImpl = geocoderAt([-0.56, 44.84], 'street')
+      const { body } = await post('/listings', NO_RENT, 201)
+      // Zone 3 : 13 €/m² × 40 m².
+      expect(body.listing.rentalPlan.targetRent).toBe(520)
+      expect(body.listing.fieldSources[KEY].evidence).toContain(
+        'zone 3 (lue à la rue)'
+      )
+    })
+
+    it('fusion : le loyer donné de l’absorbée remplace l’estimation de la gardée ; annulée, l’estimation revient', async () => {
+      await importAll()
+      const kept = (await post('/listings', NO_RENT, 201)).body.listing
+      const absorbed = (
+        await post(
+          '/listings',
+          {
+            ...LISTING,
+            title: 'T2 fictif vu ailleurs',
+            ignoreDuplicates: true,
+          },
+          201
+        )
+      ).body.listing
+      expect(kept.rentalPlan.targetRent).toBe(600)
+      const preview = await request(ctx.server)
+        .get(`/listings/${kept.id}/merge-preview?with=${absorbed.id}`)
+        .set(ctx.auth(richard))
+        .expect(200)
+      expect(
+        preview.body.fills.map((f: { field: string }) => f.field)
+      ).toContain(KEY)
+      const merged = await post(
+        `/listings/${kept.id}/merge`,
+        { absorbedId: absorbed.id },
+        200
+      )
+      let now = await read(kept.id)
+      expect(now.rentalPlan?.targetRent).toBe(700)
+      expect(now.fieldSources[KEY]?.source).toBe('user')
+      await post(`/listing-merges/${merged.body.merge.id}/undo`, {}, 200)
+      now = await read(kept.id)
+      expect(now.rentalPlan?.targetRent).toBe(600)
+      expect(now.fieldSources[KEY]?.source).toBe('estimated')
+    })
+  })
+
   it('POST /market-context rend le loyer observé d’un point, sans annonce', async () => {
     await importAll()
     const res = await request(ctx.server)
