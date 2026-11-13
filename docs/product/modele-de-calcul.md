@@ -563,12 +563,17 @@ rendements, un prix cible et un verdict :
 L_v estimé = arrondi aux 5 € (médiane(loyerM2 de la ligne du même nombre de pièces) × S)
 ```
 
-seulement si la zone est sûre (adresse au numéro ou à la rue) et que la ligne du même nombre de
-pièces existe ; sans majoration (meublé, mise en location récente). Provenance `estimated`,
-affichée « estimé » ; jamais à la place d'un loyer donné par un membre, par Claude ou lu dans
-l'annonce. Le plafond borne `L` comme pour tout loyer visé. Adresse à la rue : « ≈ » ; repère au quartier ou au centre
-de la commune : « à vérifier » ; repère en limite de deux zones : aucune valeur. Les loyers sont
-ceux de tous les locataires en place à la date de l'enquête, pas des seules mises en location.
+La zone : l'adresse ou la commune entière dans une zone donnent la médiane de leur zone ; un repère
+au centre du quartier, celle de la zone de ce centre ; la commune seule dans une commune partagée,
+la moyenne des médianes de ses zones pondérée par les logements enquêtés
+(`Σ médiane_z × n_z / Σ n_z`), ces deux cas « à confirmer avec l'adresse ». Il faut la ligne du
+même nombre de pièces ; aucune majoration (meublé, mise en location récente). Provenance
+`estimated`, affichée « estimé » ; jamais à la place d'un loyer donné par un membre, par Claude ou
+lu dans l'annonce. Le plafond borne `L` comme pour tout loyer visé.
+
+Pour l'indicateur : adresse à la rue : « ≈ » ; repère au quartier ou au centre de la commune : « à
+vérifier » ; repère en limite de deux zones : aucune valeur. Les loyers sont ceux de tous les
+locataires en place à la date de l'enquête, pas des seules mises en location.
 
 ## 11. Checklist réglementaire datée (lot 5, besoins L5, D6)
 

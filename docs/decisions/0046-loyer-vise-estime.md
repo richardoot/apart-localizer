@@ -17,11 +17,15 @@ loyers pour la zone et le nombre de pièces (lot 28).
 1. **Quand** : à chaque recalcul de la fiche (`ListingEnrichmentService`) : à la création, quel
    que soit le canal (application, connecteur, brouillon gardé), puis à chaque changement de
    surface, de pièces, de phase 2 ou de localisation.
-2. **Quelle valeur** (`estimatedTargetRent`, `domain`) : la médiane au m² des appartements du même
-   nombre de pièces × la surface, arrondie aux 5 euros. Rien sans zone sûre (statut « ok » :
-   adresse au numéro, ou à la rue avec la mention « lue à la rue »), sans ligne pour ce nombre de
-   pièces (la médiane de toutes tailles ne vaut pas pour un T1 ou un T4), ni sans surface : la
-   fiche reste alors sans loyer visé, comme avant.
+2. **Quelle valeur** (`estimateTargetRent`, `domain`) : la médiane au m² des appartements du même
+   nombre de pièces × la surface, arrondie aux 5 euros. La zone suit ce que la fiche connaît :
+   l'adresse (au numéro, ou à la rue : « lue à la rue ») ou la commune entière dans une zone
+   donnent la médiane de leur zone ; un repère au centre du quartier, celle de la zone de ce centre ;
+   la commune seule (repère au centre de la commune, en limite de deux zones, ou sans repère) dans une
+   commune partagée entre zones, la moyenne des médianes de ses zones pondérée par les logements
+   enquêtés ; ces deux derniers cas sont dits « à confirmer avec l'adresse ». Rien sans surface, sans nombre de pièces, sans ligne pour ce
+   nombre de pièces (la médiane de toutes tailles ne vaut pas pour un T1 ou un T4), ni hors du
+   périmètre de l'observatoire : la fiche reste alors sans loyer visé, comme avant.
 3. **Marquée** : provenance `estimated` sous la clé `rentalPlan.targetRent` (`TARGET_RENT_KEY`),
    avec d'où vient le chiffre (`evidence`). La fiche affiche « estimé » et la source, la réponse
    dit « avec un loyer visé estimé », le connecteur le dit « estimé d'après l'observatoire des
@@ -49,8 +53,11 @@ loyers pour la zone et le nombre de pièces (lot 28).
   du meublé, et ses loyers sont ceux de tous les locataires en place ; une majoration serait
   inventée. La médiane sous-estime plutôt une mise en location, ce qui est prudent pour décider
   d'un achat.
-- **Estimer avec un repère au quartier ou au centre de la commune** : la zone y est « à
-  vérifier », et une commune partagée entre zones donnerait un chiffre faux sans le dire.
+- **N'estimer qu'avec une adresse précise** (première version de cette décision, le 13 novembre 2026) : les annonces des portails n'ont souvent que le quartier ou la commune ; elles restaient
+  sans rentabilité. Le centre du quartier ou les zones de la commune donnent un ordre de grandeur,
+  dit « à confirmer avec l'adresse ».
+- **La zone du centre de la commune** : pour une commune partagée comme Bordeaux, elle tombe sur
+  une seule zone, souvent la plus chère ; la moyenne des zones de la commune est plus juste.
 - **Remplir le loyer de marché (`marketRent`)** : toujours écarté (0038), il reste celui que le
   membre retient de ses comparables.
 - **Estimer à la lecture sans rien écrire** : le loyer visé nourrit le prix cible, les rangs, les
@@ -62,8 +69,9 @@ loyers pour la zone et le nombre de pièces (lot 28).
 - Aucune migration : la colonne `rental_plans.target_rent` et `listings.field_sources` suffisent.
 - Les brouillons « À valider » ne sont pas estimés : leur rentabilité reste « à confirmer »
   jusqu'à ce qu'ils deviennent une annonce.
-- Code : `domain/src/rent-observatory.ts` (`estimatedTargetRent`, `targetRentAction`,
-  `targetRentIsEstimated`, `TARGET_RENT_KEY`), `domain/src/listing-merge.ts`
+- Code : `domain/src/rent-observatory.ts` (`estimateTargetRent`, `targetRentAction`,
+  `targetRentIsEstimated`, `TARGET_RENT_KEY`), `api/src/opendata/rent-observatory.service.ts`
+  (`estimate`), `domain/src/listing-merge.ts`
   (`mergeTargetRentFill`), `api/src/listings/enrichment.service.ts`, `listings.service.ts`
   (provenance à la modification), `listing-merge.service.ts`, `mcp/mcp-tools.ts`
   (`describeListing`), `web/…/budget/RentalPhaseSection.vue`, `scripts/refresh-target-rent.ts`.

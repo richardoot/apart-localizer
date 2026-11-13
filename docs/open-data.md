@@ -229,9 +229,12 @@ m² » ; le fichier ne distingue pas la location vide de la location meublée.
   toutes tailles.
 - **Usage** : affiché dans l'onglet Budget et rendu par le connecteur ; **jamais un plafond**.
   Seule exception (ADR 0046) : une annonce sans loyer visé reçoit une estimation, la médiane de
-  la ligne du même nombre de pièces × la surface, arrondie aux 5 euros, provenance `estimated`,
-  seulement quand la zone est sûre (statut « ok » : adresse au numéro ou à la rue) et qu'une
-  ligne existe pour ce nombre de pièces. Aucune majoration n'est ajoutée (meublé, mise en
+  la ligne du même nombre de pièces × la surface, arrondie aux 5 euros, provenance `estimated` :
+  l'adresse (au numéro, ou à la rue : « lue à la rue ») ou la commune entière dans une zone
+  donnent la médiane de leur zone ; un repère au centre du quartier, celle de la zone de ce centre ;
+  la commune seule (repère au centre de la commune, en limite de deux zones, ou sans repère) dans une
+  commune partagée entre zones, la moyenne des médianes de ses zones pondérée par les logements
+  enquêtés ; ces deux derniers cas sont dits « à confirmer avec l'adresse ». Il faut une ligne pour ce nombre de pièces. Aucune majoration n'est ajoutée (meublé, mise en
   location récente) ; un loyer donné par un membre, par Claude ou lu dans l'annonce n'est jamais
   remplacé. Rattrapage des annonces existantes : `pnpm refresh:target-rent -- --dry-run`.
 

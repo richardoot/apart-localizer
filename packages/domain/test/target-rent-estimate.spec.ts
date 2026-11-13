@@ -5,22 +5,37 @@
  */
 import { describe, expect, it } from 'vitest'
 import { RentObservatoryTableSchema } from '@apart/contracts'
-import type { RentObservatoryLookup } from '@apart/contracts'
 import {
   ESTIMATED_TARGET_RENT_STEP,
   TARGET_RENT_KEY,
   describeActivity,
-  estimatedTargetRent,
+  estimateTargetRent,
   listingAnswer,
-  lookupRentObservatory,
   mergeTargetRentFill,
   targetRentAction,
   targetRentIsEstimated,
 } from '../src/index.js'
-import type { ListingAnswerInput, WhatsNewEvent } from '../src/index.js'
+import type {
+  ListingAnswerInput,
+  RentObservatoryInput,
+  WhatsNewEvent,
+} from '../src/index.js'
 
 const plain = (text: string): string => text.replace(/[\u202f\u00a0]/g, ' ')
 
+const stats = (
+  rooms: number | null,
+  medianPerM2: number,
+  observations: number
+) => ({
+  rooms,
+  medianPerM2,
+  q1PerM2: medianPerM2 - 2,
+  q3PerM2: medianPerM2 + 2,
+  observations,
+})
+
+/** La commune fictive 33999 est partagée entre les zones 2 et 3 ; 33998 est entière en zone 5. */
 const TABLE = RentObservatoryTableSchema.parse({
   territory: 'bordeaux',
   observatory: 'L9900',
@@ -31,26 +46,21 @@ const TABLE = RentObservatoryTableSchema.parse({
     {
       zone: 2,
       label: 'Zone 2',
-      stats: [
-        {
-          rooms: null,
-          medianPerM2: 14,
-          q1PerM2: 12,
-          q3PerM2: 16,
-          observations: 900,
-        },
-        {
-          rooms: 2,
-          medianPerM2: 15.2,
-          q1PerM2: 13,
-          q3PerM2: 17,
-          observations: 400,
-        },
-      ],
+      stats: [stats(null, 14, 900), stats(2, 15.2, 400)],
+    },
+    {
+      zone: 3,
+      label: 'Zone 3',
+      stats: [stats(null, 12, 500), stats(2, 13, 200)],
+    },
+    {
+      zone: 5,
+      label: 'Zone 5',
+      stats: [stats(null, 10, 300), stats(2, 11, 100)],
     },
   ],
-  irisZones: { '339990101': 2 },
-  communeZones: {},
+  irisZones: { '339990101': 2, '339990102': 3 },
+  communeZones: { '33998': 5 },
   source: {
     url: null,
     file: 'fictif.zip',
@@ -59,55 +69,100 @@ const TABLE = RentObservatoryTableSchema.parse({
   },
 })
 
-const lookup = (
-  over: Partial<Parameters<typeof lookupRentObservatory>[0]> = {}
-): RentObservatoryLookup =>
-  lookupRentObservatory({
-    tables: [TABLE],
-    hasPoint: true,
-    precision: 'exact',
-    inseeCode: '33999',
-    irisCodes: ['339990101'],
-    rooms: 2,
-    surface: 41,
-    targetRent: null,
-    ...over,
-  })
+const input = (
+  over: Partial<RentObservatoryInput> = {}
+): RentObservatoryInput => ({
+  tables: [TABLE],
+  hasPoint: true,
+  precision: 'exact',
+  inseeCode: '33999',
+  irisCodes: ['339990101'],
+  rooms: 2,
+  surface: 41,
+  targetRent: null,
+  ...over,
+})
 
 describe('ADR 0046 : le loyer visé estimé', () => {
-  it('médiane du nombre de pièces × surface, arrondie aux 5 euros, avec sa source', () => {
-    const estimate = estimatedTargetRent(lookup(), 41)
+  it('adresse : la médiane de sa zone × surface, arrondie aux 5 euros, avec sa source', () => {
+    const estimate = estimateTargetRent(input())
     // 15,2 × 41 = 623,2 → 625
     expect(estimate?.targetRent).toBe(625)
     expect(ESTIMATED_TARGET_RENT_STEP).toBe(5)
     expect(plain(estimate?.evidence ?? '')).toBe(
       'Observatoire des loyers 2030, zone 2, appartements 2 pièces : médiane 15,2 €/m² × 41 m² = 625 € par mois hors charges ; loyers de tous les locataires en place, à confirmer'
     )
+    // Le loyer visé de l'entrée n'y change rien.
+    expect(estimateTargetRent(input({ targetRent: 900 }))?.targetRent).toBe(625)
   })
 
-  it('une adresse à la rue : estimé, la zone dite « lue à la rue »', () => {
-    const estimate = estimatedTargetRent(lookup({ precision: 'street' }), 41)
+  it('adresse à la rue : la zone dite « lue à la rue »', () => {
+    const estimate = estimateTargetRent(input({ precision: 'street' }))
     expect(estimate?.targetRent).toBe(625)
     expect(estimate?.evidence).toContain('zone 2 (lue à la rue)')
   })
 
-  it('rien sans zone sûre, sans ligne pour ce nombre de pièces ni sans surface', () => {
-    // Repère au quartier : « à vérifier ».
+  it('quartier : la zone du centre du quartier, à confirmer avec l’adresse', () => {
+    const estimate = estimateTargetRent(input({ precision: 'district' }))
+    expect(estimate?.targetRent).toBe(625)
+    expect(estimate?.evidence).toContain(
+      'zone 2 (celle du centre du quartier, à confirmer avec l’adresse)'
+    )
+  })
+
+  it('commune seule, partagée entre zones : la moyenne de ses zones pondérée par les logements enquêtés', () => {
+    // (15,2 × 400 + 13 × 200) / 600 = 14,47 → 14,5 €/m² ; × 41 = 594,5 → 595.
+    const expected = 595
+    const centre = estimateTargetRent(input({ precision: 'commune' }))
+    expect(centre?.targetRent).toBe(expected)
+    expect(plain(centre?.evidence ?? '')).toBe(
+      'Observatoire des loyers 2030, zones 2 et 3 de la commune (adresse inconnue : moyenne de leurs médianes pondérée par les logements enquêtés, à confirmer avec l’adresse), appartements 2 pièces : 14,5 €/m² × 41 m² = 595 € par mois hors charges ; loyers de tous les locataires en place, à confirmer'
+    )
+    // Sans repère, ou repère en limite de deux zones : la même règle.
     expect(
-      estimatedTargetRent(lookup({ precision: 'district' }), 41)
-    ).toBeNull()
-    // Trois pièces : seulement la médiane de toutes tailles.
-    expect(estimatedTargetRent(lookup({ rooms: 3 }), 41)).toBeNull()
-    // Pièces inconnues.
-    expect(estimatedTargetRent(lookup({ rooms: null }), 41)).toBeNull()
-    expect(estimatedTargetRent(lookup(), null)).toBeNull()
-    expect(estimatedTargetRent(lookup(), 0)).toBeNull()
-    // Hors du périmètre.
+      estimateTargetRent(
+        input({ hasPoint: false, precision: null, irisCodes: [] })
+      )?.targetRent
+    ).toBe(expected)
     expect(
-      estimatedTargetRent(lookup({ irisCodes: [], inseeCode: '33997' }), 41)
+      estimateTargetRent(
+        input({
+          precision: 'district',
+          irisCodes: ['339990101', '339990102'],
+        })
+      )?.targetRent
+    ).toBe(expected)
+  })
+
+  it('commune entière dans une zone : la médiane de la zone, même au centre de la commune', () => {
+    const estimate = estimateTargetRent(
+      input({ inseeCode: '33998', irisCodes: [], precision: 'commune' })
+    )
+    // 11 × 41 = 451 → 450
+    expect(estimate?.targetRent).toBe(450)
+    expect(estimate?.evidence).toContain('zone 5, appartements 2 pièces')
+  })
+
+  it('rien sans surface, sans nombre de pièces, sans ligne pour ce nombre de pièces, ni hors du périmètre', () => {
+    expect(estimateTargetRent(input({ surface: null }))).toBeNull()
+    expect(estimateTargetRent(input({ surface: 0 }))).toBeNull()
+    expect(estimateTargetRent(input({ rooms: null }))).toBeNull()
+    // Trois pièces : aucune zone n'a de ligne, à l'adresse comme à la commune.
+    expect(estimateTargetRent(input({ rooms: 3 }))).toBeNull()
+    expect(
+      estimateTargetRent(input({ rooms: 3, precision: 'commune' }))
     ).toBeNull()
+    expect(
+      estimateTargetRent(input({ irisCodes: [], inseeCode: '33997' }))
+    ).toBeNull()
+    expect(
+      estimateTargetRent(
+        input({ hasPoint: false, inseeCode: null, irisCodes: [] })
+      )
+    ).toBeNull()
+    expect(estimateTargetRent(input({ tables: [] }))).toBeNull()
     // Une surface minuscule qui s'arrondit à zéro.
-    expect(estimatedTargetRent(lookup(), 0.1)).toBeNull()
+    expect(estimateTargetRent(input({ surface: 0.1 }))).toBeNull()
   })
 
   it('l’estimation se reconnaît à sa provenance', () => {

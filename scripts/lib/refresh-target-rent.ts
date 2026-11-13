@@ -1,4 +1,4 @@
-import { estimatedTargetRent, targetRentAction } from '@apart/domain'
+import { targetRentAction } from '@apart/domain'
 import type {
   FieldProvenanceMap,
   LocationPrecision,
@@ -117,23 +117,23 @@ export async function refreshTargetRent(
     const surface = row.surface?.toNumber() ?? null
     const current = row.rentalPlan?.targetRent?.toNumber() ?? null
     const fieldSources = (row.fieldSources ?? {}) as FieldProvenanceMap
-    const lookup = await observatory.lookup({
+    const target = {
       point,
       precision: (row.locationPrecision ?? null) as LocationPrecision | null,
       inseeCode: row.inseeCode,
       rooms: row.rooms,
       surface,
-      targetRent: null,
       leaseType: null,
-    })
-    const estimate = estimatedTargetRent(lookup, surface)
+    }
+    const estimate = await observatory.estimate(target)
     const action = targetRentAction({ current, fieldSources, estimate })
     if (action.kind === 'keep') {
       if (current !== null) stats.given++
       else {
         stats.withoutEstimate++
+        const lookup = await observatory.lookup({ ...target, targetRent: null })
         log(
-          `- ${row.title} : pas d’estimation (${lookup.reasons[0] ?? lookup.notes[0] ?? 'zone ou surface inconnue'})`
+          `- ${row.title} : pas d’estimation (${surface === null ? 'surface inconnue' : row.rooms === null ? 'nombre de pièces inconnu' : (lookup.reasons[0] ?? lookup.notes[0] ?? 'hors du périmètre de l’observatoire')})`
         )
       }
       continue

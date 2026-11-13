@@ -10,7 +10,8 @@ import type {
   RentObservatoryLookup,
   RentObservatoryTable,
 } from '@apart/contracts'
-import { lookupRentObservatory } from '@apart/domain'
+import { estimateTargetRent, lookupRentObservatory } from '@apart/domain'
+import type { RentObservatoryInput, TargetRentEstimate } from '@apart/domain'
 import { GeoService } from '../geo/geo.service'
 import { ReferenceCacheService } from './reference-cache.service'
 
@@ -52,6 +53,22 @@ export class RentObservatoryService {
   }
 
   async lookup(target: RentObservatoryTarget): Promise<RentObservatoryLookup> {
+    return lookupRentObservatory(await this.input(target))
+  }
+
+  /**
+   * ADR 0046 : le loyer visé estimé d'une annonce (zone de l'adresse, du
+   * centre du quartier, sinon les zones de la commune) ; null sans estimation.
+   */
+  async estimate(
+    target: Omit<RentObservatoryTarget, 'targetRent'>
+  ): Promise<TargetRentEstimate | null> {
+    return estimateTargetRent(await this.input({ ...target, targetRent: null }))
+  }
+
+  private async input(
+    target: RentObservatoryTarget
+  ): Promise<RentObservatoryInput> {
     const tables = await this.tables()
     // Les contours qui contiennent le repère (distance nulle), pas ses voisins.
     const hits =
@@ -71,7 +88,7 @@ export class RentObservatoryService {
         : Object.values(
             await this.geo.neighbourhoodCounts(NEIGHBOURHOOD_TERRITORY)
           ).some(count => count > 0)
-    return lookupRentObservatory({
+    return {
       tables,
       contoursImported,
       hasPoint: target.point !== null,
@@ -83,6 +100,6 @@ export class RentObservatoryService {
       targetRent: target.targetRent,
       furnished:
         target.leaseType === 'furnished' || target.leaseType === 'shared',
-    })
+    }
   }
 }

@@ -22,7 +22,6 @@ import {
   REFERENCE_RENT_KEY,
   TARGET_RENT_KEY,
   dpeValidity,
-  estimatedTargetRent,
   targetRentAction,
   targetRentIsEstimated,
   locationApproximation,
@@ -228,14 +227,21 @@ export class ListingEnrichmentService {
     const listing = await this.load(member, id)
     const values = await this.values(member)
     const point = listing.location.point
-    const [transit, rent, market, surroundings, observed] = await Promise.all([
+    const [transit, rent, market, surroundings, estimate] = await Promise.all([
       this.transit.at(point, locationApproximation(listing.location)),
       this.rentFor(values, listing, now),
       this.marketFor(listing, now),
       this.surroundingsFor(listing, now),
-      this.observedRentFor(values, listing),
+      // ADR 0046 : l'adresse, sinon le centre du quartier, sinon la commune.
+      this.rentObservatory.estimate({
+        point: listing.location.point,
+        precision: listing.location.precision,
+        inseeCode: listing.location.inseeCode,
+        rooms: listing.rooms,
+        surface: listing.surface,
+        leaseType: values.leaseType,
+      }),
     ])
-    const estimate = estimatedTargetRent(observed, listing.surface)
     let dpeResult: DpeSearchResult | null = listing.openDataContext?.dpe ?? null
     let dpeApplied: DpeCandidate | null = null
     if (options.dpe) {

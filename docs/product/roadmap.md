@@ -1561,9 +1561,10 @@ aucune variable nouvelle ; un script de rattrapage (`pnpm refresh:target-rent`).
 - **Pourquoi** : une annonce créée par Claude n'a presque jamais de loyer visé ; sans lui, ni
   rentabilité, ni prix cible, ni verdict.
 - **Ce qui change** : sans loyer visé, l'application pose la médiane observée de la zone et du
-  nombre de pièces × la surface, marquée « estimé » avec sa source, quand l'adresse est au numéro
-  ou à la rue. Un loyer donné (membre, Claude, annonce) n'est jamais remplacé ; une fusion reprend
+  nombre de pièces × la surface, marquée « estimé » avec sa source : zone de l'adresse, sinon du
+  centre du quartier, sinon moyenne des zones de la commune. Un loyer donné (membre, Claude, annonce) n'est jamais remplacé ; une fusion reprend
   le loyer donné de la fiche absorbée.
 
-Limites : les brouillons « À valider » ne sont pas estimés ; un repère au quartier ou au centre de
-la commune ne donne pas d'estimation ; l'observatoire ne distingue pas le vide du meublé.
+Limites : les brouillons « À valider » ne sont pas estimés ; sans adresse, l'estimation vient du
+centre du quartier ou des zones de la commune (« à confirmer avec l'adresse ») ; l'observatoire ne
+distingue pas le vide du meublé.

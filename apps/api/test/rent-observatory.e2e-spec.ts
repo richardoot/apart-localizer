@@ -94,7 +94,7 @@ const TABLE = RentObservatoryTableSchema.parse({
 
 function geocoderAt(
   coordinates: [number, number],
-  type: 'housenumber' | 'street' = 'housenumber',
+  type: 'housenumber' | 'street' | 'municipality' = 'housenumber',
   citycode = '33999'
 ) {
   return () =>
@@ -421,6 +421,25 @@ describe('Loyers observés par l’observatoire (e2e)', () => {
       expect(body.listing.rentalPlan.targetRent).toBe(520)
       expect(body.listing.fieldSources[KEY].evidence).toContain(
         'zone 3 (lue à la rue)'
+      )
+    })
+
+    it('commune seule, partagée entre zones : la moyenne de ses zones, à confirmer avec l’adresse', async () => {
+      await importAll()
+      ctx.geocoding.fetchImpl = geocoderAt(IN_ZONE_2, 'municipality')
+      const { body } = await post(
+        '/listings',
+        {
+          ...NO_RENT,
+          location: { addressRaw: null, commune: 'Commune fictive' },
+        },
+        201
+      )
+      expect(body.listing.location.precision).toBe('commune')
+      // (15 × 120 + 13 × 120) / 240 = 14 €/m² × 40 m².
+      expect(body.listing.rentalPlan.targetRent).toBe(560)
+      expect(body.listing.fieldSources[KEY].evidence).toContain(
+        'zones 2 et 3 de la commune (adresse inconnue'
       )
     })
 

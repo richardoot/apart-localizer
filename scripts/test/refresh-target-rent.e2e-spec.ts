@@ -84,7 +84,7 @@ describe('refresh:target-rent (e2e, PostGIS)', () => {
         },
       })
     ).id
-    unplaced = (await listing('T2 fictif sans repère')).id
+    unplaced = (await listing('T2 fictif sans repère', { inseeCode: null })).id
     for (const id of [withoutRent, withRent]) {
       await geo.setListingPoint(
         id,

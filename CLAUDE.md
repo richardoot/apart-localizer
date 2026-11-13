@@ -75,9 +75,10 @@ Règles à ne pas casser :
   (`visitEditRefusal`).
 - `portalSearchUrls` construit les recherches sans réseau.
 - Le loyer observé est un indicateur, jamais un plafond ; seule exception (ADR 0046), il estime le
-  loyer visé d'une annonce qui n'en a pas (`estimatedTargetRent`, zone sûre et ligne du même
-  nombre de pièces), provenance `estimated` sur `TARGET_RENT_KEY`, et `targetRentAction` ne
-  remplace jamais un loyer donné.
+  loyer visé d'une annonce qui n'en a pas (`estimateTargetRent` : zone de l'adresse, du centre du
+  quartier, sinon moyenne pondérée des zones de la commune ; ligne du même nombre de pièces),
+  provenance `estimated` sur `TARGET_RENT_KEY`, et `targetRentAction` ne remplace jamais un loyer
+  donné.
 - La tendance des prix (`marketTrend`) est un indicateur, hors de tout calcul : une année de moins
   de dix ventes n'a pas de médiane, une année incomplète ne porte aucun écart, rien n'est extrapolé.
 

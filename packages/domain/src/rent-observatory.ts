@@ -16,7 +16,7 @@ import { formatEuros, formatPercent, plural, pluralWord } from './format.js'
  * sinon de l'IRIS du repère ; la médiane et les quartiles sont ceux des
  * appartements du même nombre de pièces. Un indicateur : il n'est jamais un
  * plafond (ADR 0038) ; seule exception, il estime le loyer visé d'une annonce
- * qui n'en a pas (`estimatedTargetRent`, ADR 0046), marqué « estimé ». Pure :
+ * qui n'en a pas (`estimateTargetRent`, ADR 0046), marqué « estimé ». Pure :
  * la table vient de la base, l'IRIS du module geo.
  */
 
@@ -399,38 +399,101 @@ export interface TargetRentEstimate {
   evidence: string
 }
 
-/**
- * ADR 0046 : le loyer visé qu'on estime pour une annonce qui n'en a pas, la
- * médiane observée au m² des appartements du même nombre de pièces × la
- * surface. Rien sans zone sûre (adresse au numéro ou à la rue : statut
- * « ok »), sans ligne pour ce nombre de pièces (la médiane de toutes tailles
- * ne vaut pas pour un T1 ou un T4) ni sans surface : la fiche reste alors
- * sans loyer visé, comme avant. Aucune majoration (meublé, mise en location
- * récente) n'est inventée.
- */
-export function estimatedTargetRent(
-  lookup: RentObservatoryLookup,
-  surface: number | null
+/** Le loyer estimé et sa source, à partir d'une médiane au m². */
+function estimateOf(
+  medianPerM2: number,
+  surface: number,
+  source: string
 ): TargetRentEstimate | null {
-  if (
-    lookup.status !== 'ok' ||
-    lookup.zone === null ||
-    lookup.rooms === null ||
-    lookup.medianPerM2 === null ||
-    surface === null ||
-    !(surface > 0)
-  ) {
-    return null
-  }
-  const raw = lookup.medianPerM2 * surface
   const targetRent =
-    Math.round(raw / ESTIMATED_TARGET_RENT_STEP) * ESTIMATED_TARGET_RENT_STEP
+    Math.round((medianPerM2 * surface) / ESTIMATED_TARGET_RENT_STEP) *
+    ESTIMATED_TARGET_RENT_STEP
   if (!(targetRent > 0)) return null
   const area = surface.toLocaleString('fr-FR', { maximumFractionDigits: 2 })
   return {
     targetRent,
-    evidence: `Observatoire des loyers ${lookup.year ?? ''}, ${lookup.zone.label.toLowerCase()}${lookup.approximate ? ' (lue à la rue)' : ''}, appartements ${roomsLabel(lookup.rooms)} : médiane ${perM2(lookup.medianPerM2)} × ${area} m² = ${formatEuros(targetRent)} par mois hors charges ; loyers de tous les locataires en place, à confirmer`,
+    evidence: `${source} ${perM2(medianPerM2)} × ${area} m² = ${formatEuros(targetRent)} par mois hors charges ; loyers de tous les locataires en place, à confirmer`,
   }
+}
+
+/** « zones 1, 2 et 3 ». */
+function zonesText(zones: readonly number[]): string {
+  return zones.length > 1
+    ? `zones ${zones.slice(0, -1).join(', ')} et ${zones.at(-1)}`
+    : `zone ${zones[0]}`
+}
+
+/**
+ * ADR 0046 : le loyer visé qu'on estime pour une annonce qui n'en a pas,
+ * d'après la ligne des appartements du même nombre de pièces × la surface :
+ *
+ * - adresse au numéro ou à la rue, ou commune entière dans une zone : la
+ *   médiane de la zone ;
+ * - repère au centre du quartier : la médiane de la zone de ce centre, « à
+ *   confirmer avec l'adresse » ;
+ * - commune connue seulement (repère au centre de la commune, en limite de
+ *   deux zones, ou sans repère) dans une commune partagée entre plusieurs
+ *   zones : la moyenne des médianes de ses zones, pondérée par les logements
+ *   enquêtés, « à confirmer avec l'adresse ».
+ *
+ * Rien sans surface, sans nombre de pièces, sans ligne pour ce nombre de
+ * pièces (la médiane de toutes tailles ne vaut pas pour un T1 ou un T4), ni
+ * hors du périmètre. Aucune majoration (meublé, mise en location récente)
+ * n'est inventée.
+ */
+export function estimateTargetRent(
+  input: RentObservatoryInput
+): TargetRentEstimate | null {
+  const surface = input.surface
+  const rooms = rentObservatoryRooms(input.rooms)
+  if (surface === null || !(surface > 0) || rooms === null) return null
+  const lookup = lookupRentObservatory({ ...input, targetRent: null })
+  const head = `Observatoire des loyers ${lookup.year ?? ''}`
+  const line = `appartements ${roomsLabel(rooms)}`
+  if (
+    lookup.zone !== null &&
+    lookup.rooms === rooms &&
+    lookup.medianPerM2 !== null
+  ) {
+    const zone = lookup.zone.label.toLowerCase()
+    if (lookup.status === 'ok') {
+      return estimateOf(
+        lookup.medianPerM2,
+        surface,
+        `${head}, ${zone}${lookup.approximate ? ' (lue à la rue)' : ''}, ${line} : médiane`
+      )
+    }
+    if (input.hasPoint && input.precision === 'district') {
+      return estimateOf(
+        lookup.medianPerM2,
+        surface,
+        `${head}, ${zone} (celle du centre du quartier, à confirmer avec l’adresse), ${line} : médiane`
+      )
+    }
+  }
+  // La commune seule : ses zones, pondérées par les logements enquêtés.
+  const table = latestRentObservatoryTable(input.tables)
+  if (!table || input.inseeCode === null) return null
+  const zones = rentObservatoryZonesOfCommune(table, input.inseeCode)
+  if (zones.length === 0) return null
+  const rows = zones.map(
+    number =>
+      table.zones
+        .find(zone => zone.zone === number)
+        ?.stats.find(stats => stats.rooms === rooms) ?? null
+  )
+  if (rows.some(row => row === null)) return null
+  const known = rows as RentObservatoryStats[]
+  const observations = known.reduce((sum, row) => sum + row.observations, 0)
+  if (!(observations > 0)) return null
+  const mean =
+    known.reduce((sum, row) => sum + row.medianPerM2 * row.observations, 0) /
+    observations
+  return estimateOf(
+    Math.round(mean * 10) / 10,
+    surface,
+    `${head}, ${zonesText(zones)} de la commune (adresse inconnue : moyenne de leurs médianes pondérée par les logements enquêtés, à confirmer avec l’adresse), ${line} :`
+  )
 }
 
 /** Vrai si le loyer visé de la fiche est l'estimation de l'application (ADR 0046). */
