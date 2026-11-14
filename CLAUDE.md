@@ -45,7 +45,8 @@ vit tout ce qui calcule, décide ou formule :
   (`similar-listings.ts`, `listing-merge.ts`), loyers observés (`rent-observatory.ts`).
 - Lecture et textes : fiche (`listing-reading.ts`, `listing-overview.ts`, `listing-answer.ts`), page
   Hypothèses (`assumptions-reading.ts`), puces et compteurs des filtres (`listing-filters.ts`),
-  usage du connecteur (`claude.ts`), phrases du journal et textes des notifications
+  usage du connecteur (`claude.ts`), consignes de lecture d'une page et « Non relevé »
+  (`listing-reading-guide.ts`, lot 32), phrases du journal et textes des notifications
   (`describeActivity` et les fichiers `*-activity.ts`), e-mail d'invitation, messages du MCP.
 
 Règles à ne pas casser :
@@ -100,7 +101,7 @@ quand il existe.
 - Plafonds, seuils et durées en constantes nommées : `LISTING_LINKS_MAX`, `LISTING_SELLERS_MAX`,
   `LISTING_COVERS_MAX`, `OPINION_CRITERIA_MAX`, `COMPARE_MAX`, `MAX_PENDING_INVITATIONS`,
   `DEFAULT_INVITATION_TTL_DAYS`, `DEFAULT_STALE_DAYS`, `AUTO_ATTACH_REVIEW_DAYS`,
-  `SIMILARITY_THRESHOLDS`, `LISTING_CHECK_TOLERANCES`.
+  `SIMILARITY_THRESHOLDS`, `LISTING_CHECK_TOLERANCES`, `PORTAL_PHOTOS_MAX` (`portal-photos.ts`).
 - Les réponses qui formeraient un import circulaire avec `views.ts` vivent à part :
   `listing-check-results.ts`, `listing-link-results.ts`, `decision-cards.ts`,
   `listing-merge-results.ts`.
@@ -145,6 +146,8 @@ Schéma Postgres `app`. Les colonnes géo sont `Unsupported` avec latitude/longi
 - Brouillons (lot 31) : `listing_drafts.updated_at` (garde-fou), `merged_into_draft_id` et
   `merged_at` (un brouillon absorbé est caché, puis supprimé après sept jours, ADR 0045),
   `merged_links` (sur le gardé, les liens des absorbés : annonce créée, exploration, alertes).
+- Photos du portail (lot 32) : `listings.portal_photos`, JSONB de liens https ; un brouillon les
+  porte dans `listing_input`.
 - Doublons à confirmer (lot 30) : `duplicate_pairs`, une ligne par paire (`listing_a_id` <
   `listing_b_id`, `CHECK` écrit à la main), `pending` (question posée) ou `distinct` (un membre a
   dit non).
@@ -247,6 +250,9 @@ Règles :
   `domain`, option `connector` de `ListingsService` ; le REST les accepte. À côté d'un point saisi,
   l'adresse donne BAN et INSEE sans bouger le repère (`manual-point.ts`, tous canaux).
 - `list_listings` rend par défaut l'onglet « Dans les critères » (`fit[]`).
+- Lecture (lot 32) : les `instructions` du serveur, le prompt d'exploration et la ligne « Non
+  relevé » viennent de `listing-reading-guide.ts` ; l'exploration ouvre la page de chaque annonce
+  gardée par le tri (`opened`, `photos`, `CANDIDATE_PAGE_FIELDS`).
 - Jamais de couverture ni d'URL signée dans les réponses ; le loyer observé est dit comme un
   indicateur, jamais comme un plafond ; la tendance des prix comme un constat daté, jamais comme une
   prévision.
@@ -352,6 +358,9 @@ Repères :
 - Tri : `views/TriagePage.vue`, position dans l'URL, `composables/useTriageSession.ts` et
   `sessionStorage`.
 - Couverture : `ListingCover.vue` et `composables/useCovers.ts` (relue avant l'expiration des URL).
+- Photos du portail (lot 32) : `PortalPhotos.vue` (Synthèse, détail d'un brouillon
+  `DraftDetailPanel.vue`, faits par thème `lib/draft-details.ts`), images chargées depuis le
+  portail, sans référent.
 - Service worker : `lib/pwa.ts` (`virtual:pwa-register`, rechargement unique après une mise à jour).
 
 ### `scripts/` : scripts d'exploitation
@@ -413,6 +422,7 @@ MCP et consentement OAuth : 0017.
 - Lot 31, les brouillons au connecteur (lire, corriger, décider, fusionner deux brouillons) : 0044,
   brouillons absorbés supprimés après sept jours : 0045
 - Loyer visé estimé d'après l'observatoire des loyers, quand personne ne l'a donné : 0046
+- Lot 32, photos du portail, brouillons lus comme une fiche, lecture complète par Claude : 0047
 
 Identifiants de code en anglais ; textes d'interface, messages d'erreur métier et descriptions
 Zod en français.
@@ -430,6 +440,8 @@ Zod en français.
   l'accord du membre ; ni annulation de fusion ni retrait d'agence par le MCP.
 - Le partage mobile et les alertes e-mail n'utilisent que ce que le téléphone ou l'e-mail
   transmet : aucune page de portail n'est téléchargée, aucun lien n'est suivi.
+- Photos du portail (lot 32) : des liens, jamais téléchargés ni copiés par le serveur ; jamais la
+  photo de couverture.
 - Photos de visite privées : jamais d'URL publique, jamais de politique d'accès ouverte sur le
   bucket, rien dans les journaux de requêtes (docs/confidentialite.md).
 - Questions aux agences (lot 17) : le serveur n'envoie jamais de message à une agence ; un

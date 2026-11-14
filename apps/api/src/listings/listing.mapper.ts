@@ -18,6 +18,7 @@ import {
   ListingSchema,
   OfferSchema,
   PointSchema,
+  PortalPhotosSchema,
   PriceEventSchema,
   TaskSchema,
 } from '@apart/contracts'
@@ -238,6 +239,7 @@ export function toListingDto(row: ListingRow): ListingDto {
     publishedAt: row.publishedAt?.toISOString() ?? null,
     sourceUpdatedAt: row.sourceUpdatedAt?.toISOString() ?? null,
     description: row.description,
+    portalPhotos: portalPhotosOf(row.portalPhotos),
     notes: row.notes,
     price: Number(row.price),
     feesAmount: num(row.feesAmount),
@@ -557,6 +559,12 @@ export function placementOf(value: unknown): ListingPlacement | null {
   if (value === null || value === undefined) return null
   const parsed = ListingPlacementSchema.safeParse(value)
   return parsed.success ? parsed.data : null
+}
+
+/** Lot 32 : les liens des photos du portail ; un JSON illisible vaut une liste vide. */
+function portalPhotosOf(value: unknown): string[] {
+  const parsed = PortalPhotosSchema.safeParse(value)
+  return parsed.success ? parsed.data : []
 }
 
 /** L'instantané open data enregistré ; un JSON d'une version antérieure illisible vaut null. */

@@ -204,6 +204,10 @@ export function formatActivityValue(
     return DATE_FIELDS.has(field) ? formatActivityDate(value) : truncate(value)
   }
   if (Array.isArray(value)) {
+    // Lot 32 : des liens d'images, comptés à l'affichage (jamais listés).
+    if (field === 'portalPhotos') {
+      return value.length === 0 ? null : plural(value.length, 'photo')
+    }
     if (field === 'items') {
       const total = value.reduce<number>(
         (sum, item) =>

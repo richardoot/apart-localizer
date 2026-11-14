@@ -17,7 +17,10 @@ import {
   ListingCheckChangeSchema,
   ListingCheckOutcomeSchema,
 } from './listing-checks.js'
+import { ListingPropertyInputSchema } from './listing.js'
+import { PortalPhotosSchema } from './portal-photos.js'
 import { ExplorationPortalSchema, SearchPortalSchema } from './portals.js'
+import { withoutDefaults } from './zod-utils.js'
 import type { SearchPortal } from './portals.js'
 import { CriteriaFiltersSchema } from './search-criteria.js'
 
@@ -43,6 +46,53 @@ export const EXPLORATION_MAX_CANDIDATES = 50
 export const EXPLORATION_EXCERPT_MAX = 2000
 /** Longueur maximale de l'extrait gardé avec une ligne du compte rendu ou un brouillon. */
 export const EXPLORATION_LINE_EXCERPT_MAX = 500
+/** Lot 32 : longueur maximale de la description entière, lue sur la page de l'annonce. */
+export const EXPLORATION_DESCRIPTION_MAX = 8000
+
+/**
+ * Lot 32 (ADR 0047) : ce que la page de l'annonce donne en plus des
+ * résultats, relevé quand Claude l'ouvre (annonces gardées après le tri).
+ * Mêmes formes que la fiche, chacune facultative.
+ */
+export const CANDIDATE_PAGE_FIELDS = [
+  'feesAmount',
+  'feesPercent',
+  'feesPayer',
+  'surfaceTotal',
+  'floor',
+  'floorsTotal',
+  'floorLabel',
+  'elevator',
+  'constructionYear',
+  'constructionPeriod',
+  'dpeConsumption',
+  'gesClass',
+  'dpeDate',
+  'heatingType',
+  'heatingCollective',
+  'outdoor',
+  'parking',
+  'cellar',
+  'orientation',
+  'condition',
+  'lotsCount',
+  'proceedings',
+  'votedWorks',
+  'syndic',
+] as const
+export type CandidatePageField = (typeof CANDIDATE_PAGE_FIELDS)[number]
+
+const candidatePageShape = z
+  .object(
+    withoutDefaults(
+      ListingPropertyInputSchema.pick(
+        Object.fromEntries(CANDIDATE_PAGE_FIELDS.map(f => [f, true])) as {
+          [K in CandidatePageField]: true
+        }
+      ).shape
+    )
+  )
+  .partial().shape
 
 const candidateDate = (what: string) =>
   z
@@ -161,9 +211,25 @@ export const ExplorationCandidateSchema = z
       .describe(
         'Référence de l’annonce affichée (« Réf. EX-2041 », « Mandat n° 2041 ») ; jamais pour un particulier'
       ),
+    // Lot 32 (ADR 0047) : la page de l'annonce, ouverte pour les annonces gardées.
+    opened: z
+      .boolean()
+      .optional()
+      .describe(
+        'Lot 32 : vrai si vous avez ouvert la page de l’annonce (pas seulement la page de résultats) et relevé tout ce qu’elle affiche'
+      ),
+    description: z
+      .string()
+      .max(EXPLORATION_DESCRIPTION_MAX)
+      .optional()
+      .describe(
+        `Lot 32 : la description entière lue sur la page de l’annonce (${EXPLORATION_DESCRIPTION_MAX} caractères au plus), sans téléphone ni e-mail d’annonceur ; elle remplace l’extrait dans le brouillon`
+      ),
+    photos: PortalPhotosSchema.optional(),
+    ...candidatePageShape,
   })
   .describe(
-    'Une annonce lue par Claude sur un portail : seuls url et portal sont obligatoires, le reste si la page le donne'
+    'Une annonce lue par Claude sur un portail : seuls url et portal sont obligatoires, le reste si la page le donne (lot 32 : tout ce que la page de l’annonce affiche quand vous l’avez ouverte)'
   )
 export type ExplorationCandidate = z.infer<typeof ExplorationCandidateSchema>
 export type ExplorationCandidateInput = z.input<

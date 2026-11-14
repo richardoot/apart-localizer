@@ -1626,6 +1626,13 @@ function scalarData(input: ScalarInput): ScalarData {
       : toDate(input.sourceUpdatedAt)
   )
   set('description', input.description)
+  // Lot 32 : les liens des photos du portail (jamais téléchargées).
+  set(
+    'portalPhotos',
+    input.portalPhotos === undefined
+      ? undefined
+      : (input.portalPhotos as Prisma.InputJsonValue)
+  )
   set('notes', input.notes)
   set('sourceText', input.sourceText)
   set(

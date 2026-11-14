@@ -76,6 +76,7 @@ export function fakeListing(over: Partial<Listing> = {}): Listing {
     sourceUpdatedAt: null,
     description: null,
     notes: 'PV à demander',
+    portalPhotos: [],
     price: 200_000,
     feesAmount: null,
     feesPercent: null,

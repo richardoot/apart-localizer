@@ -75,6 +75,8 @@ export const MERGE_FILL_FIELDS = [
   'syndic',
   'propertyTax',
   'furnitureValue',
+  // Lot 32 : les photos du portail de la fiche absorbée, si la gardée n'en a pas.
+  'portalPhotos',
 ] as const
 export type MergeFillField = (typeof MERGE_FILL_FIELDS)[number]
 
@@ -100,7 +102,12 @@ export interface MergeListingFacts {
 }
 
 function isEmpty(value: unknown): boolean {
-  return value === null || value === undefined || value === ''
+  return (
+    value === null ||
+    value === undefined ||
+    value === '' ||
+    (Array.isArray(value) && value.length === 0)
+  )
 }
 
 function label(field: string): string {

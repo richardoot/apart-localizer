@@ -1,5 +1,7 @@
 import {
+  CANDIDATE_PAGE_FIELDS,
   CRITERIA_FIT_LEVEL_LABELS,
+  EXPLORATION_DESCRIPTION_MAX,
   EXPLORATION_EXCERPT_MAX,
   EXPLORATION_LINE_EXCERPT_MAX,
   EXPLORATION_PORTAL_LABELS,
@@ -12,6 +14,7 @@ import {
 } from '@apart/contracts'
 import type {
   BriefCriteriaInput,
+  CandidatePageField,
   BriefThresholds,
   CandidateTriage,
   CriteriaFitCheckKey,
@@ -631,10 +634,13 @@ export function draftInputFromCandidate(
     commune: candidate.commune,
     district: candidate.district,
     addressRaw: candidate.address,
-    description: candidate.excerpt,
+    description: candidate.description ?? candidate.excerpt,
     sellerType: candidate.sellerType,
     sellerName: candidate.sellerName,
     sellerReference: candidate.reference,
+    portalPhotos: candidate.photos?.length ? candidate.photos : undefined,
+    // Lot 32 : ce que la page de l'annonce donne en plus des résultats.
+    ...candidatePageValues(candidate),
   }
   const fieldSources: Record<string, Provenance> = {}
   for (const [key, value] of Object.entries(read)) {
@@ -664,7 +670,12 @@ export function draftInputFromCandidate(
     publishedAt: candidate.publishedAt
       ? normalizeCheckDate(candidate.publishedAt)
       : null,
-    description: sanitizeEvidence(candidate.excerpt, EXPLORATION_EXCERPT_MAX),
+    // Lot 32 : la description entière de la page, sinon l'extrait des résultats.
+    description: candidate.description
+      ? sanitizeEvidence(candidate.description, EXPLORATION_DESCRIPTION_MAX)
+      : sanitizeEvidence(candidate.excerpt, EXPLORATION_EXCERPT_MAX),
+    portalPhotos: candidate.photos ?? [],
+    ...candidatePageValues(candidate),
     location: {
       addressRaw: candidate.address ?? null,
       commune: candidate.commune ?? null,
@@ -676,6 +687,21 @@ export function draftInputFromCandidate(
   return { input, warnings: candidateWarnings(candidate) }
 }
 
+/**
+ * Lot 32 : les champs de la page de l'annonce que Claude a relevés (ceux qu'il
+ * a laissés vides ne sont pas recopiés : la fiche garde ses valeurs par défaut).
+ */
+function candidatePageValues(
+  candidate: ExplorationCandidate
+): Partial<Record<CandidatePageField, unknown>> {
+  const values: Partial<Record<CandidatePageField, unknown>> = {}
+  for (const field of CANDIDATE_PAGE_FIELDS) {
+    const value = candidate[field]
+    if (value !== undefined && value !== null) values[field] = value
+  }
+  return values
+}
+
 /** Ce qui manque à une annonce lue, à demander avant de l'étudier. */
 export function candidateWarnings(candidate: ExplorationCandidate): string[] {
   return [
@@ -685,6 +711,14 @@ export function candidateWarnings(candidate: ExplorationCandidate): string[] {
     candidate.dpeClass === undefined ? 'DPE à demander.' : null,
     !candidate.address && !candidate.district
       ? 'Adresse ou quartier à préciser.'
+      : null,
+    // Lot 32 : la page ouverte ne les donnait pas (une page de résultats ne
+    // les donne jamais : rien à dire tant que la page n'est pas ouverte).
+    candidate.opened && candidate.annualCharges === undefined
+      ? 'Charges de copropriété non affichées : à demander.'
+      : null,
+    candidate.opened && candidate.propertyTax === undefined
+      ? 'Taxe foncière non affichée : à demander.'
       : null,
   ].filter((w): w is string => w !== null)
 }

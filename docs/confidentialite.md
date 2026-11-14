@@ -25,6 +25,14 @@ elles sont protégées.
   (`listings.cover_photo_id`) et entre au journal (« a choisi la photo de couverture », sans
   identifiant de photo ni lien) ; ni le MCP ni l'export ne portent la couverture ou son URL.
   Supprimer la photo choisie rend la première.
+- **Photos du portail (lot 32, ADR 0047)** : une fiche ou un brouillon peut garder les **liens**
+  des photos de l'annonce sur le portail (`listings.portal_photos`, trente au plus), relevés par
+  Claude dans le navigateur de l'utilisateur ou saisis par un membre. Le serveur ne télécharge
+  jamais ces images : c'est le navigateur du membre qui les affiche depuis le portail, sans
+  référent (`referrerpolicy="no-referrer"`). Le portail voit alors l'adresse IP du membre et
+  l'heure, comme s'il ouvrait l'annonce. Ce ne sont pas des données personnelles des membres ; une
+  photo de portail ne devient jamais la photo de couverture. Le journal compte les photos sans les
+  lister ; l'export JSON porte les liens, jamais les images.
 - **Mode visite (lot 24, ADR 0034)** : ce qui est fait pendant une visite (points cochés,
   remarques, notes, compte rendu, photos) est d'abord gardé **sur l'appareil**, dans la base
   IndexedDB `apart-localizer` du navigateur, puis envoyé à l'API dès que le serveur répond. On y

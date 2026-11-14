@@ -93,7 +93,9 @@ import type {
 } from '@apart/contracts'
 import {
   checkFreshness,
+  describeReadingGaps,
   describeUnsupportedEstimates,
+  readingGaps,
   sellerText,
   formatCheckDay,
   describeListingFit,
@@ -1025,6 +1027,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         return dataResult(
           `${describeListing(item)}\n${describeLinksAndSeller(item)}\n${[
             describeSellersAndMerges(item),
+            // Lot 32 : ce que la page donnerait et que la fiche n'a pas.
+            describeReadingGaps(readingGaps(item.listing)),
           ]
             .filter(Boolean)
             .map(text => `${text}\n`)
@@ -1084,7 +1088,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         "Lit le texte d'une annonce (page lue dans le navigateur, mail d'agence) et/ou des captures d'écran (base64) par le modèle d'extraction côté serveur, et rend une fiche normalisée pré-remplie : " +
         'pour chaque champ la valeur, la provenance « ai », la confiance (0 à 1) et l’extrait justificatif dans `listing.fieldSources` ; les champs indispensables manquants ou douteux ; les doublons probables déjà dans l’espace ; l’adresse géocodée si possible ; le coût de l’appel. ' +
         'Lot 18 : le vendeur (`sellerType` agence, mandataire, particulier ; jamais deviné), l’agence ou le réseau (`sellerName`, jamais le nom d’une personne) et la référence de l’annonce (`sellerReference`, « Réf. », « Mandat n° ») sont lus ; un doublon `certain` (même lien, ou même agence et même référence) est la même annonce sur un autre portail : proposez add_listing_link sur cette fiche plutôt que create_listing. ' +
-        "Rien n'est enregistré : présentez la fiche au membre, laissez-le corriger, puis appelez create_listing avec `listing` tel que rendu (fieldSources compris). Répond 503 si l'IA n'est pas configurée côté serveur.",
+        "Rien n'est enregistré : présentez la fiche au membre, laissez-le corriger, puis appelez create_listing avec `listing` tel que rendu (fieldSources compris). Lot 32 : le texte ne porte pas les photos : ajoutez `portalPhotos` (liens https des images de la page) avant create_listing. Répond 503 si l'IA n'est pas configurée côté serveur.",
       inputSchema: McpExtractListingInputSchema,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -1136,6 +1140,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
       description:
         "Enregistre une annonce normalisée dans l'espace, avec la checklist par défaut et un premier événement de prix. Elle apparaît « nouvelle » pour les autres membres. " +
         "Donnez tout ce que l'annonce dit (prix FAI, surface Carrez, pièces, étage, DPE, charges annuelles, taxe foncière, adresse, commune, quartier, loyer visé dans rentalPlan, point GeoJSON [lng, lat] si connu) ; sans point, l'adresse est géocodée côté serveur. " +
+        'Lot 32 : ouvrez la page de l’annonce et dépliez ses sections (« Voir plus », « Copropriété », « Diagnostics ») avant d’appeler : le membre doit pouvoir la juger sans retourner sur le portail. Charges de copropriété ANNUELLES (`annualCharges` : « 120 €/mois » → 1 440), taxe foncière avec la phrase lue en extrait, honoraires, chauffage, lots, description entière, et `portalPhotos` (liens https des photos de l’annonce, dans l’ordre de la page, trente au plus ; l’application les affiche depuis le portail, le serveur ne les télécharge pas). La réponse dit ce qui n’a pas été relevé (« Non relevé : … ») : relisez la page pour ces champs et complétez avec update_listing, ou dites au membre ce qui manque. ' +
         'Loyer visé (`rentalPlan.targetRent`) : seulement si l’annonce ou le membre le donne ; absent, le serveur l’estime d’après l’observatoire des loyers (médiane au m² de la zone et du nombre de pièces × surface, provenance « estimated ») : zone de l’adresse, sinon du centre du quartier, sinon moyenne des zones de la commune ; la réponse le dit « estimé » : dites-le au membre comme une estimation à confirmer. ' +
         'Le serveur pose seul le plafond d’encadrement (`rentalPlan.referenceRentPerM2`, d’après l’arrêté), l’adresse normalisée, l’identifiant BAN et le code INSEE (`location.addressNormalized`, `banId`, `inseeCode`, d’après le géocodeur) ; le loyer de marché (`rentalPlan.marketRent`) se retient dans l’application à partir des loyers comparables (add_rent_comparable) : ces clés envoyées sont ignorées. ' +
         'La taxe foncière et la part non récupérable des charges ne s’estiment pas ici : envoyées avec la provenance « ai », elles ne sont gardées qu’avec leur extrait (`fieldSources.<champ>.evidence`) ; dictées par le membre, passez `user`. Absentes, l’application les estime et le dit. ' +
@@ -1179,6 +1184,8 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           describeDuplicates(item.duplicates),
           describeDuplicateQuestions(item),
           describeUnsupportedEstimates(ignored),
+          // Lot 32 : ce qui n'a pas été relevé sur la page.
+          describeReadingGaps(readingGaps(item.listing)),
           item.createdTasks.length
             ? `Tâches créées pour les champs manquants : ${item.createdTasks.map(t => t.label).join(' ; ')}.`
             : null,
@@ -1195,6 +1202,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
         'Mise à jour partielle : seuls les champs de `patch` changent ; un sous-objet fourni (travaux, phase 2, localisation) remplace l’existant. ' +
         'Garde-fous optimistes : `expectedUpdatedAt` (le `updatedAt` lu) et `expectedPrice` ; si l’annonce a changé entre-temps, rien n’est écrit et la réponse l’explique. ' +
         'Un nouveau prix ajoute une ligne à l’historique. ' +
+        'Lot 32 : `portalPhotos` remplace la liste des photos du portail (liens https, trente au plus) ; complétez ici les champs que la réponse de create_listing disait « Non relevé » quand la page les affiche. ' +
         'Un loyer visé estimé (provenance « estimated », ADR 0046) se remplace en passant `rentalPlan` avec le loyer donné par le membre ou l’annonce ; renvoyé inchangé, il reste estimé. ' +
         'Le plafond d’encadrement, le loyer de marché, l’adresse normalisée, l’identifiant BAN et le code INSEE ne s’écrivent pas ici : la fiche garde les siens, même quand `rentalPlan` ou `location` est remplacé. Taxe foncière et charges non récupérables de provenance « ai » : gardées seulement avec leur extrait (`fieldSources.<champ>.evidence`). ' +
         'Pour préciser la localisation (lot 12), passez `location` entier (adresse au numéro dans `addressRaw`, commune, quartier cité dans `district`, sans `point`) : le repère est replacé côté serveur (adresse, sinon quartier reconnu, sinon commune) et les distances recalculées ; changer seulement le quartier ne touche pas un repère déjà à l’adresse (numéro ou rue). ' +
@@ -1245,6 +1253,7 @@ export function registerTools(server: McpServer, ctx: McpToolContext): void {
           [
             `Annonce modifiée (${written.join(', ')}) : ${describeListing(item)}`,
             describeUnsupportedEstimates(ignored),
+            describeReadingGaps(readingGaps(item.listing)),
             describeCriteriaChanges(item.criteriaChanges),
           ]
             .filter(Boolean)

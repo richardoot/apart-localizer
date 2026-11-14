@@ -43,6 +43,7 @@
   import CriteriaFitSection from './CriteriaFitSection.vue'
   import FitBadge from './FitBadge.vue'
   import OpinionsSection from './OpinionsSection.vue'
+  import PortalPhotos from './PortalPhotos.vue'
   import UiBadge from '@/components/ui/UiBadge.vue'
   import UiButton from '@/components/ui/UiButton.vue'
   import { cardClasses } from '@/lib/ui'
@@ -391,6 +392,18 @@
           @go="next => emit('go', next)"
         />
       </div>
+    </section>
+
+    <!-- Lot 32 (ADR 0047) : les photos du portail, pour la regarder sans y retourner. -->
+    <section
+      v-if="listing.portalPhotos.length"
+      :class="[card, 'grid gap-2']"
+      aria-labelledby="portal-photos-title"
+    >
+      <h2 id="portal-photos-title" class="text-sm font-semibold">
+        Photos de l’annonce
+      </h2>
+      <PortalPhotos :photos="listing.portalPhotos" />
     </section>
 
     <div class="grid gap-4 @3xl:grid-cols-2">

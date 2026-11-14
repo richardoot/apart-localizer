@@ -17,8 +17,10 @@ import type {
   SimilarDraft,
 } from '@apart/contracts'
 import {
+  describeReadingGaps,
   draftMatchesSearch,
   formatEuros,
+  readingGaps,
   similarityPercent,
 } from '@apart/domain'
 import type { McpToolContext } from './mcp-tools'
@@ -52,6 +54,16 @@ const STATUS_LABELS: Record<ListingDraftStatus, string> = {
 function withoutSender(draft: ListingDraft): Omit<ListingDraft, 'emailFrom'> {
   const { emailFrom: _from, ...rest } = draft
   return rest
+}
+
+/**
+ * Lot 32 : ce que la page de l'annonce donnerait et que le brouillon n'a
+ * pas, pour un brouillon encore à décider (un brouillon validé ou reconnu ne
+ * se corrige plus).
+ */
+export function draftReadingGaps(draft: ListingDraft): string | null {
+  if (draft.status !== 'pending' && draft.status !== 'dismissed') return null
+  return describeReadingGaps(readingGaps(draft.listing), 'update_draft')
 }
 
 /** Un brouillon en une ligne : statut, faits, origine, identifiant. */
@@ -164,7 +176,12 @@ export function registerDraftTools(
     async ({ draftId }) =>
       answer(async () => {
         const draft = await ctx.drafts.get(ctx.member, draftId)
-        return dataResult(describeDraft(draft), withoutSender(draft))
+        return dataResult(
+          [describeDraft(draft), draftReadingGaps(draft)]
+            .filter(Boolean)
+            .join('\n'),
+          withoutSender(draft)
+        )
       })
   )
 
@@ -200,7 +217,7 @@ export function registerDraftTools(
     {
       title: 'Corriger un brouillon',
       description:
-        'Corrige la fiche pré-remplie d’un brouillon à valider ou écarté, avant de le garder : seuls les champs de `patch` changent ; un sous-objet fourni (localisation, phase 2, travaux) remplace l’existant. Le statut ne se change pas ici (set_draft_status). Comme update_listing : le plafond d’encadrement, le loyer de marché et les sorties du géocodeur ne s’écrivent pas, une taxe foncière ou une part non récupérable de provenance « ai » n’est gardée qu’avec son extrait. Une localisation corrigée est replacée à la lecture ; les doublons probables sont recalculés. `provenance` : « ai » si vous avez lu la page, « user » si le membre a dicté. Garde-fou `expectedUpdatedAt` (lu avec get_draft ou list_drafts). Refusé (réponse lisible) pour un brouillon validé ou reconnu. Journalisé. Portée listings:write.',
+        'Corrige la fiche pré-remplie d’un brouillon à valider ou écarté, avant de le garder : seuls les champs de `patch` changent ; un sous-objet fourni (localisation, phase 2, travaux) remplace l’existant. Le statut ne se change pas ici (set_draft_status). Comme update_listing : le plafond d’encadrement, le loyer de marché et les sorties du géocodeur ne s’écrivent pas, une taxe foncière ou une part non récupérable de provenance « ai » n’est gardée qu’avec son extrait. Une localisation corrigée est replacée à la lecture ; les doublons probables sont recalculés. Lot 32 : complétez ici ce que la page de l’annonce affiche et que le brouillon n’a pas (« Non relevé » dans get_draft) : charges annuelles, taxe foncière avec son extrait, étage, chauffage, description entière, `portalPhotos` (liens https des photos). `provenance` : « ai » si vous avez lu la page, « user » si le membre a dicté. Garde-fou `expectedUpdatedAt` (lu avec get_draft ou list_drafts). Refusé (réponse lisible) pour un brouillon validé ou reconnu. Journalisé. Portée listings:write.',
       inputSchema: McpUpdateDraftInputSchema,
       annotations: {
         readOnlyHint: false,
@@ -220,7 +237,12 @@ export function registerDraftTools(
           { channel: CHANNEL, provenance }
         )
         return dataResult(
-          `Brouillon corrigé : ${describeDraft(draft)}`,
+          [
+            `Brouillon corrigé : ${describeDraft(draft)}`,
+            draftReadingGaps(draft),
+          ]
+            .filter(Boolean)
+            .join('\n'),
           withoutSender(draft)
         )
       })

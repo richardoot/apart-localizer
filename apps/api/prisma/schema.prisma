@@ -586,6 +586,10 @@ model Listing {
   description     String?
   notes           String?
   sourceText      String?       @map("source_text")
+  /// Lot 32 (ADR 0047) : les liens des photos de l'annonce sur le portail
+  /// (tableau JSON de liens https, trente au plus), affichées par le
+  /// navigateur du membre depuis le portail ; jamais téléchargées.
+  portalPhotos    Json          @default("[]") @map("portal_photos")
 
   // Localisation
   addressRaw        String?                                       @map("address_raw")

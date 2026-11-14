@@ -30,6 +30,7 @@ function row(over: Partial<ListingRow> = {}): ListingRow {
     description: null,
     notes: null,
     sourceText: null,
+    portalPhotos: [],
     addressRaw: null,
     addressNormalized: null,
     banId: null,

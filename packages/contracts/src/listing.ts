@@ -8,6 +8,7 @@ import {
   SellerTypeSchema,
 } from './enums.js'
 import { PointSchema } from './geojson.js'
+import { PortalPhotosSchema } from './portal-photos.js'
 import { ListingPlacementSchema } from './placement.js'
 import { RenovationInputSchema, RenovationSchema } from './renovation.js'
 import { RentalPlanInputSchema, RentalPlanSchema } from './rental-plan.js'
@@ -244,6 +245,8 @@ export const ListingIdentityInputSchema = z.object({
     .describe('Dernière mise à jour constatée sur la source, ISO 8601'),
   description: nullableText(20_000, "Description brute de l'annonce"),
   notes: nullableText(10_000, 'Notes libres des membres'),
+  // Lot 32 (ADR 0047) : les liens des photos du portail, jamais téléchargées.
+  portalPhotos: PortalPhotosSchema.default([]),
 })
 
 /**

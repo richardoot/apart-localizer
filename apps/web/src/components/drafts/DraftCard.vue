@@ -38,6 +38,10 @@
    * même : ajouter ce lien à la fiche » ajoute le lien du brouillon à
    * l'annonce suivie ; un doublon certain (même agence, même référence) est
    * mis en avant, une même référence avec une autre agence est dite.
+   *
+   * Lot 32 (ADR 0047) : la première photo du portail en tête de carte, et
+   * « Voir tout le détail » ouvre le brouillon lu comme une fiche (photos,
+   * chiffres, faits par thème, description entière).
    */
   const props = withDefaults(
     defineProps<{
@@ -56,7 +60,15 @@
     undo: []
     same: [listingId: string]
     other: []
+    /** Lot 32 : ouvrir le détail du brouillon. */
+    details: []
   }>()
+
+  /** Lot 32 : la première photo du portail ; cachée si elle ne se charge plus. */
+  const coverFailed = ref(false)
+  const cover = computed(() =>
+    coverFailed.value ? null : (props.draft.listing.portalPhotos[0] ?? null)
+  )
 
   const dismissing = ref(false)
   const reason = ref('')
@@ -95,6 +107,25 @@
     data-testid="draft-card"
   >
     <div class="grid min-w-0 flex-[999_1_32rem] gap-2">
+      <!-- Lot 22 : une photo cliquable qui ouvre le détail, pas un bouton d'action. -->
+      <button
+        v-if="cover"
+        type="button"
+        class="h-36 w-full overflow-hidden rounded-xl bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:h-44 sm:max-w-md"
+        aria-label="Voir les photos et tout le détail"
+        data-testid="draft-cover"
+        @click="emit('details')"
+      >
+        <img
+          :src="cover"
+          alt=""
+          loading="lazy"
+          decoding="async"
+          referrerpolicy="no-referrer"
+          class="size-full object-cover"
+          @error="coverFailed = true"
+        />
+      </button>
       <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
         <h3 class="text-base font-semibold">{{ d.listing.title }}</h3>
         <UiBadge variant="outline" data-testid="draft-portal">{{
@@ -219,6 +250,13 @@
           </UiButton>
         </div>
         <div class="grid grid-cols-2 gap-x-2 sm:grid-cols-1">
+          <UiButton
+            variant="link"
+            data-action="details"
+            @click="emit('details')"
+          >
+            Voir tout le détail
+          </UiButton>
           <UiButton
             v-if="!agreement"
             variant="link"

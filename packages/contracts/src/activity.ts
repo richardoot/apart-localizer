@@ -118,6 +118,7 @@ export const LISTING_FIELD_LABELS: Record<string, string> = {
   publishedAt: 'Publiée le',
   sourceUpdatedAt: 'Mise à jour sur le portail',
   description: 'Description',
+  portalPhotos: 'Photos du portail',
   notes: 'Notes',
   price: 'Prix',
   feesAmount: "Honoraires d'agence",

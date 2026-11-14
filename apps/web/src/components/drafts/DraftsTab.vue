@@ -21,6 +21,7 @@
   import StageRows from '@/components/workflow/StageRows.vue'
   import AttachedLinks from './AttachedLinks.vue'
   import DraftCard from './DraftCard.vue'
+  import DraftDetailPanel from './DraftDetailPanel.vue'
 
   /**
    * Lot 16 : l'onglet « À valider » de la page Annonces : tous les
@@ -99,6 +100,11 @@
   })
   const cardOf = (id: string): ListingDraft | undefined =>
     cards.value.find(d => d.id === id)
+  /** Lot 32 : le brouillon ouvert en détail (lu comme une fiche). */
+  const detailId = ref<string | null>(null)
+  const detail = computed(() =>
+    detailId.value ? (cardOf(detailId.value) ?? null) : null
+  )
   const expandedIds = computed(() => (props.expanded ? [props.expanded] : []))
 
   /** Lot 21 : le titre d'un brouillon déplie sa carte (il n'a pas de fiche). */
@@ -169,6 +175,11 @@
       // Lot 21 : à plusieurs, l'annonce n'est pas créée : le brouillon reste.
       if (result.listingId) remember(result.draft)
     })
+  /** Lot 32 : ajouter depuis le détail ; le panneau se ferme si c'est fait. */
+  async function acceptFromDetail(draft: ListingDraft): Promise<void> {
+    await accept(draft)
+    if (!errors.value[draft.id]) detailId.value = null
+  }
   const dismiss = (draft: ListingDraft, reason: string | null) =>
     run(draft.id, async () => {
       const saved = await draftQueries.decide.mutateAsync({
@@ -311,6 +322,7 @@
             @undo="undo(cardOf(row.id)!)"
             @same="listingId => same(cardOf(row.id)!, listingId)"
             @other="other(cardOf(row.id)!)"
+            @details="detailId = row.id"
           />
         </template>
       </StageRows>
@@ -328,9 +340,19 @@
           @undo="undo(draft)"
           @same="listingId => same(draft, listingId)"
           @other="other(draft)"
+          @details="detailId = draft.id"
         />
       </div>
     </QueryState>
+    <DraftDetailPanel
+      v-if="detail"
+      :draft="detail"
+      :busy="busy === detail.id"
+      :error="errors[detail.id] ?? null"
+      :agreement="agreement"
+      @close="detailId = null"
+      @accept="acceptFromDetail(detail)"
+    />
 
     <UiCard
       v-if="latest"

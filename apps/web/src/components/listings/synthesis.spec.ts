@@ -414,3 +414,18 @@ describe('ListingSynthesis (lot 19)', () => {
     expect(wrapper.find('[data-testid="live-badge"]').exists()).toBe(false)
   })
 })
+
+describe('ListingSynthesis (lot 32) : les photos du portail', () => {
+  it('montre la galerie quand la fiche a des photos, rien sinon', () => {
+    const without = mountSynthesis()
+    expect(without.find('[data-testid="portal-photos"]').exists()).toBe(false)
+
+    const item = example()
+    item.listing.portalPhotos = ['https://img.example.test/annonce/1.jpg']
+    const withPhotos = mountSynthesis({ item })
+    expect(
+      withPhotos.get('[data-testid="portal-photo-main"]').attributes('src')
+    ).toBe('https://img.example.test/annonce/1.jpg')
+    expect(withPhotos.text()).toContain('Photos de l’annonce')
+  })
+})

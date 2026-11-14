@@ -1553,6 +1553,28 @@ outils MCP (49).
 Limites : la ressemblance entre brouillons ne mesure pas de distance ; la fusion de deux brouillons
 n'existe qu'au connecteur (dans l'application, on écarte l'un des deux).
 
+## Lot 32 : consulter une annonce sans retourner sur le portail
+
+Statut : livré le 15 novembre 2026 (code, tests, documentation ; ADR 0047). Une migration
+additive (`listings.portal_photos`), aucune variable, aucun outil MCP nouveau.
+
+- **Pourquoi** : pour voir les photos, juger une annonce « À valider » ou retrouver les charges et
+  la taxe foncière, il fallait rouvrir le portail.
+- **Photos du portail** : Claude relève les liens des photos de l'annonce (trente au plus) ;
+  l'application les affiche depuis le portail dans la Synthèse de la fiche et dans le détail d'un
+  brouillon, sans jamais les télécharger. Une photo retirée par le portail disparaît.
+- **Un brouillon se lit comme une fiche** : la première photo en tête de carte, et « Voir tout le
+  détail » : photos, les quatre chiffres, l'adéquation, les faits par thème (« non indiqué » pour
+  ce qui manque), la description entière, « Ajouter à la liste ».
+- **Claude relève tout** : à l'exploration, il ouvre la page de chaque annonce gardée par le tri ;
+  partout, une seule liste de consignes (charges annuelles, taxe foncière avec l'extrait lu,
+  honoraires, chauffage, lots, photos…) est donnée au connecteur à l'initialisation, et chaque
+  réponse dit ce qui n'a pas été relevé.
+
+Limites : les photos dépendent du portail (une annonce retirée les perd) ; le détail d'un
+brouillon n'a pas les données de quartier (calculées à la création de la fiche) ; une
+exploration est plus longue (une page ouverte par annonce gardée).
+
 ## Loyer visé estimé d'après l'observatoire des loyers
 
 Statut : livré le 13 novembre 2026 (code, tests, documentation ; ADR 0046). Aucune migration,

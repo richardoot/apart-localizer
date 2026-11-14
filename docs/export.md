@@ -139,6 +139,10 @@ récente à la plus ancienne : annonce ou brouillon visé, auteur, choix, raison
 départ, résolution, réponses de chaque membre, dates ; une liste vide dans un export antérieur).
 Une proposition ne porte aucune note d'avis. Le CSV gagne une seule colonne, en fin de ligne,
 « Décision en attente ».
+Le lot 32 garde aussi la version 1 (ajout seulement) : `listing.portalPhotos`, les liens https
+des photos de l'annonce sur le portail (ADR 0047 ; une liste vide par défaut et dans un export
+antérieur). Ce sont des liens vers le portail, pas des images : le fichier n'en contient aucune.
+Le CSV ne change pas.
 
 ```text
 {
