@@ -121,7 +121,7 @@ critères et leur prédicat unique, arrêts TBM, ventes DVF, zonage de l'encadre
 quartiers, contours d'une commune, zone `location_area` de l'annonce, lieux-dits, IRIS). Résultats
 validés par Zod. Les mesures de l'adéquation (`criteriaFitMeasures`) tiennent en une seule requête
 pour la liste, l'aperçu, les alertes et le rattrapage ; `criteriaFitMeasuresForPoints` rend les
-mêmes pour des annonces pas enregistrées, `criteriaZones` les zones d'un critère élargi de sa marge.
+mêmes pour des annonces pas enregistrées, `criteriaZones` les zones d'un critère élargi de sa marge. Les distances au tram ne sont calculées que si une règle filtre dessus (`needsTram`, ADR 0049).
 La décision est dans `domain`. Doublons : `listingZoneGaps` mesure l'écart entre les lieux (contour
 retenu, sinon point). Pour la tendance des prix, le module rend les prix au m² par année
 (`dvfPricesByYearWithinRadius`) : les médianes sont dans `domain`.
@@ -430,6 +430,7 @@ MCP et consentement OAuth : 0017.
 - Loyer visé estimé d'après l'observatoire des loyers, quand personne ne l'a donné : 0046
 - Lot 32, photos du portail, brouillons lus comme une fiche, lecture complète par Claude : 0047
 - Coût CPU sur Vercel (même origine `/api`, portier des requêtes, paquets au premier usage) : 0048
+- Mesures de l'adéquation (tram par l'index, seulement avec un filtre tram) : 0049
 
 Identifiants de code en anglais ; textes d'interface, messages d'erreur métier et descriptions
 Zod en français.

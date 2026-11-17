@@ -321,14 +321,16 @@ export class GeoService {
    * l'espace et ses critères actifs (ou ceux de `criteriaIds`, archivés
    * compris) : distance du repère au périmètre, relation du contour de
    * l'annonce (quartier retenu ou commune) au périmètre, distances au tram
-   * depuis le repère et depuis le contour. La décision (niveau, raisons) est
-   * dans `domain` (`criteriaFit`) ; ce module ne fait que mesurer.
+   * depuis le repère et depuis le contour (`tram: false` : nulles, sans les
+   * calculer). La décision (niveau, raisons) est dans `domain`
+   * (`criteriaFit`) ; ce module ne fait que mesurer.
    */
   async criteriaFitMeasures(
     workspaceId: string,
     options: {
       criteriaIds?: readonly string[]
       listingIds?: readonly string[]
+      tram?: boolean
     } = {},
     tx?: Pick<Prisma.TransactionClient, '$queryRaw'>
   ): Promise<CriteriaFitMeasureRow[]> {
@@ -353,7 +355,7 @@ export class GeoService {
         FROM "app"."listings" l
         WHERE l."workspace_id" = ${workspaceId} ${listings}
       ),
-      ${TRAM_DISTANCES}
+      ${tramDistances(options.tram ?? true)}
       SELECT ${CRITERIA_FIT_MEASURES}
       FROM l JOIN lt ON lt."id" = l."id" CROSS JOIN c`
     return CriteriaFitMeasureRows.parse(rows)
@@ -366,7 +368,8 @@ export class GeoService {
    */
   async criteriaFitMeasuresDraft(
     workspaceId: string,
-    draft: CriteriaGeoDraft
+    draft: CriteriaGeoDraft,
+    options: { tram?: boolean } = {}
   ): Promise<CriteriaFitMeasureRow[]> {
     const polygon = draft.polygon ? JSON.stringify(draft.polygon) : null
     const rows = await this.prisma.$queryRaw`
@@ -384,7 +387,7 @@ export class GeoService {
         FROM "app"."listings" l
         WHERE l."workspace_id" = ${workspaceId}
       ),
-      ${TRAM_DISTANCES}
+      ${tramDistances(options.tram ?? true)}
       SELECT ${CRITERIA_FIT_MEASURES}
       FROM l JOIN lt ON lt."id" = l."id" CROSS JOIN c`
     return CriteriaFitMeasureRows.parse(rows)
@@ -400,7 +403,8 @@ export class GeoService {
   async criteriaFitMeasuresForPoints(
     workspaceId: string,
     criteriaIds: readonly string[],
-    points: readonly CandidateGeo[]
+    points: readonly CandidateGeo[],
+    options: { tram?: boolean } = {}
   ): Promise<CriteriaFitMeasureRow[]> {
     if (criteriaIds.length === 0 || points.length === 0) return []
     const rows = points.map(p => {
@@ -419,7 +423,7 @@ export class GeoService {
         WHERE sc."workspace_id" = ${workspaceId} AND sc."id" IN (${Prisma.join([...criteriaIds])})
       ),
       l AS (${Prisma.join(rows, ' UNION ALL ')}),
-      ${TRAM_DISTANCES}
+      ${tramDistances(options.tram ?? true)}
       SELECT ${CRITERIA_FIT_MEASURES}
       FROM l JOIN lt ON lt."id" = l."id" CROSS JOIN c`
     return CriteriaFitMeasureRows.parse(result)
@@ -1565,19 +1569,50 @@ export interface CriteriaGeoDraft {
 }
 
 /**
+ * Arrêts candidats au plus proche : les premiers par l'index GiST (distance
+ * sur la sphère), dont on garde la plus courte distance sur l'ellipsoïde.
+ * Les deux distances diffèrent de moins de 0,5 % : dix candidats suffisent
+ * largement à retrouver l'arrêt le plus proche (ADR 0049).
+ */
+const TRAM_CANDIDATES = 10
+
+/** La distance de `shape` à l'arrêt de tram le plus proche, par l'index. */
+function nearestTram(shape: Prisma.Sql): Prisma.Sql {
+  return Prisma.sql`(
+    SELECT MIN(ST_Distance(n."geom", ${shape}))
+    FROM (
+      SELECT t."geom" FROM "app"."transit_stops" t
+      WHERE t."mode" = 'tram' AND t."geom" IS NOT NULL AND ${shape} IS NOT NULL
+      ORDER BY t."geom" <-> ${shape}
+      LIMIT ${TRAM_CANDIDATES}
+    ) n
+  )`
+}
+
+/**
  * Les distances d'une annonce `l` à l'arrêt de tram le plus proche, depuis
  * son repère et depuis son contour (0 si un arrêt est dans le contour) ;
- * null sans repère, sans contour ou sans arrêt importé. Une fois par
- * annonce, quel que soit le nombre de critères.
+ * null sans repère, sans contour ou sans arrêt importé. Calculées une fois
+ * par annonce (`MATERIALIZED` : sinon Postgres les recalcule pour chaque
+ * critère), et seulement quand une règle filtre sur le tram (`needed`) :
+ * sans filtre, le domaine ne les lit pas et les colonnes restent nulles.
  */
-const TRAM_DISTANCES = Prisma.sql`lt AS (
-  SELECT l."id",
-         MIN(ST_Distance(t."geom", l."geom")) AS "tram_point_distance",
-         MIN(ST_Distance(t."geom", l."location_area")) AS "tram_area_distance"
-  FROM l
-  LEFT JOIN "app"."transit_stops" t ON t."mode" = 'tram' AND t."geom" IS NOT NULL
-  GROUP BY l."id"
-)`
+function tramDistances(needed: boolean): Prisma.Sql {
+  if (!needed) {
+    return Prisma.sql`lt AS (
+      SELECT l."id",
+             NULL::double precision AS "tram_point_distance",
+             NULL::double precision AS "tram_area_distance"
+      FROM l
+    )`
+  }
+  return Prisma.sql`lt AS MATERIALIZED (
+    SELECT l."id",
+           ${nearestTram(Prisma.sql`l."geom"`)} AS "tram_point_distance",
+           ${nearestTram(Prisma.sql`l."location_area"`)} AS "tram_area_distance"
+    FROM l
+  )`
+}
 
 /** Le centre d'un critère point et rayon. */
 const CENTER = Prisma.sql`ST_SetSRID(ST_MakePoint(c."center_longitude", c."center_latitude"), 4326)::geography`

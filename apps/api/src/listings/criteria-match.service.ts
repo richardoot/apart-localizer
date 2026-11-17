@@ -113,6 +113,16 @@ export function measuresOf(row: CriteriaFitMeasureRow): CriteriaFitMeasures {
   }
 }
 
+/**
+ * Si une règle filtre sur la distance au tram : sinon le domaine ne lit pas
+ * ces distances, et la base ne les calcule pas (ADR 0049).
+ */
+export function needsTram(
+  rules: readonly { filters: { maxTramDistanceMeters: number | null } }[]
+): boolean {
+  return rules.some(r => r.filters.maxTramDistanceMeters !== null)
+}
+
 const NO_MEASURE: CriteriaFitMeasures = {
   hasPoint: false,
   precision: null,
@@ -248,18 +258,20 @@ export class CriteriaMatchService {
     if (rows.length === 0) return []
     const base =
       options.base ?? (await this.workspaceAssumptions(workspaceId, client))
-    const needsGeo = options.rules.some(
-      r => r.perimeterType !== null || r.filters.maxTramDistanceMeters !== null
-    )
+    const tram = needsTram(options.rules)
+    const needsGeo = tram || options.rules.some(r => r.perimeterType !== null)
     const measures = new Map<string, CriteriaFitMeasures>()
     if (needsGeo) {
       const found = options.draft
-        ? await this.geo.criteriaFitMeasuresDraft(workspaceId, options.draft)
+        ? await this.geo.criteriaFitMeasuresDraft(workspaceId, options.draft, {
+            tram,
+          })
         : await this.geo.criteriaFitMeasures(
             workspaceId,
             {
               criteriaIds: options.rules.map(r => r.id),
               ...(options.listingIds ? { listingIds: options.listingIds } : {}),
+              tram,
             },
             client
           )

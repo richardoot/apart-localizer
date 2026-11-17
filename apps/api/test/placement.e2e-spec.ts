@@ -647,4 +647,92 @@ describe('Placement des annonces (e2e)', () => {
       area_share: null,
     })
   })
+
+  it('ADR 0049 : distances au tram par l’index, égales au calcul sur tous les arrêts, nulles sans filtre tram', async () => {
+    await create({ commune: 'Bordeaux', district: 'Secteur fictif Nord' })
+    const workspace = await ctx.prisma.workspace.findFirstOrThrow()
+    // Un point dans le contour d'une annonce placée au quartier.
+    const [inside] = await ctx.prisma.$queryRaw<
+      { longitude: number; latitude: number }[]
+    >`
+      SELECT ST_X(p) AS "longitude", ST_Y(p) AS "latitude"
+      FROM (SELECT ST_PointOnSurface(l."location_area"::geometry) AS p
+            FROM "app"."listings" l
+            WHERE l."workspace_id" = ${workspace.id} AND l."location_area" IS NOT NULL
+            LIMIT 1) s`
+    expect(inside).toBeDefined()
+    // Quinze arrêts de tram en ligne, plus nombreux que les dix candidats, un
+    // dans ce contour, et un arrêt de bus plus proche, jamais compté.
+    await geo.upsertTransitStops('TBM', [
+      ...Array.from({ length: 15 }, (_, i) => ({
+        externalId: `T${i}`,
+        mode: 'tram' as const,
+        name: `Tram fictif ${i}`,
+        lines: ['A'],
+        longitude: -0.62 + i * 0.002,
+        latitude: 44.83 + (i % 3) * 0.001,
+      })),
+      {
+        externalId: 'T-IN',
+        mode: 'tram' as const,
+        name: 'Tram fictif du contour',
+        lines: ['B'],
+        longitude: inside?.longitude ?? 0,
+        latitude: inside?.latitude ?? 0,
+      },
+      {
+        externalId: 'B1',
+        mode: 'bus' as const,
+        name: 'Bus fictif',
+        lines: ['Lianes 1'],
+        longitude: -0.595,
+        latitude: 44.8425,
+      },
+    ])
+    const exhaustive = await ctx.prisma.$queryRaw<
+      { id: string; point: number | null; area: number | null }[]
+    >`
+      SELECT l."id",
+             MIN(ST_Distance(t."geom", l."geom")) AS "point",
+             MIN(ST_Distance(t."geom", l."location_area")) AS "area"
+      FROM "app"."listings" l
+      JOIN "app"."transit_stops" t ON t."mode" = 'tram'
+      WHERE l."workspace_id" = ${workspace.id}
+      GROUP BY l."id"`
+    const draft = {
+      perimeterType: 'polygon' as const,
+      center: null,
+      polygon: square(-0.61, 44.835, 0.03),
+    }
+    const rows = await geo.criteriaFitMeasuresDraft(workspace.id, draft)
+    expect(rows.length).toBe(exhaustive.length)
+    expect(rows.some(r => r.has_area)).toBe(true)
+    for (const row of rows) {
+      const expected = exhaustive.find(e => e.id === row.listing_id)
+      expect(row.tram_point_distance).toBeCloseTo(expected?.point ?? NaN, 6)
+      if (row.has_area) {
+        expect(row.tram_area_distance).toBeCloseTo(expected?.area ?? NaN, 6)
+      } else {
+        expect(row.tram_area_distance).toBeNull()
+      }
+    }
+    // L'arrêt dans le contour : le contour est à 0 m du tram.
+    expect(
+      rows.filter(r => r.has_area).map(r => r.tram_area_distance)
+    ).toContain(0)
+
+    // Sans filtre tram : rien n'est calculé, le reste des mesures est le même.
+    const without = await geo.criteriaFitMeasuresDraft(workspace.id, draft, {
+      tram: false,
+    })
+    const byId = (a: { listing_id: string }, b: { listing_id: string }) =>
+      a.listing_id.localeCompare(b.listing_id)
+    expect([...without].sort(byId)).toEqual(
+      [...rows].sort(byId).map(r => ({
+        ...r,
+        tram_point_distance: null,
+        tram_area_distance: null,
+      }))
+    )
+  })
 })

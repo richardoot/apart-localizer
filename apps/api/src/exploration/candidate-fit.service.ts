@@ -15,6 +15,7 @@ import type { CandidateGeo, ListingAreaRef } from '../geo/geo.service'
 import {
   CriteriaMatchService,
   measuresOf,
+  needsTram,
 } from '../listings/criteria-match.service'
 import type { FitRule } from '../listings/criteria-match.service'
 import { evaluateListing } from '../listings/evaluate'
@@ -67,9 +68,8 @@ export class CandidateFitService {
     const { rules, base } = context ?? (await this.context(workspaceId))
     const result = new Map<string, ListingCriteriaFit>()
     if (items.length === 0) return result
-    const needsGeo = rules.some(
-      r => r.perimeterType !== null || r.filters.maxTramDistanceMeters !== null
-    )
+    const tram = needsTram(rules)
+    const needsGeo = tram || rules.some(r => r.perimeterType !== null)
     const measures = new Map<string, CriteriaFitMeasures>()
     if (needsGeo) {
       const points: CandidateGeo[] = items.map(item => ({
@@ -81,7 +81,8 @@ export class CandidateFitService {
       const rows = await this.geo.criteriaFitMeasuresForPoints(
         workspaceId,
         rules.map(r => r.id),
-        points
+        points,
+        { tram }
       )
       for (const row of rows) {
         measures.set(`${row.listing_id}:${row.criteria_id}`, measuresOf(row))
