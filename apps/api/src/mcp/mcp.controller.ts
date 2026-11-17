@@ -10,8 +10,7 @@ import {
 import { ApiExcludeController } from '@nestjs/swagger'
 import type { Request, Response } from 'express'
 import { connectorReadingInstructions } from '@apart/domain'
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
+import { mcpSdk } from './mcp-sdk'
 import { DuplicatesService } from '../listings/duplicates.service'
 import { ExtractionService } from '../listings/extraction.service'
 import { ListingsService } from '../listings/listings.service'
@@ -114,6 +113,7 @@ export class McpController {
     res: Response,
     body?: unknown
   ): Promise<void> {
+    const { McpServer, StreamableHTTPServerTransport } = mcpSdk()
     const server = new McpServer(MCP_SERVER_INFO, {
       // Lot 32 (ADR 0047) : ce que Claude relève sur une page d'annonce.
       instructions: connectorReadingInstructions(),

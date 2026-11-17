@@ -1,5 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk'
+import type Anthropic from '@anthropic-ai/sdk'
 import type { AiConfig } from './ai.config'
+import { anthropicSdk } from './anthropic-sdk'
+import type { AnthropicSdk } from './anthropic-sdk'
 
 /**
  * Le client Anthropic, ou `null` quand la clé n'est pas configurée. Déclaré
@@ -14,7 +16,21 @@ export interface AnthropicLike {
   messages: Pick<Anthropic['messages'], 'parse'>
 }
 
-export function createAnthropicClient(config: AiConfig): AnthropicLike | null {
-  if (!config.apiKey) return null
-  return new Anthropic({ apiKey: config.apiKey, maxRetries: 2 })
+/**
+ * Le client réel n'est construit (et le SDK chargé) qu'au premier appel
+ * (ADR 0048) : un démarrage à froid qui ne sert pas d'extraction ne le paie
+ * pas.
+ */
+export function createAnthropicClient(
+  config: AiConfig,
+  load: () => Pick<AnthropicSdk, 'Anthropic'> = anthropicSdk
+): AnthropicLike | null {
+  const apiKey = config.apiKey
+  if (!apiKey) return null
+  let client: Anthropic | undefined
+  const real = (): Anthropic =>
+    (client ??= new (load().Anthropic)({ apiKey, maxRetries: 2 }))
+  const parse = ((...args: Parameters<Anthropic['messages']['parse']>) =>
+    real().messages.parse(...args)) as Anthropic['messages']['parse']
+  return { messages: { parse } }
 }

@@ -20,6 +20,9 @@ import { corsOrigins } from './config/env'
  */
 const JSON_BODY_LIMIT = '25mb'
 
+/** Durée de validité d'une réponse au pré-vol CORS (`Access-Control-Max-Age`). */
+const CORS_PREFLIGHT_MAX_AGE_SECONDS = 7200
+
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     // JSON lines in production so Vercel indexes them, readable ones at a
@@ -51,9 +54,14 @@ async function bootstrap(): Promise<void> {
   // The Zod validation pipe is registered as APP_PIPE in AppModule.
   app.useGlobalFilters(new AllExceptionsFilter())
 
+  // Le web passe par la réécriture /api de son propre domaine (ADR 0048) :
+  // plus de pré-vol. Pour ce qui appelle encore l'API d'une autre origine,
+  // le navigateur garde la réponse au pré-vol (Chrome deux heures, Safari
+  // dix minutes) au lieu de la redemander avant chaque requête.
   app.enableCors({
     origin: corsOrigins(process.env.FRONTEND_URL ?? 'http://localhost:5173'),
     credentials: true,
+    maxAge: CORS_PREFLIGHT_MAX_AGE_SECONDS,
   })
 
   // OpenAPI from the very Zod schemas the DTOs are built on, outside

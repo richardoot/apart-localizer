@@ -5,15 +5,18 @@ import {
 } from '@nestjs/common'
 import { createClient } from '@supabase/supabase-js'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
+import { TokenCache } from './token-cache'
 
 /**
  * The one call that leaves the machine to validate a token: Supabase Auth
  * answers who the bearer is. Built with the service role key so that any
- * user's token can be checked; that key never reaches a browser.
+ * user's token can be checked; that key never reaches a browser. A token
+ * Supabase accepted is kept a minute per instance (token-cache.ts, ADR 0048).
  */
 @Injectable()
 export class SupabaseService {
   private readonly supabase: ReturnType<typeof createClient>
+  private readonly validated = new TokenCache<SupabaseUser>()
 
   constructor() {
     const supabaseUrl = process.env.SUPABASE_URL
@@ -34,6 +37,9 @@ export class SupabaseService {
   }
 
   async getUser(token: string): Promise<SupabaseUser> {
+    const known = this.validated.get(token)
+    if (known) return known
+
     const {
       data: { user },
       error,
@@ -43,6 +49,7 @@ export class SupabaseService {
       throw new UnauthorizedException('Jeton invalide ou expiré')
     }
 
+    this.validated.set(token, user)
     return user
   }
 }

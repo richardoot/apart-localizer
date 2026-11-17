@@ -162,6 +162,8 @@ Supabase>` ; la file d'un membre n'est jamais rejouée sous le compte d'un autre
   jamais le corps, les en-têtes, la chaîne de requête, une adresse e-mail ou un jeton. Les
   chemins portent des identifiants techniques (UUID), pas de donnée personnelle.
 - Les avertissements des envois (push, e-mail) ne citent que le code d'erreur.
+- Un jeton accepté par Supabase est gardé en mémoire de l'instance au plus une minute, sous son
+  empreinte SHA-256, jamais en clair ni écrit nulle part (`auth/token-cache.ts`, ADR 0048).
 - Sentry (facultatif) ne reçoit ni corps, ni chaîne de requête, ni cookies (docs/deploiement.md
   § 6).
 - Le journal d'activité de l'espace (`activity_logs`) garde qui a changé quoi, quand et par

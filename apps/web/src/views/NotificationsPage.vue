@@ -20,6 +20,7 @@
   import { useWorkspace } from '@/composables/useWorkspace'
   import { useAction } from '@/composables/useAction'
   import { formatRelativeDays, plural } from '@/lib/format'
+  import { API_PUBLIC_URL } from '@/lib/api'
   import QueryState from '@/components/ui/QueryState.vue'
   import UiAlert from '@/components/ui/UiAlert.vue'
   import UiButton from '@/components/ui/UiButton.vue'
@@ -39,11 +40,11 @@
   const iosBrowser = installState(readInstallEnv()) === 'ios-browser'
   const channels = NotificationChannelSchema.options
 
-  const apiUrl = (
-    import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
-  ).replace(/\/$/, '')
+  // Le service d'alertes joint l'API directement, pas par la réécriture /api.
   const inboundUrl = computed(() =>
-    settings.data.value ? `${apiUrl}${settings.data.value.inbound.path}` : ''
+    settings.data.value
+      ? `${API_PUBLIC_URL}${settings.data.value.inbound.path}`
+      : ''
   )
 
   /**

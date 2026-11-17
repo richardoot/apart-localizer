@@ -86,5 +86,13 @@ export default defineConfig({
   server: {
     port,
     strictPort: true,
+    // ADR 0048 : la réécriture de vercel.json, en local (VITE_API_PROXY_PATH=/api).
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_URL ?? 'http://localhost:3000',
+        changeOrigin: true,
+        rewrite: path => path.replace(/^\/api/, ''),
+      },
+    },
   },
 })

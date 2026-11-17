@@ -8,6 +8,7 @@ import type {
 } from '@apart/contracts'
 import { api } from '@/lib/api'
 import { workspaceKey } from '@/composables/useWorkspace'
+import { QUERY_STALE_MS } from '@/lib/query'
 
 export const decisionKeys = {
   all: ['decisions'] as const,
@@ -24,7 +25,9 @@ export function useWorkflowOverview(enabled: MaybeRef<boolean> = true) {
   return useQuery({
     queryKey: decisionKeys.overview,
     queryFn: api.decisions.overview,
-    staleTime: 15_000,
+    staleTime: QUERY_STALE_MS,
+    // ADR 0048 : ce qu'un autre membre a proposé ou décidé, relu au retour.
+    refetchOnWindowFocus: true,
     enabled: computed(() => unref(enabled)),
   })
 }

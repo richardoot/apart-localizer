@@ -8,7 +8,13 @@ vi.mock('@sentry/vue', () => ({
 }))
 
 import * as Sentry from '@sentry/vue'
-import { apiOrigin, sampleRate, sentryOptions, setSentryUser } from './sentry'
+import {
+  apiOrigin,
+  sampleRate,
+  sentryOptions,
+  setSentryUser,
+  traceTargets,
+} from './sentry'
 
 describe('sentryOptions', () => {
   it('reste inerte sans DSN', () => {
@@ -29,6 +35,22 @@ describe('sentryOptions', () => {
     expect(options?.tracePropagationTargets).toEqual([
       'https://api.example.invalid',
     ])
+  })
+
+  it('trace aussi vers la réécriture /api de même origine (ADR 0048)', () => {
+    const targets = traceTargets({
+      VITE_API_URL: 'https://api.example.invalid',
+      VITE_API_PROXY_PATH: '/api',
+    })
+    expect(targets[0]).toBe('https://api.example.invalid')
+    const proxy = targets[1] as RegExp
+    expect(proxy.test('/api/listings')).toBe(true)
+    expect(proxy.test('/api')).toBe(true)
+    expect(proxy.test('/apiculture')).toBe(false)
+    expect(proxy.test('https://autre.invalid/api/x')).toBe(false)
+    expect(
+      traceTargets({ VITE_API_URL: 'https://api.example.invalid' })
+    ).toEqual(['https://api.example.invalid'])
   })
 
   it('taux et origine de repli', () => {

@@ -11,4 +11,10 @@ describe('main.ts', () => {
     const source = readFileSync(join(__dirname, 'main.ts'), 'utf8')
     expect(source).not.toMatch(/^\s*export\s/m)
   })
+
+  it('fait garder la réponse au pré-vol CORS (ADR 0048)', () => {
+    const source = readFileSync(join(__dirname, 'main.ts'), 'utf8')
+    expect(source).toMatch(/maxAge: CORS_PREFLIGHT_MAX_AGE_SECONDS/)
+    expect(source).toMatch(/CORS_PREFLIGHT_MAX_AGE_SECONDS = 7200/)
+  })
 })

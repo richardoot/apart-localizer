@@ -51,10 +51,42 @@ export function logLevels(env: LoggingEnv): LogLevel[] {
   return LEVELS.slice(LEVELS.indexOf(wanted))
 }
 
+/**
+ * The contexts in which Nest narrates its own start: one line per module
+ * (InstanceLoader), per controller (RoutesResolver) and per route
+ * (RouterExplorer), some 230 lines on every cold start. NestFactory and
+ * NestApplication keep their two lines, which mark a cold start.
+ */
+export const BOOT_CONTEXTS: ReadonlySet<string> = new Set([
+  'InstanceLoader',
+  'RoutesResolver',
+  'RouterExplorer',
+])
+
+/**
+ * Where the lines are stored and paid for (JSON), the start narration is
+ * dropped unless LOG_LEVEL asks for debug or verbose (ADR 0048).
+ */
+export function quietBoot(env: LoggingEnv): boolean {
+  return logFormat(env) === 'json' && logLevels(env).includes('debug') === false
+}
+
+/** A ConsoleLogger that leaves out Nest's start narration. */
+export class QuietBootLogger extends ConsoleLogger {
+  override log(message: unknown, ...optionalParams: unknown[]): void {
+    const context = optionalParams[optionalParams.length - 1]
+    if (typeof context === 'string' && BOOT_CONTEXTS.has(context)) return
+    super.log(message, ...optionalParams)
+  }
+}
+
 /** The logger handed to `NestFactory.create`, built from that policy. */
 export function createLogger(env: LoggingEnv): LoggerService {
-  return new ConsoleLogger({
+  const options = {
     json: logFormat(env) === 'json',
     logLevels: logLevels(env),
-  })
+  }
+  return quietBoot(env)
+    ? new QuietBootLogger(options)
+    : new ConsoleLogger(options)
 }

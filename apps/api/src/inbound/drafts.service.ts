@@ -110,6 +110,13 @@ interface DraftReading {
   decision: DecisionProposal | null
 }
 
+/** ADR 0048 : un brouillon en attente tel que l'aperçu des étapes le lit. */
+export interface PendingDraftSummary {
+  id: string
+  fit: ListingCriteriaFit | null
+  decision: DecisionProposal | null
+}
+
 /** Lot 21 : une écriture née d'une décision à plusieurs ; lot 31 : son canal. */
 export interface DraftWriteOptions {
   decision?: DecisionJournal
@@ -323,6 +330,42 @@ export class DraftsService {
   }
 
   /**
+   * ADR 0048 : ce que l'aperçu des étapes (`GET /decisions/overview`) lit
+   * des brouillons en attente, l'adéquation et la proposition en cours,
+   * sans la fiche entière ni les chiffres. Mêmes brouillons et même
+   * adéquation que `list(member, 'pending')`.
+   */
+  async pendingSummaries(member: Member): Promise<PendingDraftSummary[]> {
+    const rows = await this.prisma.listingDraft.findMany({
+      where: {
+        workspaceId: member.workspaceId,
+        status: 'pending',
+        mergedIntoDraftId: null,
+      },
+      select: {
+        id: true,
+        input: true,
+        locationPlacement: true,
+        decisionProposals: draftInclude.decisionProposals,
+      },
+      orderBy: { receivedAt: 'desc' },
+      take: 100,
+    })
+    const { items, fits, decisions } = await this.locateAndFit(member, rows)
+    const proposals = new Map(
+      rows.map(row => [row.id, row.decisionProposals[0] ?? null])
+    )
+    return items.map(item => {
+      const proposal = proposals.get(item.key) ?? null
+      return {
+        id: item.key,
+        fit: fits.get(item.key) ?? null,
+        decision: proposal ? decisionViewOf(proposal, member, decisions) : null,
+      }
+    })
+  }
+
+  /**
    * Ce qu'un brouillon en attente montre à la lecture, sans réseau :
    * l'adéquation, les chiffres avec les hypothèses de l'espace (lot 21), le
    * repère pour la carte et la proposition en cours.
@@ -331,20 +374,10 @@ export class DraftsService {
     member: Member,
     rows: readonly DraftRowWithCheck[]
   ): Promise<Map<string, DraftReading>> {
-    const items = await Promise.all(
-      rows.map(async row => {
-        const located = await this.fit.offlineLocation(
-          draftInput(row),
-          placementOf(row.locationPlacement)
-        )
-        return { key: row.id, listing: located.listing, area: located.area }
-      })
+    const { items, context, decisions, fits } = await this.locateAndFit(
+      member,
+      rows
     )
-    const [context, decisions] = await Promise.all([
-      this.fit.context(member.workspaceId),
-      loadDecisionContext(this.prisma, member.workspaceId),
-    ])
-    const fits = await this.fit.fits(member.workspaceId, items, context)
     const proposals = new Map(
       rows.map(row => [row.id, row.decisionProposals[0] ?? null])
     )
@@ -364,6 +397,28 @@ export class DraftsService {
       })
     }
     return readings
+  }
+
+  /** Le repère hors ligne et l'adéquation de chaque brouillon, en une mesure géo. */
+  private async locateAndFit(
+    member: Member,
+    rows: readonly Pick<DraftRow, 'id' | 'input' | 'locationPlacement'>[]
+  ) {
+    const items = await Promise.all(
+      rows.map(async row => {
+        const located = await this.fit.offlineLocation(
+          draftInput(row),
+          placementOf(row.locationPlacement)
+        )
+        return { key: row.id, listing: located.listing, area: located.area }
+      })
+    )
+    const [context, decisions] = await Promise.all([
+      this.fit.context(member.workspaceId),
+      loadDecisionContext(this.prisma, member.workspaceId),
+    ])
+    const fits = await this.fit.fits(member.workspaceId, items, context)
+    return { items, context, decisions, fits }
   }
 
   /**

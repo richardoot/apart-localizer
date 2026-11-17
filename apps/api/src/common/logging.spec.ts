@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ConsoleLogger } from '@nestjs/common'
-import { createLogger, logFormat, logLevels } from './logging'
+import {
+  BOOT_CONTEXTS,
+  QuietBootLogger,
+  createLogger,
+  logFormat,
+  logLevels,
+  quietBoot,
+} from './logging'
 
 describe('logFormat', () => {
   it('is JSON in production, where a machine reads the lines', () => {
@@ -62,5 +69,34 @@ describe('createLogger', () => {
     expect(createLogger({ NODE_ENV: 'production' })).toBeInstanceOf(
       ConsoleLogger
     )
+  })
+})
+
+describe('quiet boot (ADR 0048)', () => {
+  it('drops the start narration where lines are stored, unless debug is asked', () => {
+    expect(quietBoot({ NODE_ENV: 'production' })).toBe(true)
+    expect(quietBoot({ NODE_ENV: 'production', LOG_LEVEL: 'debug' })).toBe(
+      false
+    )
+    expect(quietBoot({ NODE_ENV: 'development' })).toBe(false)
+    expect(createLogger({ NODE_ENV: 'production' })).toBeInstanceOf(
+      QuietBootLogger
+    )
+    expect(createLogger({})).not.toBeInstanceOf(QuietBootLogger)
+  })
+
+  it('leaves out module, controller and route lines, keeps the rest', () => {
+    const logger = new QuietBootLogger({ json: true })
+    const print = vi
+      .spyOn(ConsoleLogger.prototype, 'log')
+      .mockImplementation(() => undefined)
+    for (const context of BOOT_CONTEXTS) {
+      logger.log('Mapped {/listings, GET} route', context)
+    }
+    expect(print).not.toHaveBeenCalled()
+    logger.log('Nest application successfully started', 'NestApplication')
+    logger.log({ method: 'GET', path: '/listings' }, 'HTTP')
+    expect(print).toHaveBeenCalledTimes(2)
+    print.mockRestore()
   })
 })

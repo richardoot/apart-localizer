@@ -154,7 +154,8 @@ export class DecisionsService {
             },
           },
         }),
-        this.drafts.list(member, 'pending'),
+        // ADR 0048 : l'adéquation et la proposition, sans la fiche entière.
+        this.drafts.pendingSummaries(member),
         this.prisma.decisionProposal.findMany({
           where: {
             workspaceId: member.workspaceId,

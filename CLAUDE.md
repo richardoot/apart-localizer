@@ -166,6 +166,9 @@ projection, scénarios, comparables de loyer, conformité), `search-criteria`, `
 
 Règles :
 
+- Démarrage à froid (ADR 0048) : un paquet lourd qui ne sert qu'à une route ou qu'avec une
+  variable se charge au premier usage (`common/lazy-module.ts` : Sentry sans DSN, SDK Anthropic,
+  SDK MCP).
 - Recalculs : toute écriture sur une annonce passe par `enrichmentNeeds` (`domain`) ; une adresse
   trouvée au numéro ou à la rue replace un point saisi renvoyé tel quel
   (`addressOverridesManualPoint`) ; le web relit par `invalidateListingReads`.
@@ -362,6 +365,9 @@ Repères :
   `DraftDetailPanel.vue`, faits par thème `lib/draft-details.ts`), images chargées depuis le
   portail, sans référent.
 - Service worker : `lib/pwa.ts` (`virtual:pwa-register`, rechargement unique après une mise à jour).
+- Requêtes (ADR 0048) : toutes par `apiFetch`, réécriture `/api` de même origine
+  (`lib/api-base.ts`) et portier `lib/request-gate.ts` ; relectures réglées dans `lib/query.ts`,
+  le retour sur l'onglet ne relit que la cloche et les étapes.
 
 ### `scripts/` : scripts d'exploitation
 
@@ -423,6 +429,7 @@ MCP et consentement OAuth : 0017.
   brouillons absorbés supprimés après sept jours : 0045
 - Loyer visé estimé d'après l'observatoire des loyers, quand personne ne l'a donné : 0046
 - Lot 32, photos du portail, brouillons lus comme une fiche, lecture complète par Claude : 0047
+- Coût CPU sur Vercel (même origine `/api`, portier des requêtes, paquets au premier usage) : 0048
 
 Identifiants de code en anglais ; textes d'interface, messages d'erreur métier et descriptions
 Zod en français.

@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import Anthropic from '@anthropic-ai/sdk'
 import { ExtractionRequestSchema } from '@apart/contracts'
 import {
   SAMPLE_LISTING_TEXT,
@@ -10,6 +9,10 @@ import {
 import type { AnthropicLike } from './ai-client'
 import { aiConfig } from './ai.config'
 import { AiService } from './ai.service'
+import { anthropicSdk } from './anthropic-sdk'
+
+// Les classes d'erreur du SDK tel que l'API le charge (require, ADR 0048).
+const { Anthropic } = anthropicSdk()
 
 const config = aiConfig({
   ANTHROPIC_API_KEY: 'sk-test',

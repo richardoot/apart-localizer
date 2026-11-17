@@ -148,6 +148,8 @@ import type {
   WorkspaceUpdate,
 } from '@apart/contracts'
 import { supabase } from './supabase'
+import { apiPublicUrl, apiRequestBase } from './api-base'
+import { createRequestGate } from './request-gate'
 
 export class ApiError extends Error {
   constructor(
@@ -160,12 +162,21 @@ export class ApiError extends Error {
   }
 }
 
-const baseUrl = (
-  import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
-).replace(/\/$/, '')
+/** Où partent les requêtes : la réécriture `/api` de même origine, sinon l'API (ADR 0048). */
+const baseUrl = apiRequestBase(import.meta.env)
+
+/** L'adresse publique de l'API, pour ce qu'un autre programme joint directement. */
+export const API_PUBLIC_URL = apiPublicUrl(import.meta.env)
 
 /** Lot 23 : l'adresse du connecteur MCP, à coller dans claude.ai (mise en route). */
-export const MCP_URL = `${baseUrl}/mcp`
+export const MCP_URL = `${API_PUBLIC_URL}/mcp`
+
+/**
+ * ADR 0048 : une API froide démarre une instance par requête simultanée.
+ * Le portier fait partir seule la première requête après un silence et
+ * limite les requêtes en cours (`lib/request-gate.ts`).
+ */
+const gate = createRequestGate()
 
 /** The bearer token of the current session, refreshed by Supabase as needed. */
 async function accessToken(): Promise<string | null> {
@@ -191,7 +202,7 @@ export async function apiFetch<T>(
   const request: RequestInit = { ...rest, headers }
   if (json !== undefined) request.body = JSON.stringify(json)
 
-  const response = await fetch(`${baseUrl}${path}`, request)
+  const response = await gate.run(() => fetch(`${baseUrl}${path}`, request))
 
   if (!response.ok) {
     let message = `Erreur ${response.status}`
@@ -233,7 +244,7 @@ export async function apiDownload(path: string): Promise<DownloadedFile> {
   const token = await accessToken()
   const headers = new Headers()
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  const response = await fetch(`${baseUrl}${path}`, { headers })
+  const response = await gate.run(() => fetch(`${baseUrl}${path}`, { headers }))
   if (!response.ok) {
     let message = `Erreur ${response.status}`
     try {

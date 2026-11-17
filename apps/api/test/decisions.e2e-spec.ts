@@ -675,6 +675,41 @@ describe('Lot 21 : décider à plusieurs (e2e)', () => {
   })
 
   describe('sur un brouillon', () => {
+    it('l’aperçu compte les brouillons comme la liste les lit (ADR 0048)', async () => {
+      const proposedId = await draft('[Exemple] T2 Saint-Michel')
+      await draft('[Exemple] T2 Chartrons')
+      const proposed = await decide(
+        richard,
+        { kind: 'draft', id: proposedId },
+        'keep'
+      ).expect(200)
+      const [overview, list] = await Promise.all([
+        api().get('/decisions/overview').set(ctx.auth(richard)).expect(200),
+        api()
+          .get('/listing-drafts?status=pending')
+          .set(ctx.auth(richard))
+          .expect(200),
+      ])
+      const drafts = list.body as Array<{
+        id: string
+        fit: { level: string } | null
+        decision: { id: string } | null
+      }>
+      const stage = overview.body.stages.find(
+        (s: { stage: string }) => s.stage === 'a-valider'
+      )
+      expect(stage.count + stage.outOfCriteria).toBe(drafts.length)
+      expect(stage.toSort).toBe(drafts.filter(d => !d.decision).length)
+      expect(drafts.find(d => d.id === proposedId)?.decision?.id).toBe(
+        proposed.body.proposal.id
+      )
+      expect(
+        overview.body.proposals.some(
+          (p: { id: string }) => p.id === proposed.body.proposal.id
+        )
+      ).toBe(true)
+    })
+
     it('l’annonce naît à l’accord complet seulement', async () => {
       const id = await draft()
       const proposed = await decide(

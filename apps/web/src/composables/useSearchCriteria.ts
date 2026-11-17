@@ -7,6 +7,7 @@ import type {
   SearchCriteriaUpdate,
 } from '@apart/contracts'
 import { api } from '@/lib/api'
+import { STABLE_STALE_MS } from '@/lib/query'
 
 export const criteriaKeys = {
   all: ['search-criteria'] as const,
@@ -23,6 +24,7 @@ export function useSearchCriteriaList(
   return useQuery({
     queryKey: computed(() => criteriaKeys.list(unref(includeArchived))),
     queryFn: () => api.searchCriteria.list(unref(includeArchived)),
+    staleTime: STABLE_STALE_MS,
   })
 }
 

@@ -1,6 +1,5 @@
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common'
-import Anthropic from '@anthropic-ai/sdk'
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
+import type Anthropic from '@anthropic-ai/sdk'
 import { AiListingExtractionSchema, base64Bytes } from '@apart/contracts'
 import type {
   AiListingExtraction,
@@ -8,6 +7,7 @@ import type {
   ExtractionUsage,
 } from '@apart/contracts'
 import { AI_CONFIG, ANTHROPIC_CLIENT } from './ai-client'
+import { anthropicSdk } from './anthropic-sdk'
 import type { AnthropicLike } from './ai-client'
 import type { AiConfig } from './ai.config'
 import {
@@ -109,7 +109,7 @@ export class AiService {
         thinking: { type: 'adaptive' },
         output_config: {
           effort: this.config.effort,
-          format: zodOutputFormat(AiListingExtractionSchema),
+          format: anthropicSdk().zodOutputFormat(AiListingExtractionSchema),
         },
         system: [
           {
@@ -146,6 +146,7 @@ function usageOf(
 
 /** Du plus précis au plus général : le SDK distingue les causes, l'appelant aussi. */
 function translate(error: unknown): Error {
+  const { Anthropic } = anthropicSdk()
   if (error instanceof Anthropic.AuthenticationError) {
     return new AiUnavailableException(
       'clé refusée par Anthropic ; vérifie ANTHROPIC_API_KEY.'

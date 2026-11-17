@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL: string
   readonly VITE_SUPABASE_ANON_KEY: string
   readonly VITE_API_URL: string
+  /** ADR 0048 : `/api` en production, la réécriture de même origine vers l'API. */
+  readonly VITE_API_PROXY_PATH?: string
   /** URL d'un style MapLibre sans clé ; défaut : OpenFreeMap Liberty. */
   readonly VITE_MAP_STYLE_URL?: string
   /** `1` = connexion par e-mail et mot de passe, en local seulement (ADR 0016). */

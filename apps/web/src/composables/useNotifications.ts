@@ -4,6 +4,7 @@ import type { NotificationPreferencesUpdate } from '@apart/contracts'
 import { api } from '@/lib/api'
 import { errorMessage } from '@/lib/errors'
 import { pushSupport, urlBase64ToUint8Array } from '@/lib/push'
+import { NOTIFICATIONS_POLL_MS } from '@/lib/query'
 
 export const notificationKeys = {
   list: (unreadOnly: boolean, limit: number) =>
@@ -11,13 +12,13 @@ export const notificationKeys = {
   settings: ['notifications', 'settings'] as const,
 }
 
-/** La cloche : les notifications du membre, relues chaque minute. */
+/** La cloche : les notifications du membre, relues toutes les cinq minutes et au retour sur l'onglet. */
 export function useNotifications(unreadOnly = false, limit = 20) {
   const client = useQueryClient()
   const query = useQuery({
     queryKey: notificationKeys.list(unreadOnly, limit),
     queryFn: () => api.notifications.list({ unreadOnly, limit }),
-    refetchInterval: 60_000,
+    refetchInterval: NOTIFICATIONS_POLL_MS,
     refetchOnWindowFocus: true,
   })
   const unreadCount = computed(() => query.data.value?.unreadCount ?? 0)

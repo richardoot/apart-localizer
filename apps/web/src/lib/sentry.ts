@@ -8,11 +8,13 @@ import * as Sentry from '@sentry/vue'
 import type { BrowserOptions } from '@sentry/vue'
 import type { App } from 'vue'
 import type { Router } from 'vue-router'
+import { apiProxyPath } from './api-base'
 
 export interface SentryEnv {
   VITE_SENTRY_DSN?: string | undefined
   VITE_SENTRY_TRACES_SAMPLE_RATE?: string | undefined
   VITE_API_URL?: string | undefined
+  VITE_API_PROXY_PATH?: string | undefined
   VITE_VERCEL_ENV?: string | undefined
   VITE_VERCEL_GIT_COMMIT_SHA?: string | undefined
   MODE?: string | undefined
@@ -27,6 +29,19 @@ export function sampleRate(
   if (raw === undefined || raw === '') return fallback
   const value = Number(raw)
   return Number.isFinite(value) && value >= 0 && value <= 1 ? value : fallback
+}
+
+/**
+ * Où les en-têtes de trace peuvent partir : l'API, et la réécriture `/api`
+ * de même origine quand elle est donnée (ADR 0048), rien d'autre.
+ */
+export function traceTargets(env: SentryEnv): Array<string | RegExp> {
+  const proxy = apiProxyPath(env)
+  const escaped = proxy?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return [
+    apiOrigin(env.VITE_API_URL),
+    ...(escaped ? [new RegExp(`^${escaped}(?:/|$)`)] : []),
+  ]
 }
 
 /** L'origine à laquelle les en-têtes de trace peuvent partir : l'API, rien d'autre. */
@@ -47,7 +62,7 @@ export function sentryOptions(env: SentryEnv): SentryInitOptions | undefined {
     environment: env.VITE_VERCEL_ENV ?? env.MODE ?? 'development',
     release: env.VITE_VERCEL_GIT_COMMIT_SHA,
     tracesSampleRate: sampleRate(env.VITE_SENTRY_TRACES_SAMPLE_RATE),
-    tracePropagationTargets: [apiOrigin(env.VITE_API_URL)],
+    tracePropagationTargets: traceTargets(env),
   }
 }
 

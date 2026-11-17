@@ -2,9 +2,9 @@ import { Module } from '@nestjs/common'
 import { APP_GUARD, APP_PIPE } from '@nestjs/core'
 import { ConfigModule } from '@nestjs/config'
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
-import { SentryModule } from '@sentry/nestjs/setup'
 import { ZodValidationPipe } from 'nestjs-zod'
 import { throttleOptions, validateEnv } from './config/env'
+import { sentryModules } from './common/sentry-runtime'
 import { PrismaModule } from './prisma/prisma.module'
 import { ActivityModule } from './activity/activity.module'
 import { GeoModule } from './geo/geo.module'
@@ -30,8 +30,9 @@ import { DecisionsModule } from './decisions/decisions.module'
 
 @Module({
   imports: [
-    // Inerte sans SENTRY_DSN (instrument.ts n'initialise pas le SDK).
-    SentryModule.forRoot(),
+    // Seulement quand instrument.ts a démarré le SDK (un DSN est posé) :
+    // sans lui, le paquet n'est même pas chargé (ADR 0048).
+    ...sentryModules(),
     ConfigModule.forRoot({
       isGlobal: true,
       validate: validateEnv,

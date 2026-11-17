@@ -401,6 +401,9 @@ Après le premier déploiement : `GET https://<api>.vercel.app/health` doit rép
 
 Projet `apart-localizer-frontend`, **Root Directory** `apps/web`, framework Vite, Node 24.x (le `vercel.json` fixe la réécriture
 SPA et les en-têtes de sécurité, dont une CSP qui autorise les tuiles et polices en `https:`).
+Il réécrit aussi `/api/…` vers l'API (ADR 0048) : le web l'appelle sur son propre domaine, sans
+pré-vol CORS, ce qui économise le temps CPU des fonctions. L'adresse de l'API y est écrite
+(`https://apart-localizer-backend.vercel.app`) : à changer avec le projet de l'API.
 Variables :
 
 | Variable                 | Valeur                                                                                                                                                      |
@@ -408,6 +411,7 @@ Variables :
 | `VITE_SUPABASE_URL`      | `https://<ref>.supabase.co`                                                                                                                                 |
 | `VITE_SUPABASE_ANON_KEY` | clé `anon`                                                                                                                                                  |
 | `VITE_API_URL`           | `https://<api>.vercel.app`                                                                                                                                  |
+| `VITE_API_PROXY_PATH`    | `/api` en Production (ADR 0048) : les requêtes passent par la réécriture de `vercel.json` ; vide = elles vont à `VITE_API_URL` (pré-vol à chaque requête)   |
 | `VITE_MAP_STYLE_URL`     | facultatif ; remplace le fond « Plan OSM » (défaut OpenFreeMap `https://tiles.openfreemap.org/styles/liberty`, sans clé) ; les fonds IGN n'en dépendent pas |
 | `VITE_SENTRY_DSN`        | DSN du projet Sentry « web » (vide = inactif)                                                                                                               |
 
