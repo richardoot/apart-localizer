@@ -1,4 +1,4 @@
-# 0049. Mesures de l'adéquation : distances au tram par l'index, et seulement quand un critère les lit
+# 0049. Requêtes lentes sur la petite base : distances au tram par l'index, décomptes des imports en mémoire
 
 Statut : acceptée, 17 novembre 2026. Suite de l'ADR 0048 ; touche à la requête des mesures de
 l'adéquation (ADR 0024), sans changer aucun niveau ni aucune raison.
@@ -40,6 +40,22 @@ Vérifié sur la base de production en lecture seule : les 88 distances (repère
 identiques au calcul sur tous les arrêts. La requête passe de 1,2–1,9 s à 360 ms avec un filtre
 tram, à 80 ms sans (dont 35 ms d'aller-retour depuis le poste qui mesurait).
 
+## Suite : le contexte de la fiche
+
+`GET /listings/:id/context` prenait 1,4 à 1,5 s. Les statistiques de la base de production
+(`pg_stat_statements`, depuis le 3 novembre) montrent qu'aucune requête n'y est lente à elle seule
+quand le cache de la base est chaud (3 ms d'exécution pour la tendance), mais qu'elles
+s'enchaînent, et que deux d'entre elles recomptent à chaque fiche ce qui ne change qu'à un
+import :
+
+4. **Décomptes gardés en mémoire.** `dvfYears` (toutes les ventes DVF parcourues, 140 ms en
+   moyenne) et `neighbourhoodCounts` (38 ms, 450 appels) passent par `common/ttl-memo.ts`, dix
+   minutes (`IMPORT_COUNTS_TTL_MS`). Un import par `GeoService` dans le même processus vide la
+   mémoire ; un import lancé par script se voit au plus tard dix minutes après.
+5. **Comparables et tendance en même temps.** Leurs rayons s'élargissent chacun de son côté
+   (`MarketService`) : les deux suites de requêtes partent ensemble au lieu de l'une après
+   l'autre.
+
 ## Options écartées
 
 - **Garder les distances au tram sur l'annonce** (colonnes recalculées à chaque déplacement du
@@ -53,4 +69,5 @@ tram, à 80 ms sans (dont 35 ms d'aller-retour depuis le poste qui mesurait).
 - Les niveaux et les raisons de l'adéquation ne changent pas : le domaine ne lit les distances au
   tram que pour un critère qui filtre dessus, et elles sont alors les mêmes.
 - Un test e2e (`placement.e2e-spec.ts`) compare les distances à celles du calcul sur tous les
-  arrêts, et vérifie qu'elles sont nulles sans filtre tram.
+  arrêts, et vérifie qu'elles sont nulles sans filtre tram ; un autre (`market-trend.e2e-spec.ts`)
+  que les années DVF sont gardées et qu'un import par l'API les renouvelle.

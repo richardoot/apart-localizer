@@ -430,7 +430,7 @@ MCP et consentement OAuth : 0017.
 - Loyer visé estimé d'après l'observatoire des loyers, quand personne ne l'a donné : 0046
 - Lot 32, photos du portail, brouillons lus comme une fiche, lecture complète par Claude : 0047
 - Coût CPU sur Vercel (même origine `/api`, portier des requêtes, paquets au premier usage) : 0048
-- Mesures de l'adéquation (tram par l'index, seulement avec un filtre tram) : 0049
+- Requêtes lentes (tram par l'index, décomptes des imports en mémoire) : 0049
 
 Identifiants de code en anglais ; textes d'interface, messages d'erreur métier et descriptions
 Zod en français.

@@ -270,4 +270,20 @@ describe('Tendance des prix de vente (e2e)', () => {
     })
     expect(trend.reasons[0]).toContain('Moins de 10 ventes par an à 2000 m')
   })
+
+  it('ADR 0049 : les années DVF sont gardées en mémoire, un import par l’API les renouvelle', async () => {
+    const before = await geo.dvfYears()
+    expect(before.some(y => y.year === 2019)).toBe(false)
+    // Une vente écrite à côté de GeoService (un script, un autre processus) :
+    // pas encore vue, la lecture vient de la mémoire.
+    await ctx.prisma.$executeRaw`
+      INSERT INTO "app"."dvf_sales" ("id", "external_id", "mutation_date", "mutation_nature", "price",
+        "property_type", "commune", "insee_code", "source", "imported_at")
+      VALUES (gen_random_uuid()::text, 'MEMOIRE-1', '2019-06-15', 'Vente', 100000,
+        'Appartement', 'Bordeaux', '33063', 'test', now())`
+    expect(await geo.dvfYears()).toEqual(before)
+    // Un import par GeoService vide la mémoire : les deux ventes sont vues.
+    await geo.upsertDvfSales([sale(2019, 4000)])
+    expect((await geo.dvfYears()).find(y => y.year === 2019)?.count).toBe(2)
+  })
 })

@@ -362,7 +362,9 @@ Les commandes acceptent les options avec ou sans le séparateur `--` de pnpm.
 Après un import, les annonces gardent leur instantané (`open_data_context`) jusqu'à la prochaine
 modification ; `POST /listings/:id/geocode` (bouton « Relancer le géocodage » de la fiche) le
 recalcule. Le bloc « Contexte » de la fiche, `GET /listings/:id/context` et `get_market_context`
-sont toujours calculés à la lecture.
+sont toujours calculés à la lecture. Seuls les décomptes des données importées (années DVF et
+nombre de ventes, contours par nature) sont gardés dix minutes en mémoire par l'API (ADR 0049) :
+un import lancé par script se voit dans le contexte au plus tard dix minutes après.
 
 ## Règles appliquées
 

@@ -98,19 +98,20 @@ export class MarketService {
     const radii = target.radiusMeters
       ? [target.radiusMeters]
       : [...MARKET_RADII]
-    let hits: DvfSaleHit[] = []
-    let radius = radii[0] as number
-    for (const r of radii) {
-      radius = r
-      hits = await this.geo.dvfSalesWithinRadius({
-        point: target.point,
-        radiusMeters: r,
-        from: period.from,
-        to: period.to,
-        surfaceRange,
-      })
-      if (hits.length >= MARKET_MIN_COMPARABLES) break
-    }
+    const approximate = target.approximation
+      ? approximationReason('market', target.approximation)
+      : null
+    // Comparables et tendance ont chacun leurs rayons : lus en même temps.
+    const [{ hits, radius }, trend] = await Promise.all([
+      this.comparables(target.point, radii, period, surfaceRange),
+      this.trend(
+        target.point,
+        target.precision ?? null,
+        years,
+        radii,
+        approximate
+      ),
+    ])
     const stats = marketStats(
       hits.map(h => h.price_per_m2).filter((v): v is number => v !== null)
     )
@@ -131,17 +132,7 @@ export class MarketService {
         `Données DVF disponibles jusqu'en ${last} (publication avec six mois à un an de décalage).`
       )
     }
-    const approximate = target.approximation
-      ? approximationReason('market', target.approximation)
-      : null
     if (approximate) reasons.push(approximate)
-    const trend = await this.trend(
-      target.point,
-      target.precision ?? null,
-      years,
-      radii,
-      approximate
-    )
     const listingPricePerM2 =
       target.price && surface ? target.price / surface : null
     const enough = stats !== null && stats.count >= MARKET_MIN_COMPARABLES
@@ -181,6 +172,29 @@ export class MarketService {
       dataYears,
       trend,
     }
+  }
+
+  /** Les ventes comparables du premier rayon qui en a assez, sinon du dernier. */
+  private async comparables(
+    point: Point,
+    radii: readonly number[],
+    period: { from: string; to: string },
+    surfaceRange: [number, number] | null
+  ): Promise<{ hits: DvfSaleHit[]; radius: number }> {
+    let hits: DvfSaleHit[] = []
+    let radius = radii[0] as number
+    for (const r of radii) {
+      radius = r
+      hits = await this.geo.dvfSalesWithinRadius({
+        point,
+        radiusMeters: r,
+        from: period.from,
+        to: period.to,
+        surfaceRange,
+      })
+      if (hits.length >= MARKET_MIN_COMPARABLES) break
+    }
+    return { hits, radius }
   }
 
   /**

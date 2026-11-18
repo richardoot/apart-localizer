@@ -27,6 +27,14 @@ import type {
 } from '@apart/contracts'
 import { PrismaService } from '../prisma/prisma.service'
 import { Prisma } from '../generated/prisma'
+import { ttlMemo } from '../common/ttl-memo'
+
+/**
+ * Durée pendant laquelle les décomptes des données importées (années DVF,
+ * contours par nature) sont gardés en mémoire : ils ne changent qu'à un
+ * import (ADR 0049).
+ */
+export const IMPORT_COUNTS_TTL_MS = 10 * 60_000
 
 /**
  * Le seul endroit où vit du SQL géographique.
@@ -41,6 +49,13 @@ import { Prisma } from '../generated/prisma'
  */
 @Injectable()
 export class GeoService {
+  private readonly dvfYearsMemo =
+    ttlMemo<{ year: number; count: number; lastDate: string }[]>(
+      IMPORT_COUNTS_TTL_MS
+    )
+  private readonly neighbourhoodCountsMemo =
+    ttlMemo<Record<NeighbourhoodKind, number>>(IMPORT_COUNTS_TTL_MS)
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -492,17 +507,21 @@ export class GeoService {
     options: { batchSize?: number; replaceYears?: readonly number[] } = {}
   ): Promise<number> {
     const years = options.replaceYears ?? []
-    if (years.length === 0)
-      return this.insertDvfSales(this.prisma, sales, options)
-    return this.prisma.$transaction(
-      async tx => {
-        await tx.$executeRaw`
-          DELETE FROM "app"."dvf_sales"
-          WHERE EXTRACT(YEAR FROM "mutation_date")::int IN (${Prisma.join([...years])})`
-        return this.insertDvfSales(tx, sales, options)
-      },
-      { timeout: 120_000, maxWait: 10_000 }
-    )
+    try {
+      if (years.length === 0)
+        return await this.insertDvfSales(this.prisma, sales, options)
+      return await this.prisma.$transaction(
+        async tx => {
+          await tx.$executeRaw`
+            DELETE FROM "app"."dvf_sales"
+            WHERE EXTRACT(YEAR FROM "mutation_date")::int IN (${Prisma.join([...years])})`
+          return this.insertDvfSales(tx, sales, options)
+        },
+        { timeout: 120_000, maxWait: 10_000 }
+      )
+    } finally {
+      this.dvfYearsMemo.clear()
+    }
   }
 
   private async insertDvfSales(
@@ -636,8 +655,16 @@ export class GeoService {
     }))
   }
 
-  /** Les années DVF présentes en base, le nombre de ventes de chacune et la date de la dernière. */
-  async dvfYears(): Promise<
+  /**
+   * Les années DVF présentes en base, le nombre de ventes de chacune et la
+   * date de la dernière. Gardées en mémoire `IMPORT_COUNTS_TTL_MS` : la
+   * requête parcourt toute la table, et chaque fiche la demandait.
+   */
+  dvfYears(): Promise<{ year: number; count: number; lastDate: string }[]> {
+    return this.dvfYearsMemo.get('all', () => this.readDvfYears())
+  }
+
+  private async readDvfYears(): Promise<
     { year: number; count: number; lastDate: string }[]
   > {
     const rows = await this.prisma.$queryRaw`
@@ -907,6 +934,17 @@ export class GeoService {
     rows: readonly NeighbourhoodRow[]
   ): Promise<{ written: number; removed: number }> {
     if (rows.length === 0) return { written: 0, removed: 0 }
+    try {
+      return await this.replaceNeighbourhoodRows(territory, rows)
+    } finally {
+      this.neighbourhoodCountsMemo.clear()
+    }
+  }
+
+  private replaceNeighbourhoodRows(
+    territory: string,
+    rows: readonly NeighbourhoodRow[]
+  ): Promise<{ written: number; removed: number }> {
     return this.prisma.$transaction(
       async tx => {
         const removed = await tx.$executeRaw`
@@ -1035,8 +1073,16 @@ export class GeoService {
     }
   }
 
-  /** Nombre de contours importés pour un territoire, et par nature. */
-  async neighbourhoodCounts(
+  /** Nombre de contours importés pour un territoire, et par nature (gardé comme `dvfYears`). */
+  neighbourhoodCounts(
+    territory: string
+  ): Promise<Record<NeighbourhoodKind, number>> {
+    return this.neighbourhoodCountsMemo.get(territory, () =>
+      this.readNeighbourhoodCounts(territory)
+    )
+  }
+
+  private async readNeighbourhoodCounts(
     territory: string
   ): Promise<Record<NeighbourhoodKind, number>> {
     const rows = await this.prisma.$queryRaw`
